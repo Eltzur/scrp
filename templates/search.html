@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Market Price Comparison</title>
+</head>
+<body>
+    <h1>Supermarket Price Compare</h1>
+    <form method="post">
+        <input type="text" name="query" placeholder="Search for an item..." value="{{ query }}">
+        <select name="city">
+            <option value="">All Cities</option>
+            {% for c in cities %}
+            <option value="{{c}}" {% if c==city %}selected{% endif %}>{{c}}</option>
+            {% endfor %}
+        </select>
+        <input type="submit" value="Search">
+    </form>
+
+    <table border="1" cellpadding="6">
+      <tr>
+        <th>Product Code</th>
+        <th>Product Name</th>
+        {% for b in branches %}
+        <th>{{ b }}</th>
+        {% endfor %}
+      </tr>
+      {% for row in prices %}
+      <tr>
+        <td>{{ row['code'] }}</td>
+        <td>{{ row['name'] }}</td>
+        {% for b in branches %}
+          {% set col='LOWEST_' + b %}
+          {% set pcol='promo_price_'+b %}
+          {% set rcol='price_'+b %}
+          <td {% if row[col]=='1' %}style="background:yellow;font-weight:bold"{% endif %}>
+            {{ row[pcol] if row[pcol] else row[rcol] }}
+            {% if row['lowest_type_'+b] %}
+              <span>({{ row['lowest_type_'+b] }})</span>
+            {% endif %}
+          </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </table>
+</body>
+</html>
