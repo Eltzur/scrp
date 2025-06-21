@@ -1,16 +1,16 @@
-# SCRP – Supermarket Comparison & Price Scraper
+# SCRP – Supermarket Comparison & Price Scraper (Israel)
 
-**SCRP** is a python-based tool that scrapes, parses, and compares product prices and promotions from major supermarket chains in Israel. By fetching live price feeds directly from supermarket APIs, SCRP enables users to easily compare prices and find the best deals at nearby stores.
+SCRP is a Python-based web application that scrapes, parses, and compares product prices and promotions from major supermarket chains in Israel. By collecting live price feeds directly from supermarket APIs, SCRP helps users compare prices and discover the most affordable nearby supermarket for their shopping basket.
 
 ---
 
 ## Features
 
-- **Automatic price scraping** from multiple Israeli supermarket chains (Shufersal, Rami Levi, etc.)
-- **Product and promotion parsing** into a standardized format
-- **Basket comparison:** find the cheapest store for your grocery list
-- **Nearby store search** (optional, based on user location)
-- **Export data** to CSV, JSON, or other formats
+- **Automatic price scraping** from multiple Israeli supermarket chains (Shufersal, Rami Levi, and others)
+- **Product & promotion parsing** into a unified, easy-to-search format
+- **Basket comparison** – instantly find the cheapest store for your chosen items
+- **"Stores near me" search** (location-aware, optional)
+- **User-friendly web interface** for input and results
 
 ---
 
@@ -18,31 +18,32 @@
 
 - Shufersal
 - Rami Levi
-- [Add others as implemented in `/scraper/`]
+- [List other supported supermarkets as implemented]
 
 ---
 
 ## How It Works
 
-1. **Select Supermarkets:** Choose which chains to fetch data from.
-2. **Fetch Prices:** SCRP downloads official price lists (as required by Israeli law) from each chain.
-3. **Parse & Normalize:** The raw data (CSV, XML, JSON) is converted into a unified product format.
-4. **Compare:** Automatically compares your basket or selected products across available stores.
-5. **Results:** View or export the cheapest options and detailed price breakdowns.
+1. **Select supermarkets** or enable "all nearby."
+2. **Enter your shopping basket** (manually or upload).
+3. **SCRP fetches current price lists** from each chain’s public data feed.
+4. **Data is parsed and normalized** into a unified product catalog.
+5. **Compare**: Instantly see price comparisons for your basket across stores.
+6. **View cheapest store(s) and savings** using a clear, interactive GUI.
 
 ---
 
-## Installation
+## Installing & Running
 
 ### Prerequisites
 
-- [Go (Golang)](https://golang.org/doc/install) 1.18+
+- Python 3.8+
+- `pip`, `venv`, and common Python libraries
 
-### Build
+### Setup
 
-Clone and build SCRP:
+1. **Clone this repository:**
 
-```bash
-git clone https://github.com/Eltzur/scrp.git
-cd scrp
-go build -o scrp
+   ```bash
+   git clone https://github.com/Eltzur/scrp.git
+   cd scrp
