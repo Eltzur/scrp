@@ -18,7 +18,9 @@ SCRP is a Python-based web application that scrapes, parses, and compares produc
 
 - Shufersal
 - Rami Levi
-- [List other supported supermarkets as implemented]
+- King store
+- Victory
+- and more
 
 ---
 
