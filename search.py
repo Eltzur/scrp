@@ -19,8 +19,10 @@ SELECT
     p.unit_of_measure_price,
     p.price_update_date,
     c.chain_id,
-    c.name   AS chain_name,
-    s.store_id
+    c.name        AS chain_name,
+    s.store_id,
+    s.store_name,
+    s.city
 FROM items i
 JOIN prices  p ON p.item_code = i.item_code
 JOIN stores  s ON s.id        = p.store_fk
@@ -44,10 +46,10 @@ def search(query: str, db_path: Path = DEFAULT_DB) -> None:
         print(f'No results for "{query}"')
         return
 
-    print(f'{"CODE":<14} {"PRICE":>7}  {"UNIT PRICE":>14}  {"UPDATED":<17}  {"CHAIN":<15}  {"STORE":<6}  NAME')
-    print("-" * 115)
+    print(f'{"CODE":<14} {"PRICE":>7}  {"UNIT PRICE":>14}  {"STORE":<30}  {"CITY":<15}  NAME')
+    print("-" * 120)
     for r in rows:
-        chain_label = r["chain_name"] if r["chain_name"] else r["chain_id"]
+        store_label = r["store_name"] if r["store_name"] else r["store_id"]
         unit = (
             f'{r["unit_of_measure_price"]:.2f}/{r["unit_of_measure"]}'
             if r["unit_of_measure_price"] else ""
@@ -56,9 +58,8 @@ def search(query: str, db_path: Path = DEFAULT_DB) -> None:
             f'{r["item_code"]:<14} '
             f'{r["item_price"]:>7.2f}  '
             f'{unit:>14}  '
-            f'{(r["price_update_date"] or ""):<17}  '
-            f'{chain_label:<15}  '
-            f'{r["store_id"]:<6}  '
+            f'{store_label:<30}  '
+            f'{(r["city"] or ""):<15}  '
             f'{r["item_name"]}'
         )
     print(f"\n{len(rows)} result(s)")
