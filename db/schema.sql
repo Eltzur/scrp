@@ -8,6 +8,10 @@ CREATE TABLE IF NOT EXISTS stores (
     chain_id     TEXT NOT NULL REFERENCES chains(chain_id),
     sub_chain_id TEXT NOT NULL,
     store_id     TEXT NOT NULL,
+    store_name   TEXT,
+    city         TEXT,
+    city_norm    TEXT,
+    address      TEXT,
     UNIQUE (chain_id, sub_chain_id, store_id)
 );
 
@@ -36,5 +40,16 @@ CREATE TABLE IF NOT EXISTS prices (
     UNIQUE (store_fk, item_code)
 );
 
+CREATE TABLE IF NOT EXISTS fetch_runs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    chain_id        TEXT NOT NULL,
+    run_at          TEXT NOT NULL,
+    files_attempted INTEGER DEFAULT 0,
+    files_loaded    INTEGER DEFAULT 0,
+    items_inserted  INTEGER DEFAULT 0,
+    status          TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_prices_item_code ON prices(item_code);
 CREATE INDEX IF NOT EXISTS idx_items_name       ON items(item_name);
+CREATE INDEX IF NOT EXISTS idx_stores_city_norm ON stores(city_norm);

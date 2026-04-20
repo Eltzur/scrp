@@ -27,19 +27,24 @@ def upsert_chain(conn: sqlite3.Connection, chain_id: str) -> None:
 def upsert_store(
     conn: sqlite3.Connection, chain_id: str, sub_chain_id: str, store_id: str
 ) -> int:
+    # Prefer an existing row matched by (chain_id, store_id) regardless of sub_chain_id.
+    # Old-format filenames default sub_chain_id to "001", but the XML header may differ
+    # (e.g. יש stores = sub_chain 015, דיל = sub_chain 002). Using just store_id avoids
+    # creating orphan rows with no store_name/city.
+    row = conn.execute(
+        "SELECT id FROM stores WHERE chain_id=? AND store_id=?",
+        (chain_id, store_id),
+    ).fetchone()
+    if row:
+        return row["id"]
+    # Truly new store — insert it
     conn.execute(
-        """
-        INSERT OR IGNORE INTO stores (chain_id, sub_chain_id, store_id)
-        VALUES (?, ?, ?)
-        """,
+        "INSERT OR IGNORE INTO stores (chain_id, sub_chain_id, store_id) VALUES (?, ?, ?)",
         (chain_id, sub_chain_id, store_id),
     )
     row = conn.execute(
-        """
-        SELECT id FROM stores
-        WHERE chain_id=? AND sub_chain_id=? AND store_id=?
-        """,
-        (chain_id, sub_chain_id, store_id),
+        "SELECT id FROM stores WHERE chain_id=? AND store_id=?",
+        (chain_id, store_id),
     ).fetchone()
     return row["id"]
 
