@@ -60,19 +60,35 @@ fetch_runs  — id, chain_id, run_at, files_attempted, files_loaded,
   - Old: `PriceFull{ChainId}-{StoreId}-{Timestamp12}.gz`
   - New: `PriceFull{ChainId}-{SubChainId}-{StoreId}-{Date8}-{Time6}.gz`
 
+### Osher Ad (7290103152017)
+- Portal: same Cerberus portal as Rami Levy (username: `osherad`, empty password)
+- 23 stores, warehouse/discount format, founded 2009
+- Filename format: NEW format `PriceFull{ChainId}-{SubChainId}-{StoreId}-{Date8}-{Time6}.gz`
+- Stores XML: same UTF-16 structure, same government city code system
+- Expected: ~55% exclusive barcodes — Kirkland (Costco private label) + imports not found elsewhere
+- Implementation: `OsherAdScraper(CerberusScraper)` — 6-line subclass
+
 ### Rami Levy (7290058140886)
-- Portal: https://url.retail.publishedprices.co.il (Cerberus web client — requires auth)
+- Portal: same Cerberus portal (username: `RamiLevi`, empty password)
+- ~96 stores, updated daily ~midnight and 6AM
+- Filename format: OLD format `PriceFull{ChainId}-{StoreId}-{Timestamp12}.gz`
+- Implementation: `RamiLeviScraper(CerberusScraper)` — 6-line subclass
+
+### Cerberus portal shared pattern
+- URL: https://url.retail.publishedprices.co.il
 - Login: 2-step CSRF flow
   1. GET /login → extract `<meta name="csrftoken">` → POST /login/user with form field `csrftoken`
   2. Re-extract CSRF from /file page → use for all subsequent API calls
 - File listing: POST /file/json/dir with `csrftoken` + DataTables params → JSON `aaData`
 - Download: GET /file/d/{filename} (session cookie required)
 - Stores XML: `Stores{ChainId}-000-{Date}-{Time}.xml` — UTF-16 encoded, NOT gzipped
-  - City field is numeric code (3000 = ירושלים, 5000 = תל אביב, etc.) — see CITY_CODES in ramilevi.py
-- PriceFull: old filename format `PriceFull{ChainId}-{StoreId}-{Timestamp12}.gz`
-- ~96 stores, 190 PriceFull files, updated daily ~midnight and 6AM
+  - City field is numeric government code — see `CITY_CODES` in `scraper/cerberus.py`
+- Both old and new PriceFull filename formats handled in `CerberusScraper.build_pricefull_index()`
+- Adding a new Cerberus chain = 6-line subclass (CHAIN_ID, USERNAME, CHAIN_NAME)
 
 ## Multi-Chain Architecture
+Hierarchy: `ChainScraper` (base.py) → `CerberusScraper` (cerberus.py) → `RamiLeviScraper` / `OsherAdScraper`
+
 All scrapers inherit from `ChainScraper` (scraper/base.py):
 - Implement `load_stores(conn)` → populate stores table, return store_id → metadata
 - Implement `build_pricefull_index(target_store_ids)` → return store_id → entry with filename/url
@@ -104,10 +120,13 @@ This ensures cross-chain matches even when chains use different word orders for 
   both chains on shared barcodes. Real per-chain names populate on next scraper run.
 
 ## db/chain_overlap.py
-Run as `python -m db.chain_overlap` — prints:
-- Unique barcode count per chain
-- Pairwise barcode overlap (count + % of union)
-- Top 10 price deltas for shared items
+Run as `python -m db.chain_overlap` — N-chain analysis, prints:
+- Per-chain stats: unique barcodes, price rows, stores loaded
+- Pairwise overlap matrix (NxN)
+- All-chains intersection count + % of union
+- Top 20 price deltas (any 2+ chains, cheapest vs most expensive)
+- Exclusive barcode counts per chain (Osher Ad ~55% exclusive due to Kirkland/imports)
+- Top 10 exclusive products per chain by price
 
 ## Conventions
 - All DB writes use INSERT OR IGNORE / ON CONFLICT upserts — safe to re-run
