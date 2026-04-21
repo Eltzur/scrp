@@ -14,7 +14,10 @@ The cross-chain join key is `ItemCode` (product barcode).
 - **FastAPI** + **uvicorn** — REST API server (api/)
 - **Pydantic v2** — response model validation
 - **pytest** + **httpx** — smoke tests via TestClient
-- Future: React/Next.js (frontend/)
+- **React 19 + Vite 5 + TypeScript** — frontend (web/)
+- **Tailwind CSS v3** — styling
+- **TanStack React Query** — data fetching/caching
+- **openapi-typescript v6** — auto-generate TS types from OpenAPI spec
 
 ## Folder Structure
 ```
@@ -38,7 +41,10 @@ api/        — FastAPI application
     product.py  — GET /product/{barcode}
   tests/
     test_smoke.py — 11 TestClient smoke tests
-frontend/   — future React app
+web/        — React + Vite + Tailwind frontend
+  src/api/      — axios client + React Query hooks
+  src/components/ — UI components (ProductCard, SearchBar, Filters, etc.)
+  src/types/api.ts — auto-generated from OpenAPI spec (npm run gen:types)
 load.py     — CLI pipeline: parse one XML file → SQLite
 search.py   — CLI search (--compare, --limit, --store-only flags)
 ```
@@ -178,6 +184,35 @@ Extracted from search.py; used by both CLI and API:
 ```bash
 python -m pytest api/tests/test_smoke.py -v
 ```
+
+## Frontend Layer (Session 6a)
+
+### Two-server dev workflow
+```bash
+# Terminal 1 — backend
+uvicorn api.main:app --reload         # http://localhost:8000
+
+# Terminal 2 — frontend
+cd web && npm run dev                 # http://localhost:5173
+```
+
+### Key frontend commands
+```bash
+npm run typecheck      # TS check without build
+npm run gen:types      # regenerate src/types/api.ts from live OpenAPI spec
+npm run build          # production build → web/dist/
+```
+
+### OpenAPI → TypeScript pipeline
+`openapi-typescript@6` reads http://localhost:8000/openapi.json and writes
+`web/src/types/api.ts`. All API types (SearchResult, ProductWithPrices, etc.)
+are imported from there — zero manual type maintenance.
+
+### Component design decisions
+- ProductCard groups quotes by chain_id and shows cheapest store per chain (one row per chain)
+- Compare mode (default on) calls /compare (2+ chains only); off calls /search
+- Debounce: 300ms. Min query: 2 chars.
+- Skeleton placeholders (not spinner) on first load; previous results stay visible during refetch
 
 ## Conventions
 - All DB writes use INSERT OR IGNORE / ON CONFLICT upserts — safe to re-run
