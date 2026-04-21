@@ -1,0 +1,55 @@
+{
+  "app": {
+    "title": "השוואת מחירים בסופרמרקט",
+    "tagline": "השוו מחירי מזון ברשתות השיווק הישראליות"
+  },
+  "search": {
+    "placeholder": "חפשו מוצר בעברית או באנגלית… למשל במבה, חלב, קוטג'",
+    "clear": "נקה",
+    "results_count": "נמצאו {{count}} מוצרים",
+    "comparable_count": "{{count}} ניתנים להשוואה בין רשתות"
+  },
+  "filters": {
+    "compare_mode": "מצב השוואה",
+    "all_cities": "כל הערים",
+    "all_chains": "כל הרשתות",
+    "city_option": "{{city}} ({{chains}} רשתות)",
+    "group_by": "קיבוץ לפי",
+    "group_chain": "רשת",
+    "group_store": "סניף",
+    "compare_disabled_city": "רק ל{{chain}} יש נתונים בעיר זו — מציג את כל המוצרים שלהם"
+  },
+  "stats": {
+    "summary": "מחפש ב-{{chains}} רשתות, {{stores}} סניפים, {{prices}} מחירים"
+  },
+  "product_card": {
+    "cheapest": "הכי זול",
+    "save": "חיסכון של {{amount}} ({{pct}}%) לעומת היקר ביותר",
+    "only_at": "בלעדי ב{{chain}}",
+    "chains_count": "{{count}} רשתות",
+    "barcode": "{{code}}"
+  },
+  "empty": {
+    "title": "התחילו להקליד להשוואת מחירים",
+    "no_results": "לא נמצאו מוצרים עבור \"{{query}}\"",
+    "no_results_hint": "נסו מונח קצר יותר או בדקו את האיות",
+    "try": "נסו:"
+  },
+  "suggestions": ["במבה", "חלב תנובה", "קוטג'", "ביצים", "לחם"],
+  "load_more": {
+    "button": "טעינת עוד",
+    "loading": "טוען…"
+  },
+  "errors": {
+    "api_down": "לא ניתן לגשת לשרת",
+    "api_down_hint": "ודאו ש-uvicorn api.main:app --reload פועל",
+    "retry": "נסה שוב"
+  },
+  "footer": {
+    "attribution": "נתונים ממאגר שקיפות המחירים הממשלתי (gov.il), מתעדכן יומיומית"
+  },
+  "language": {
+    "switch_to_he": "עברית",
+    "switch_to_en": "English"
+  }
+}

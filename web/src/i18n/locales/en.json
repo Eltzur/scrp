@@ -1,0 +1,55 @@
+{
+  "app": {
+    "title": "Israeli Price Comparison",
+    "tagline": "Compare grocery prices across Israeli supermarket chains"
+  },
+  "search": {
+    "placeholder": "Search in Hebrew or English… e.g. במבה, milk, cottage",
+    "clear": "Clear",
+    "results_count": "{{count}} products found",
+    "comparable_count": "{{count}} comparable across chains"
+  },
+  "filters": {
+    "compare_mode": "Compare mode",
+    "all_cities": "All cities",
+    "all_chains": "All chains",
+    "city_option": "{{city}} ({{chains}} chains)",
+    "group_by": "Group by",
+    "group_chain": "Chain",
+    "group_store": "Store",
+    "compare_disabled_city": "Only {{chain}} has data in this city — showing all their products"
+  },
+  "stats": {
+    "summary": "Searching across {{chains}} chains, {{stores}} stores, {{prices}} prices"
+  },
+  "product_card": {
+    "cheapest": "CHEAPEST",
+    "save": "Save {{amount}} ({{pct}}%) vs most expensive",
+    "only_at": "Only at {{chain}}",
+    "chains_count": "{{count}} chains",
+    "barcode": "{{code}}"
+  },
+  "empty": {
+    "title": "Start typing to compare prices",
+    "no_results": "No products found for \"{{query}}\"",
+    "no_results_hint": "Try a shorter term or check the spelling",
+    "try": "Try:"
+  },
+  "suggestions": ["במבה", "חלב תנובה", "cottage", "ביצים", "לחם"],
+  "load_more": {
+    "button": "Load more",
+    "loading": "Loading…"
+  },
+  "errors": {
+    "api_down": "Could not reach the backend",
+    "api_down_hint": "Make sure uvicorn api.main:app --reload is running",
+    "retry": "Retry"
+  },
+  "footer": {
+    "attribution": "Data from Israeli government price transparency (gov.il), updated daily"
+  },
+  "language": {
+    "switch_to_he": "עברית",
+    "switch_to_en": "English"
+  }
+}
