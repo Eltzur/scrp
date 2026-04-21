@@ -10,7 +10,7 @@ import {
   type CompareOpts,
 } from './client';
 
-const STALE = 5 * 60 * 1000; // 5 minutes
+const STALE = 5 * 60 * 1000;
 
 export const useSearch = (query: string, opts: SearchOpts = {}, enabled = true) =>
   useQuery({

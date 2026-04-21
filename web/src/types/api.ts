@@ -36,8 +36,8 @@ export interface paths {
   };
   "/cities": {
     /**
-     * Cities with data
-     * @description Distinct city names we have store data for, sorted alphabetically.
+     * Cities with price data
+     * @description Cities that have actual price data loaded, with chain/store/price counts.
      */
     get: operations["cities_cities_get"];
   };
@@ -46,6 +46,7 @@ export interface paths {
      * Search products by name
      * @description Search for products by Hebrew or English name. Multi-word queries match ALL words
      * in any order. Returns multi-chain products first, then single-chain.
+     * Supports pagination via offset. group_by=store returns one row per store.
      */
     get: operations["search_search_get"];
   };
@@ -97,6 +98,34 @@ export interface components {
        * @description Stores we have price data for
        */
       total_stores_loaded: number;
+    };
+    /**
+     * CityInfo
+     * @description A city with price coverage statistics.
+     */
+    CityInfo: {
+      /** City */
+      city: string;
+      /**
+       * Chain Count
+       * @description Number of distinct chains with prices in this city
+       */
+      chain_count: number;
+      /**
+       * Store Count
+       * @description Number of stores with prices in this city
+       */
+      store_count: number;
+      /**
+       * Price Count
+       * @description Total price rows in this city
+       */
+      price_count: number;
+      /**
+       * Chain Ids
+       * @description chain_ids present in this city
+       */
+      chain_ids?: string[];
     };
     /** HTTPValidationError */
     HTTPValidationError: {
@@ -212,6 +241,12 @@ export interface components {
        * @description Barcodes available in 2+ chains
        */
       comparable_count: number;
+      /**
+       * Has More
+       * @description True when more results exist beyond current page
+       * @default false
+       */
+      has_more?: boolean;
       /**
        * Items
        * @description Multi-chain products first (sorted by cheapest price), then single-chain
@@ -371,15 +406,15 @@ export interface operations {
     };
   };
   /**
-   * Cities with data
-   * @description Distinct city names we have store data for, sorted alphabetically.
+   * Cities with price data
+   * @description Cities that have actual price data loaded, with chain/store/price counts.
    */
   cities_cities_get: {
     responses: {
       /** @description Successful Response */
       200: {
         content: {
-          "application/json": string[];
+          "application/json": components["schemas"]["CityInfo"][];
         };
       };
     };
@@ -388,6 +423,7 @@ export interface operations {
    * Search products by name
    * @description Search for products by Hebrew or English name. Multi-word queries match ALL words
    * in any order. Returns multi-chain products first, then single-chain.
+   * Supports pagination via offset. group_by=store returns one row per store.
    */
   search_search_get: {
     parameters: {
@@ -396,10 +432,14 @@ export interface operations {
         q: string;
         /** @description Max products returned */
         limit?: number;
+        /** @description Pagination offset */
+        offset?: number;
         /** @description Filter to stores in this city */
         city?: string | null;
         /** @description Filter to one chain_id */
         chain?: string | null;
+        /** @description Group results by chain or individual store */
+        group_by?: "chain" | "store";
       };
     };
     responses: {
@@ -429,6 +469,8 @@ export interface operations {
         q: string;
         /** @description Max products returned */
         limit?: number;
+        /** @description Pagination offset */
+        offset?: number;
         /** @description Filter to stores in this city */
         city?: string | null;
       };

@@ -1,24 +1,28 @@
 import axios from 'axios';
 import type { components } from '../types/api';
 
-export type ChainSummary = components['schemas']['ChainSummary'];
-export type Store = components['schemas']['Store'];
-export type PriceQuote = components['schemas']['PriceQuote'];
-export type Product = components['schemas']['Product'];
+export type ChainSummary    = components['schemas']['ChainSummary'];
+export type Store           = components['schemas']['Store'];
+export type PriceQuote      = components['schemas']['PriceQuote'];
+export type Product         = components['schemas']['Product'];
 export type ProductWithPrices = components['schemas']['ProductWithPrices'];
-export type SearchResult = components['schemas']['SearchResult'];
-export type StatsResponse = components['schemas']['StatsResponse'];
+export type SearchResult    = components['schemas']['SearchResult'];
+export type StatsResponse   = components['schemas']['StatsResponse'];
+export type CityInfo        = components['schemas']['CityInfo'];
 
 const http = axios.create({ baseURL: 'http://localhost:8000' });
 
 export interface SearchOpts {
   limit?: number;
+  offset?: number;
   city?: string | null;
   chain?: string | null;
+  group_by?: 'chain' | 'store';
 }
 
 export interface CompareOpts {
   limit?: number;
+  offset?: number;
   city?: string | null;
 }
 
@@ -34,8 +38,8 @@ export const getProduct = (barcode: string): Promise<ProductWithPrices> =>
 export const getChains = (): Promise<ChainSummary[]> =>
   http.get<ChainSummary[]>('/chains').then(r => r.data);
 
-export const getCities = (): Promise<string[]> =>
-  http.get<string[]>('/cities').then(r => r.data);
+export const getCities = (): Promise<CityInfo[]> =>
+  http.get<CityInfo[]>('/cities').then(r => r.data);
 
 export const getStores = (opts: { chain?: string; city?: string } = {}): Promise<Store[]> =>
   http.get<Store[]>('/stores', { params: opts }).then(r => r.data);

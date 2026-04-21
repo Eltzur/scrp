@@ -1,21 +1,32 @@
 import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import Header from './components/Header';
 import SearchBar from './components/SearchBar';
 import Filters, { type FilterState } from './components/Filters';
 import StatsBar from './components/StatsBar';
 import ResultsList from './components/ResultsList';
 import { useSearch, useCompare } from './api/hooks';
+import { searchProducts, compareProducts } from './api/client';
+import type { ProductWithPrices } from './api/client';
 
-const DEFAULT_FILTERS: FilterState = { city: null, chain: null, compareMode: true };
+const DEFAULT_FILTERS: FilterState = {
+  city: null,
+  chain: null,
+  compareMode: true,
+  groupBy: 'chain',
+};
+
+const PAGE_SIZE = 30;
 
 function useActiveResults(query: string, filters: FilterState) {
-  const city = filters.city ?? undefined;
-  const chain = filters.chain ?? undefined;
+  const city    = filters.city ?? undefined;
+  const chain   = filters.chain ?? undefined;
+  const groupBy = filters.groupBy;
 
   const search = useSearch(
     query,
-    { city, chain },
+    { city, chain, group_by: groupBy },
     !filters.compareMode,
   );
   const compare = useCompare(
@@ -23,22 +34,70 @@ function useActiveResults(query: string, filters: FilterState) {
     { city },
     filters.compareMode,
   );
-
   return filters.compareMode ? compare : search;
 }
 
 export default function App() {
-  const [query, setQuery] = useState('');
+  const { t } = useTranslation();
+  const [query, setQuery]     = useState('');
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
-  const queryClient = useQueryClient();
+  const queryClient           = useQueryClient();
+
+  // Accumulated items for "load more" (client-side page merge)
+  const [extraItems, setExtraItems]     = useState<ProductWithPrices[]>([]);
+  const [loadingMore, setLoadingMore]   = useState(false);
+  const [lastQuery, setLastQuery]       = useState('');
+  const [lastFilters, setLastFilters]   = useState<FilterState>(DEFAULT_FILTERS);
 
   const { data, isLoading, isFetching, isError } = useActiveResults(query, filters);
 
-  const handleSearch = useCallback((q: string) => setQuery(q), []);
+  // Reset accumulated items whenever query or filters change
+  const resetExtras = useCallback(() => {
+    setExtraItems([]);
+    setLoadingMore(false);
+  }, []);
+
+  const handleSearch = useCallback((q: string) => {
+    setQuery(q);
+    resetExtras();
+    setLastQuery(q);
+  }, [resetExtras]);
+
+  const handleFiltersChange = useCallback((f: FilterState) => {
+    setFilters(f);
+    resetExtras();
+    setLastFilters(f);
+  }, [resetExtras]);
 
   const handleRetry = () => {
     queryClient.invalidateQueries({ queryKey: [filters.compareMode ? 'compare' : 'search'] });
   };
+
+  const handleLoadMore = async () => {
+    if (!data || loadingMore) return;
+    const currentCount = data.items.length + extraItems.length;
+    setLoadingMore(true);
+    try {
+      const opts = filters.compareMode
+        ? { city: lastFilters.city ?? undefined, limit: PAGE_SIZE, offset: currentCount }
+        : { city: lastFilters.city ?? undefined, chain: lastFilters.chain ?? undefined, group_by: lastFilters.groupBy, limit: PAGE_SIZE, offset: currentCount };
+      const next = filters.compareMode
+        ? await compareProducts(lastQuery, opts)
+        : await searchProducts(lastQuery, opts);
+      setExtraItems(prev => [...prev, ...next.items]);
+      // Update has_more by injecting a synthetic result (we track it separately)
+      setLastHasMore(next.has_more);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const [lastHasMore, setLastHasMore] = useState(false);
+
+  // Merge base result with extra pages
+  const mergedResult = data
+    ? { ...data, items: [...data.items, ...extraItems], has_more: extraItems.length > 0 ? lastHasMore : (data.has_more ?? false) }
+    : undefined;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -48,23 +107,25 @@ export default function App() {
         <SearchBar onSearch={handleSearch} />
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Filters filters={filters} onChange={setFilters} />
+          <Filters filters={filters} onChange={handleFiltersChange} />
           <StatsBar />
         </div>
 
         <ResultsList
-          result={data}
+          result={mergedResult}
           isLoading={isLoading}
-          isFetching={isFetching}
+          isFetching={isFetching && !loadingMore}
           isError={isError}
           query={query}
           onRetry={handleRetry}
+          onLoadMore={handleLoadMore}
+          isLoadingMore={loadingMore}
         />
       </main>
 
       <footer className="max-w-6xl mx-auto px-4 py-6 border-t border-gray-200 mt-8">
         <p className="text-xs text-gray-400 text-center">
-          Data sourced from Israeli government price transparency (gov.il), updated daily.
+          {t('footer.attribution')}
         </p>
       </footer>
     </div>
