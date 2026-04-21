@@ -19,97 +19,7 @@ from collections import defaultdict
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 from db.db import connect, DEFAULT_DB
-from scraper.city_names import normalize_city
-
-
-# ---------------------------------------------------------------------------
-# Barcode discovery — barcode-first, name-second architecture
-# ---------------------------------------------------------------------------
-
-def _word_clause(words: list[str], table_alias: str = "") -> tuple[str, list]:
-    """
-    Build SQL WHERE fragment requiring ALL words match (any order, any field).
-    Returns (sql_fragment, params_list).
-    Each word: (item_name LIKE ? OR manufacturer_name LIKE ?)
-    """
-    prefix = f"{table_alias}." if table_alias else ""
-    clauses = []
-    params = []
-    for w in words:
-        pat = f"%{w}%"
-        clauses.append(f"({prefix}item_name LIKE ? OR {prefix}manufacturer_name LIKE ?)")
-        params.extend([pat, pat])
-    return " AND ".join(clauses), params
-
-
-def _find_barcodes(conn, words: list[str]) -> list[str]:
-    """
-    Return all item_codes whose name matches ALL query words in ANY order.
-    Searches item_chain_names first (per-chain names), then items (canonical).
-    UNION deduplicates.
-    """
-    if not words:
-        return []
-
-    clause, params = _word_clause(words)
-
-    sql = f"""
-        SELECT DISTINCT item_code FROM item_chain_names
-        WHERE {clause}
-        UNION
-        SELECT item_code FROM items
-        WHERE {clause}
-    """
-    rows = conn.execute(sql, params + params).fetchall()
-    return [r["item_code"] for r in rows]
-
-
-# ---------------------------------------------------------------------------
-# Price fetching
-# ---------------------------------------------------------------------------
-
-_PRICE_QUERY = """
-SELECT
-    icn.item_code,
-    icn.item_name,
-    icn.manufacturer_name,
-    i.unit_of_measure,
-    p.item_price,
-    p.unit_of_measure_price,
-    p.price_update_date,
-    c.chain_id,
-    c.name        AS chain_name,
-    s.store_id,
-    s.store_name,
-    s.city
-FROM item_chain_names icn
-JOIN items   i ON i.item_code  = icn.item_code
-JOIN prices  p ON p.item_code  = icn.item_code
-JOIN stores  s ON s.id         = p.store_fk AND s.chain_id = icn.chain_id
-JOIN chains  c ON c.chain_id   = icn.chain_id
-WHERE icn.item_code IN ({placeholders})
-"""
-
-
-def _fetch_prices(conn, barcodes: list[str], city: str | None, store_only: str | None) -> list:
-    if not barcodes:
-        return []
-
-    placeholders = ",".join("?" * len(barcodes))
-    sql = _PRICE_QUERY.format(placeholders=placeholders)
-    params: list = list(barcodes)
-
-    if city:
-        city_norm = normalize_city(city)
-        sql += " AND s.city_norm = ?"
-        params.append(city_norm)
-
-    if store_only:
-        sql += " AND s.store_id = ?"
-        params.append(store_only)
-
-    sql += " ORDER BY p.item_price"
-    return conn.execute(sql, params).fetchall()
+from db.query import find_barcodes, fetch_prices, group_by_product
 
 
 # ---------------------------------------------------------------------------
@@ -247,13 +157,13 @@ def search(
     words = query.split()
     conn  = connect(db_path)
 
-    barcodes = _find_barcodes(conn, words)
+    barcodes = find_barcodes(conn, words)
     if not barcodes:
         print(f'No results for "{query}"')
         conn.close()
         return
 
-    rows = _fetch_prices(conn, barcodes, city, store_only)
+    rows = fetch_prices(conn, barcodes, city=city, store_only=store_only)
     conn.close()
 
     if not rows:
