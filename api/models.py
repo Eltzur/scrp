@@ -61,11 +61,21 @@ class ProductWithPrices(BaseModel):
     chains_count: int         = Field(description="Number of distinct chains carrying this barcode")
 
 
+class CityInfo(BaseModel):
+    """A city with price coverage statistics."""
+    city: str
+    chain_count: int           = Field(description="Number of distinct chains with prices in this city")
+    store_count: int           = Field(description="Number of stores with prices in this city")
+    price_count: int           = Field(description="Total price rows in this city")
+    chain_ids: list[str]       = Field(default_factory=list, description="chain_ids present in this city")
+
+
 class SearchResult(BaseModel):
     """Response for GET /search and GET /compare."""
     query: str
     total_matches: int        = Field(description="Distinct barcodes matching the query")
     comparable_count: int     = Field(description="Barcodes available in 2+ chains")
+    has_more: bool            = Field(False, description="True when more results exist beyond current page")
     items: list[ProductWithPrices] = Field(
         description="Multi-chain products first (sorted by cheapest price), then single-chain"
     )

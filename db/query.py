@@ -171,6 +171,50 @@ def group_by_product(rows: list[dict]) -> dict[str, dict]:
 
 
 # ---------------------------------------------------------------------------
+# Store-level grouping (one ProductWithPrices per store, no deduplication)
+# ---------------------------------------------------------------------------
+
+def group_by_store(rows: list[dict]) -> list[dict]:
+    """
+    Return one entry per (item_code, store) — no chain deduplication.
+    Each entry is a ProductWithPrices-shaped dict with a single quote.
+    """
+    products = []
+    names_per_chain: dict[str, dict[str, str]] = defaultdict(dict)
+    for r in rows:
+        if r["item_name"]:
+            names_per_chain[r["item_code"]][r["chain_id"]] = r["item_name"]
+
+    for r in rows:
+        quote = {
+            "chain_id":        r["chain_id"],
+            "chain_name":      r["chain_name"],
+            "store_id":        r["store_id"],
+            "store_name":      r["store_name"],
+            "city":            r["city"],
+            "address":         r.get("address"),
+            "price":           r["item_price"],
+            "unit_price":      r["unit_of_measure_price"],
+            "unit_of_measure": r["unit_of_measure"],
+            "updated_at":      r["price_update_date"],
+            "delta_from_cheapest": 0.0,
+        }
+        products.append({
+            "item_code":          r["item_code"],
+            "canonical_name":     r["item_name"],
+            "manufacturer":       r["manufacturer_name"],
+            "unit_of_measure":    r["unit_of_measure"],
+            "is_weighted":        bool(r["is_weighted"]),
+            "names_per_chain":    dict(names_per_chain[r["item_code"]]),
+            "quotes":             [quote],
+            "cheapest_price":     r["item_price"],
+            "most_expensive_price": r["item_price"],
+            "chains_count":       1,
+        })
+    return products
+
+
+# ---------------------------------------------------------------------------
 # Catalog queries
 # ---------------------------------------------------------------------------
 
@@ -212,11 +256,31 @@ def fetch_stores(
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
-def fetch_cities(conn: sqlite3.Connection) -> list[str]:
-    rows = conn.execute(
-        "SELECT DISTINCT city FROM stores WHERE city IS NOT NULL ORDER BY city"
-    ).fetchall()
-    return [r["city"] for r in rows]
+def fetch_cities(conn: sqlite3.Connection) -> list[dict]:
+    """Cities that have actual price data, with coverage stats."""
+    rows = conn.execute("""
+        SELECT
+            s.city,
+            COUNT(DISTINCT s.chain_id)  AS chain_count,
+            COUNT(DISTINCT s.id)        AS store_count,
+            COUNT(p.id)                 AS price_count,
+            GROUP_CONCAT(DISTINCT s.chain_id) AS chain_ids_csv
+        FROM stores s
+        JOIN prices p ON p.store_fk = s.id
+        WHERE s.city IS NOT NULL
+        GROUP BY s.city
+        ORDER BY s.city
+    """).fetchall()
+    result = []
+    for r in rows:
+        result.append({
+            "city":        r["city"],
+            "chain_count": r["chain_count"],
+            "store_count": r["store_count"],
+            "price_count": r["price_count"],
+            "chain_ids":   r["chain_ids_csv"].split(",") if r["chain_ids_csv"] else [],
+        })
+    return result
 
 
 def fetch_stats(conn: sqlite3.Connection) -> dict:

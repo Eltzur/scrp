@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 import sqlite3
-from api.models import ChainSummary, Store
+from api.models import ChainSummary, Store, CityInfo
 from api.dependencies import get_db
 from db.query import fetch_chains, fetch_stores, fetch_cities
 
@@ -26,7 +26,7 @@ def stores(
     return fetch_stores(conn, chain_id=chain, city=city)
 
 
-@router.get("/cities", response_model=list[str], summary="Cities with data")
+@router.get("/cities", response_model=list[CityInfo], summary="Cities with price data")
 def cities(conn: sqlite3.Connection = Depends(get_db)):
-    """Distinct city names we have store data for, sorted alphabetically."""
+    """Cities that have actual price data loaded, with chain/store/price counts."""
     return fetch_cities(conn)
