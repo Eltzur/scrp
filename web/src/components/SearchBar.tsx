@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   onSearch: (q: string) => void;
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export default function SearchBar({ onSearch, initialValue = '' }: Props) {
+  const { t } = useTranslation();
   const [value, setValue] = useState(initialValue);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -20,24 +22,25 @@ export default function SearchBar({ onSearch, initialValue = '' }: Props) {
     <div className="relative">
       <Search
         size={18}
-        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+        className="absolute start-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
       />
       <input
         type="text"
         value={value}
         onChange={e => setValue(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') onSearch(value); }}
-        placeholder="Search products in Hebrew or English… e.g. במבה, milk, cottage"
-        className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-xl text-gray-900
+        placeholder={t('search.placeholder')}
+        className="w-full ps-10 pe-10 py-3 border border-gray-300 rounded-xl text-gray-900
                    placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500
                    focus:border-transparent text-sm bg-white shadow-sm"
         autoFocus
+        dir="auto"
       />
       {value && (
         <button
           onClick={() => { setValue(''); onSearch(''); }}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-          aria-label="Clear"
+          className="absolute end-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          aria-label={t('search.clear')}
         >
           <X size={16} />
         </button>

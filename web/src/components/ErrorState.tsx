@@ -1,16 +1,19 @@
 import { AlertCircle, RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   onRetry?: () => void;
 }
 
 export default function ErrorState({ onRetry }: Props) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex flex-col items-center py-20 text-center">
       <AlertCircle size={40} className="text-rose-400 mb-4" />
-      <p className="text-gray-700 font-medium">Could not reach the backend</p>
+      <p className="text-gray-700 font-medium">{t('errors.api_down')}</p>
       <p className="text-gray-400 text-sm mt-1">
-        Make sure <code className="bg-gray-100 px-1 rounded text-xs">uvicorn api.main:app --reload</code> is running
+        <code className="bg-gray-100 px-1 rounded text-xs">{t('errors.api_down_hint')}</code>
       </p>
       {onRetry && (
         <button
@@ -19,7 +22,7 @@ export default function ErrorState({ onRetry }: Props) {
                      rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
         >
           <RefreshCw size={14} />
-          Retry
+          {t('errors.retry')}
         </button>
       )}
     </div>

@@ -1,8 +1,10 @@
+import { useTranslation } from 'react-i18next';
 import type { SearchResult } from '../api/client';
 import ProductCard from './ProductCard';
 import ProductCardSkeleton from './ProductCardSkeleton';
 import EmptyState from './EmptyState';
 import ErrorState from './ErrorState';
+import { Loader2 } from 'lucide-react';
 
 interface Props {
   result: SearchResult | undefined;
@@ -11,14 +13,19 @@ interface Props {
   isError: boolean;
   query: string;
   onRetry: () => void;
+  onLoadMore?: () => void;
+  isLoadingMore?: boolean;
 }
 
 const SKELETON_COUNT = 6;
 
-export default function ResultsList({ result, isLoading, isFetching, isError, query, onRetry }: Props) {
+export default function ResultsList({
+  result, isLoading, isFetching, isError, query, onRetry, onLoadMore, isLoadingMore,
+}: Props) {
+  const { t } = useTranslation();
+
   if (isError) return <ErrorState onRetry={onRetry} />;
 
-  // First load — no previous data yet → show skeletons
   if (isLoading && !result) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -35,16 +42,38 @@ export default function ResultsList({ result, isLoading, isFetching, isError, qu
   }
 
   return (
-    <div className={isFetching ? 'opacity-70 transition-opacity' : ''}>
+    <div className={isFetching && !isLoadingMore ? 'opacity-70 transition-opacity' : ''}>
       <p className="text-xs text-gray-400 mb-3">
-        {result.total_matches} products found
-        {result.comparable_count > 0 && ` · ${result.comparable_count} comparable across chains`}
+        {t('search.results_count', { count: result.total_matches })}
+        {result.comparable_count > 0 && ` · ${t('search.comparable_count', { count: result.comparable_count })}`}
       </p>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {result.items.map(item => (
           <ProductCard key={item.product.item_code} item={item} />
         ))}
       </div>
+
+      {/* Load more */}
+      {result.has_more && onLoadMore && (
+        <div className="flex justify-center mt-6">
+          <button
+            onClick={onLoadMore}
+            disabled={isLoadingMore}
+            className="flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-300
+                       text-gray-700 rounded-lg text-sm font-medium hover:border-emerald-500
+                       hover:text-emerald-600 transition-colors disabled:opacity-50"
+          >
+            {isLoadingMore ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                {t('load_more.loading')}
+              </>
+            ) : (
+              t('load_more.button')
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
