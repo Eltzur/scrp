@@ -11,7 +11,10 @@ The cross-chain join key is `ItemCode` (product barcode).
 - **lxml** — XML and HTML parsing (Shufersal HTML listing)
 - **SQLite** (Phase 1) → PostgreSQL (later)
 - **requests** — HTTP downloads
-- Future: FastAPI (api/), React/Next.js (frontend/)
+- **FastAPI** + **uvicorn** — REST API server (api/)
+- **Pydantic v2** — response model validation
+- **pytest** + **httpx** — smoke tests via TestClient
+- Future: React/Next.js (frontend/)
 
 ## Folder Structure
 ```
@@ -19,11 +22,22 @@ scraper/    — per-chain downloaders
   base.py       — ChainScraper ABC (shared download/load/run logic)
   shufersal.py  — ShufersalScraper (public HTML listing)
   ramilevi.py   — RamiLeviScraper (Cerberus authenticated portal)
+  osherad.py    — OsherAdScraper (Cerberus portal)
   registry.py   — chain_id → scraper class mapping
   city_names.py — Hebrew city normalization
 parser/     — XML parsers (price_parser.py)
-db/         — schema.sql, db.py helpers, chain_overlap.py
-api/        — future FastAPI app
+db/         — schema.sql, db.py helpers, query.py, chain_overlap.py
+api/        — FastAPI application
+  main.py       — app factory, CORS, router wiring
+  models.py     — Pydantic v2 response models
+  dependencies.py — get_db() per-request SQLite connection
+  routers/
+    health.py   — GET /health, GET /stats
+    catalog.py  — GET /chains, /stores, /cities
+    search.py   — GET /search, /compare
+    product.py  — GET /product/{barcode}
+  tests/
+    test_smoke.py — 11 TestClient smoke tests
 frontend/   — future React app
 load.py     — CLI pipeline: parse one XML file → SQLite
 search.py   — CLI search (--compare, --limit, --store-only flags)
@@ -127,6 +141,43 @@ Run as `python -m db.chain_overlap` — N-chain analysis, prints:
 - Top 20 price deltas (any 2+ chains, cheapest vs most expensive)
 - Exclusive barcode counts per chain (Osher Ad ~55% exclusive due to Kirkland/imports)
 - Top 10 exclusive products per chain by price
+
+## API Layer (Session 5)
+
+### Running the server
+```bash
+uvicorn api.main:app --reload        # dev server, hot-reload
+uvicorn api.main:app --port 8000     # production-style
+```
+Interactive docs at http://localhost:8000/docs (Swagger UI).
+
+### Endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /health | Liveness check |
+| GET | /stats | DB counts + last fetch per chain |
+| GET | /chains | All chains with barcode/store counts |
+| GET | /stores | Store branches (filter: ?chain=&city=) |
+| GET | /cities | Distinct cities with data |
+| GET | /search | Product search (?q=&limit=&city=&chain=) |
+| GET | /compare | Cross-chain only (?q=&limit=&city=) |
+| GET | /product/{barcode} | All prices for one barcode |
+
+### Pydantic v2 models (api/models.py)
+- `ChainSummary`, `Store`, `PriceQuote`, `Product`, `ProductWithPrices`, `SearchResult`, `StatsResponse`
+- All use `ConfigDict(from_attributes=True)` for SQLite Row compatibility
+
+### db/query.py — shared query engine
+Extracted from search.py; used by both CLI and API:
+- `find_barcodes(conn, words)` — UNION search across item_chain_names + items
+- `fetch_prices(conn, barcodes, city, chain_id)` — full join with delta computation
+- `group_by_product(rows)` — group/sort by item_code, build quotes list
+- `fetch_chains / fetch_stores / fetch_cities / fetch_stats / fetch_product`
+
+### Running tests
+```bash
+python -m pytest api/tests/test_smoke.py -v
+```
 
 ## Conventions
 - All DB writes use INSERT OR IGNORE / ON CONFLICT upserts — safe to re-run
