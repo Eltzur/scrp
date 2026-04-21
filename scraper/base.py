@@ -9,7 +9,8 @@ from pathlib import Path
 import requests
 
 from db.db import (
-    connect, init_db, upsert_chain, upsert_store, upsert_item, upsert_price, DEFAULT_DB
+    connect, init_db, upsert_chain, upsert_store,
+    upsert_item, upsert_item_chain_name, upsert_price, DEFAULT_DB
 )
 from parser.price_parser import parse_file as parse_price_file
 from scraper.city_names import normalize_city
@@ -91,6 +92,7 @@ class ChainScraper(abc.ABC):
                     if not item["item_code"] or item["item_price"] is None:
                         continue
                     upsert_item(conn, item)
+                    upsert_item_chain_name(conn, chain_id, item)
                     upsert_price(conn, store_fk, item)
                     count += 1
                     if count % 500 == 0:

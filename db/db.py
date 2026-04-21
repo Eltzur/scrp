@@ -67,6 +67,19 @@ def upsert_item(conn: sqlite3.Connection, item: dict) -> None:
     )
 
 
+def upsert_item_chain_name(conn: sqlite3.Connection, chain_id: str, item: dict) -> None:
+    conn.execute(
+        """
+        INSERT INTO item_chain_names (item_code, chain_id, item_name, manufacturer_name)
+        VALUES (:item_code, :chain_id, :item_name, :manufacturer_name)
+        ON CONFLICT(item_code, chain_id) DO UPDATE SET
+            item_name         = excluded.item_name,
+            manufacturer_name = excluded.manufacturer_name
+        """,
+        {"chain_id": chain_id, **item},
+    )
+
+
 def upsert_price(conn: sqlite3.Connection, store_fk: int, item: dict) -> None:
     conn.execute(
         """
