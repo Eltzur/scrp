@@ -113,7 +113,7 @@ class ShufersalScraper(ChainScraper):
         return rows
 
     def load_stores(self, conn, pages_to_scan: int = 18) -> dict:
-        upsert_chain(conn, self.CHAIN_ID)
+        upsert_chain(conn, self.CHAIN_ID, "שופרסל")
         seen: dict[str, dict] = {}
 
         log.info(f"Shufersal: collecting store metadata (pages 1-{pages_to_scan})…")

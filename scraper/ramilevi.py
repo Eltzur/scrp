@@ -104,7 +104,7 @@ class RamiLeviScraper(ChainScraper):
         return r.json().get("aaData", [])
 
     def load_stores(self, conn) -> dict:
-        upsert_chain(conn, self.CHAIN_ID)
+        upsert_chain(conn, self.CHAIN_ID, "רמי לוי")
         files = self._list_files()
 
         stores_files = sorted(

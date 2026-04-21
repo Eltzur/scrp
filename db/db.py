@@ -18,9 +18,11 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def upsert_chain(conn: sqlite3.Connection, chain_id: str) -> None:
+def upsert_chain(conn: sqlite3.Connection, chain_id: str, name: str = "") -> None:
     conn.execute(
-        "INSERT OR IGNORE INTO chains (chain_id) VALUES (?)", (chain_id,)
+        """INSERT INTO chains (chain_id, name) VALUES (?, ?)
+           ON CONFLICT(chain_id) DO UPDATE SET name = CASE WHEN excluded.name != '' THEN excluded.name ELSE name END""",
+        (chain_id, name),
     )
 
 
