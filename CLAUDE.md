@@ -15,9 +15,10 @@ The cross-chain join key is `ItemCode` (product barcode).
 - **Pydantic v2** — response model validation
 - **pytest** + **httpx** — smoke tests via TestClient
 - **React 19 + Vite 5 + TypeScript** — frontend (web/)
-- **Tailwind CSS v3** — styling
+- **Tailwind CSS v3** — styling (logical properties for RTL: ps-/pe-, ms-/me-, start-/end-)
 - **TanStack React Query** — data fetching/caching
 - **openapi-typescript v6** — auto-generate TS types from OpenAPI spec
+- **react-i18next + i18next** — bilingual EN/HE with RTL layout toggle
 
 ## Folder Structure
 ```
@@ -44,6 +45,7 @@ api/        — FastAPI application
 web/        — React + Vite + Tailwind frontend
   src/api/      — axios client + React Query hooks
   src/components/ — UI components (ProductCard, SearchBar, Filters, etc.)
+  src/i18n/     — i18next config + locales/en.json + locales/he.json
   src/types/api.ts — auto-generated from OpenAPI spec (npm run gen:types)
 load.py     — CLI pipeline: parse one XML file → SQLite
 search.py   — CLI search (--compare, --limit, --store-only flags)
@@ -164,9 +166,9 @@ Interactive docs at http://localhost:8000/docs (Swagger UI).
 | GET | /stats | DB counts + last fetch per chain |
 | GET | /chains | All chains with barcode/store counts |
 | GET | /stores | Store branches (filter: ?chain=&city=) |
-| GET | /cities | Distinct cities with data |
-| GET | /search | Product search (?q=&limit=&city=&chain=) |
-| GET | /compare | Cross-chain only (?q=&limit=&city=) |
+| GET | /cities | Cities with price data (CityInfo[]: city, chain_count, store_count, price_count) |
+| GET | /search | Product search (?q=&limit=&offset=&city=&chain=&group_by=chain\|store) |
+| GET | /compare | Cross-chain only (?q=&limit=&offset=&city=) |
 | GET | /product/{barcode} | All prices for one barcode |
 
 ### Pydantic v2 models (api/models.py)
@@ -213,6 +215,16 @@ are imported from there — zero manual type maintenance.
 - Compare mode (default on) calls /compare (2+ chains only); off calls /search
 - Debounce: 300ms. Min query: 2 chars.
 - Skeleton placeholders (not spinner) on first load; previous results stay visible during refetch
+
+### Session 6b additions
+- **Bilingual**: EN/HE toggle in header, persisted to localStorage key `lang`
+- **RTL**: `<html dir="rtl" lang="he">` set on language change; Tailwind logical properties throughout
+- **Prices/barcodes always LTR** (`dir="ltr"`) even in RTL layout — correct for ₪ numerals
+- **Pagination**: `/search` + `/compare` accept `offset` param; `SearchResult.has_more` drives "Load more" button
+- **Price-aware /cities**: returns `CityInfo[]` with `chain_count`, `store_count`, `price_count`, `chain_ids` — cities with zero prices excluded
+- **group_by**: `/search?group_by=store` returns one row per store (power-user mode); default is `chain`
+- **Low-coverage city warning**: amber banner when `compareMode=true` and selected city has `chain_count < 2`
+- **Intl.NumberFormat** for prices keyed to current i18n language (₪ stays ILS regardless)
 
 ## Conventions
 - All DB writes use INSERT OR IGNORE / ON CONFLICT upserts — safe to re-run
