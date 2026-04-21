@@ -31,13 +31,26 @@ def test_chains_returns_list():
         assert "name" in data[0]
 
 
-def test_cities_returns_list_of_strings():
+def test_cities_returns_city_info_shape():
     r = client.get("/cities")
     assert r.status_code == 200
     data = r.json()
     assert isinstance(data, list)
     if data:
-        assert isinstance(data[0], str)
+        city = data[0]
+        assert "city" in city
+        assert "chain_count" in city
+        assert "store_count" in city
+        assert "price_count" in city
+        assert isinstance(city["chain_count"], int)
+        assert city["price_count"] > 0  # price-aware: every city has prices
+
+
+def test_cities_are_price_aware():
+    r = client.get("/cities")
+    data = r.json()
+    for city in data:
+        assert city["price_count"] > 0, f"City {city['city']} has no prices — should be excluded"
 
 
 def test_stores_returns_list():
@@ -53,8 +66,32 @@ def test_search_returns_result_shape():
     assert "query" in body
     assert "total_matches" in body
     assert "comparable_count" in body
+    assert "has_more" in body
     assert "items" in body
     assert body["query"] == "במבה"
+
+
+def test_search_has_more_and_pagination():
+    r1 = client.get("/search", params={"q": "חלב", "limit": 5, "offset": 0})
+    assert r1.status_code == 200
+    b1 = r1.json()
+    if b1["total_matches"] > 5:
+        assert b1["has_more"] is True
+        r2 = client.get("/search", params={"q": "חלב", "limit": 5, "offset": 5})
+        assert r2.status_code == 200
+        b2 = r2.json()
+        ids1 = {i["product"]["item_code"] for i in b1["items"]}
+        ids2 = {i["product"]["item_code"] for i in b2["items"]}
+        assert ids1.isdisjoint(ids2), "Offset pages should not overlap"
+
+
+def test_search_group_by_store_returns_more():
+    r_chain = client.get("/search", params={"q": "חלב", "limit": 100, "group_by": "chain"})
+    r_store = client.get("/search", params={"q": "חלב", "limit": 100, "group_by": "store"})
+    assert r_chain.status_code == 200
+    assert r_store.status_code == 200
+    # store-level returns at least as many rows as chain-level
+    assert r_store.json()["total_matches"] >= r_chain.json()["total_matches"]
 
 
 def test_compare_only_multi_chain():
@@ -63,6 +100,12 @@ def test_compare_only_multi_chain():
     body = r.json()
     for item in body["items"]:
         assert item["chains_count"] >= 2
+
+
+def test_compare_has_more_field():
+    r = client.get("/compare", params={"q": "מים", "limit": 5})
+    assert r.status_code == 200
+    assert "has_more" in r.json()
 
 
 def test_search_empty_query_rejected():
