@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-import sqlite3
+from sqlalchemy.engine import Connection
 from api.models import StatsResponse
 from api.dependencies import get_db
 from db.query import fetch_stats
@@ -14,6 +14,6 @@ def health():
 
 
 @router.get("/stats", response_model=StatsResponse, summary="Database statistics")
-def stats(conn: sqlite3.Connection = Depends(get_db)):
+def stats(conn: Connection = Depends(get_db)):
     """Counts of chains, stores, items, and prices; last successful fetch per chain."""
     return fetch_stats(conn)

@@ -1,6 +1,6 @@
 import re
-import sqlite3
 from fastapi import APIRouter, Depends, HTTPException, Path
+from sqlalchemy.engine import Connection
 
 from api.models import ProductWithPrices, Product, PriceQuote
 from api.dependencies import get_db
@@ -19,7 +19,7 @@ _BARCODE_RE = re.compile(r"^\d{8,14}$")
 )
 def product(
     barcode: str = Path(description="EAN/barcode — 8 to 14 digits"),
-    conn: sqlite3.Connection = Depends(get_db),
+    conn: Connection = Depends(get_db),
 ):
     """
     Fetch every price quote across all stores for a single barcode.

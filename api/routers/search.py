@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Literal
 from fastapi import APIRouter, Depends, Query
-import sqlite3
+from sqlalchemy.engine import Connection
 
 from api.models import SearchResult, ProductWithPrices, Product, PriceQuote
 from api.dependencies import get_db
@@ -12,7 +12,7 @@ router = APIRouter(tags=["Search"])
 
 def _build_result(
     query: str,
-    conn: sqlite3.Connection,
+    conn: Connection,
     limit: int,
     offset: int,
     city: str | None,
@@ -103,7 +103,7 @@ def search(
     city:     str | None    = Query(None, description="Filter to stores in this city"),
     chain:    str | None    = Query(None, description="Filter to one chain_id"),
     group_by: Literal["chain", "store"] = Query("chain", description="Group results by chain or individual store"),
-    conn:     sqlite3.Connection = Depends(get_db),
+    conn:     Connection = Depends(get_db),
 ):
     """
     Search for products by Hebrew or English name. Multi-word queries match ALL words
@@ -119,7 +119,7 @@ def compare(
     limit:  int           = Query(30, ge=1, le=100, description="Max products returned"),
     offset: int           = Query(0, ge=0, description="Pagination offset"),
     city:   str | None    = Query(None, description="Filter to stores in this city"),
-    conn:   sqlite3.Connection = Depends(get_db),
+    conn:   Connection = Depends(get_db),
 ):
     """
     Like /search but returns ONLY products available in 2+ chains, with

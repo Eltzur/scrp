@@ -1,8 +1,41 @@
+import os
 import sqlite3
+from functools import lru_cache
 from pathlib import Path
+
+from sqlalchemy import create_engine, event, text
+from sqlalchemy.engine import Engine
 
 SCHEMA = Path(__file__).parent / "schema.sql"
 DEFAULT_DB = Path(__file__).parent.parent / "prices.db"
+
+
+def _database_url() -> str:
+    url = os.environ.get("DATABASE_URL", "")
+    if url.startswith("postgres://"):
+        # Railway provides postgres:// — SQLAlchemy 2.x requires postgresql://
+        url = "postgresql://" + url[len("postgres://"):]
+    return url or f"sqlite:///{DEFAULT_DB}"
+
+
+@lru_cache(maxsize=1)
+def get_engine() -> Engine:
+    url = _database_url()
+    if url.startswith("sqlite"):
+        engine = create_engine(url, connect_args={"check_same_thread": False})
+
+        @event.listens_for(engine, "connect")
+        def _set_sqlite_pragmas(dbapi_conn, _record):
+            dbapi_conn.execute("PRAGMA journal_mode=WAL")
+            dbapi_conn.execute("PRAGMA foreign_keys=ON")
+    else:
+        engine = create_engine(
+            url,
+            pool_pre_ping=True,
+            pool_size=5,
+            max_overflow=5,
+        )
+    return engine
 
 
 def connect(db_path: Path = DEFAULT_DB) -> sqlite3.Connection:
