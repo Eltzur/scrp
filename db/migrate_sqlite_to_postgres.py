@@ -111,7 +111,7 @@ def main() -> None:
     for table in TABLES:
         cols, rows = sqlite_rows(lite, table)
         sqlite_counts[table] = len(rows)
-        print(f"  {table:20s}: {len(rows):>7,} rows → inserting…", end="", flush=True)
+        print(f"  {table:20s}: {len(rows):>7,} rows -> inserting...", end="", flush=True)
         insert_table(pg, table, cols, rows)
         pg_counts[table] = count_pg(pg, table)
         print(f" {pg_counts[table]:>7,} in PG")
@@ -123,16 +123,16 @@ def main() -> None:
     all_ok = True
     for table in TABLES:
         s, p  = sqlite_counts[table], pg_counts[table]
-        badge = "✅" if s == p else "❌"
+        badge = "OK" if s == p else "MISMATCH"
         print(f"  {table:20s}: SQLite={s:>7,}  PostgreSQL={p:>7,}  {badge}")
         if s != p:
             all_ok = False
 
     print()
     if all_ok:
-        print("All tables match ✅  Migration complete.")
+        print("All tables match. Migration complete.")
     else:
-        print("Mismatch detected ❌  Check for constraint violations above.")
+        print("Mismatch detected. Check for constraint violations above.")
         sys.exit(1)
 
     lite.close()
