@@ -123,6 +123,20 @@ def test_product_not_found():
     assert r.status_code == 404
 
 
+def test_search_chain_filter_no_duplicates():
+    """group_by=chain must return unique item_codes even when filtered to one chain."""
+    chains = client.get("/chains").json()
+    if not chains:
+        pytest.skip("no chains loaded")
+    chain_id = chains[0]["chain_id"]
+    r = client.get("/search", params={"q": "חלב", "chain": chain_id, "group_by": "chain", "limit": 50})
+    assert r.status_code == 200
+    items = r.json()["items"]
+    codes = [i["product"]["item_code"] for i in items]
+    dupes = [c for c in set(codes) if codes.count(c) > 1]
+    assert len(dupes) == 0, f"Duplicate item_codes: {dupes}"
+
+
 def test_product_valid_barcode_shape():
     chains = client.get("/chains").json()
     if not chains:

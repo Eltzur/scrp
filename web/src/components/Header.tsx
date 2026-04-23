@@ -24,7 +24,7 @@ export default function Header() {
         <button
           onClick={toggleLang}
           className="text-sm font-medium text-gray-500 hover:text-emerald-600 transition-colors px-2 py-1 rounded"
-          aria-label="Switch language"
+          aria-label={t('header.aria_lang_toggle')}
         >
           {isHe ? t('language.switch_to_en') : t('language.switch_to_he')}
         </button>

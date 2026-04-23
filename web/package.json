@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "gen:types": "openapi-typescript http://localhost:8000/openapi.json -o src/types/api.ts"
+    "gen:types": "openapi-typescript http://localhost:8000/openapi.json -o src/types/api.ts",
+    "test:i18n": "node scripts/check-i18n.js"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.99.2",

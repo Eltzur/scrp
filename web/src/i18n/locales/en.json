@@ -3,6 +3,9 @@
     "title": "Israeli Price Comparison",
     "tagline": "Compare grocery prices across Israeli supermarket chains"
   },
+  "header": {
+    "aria_lang_toggle": "Switch language"
+  },
   "search": {
     "placeholder": "Search in Hebrew or English… e.g. במבה, milk, cottage",
     "clear": "Clear",
@@ -17,7 +20,8 @@
     "group_by": "Group by",
     "group_chain": "Chain",
     "group_store": "Store",
-    "compare_disabled_city": "Only {{chain}} has data in this city — showing all their products"
+    "compare_disabled_city": "Compare mode needs 2+ chains. {{city}} only has {{chain_name}}.",
+    "compare_off": "Turn off compare mode"
   },
   "stats": {
     "summary": "Searching across {{chains}} chains, {{stores}} stores, {{prices}} prices"

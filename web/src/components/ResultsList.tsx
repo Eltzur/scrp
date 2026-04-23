@@ -48,9 +48,11 @@ export default function ResultsList({
         {result.comparable_count > 0 && ` · ${t('search.comparable_count', { count: result.comparable_count })}`}
       </p>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {result.items.map(item => (
-          <ProductCard key={item.product.item_code} item={item} />
-        ))}
+        {result.items
+          .filter((item, i, arr) => arr.findIndex(x => x.product.item_code === item.product.item_code) === i)
+          .map(item => (
+            <ProductCard key={item.product.item_code} item={item} />
+          ))}
       </div>
 
       {/* Load more */}
