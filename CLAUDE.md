@@ -9,7 +9,7 @@ The cross-chain join key is `ItemCode` (product barcode).
 ## Tech Stack
 - **Python 3.10+** with virtualenv at `venv/`
 - **lxml** — XML and HTML parsing (Shufersal HTML listing)
-- **SQLite** (Phase 1) → PostgreSQL (later)
+- **SQLite** (local dev) + **PostgreSQL** (Railway production) via SQLAlchemy Core
 - **requests** — HTTP downloads
 - **FastAPI** + **uvicorn** — REST API server (api/)
 - **Pydantic v2** — response model validation
@@ -30,18 +30,19 @@ scraper/    — per-chain downloaders
   registry.py   — chain_id → scraper class mapping
   city_names.py — Hebrew city normalization
 parser/     — XML parsers (price_parser.py)
-db/         — schema.sql, db.py helpers, query.py, chain_overlap.py
+db/         — schema.sql (SQLite), schema_postgres.sql (PG), db.py helpers, query.py, chain_overlap.py
+              migrate_sqlite_to_postgres.py — one-shot data migration script
 api/        — FastAPI application
   main.py       — app factory, CORS, router wiring
   models.py     — Pydantic v2 response models
-  dependencies.py — get_db() per-request SQLite connection
+  dependencies.py — get_db() per-request SQLAlchemy connection (SQLite or PG)
   routers/
     health.py   — GET /health, GET /stats
     catalog.py  — GET /chains, /stores, /cities
     search.py   — GET /search, /compare
     product.py  — GET /product/{barcode}
   tests/
-    test_smoke.py — 11 TestClient smoke tests
+    test_smoke.py — 16 TestClient smoke tests
 web/        — React + Vite + Tailwind frontend
   src/api/      — axios client + React Query hooks
   src/components/ — UI components (ProductCard, SearchBar, Filters, etc.)
@@ -225,6 +226,77 @@ are imported from there — zero manual type maintenance.
 - **group_by**: `/search?group_by=store` returns one row per store (power-user mode); default is `chain`
 - **Low-coverage city warning**: amber banner when `compareMode=true` and selected city has `chain_count < 2`
 - **Intl.NumberFormat** for prices keyed to current i18n language (₪ stays ILS regardless)
+
+## Deployment (Session 7a)
+
+### Two-environment setup
+
+| Environment | Database | How to activate |
+|---|---|---|
+| Local dev | SQLite (`prices.db`) | `DATABASE_URL` unset (default) |
+| Production | Railway PostgreSQL | `DATABASE_URL=postgresql://...` set in env |
+
+`db/db.py:get_engine()` reads `DATABASE_URL` at startup. If unset → SQLite.
+If set and starts with `postgres://`, it is normalised to `postgresql://` (Railway
+quirk) before creating the SQLAlchemy engine.
+
+Scrapers (`scraper/`) always write to local SQLite via `sqlite3` directly —
+they are never deployed to production.
+
+### Running locally (unchanged)
+```bash
+uvicorn api.main:app --reload   # SQLite, no DATABASE_URL needed
+venv/Scripts/python.exe -m pytest api/tests/test_smoke.py -v
+```
+
+### Production (Railway)
+- **URL**: set after Railway domain generation (see Session 7b for custom domain)
+- **Auto-deploy**: every push to `main` triggers a Railway redeploy
+- **Start command** (in `Procfile` + `railway.json`):
+  ```
+  gunicorn -k uvicorn.workers.UvicornWorker api.main:app --bind 0.0.0.0:$PORT --workers 2
+  ```
+- **Health check**: Railway pings `/health` after deploy
+
+### Railway environment variables
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | Auto-populated by Railway when PostgreSQL service is linked |
+| `ALLOWED_ORIGINS` | `https://super.xxl.co.il,http://localhost:5173` |
+| `PORT` | Auto-populated by Railway |
+
+### CORS
+`api/main.py` reads `ALLOWED_ORIGINS` (comma-separated) from env.
+Default (local): `http://localhost:5173,http://localhost:3000`.
+No wildcard `*` in production.
+
+### PostgreSQL schema
+`db/schema_postgres.sql` — idempotent PG schema (`IF NOT EXISTS` throughout).
+Differences from `db/schema.sql` (SQLite):
+- `SERIAL PRIMARY KEY` instead of `INTEGER PRIMARY KEY AUTOINCREMENT`
+- `DOUBLE PRECISION` instead of `REAL` for price/quantity columns
+
+### Data migration (one-shot)
+`db/migrate_sqlite_to_postgres.py` copies all data from local `prices.db` into
+the Railway PostgreSQL database.
+
+```bash
+# Set DATABASE_URL to the Railway PG connection string, then:
+DATABASE_URL=postgresql://user:pass@host:port/db \
+    python -m db.migrate_sqlite_to_postgres
+```
+
+Migration order: `chains → stores → items → item_chain_names → prices → fetch_runs`
+(respects FK constraints). Uses batched inserts (1000 rows/batch). Resets
+PostgreSQL SERIAL sequences after bulk copy so future inserts work. Prints
+per-table counts and validates SQLite == PostgreSQL row counts.
+
+### db/query.py — dialect-agnostic
+All queries use `sqlalchemy.text()` with `:named` parameters (not `?`).
+`IN` clauses use `bindparam("codes", expanding=True)` — SQLAlchemy expands
+the tuple automatically for both SQLite and PostgreSQL.
+`fetch_cities` uses two queries instead of `GROUP_CONCAT` (SQLite) /
+`STRING_AGG` (PostgreSQL) to stay dialect-neutral.
 
 ## Conventions
 - All DB writes use INSERT OR IGNORE / ON CONFLICT upserts — safe to re-run
