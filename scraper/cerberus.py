@@ -19,6 +19,8 @@ import urllib3
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from sqlalchemy import text
+
 from scraper.base import ChainScraper
 from db.db import upsert_chain
 from scraper.city_names import normalize_city
@@ -209,19 +211,19 @@ class CerberusScraper(ChainScraper):
             city      = self.CITY_CODES.get(city_code)
             city_norm = normalize_city(city) if city else None
 
-            conn.execute(
-                """
+            conn.execute(text("""
                 INSERT INTO stores
                     (chain_id, sub_chain_id, store_id, store_name, city, city_norm, address)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (:chain_id, :sub_chain_id, :store_id, :store_name, :city, :city_norm, :address)
                 ON CONFLICT(chain_id, sub_chain_id, store_id) DO UPDATE SET
                     store_name = COALESCE(excluded.store_name, store_name),
                     city       = COALESCE(excluded.city, city),
                     city_norm  = COALESCE(excluded.city_norm, city_norm),
                     address    = COALESCE(excluded.address, address)
-                """,
-                (self.CHAIN_ID, "001", sid, name, city, city_norm, addr),
-            )
+                """), {
+                "chain_id": self.CHAIN_ID, "sub_chain_id": "001", "store_id": sid,
+                "store_name": name, "city": city, "city_norm": city_norm, "address": addr,
+            })
             seen[sid] = {
                 "store_id": sid, "store_name": name,
                 "city": city, "city_norm": city_norm,

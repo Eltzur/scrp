@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 from lxml import html
+from sqlalchemy import text
 
 from scraper.base import ChainScraper
 from db.db import upsert_chain
@@ -131,18 +132,18 @@ class ShufersalScraper(ChainScraper):
                     continue
                 city = _city_from_branch_name(row["branch_name"])
                 city_norm = normalize_city(city) if city else None
-                conn.execute(
-                    """
+                conn.execute(text("""
                     INSERT INTO stores (chain_id, sub_chain_id, store_id, store_name, city, city_norm)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    VALUES (:chain_id, :sub_chain_id, :store_id, :store_name, :city, :city_norm)
                     ON CONFLICT(chain_id, sub_chain_id, store_id) DO UPDATE SET
                         store_name = COALESCE(excluded.store_name, store_name),
                         city       = COALESCE(excluded.city, city),
                         city_norm  = COALESCE(excluded.city_norm, city_norm)
-                    """,
-                    (self.CHAIN_ID, row["sub_chain_id"], sid,
-                     row["branch_name"], city, city_norm),
-                )
+                    """), {
+                    "chain_id": self.CHAIN_ID, "sub_chain_id": row["sub_chain_id"],
+                    "store_id": sid, "store_name": row["branch_name"],
+                    "city": city, "city_norm": city_norm,
+                })
                 seen[sid] = {
                     "store_id":    sid,
                     "store_name":  row["branch_name"],

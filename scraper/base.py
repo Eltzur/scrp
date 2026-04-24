@@ -2,11 +2,13 @@
 import abc
 import gzip
 import logging
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
+from sqlalchemy import text
 
 from db.db import (
     connect, init_db, upsert_chain, upsert_store,
@@ -50,7 +52,9 @@ class ChainScraper(abc.ABC):
         with gzip.open(gz_path, "rb") as f:
             return f.read()
 
-    def load_prices_for_stores(self, store_ids: list, conn, keep_raw: bool = False) -> dict:
+    def load_prices_for_stores(
+        self, store_ids: list, conn, keep_raw: bool = False, replace: bool = True
+    ) -> dict:
         target = set(store_ids)
         index = self.build_pricefull_index(target)
 
@@ -64,7 +68,7 @@ class ChainScraper(abc.ABC):
                 continue
 
             files_attempted += 1
-            log.info(f"  Store {sid}: downloading {entry['filename']}…")
+            log.info(f"  Store {sid}: downloading {entry['filename']}...")
             gz_path = RAW_DIR / (entry["filename"] + ".gz")
 
             try:
@@ -87,6 +91,13 @@ class ChainScraper(abc.ABC):
                 upsert_chain(conn, chain_id)
                 store_fk = upsert_store(conn, chain_id, sub_chain_id, store_id_xml)
 
+                if replace:
+                    # TODO: when price_history table is added, archive rows here before deleting
+                    conn.execute(
+                        text("DELETE FROM prices WHERE store_fk=:store_fk"),
+                        {"store_fk": store_fk},
+                    )
+
                 count = 0
                 for item in items:
                     if not item["item_code"] or item["item_price"] is None:
@@ -107,13 +118,18 @@ class ChainScraper(abc.ABC):
                 log.warning(f"  Store {sid} failed: {e}")
                 gz_path.unlink(missing_ok=True)
 
-        conn.execute(
-            """INSERT INTO fetch_runs
+        conn.execute(text("""
+            INSERT INTO fetch_runs
                (chain_id, run_at, files_attempted, files_loaded, items_inserted, status)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (self.CHAIN_ID, run_at, files_attempted, files_loaded, items_inserted,
-             "ok" if files_loaded == files_attempted else "partial"),
-        )
+               VALUES (:chain_id, :run_at, :files_attempted, :files_loaded, :items_inserted, :status)
+        """), {
+            "chain_id":       self.CHAIN_ID,
+            "run_at":         run_at,
+            "files_attempted": files_attempted,
+            "files_loaded":   files_loaded,
+            "items_inserted": items_inserted,
+            "status":         "ok" if files_loaded == files_attempted else "partial",
+        })
         conn.commit()
 
         return {
@@ -122,7 +138,14 @@ class ChainScraper(abc.ABC):
             "items_inserted":  items_inserted,
         }
 
-    def run(self, city: str = "ירושלים", n_stores: int = 5, db_path=None, keep_raw: bool = False):
+    def run(
+        self,
+        city: str = "ירושלים",
+        n_stores: int = 5,
+        db_path=None,
+        keep_raw: bool = False,
+        append: bool = False,
+    ):
         logging.basicConfig(level=logging.INFO, format="%(message)s")
         db_path = db_path or DEFAULT_DB
         conn = connect(db_path)
@@ -131,35 +154,45 @@ class ChainScraper(abc.ABC):
         self.load_stores(conn)
 
         city_norm = normalize_city(city)
-        log.info(f"\nFinding stores with city_norm='{city_norm}'…")
+        log.info(f"\nFinding stores with city_norm='{city_norm}'...")
 
-        rows = conn.execute(
+        rows = conn.execute(text(
             "SELECT store_id, sub_chain_id, store_name FROM stores "
-            "WHERE chain_id=? AND city_norm=? ORDER BY store_id LIMIT ?",
-            (self.CHAIN_ID, city_norm, n_stores),
-        ).fetchall()
+            "WHERE chain_id=:chain_id AND city_norm=:city_norm ORDER BY store_id LIMIT :limit"
+        ), {"chain_id": self.CHAIN_ID, "city_norm": city_norm, "limit": n_stores}).fetchall()
 
         if not rows:
-            sample = conn.execute(
+            sample = conn.execute(text(
                 "SELECT DISTINCT city, city_norm FROM stores "
-                "WHERE chain_id=? AND city IS NOT NULL ORDER BY city_norm LIMIT 15",
-                (self.CHAIN_ID,),
-            ).fetchall()
+                "WHERE chain_id=:chain_id AND city IS NOT NULL ORDER BY city_norm LIMIT 15"
+            ), {"chain_id": self.CHAIN_ID}).fetchall()
             log.error(
                 f"No stores found for '{city}' (norm='{city_norm}'). "
-                f"Sample: {[(r['city'], r['city_norm']) for r in sample]}"
+                f"Sample: {[(r[0], r[1]) for r in sample]}"
             )
             conn.close()
             return
 
-        store_ids = [r["store_id"] for r in rows]
+        store_ids = [r[0] for r in rows]
         for r in rows:
-            log.info(f"  Store {r['store_id']}: {r['store_name']}")
+            log.info(f"  Store {r[0]}: {r[2]}")
 
-        summary = self.load_prices_for_stores(store_ids, conn, keep_raw=keep_raw)
+        summary = self.load_prices_for_stores(
+            store_ids, conn, keep_raw=keep_raw, replace=not append
+        )
         conn.close()
 
         print(f"\n--- Done ---")
         print(f"Files attempted : {summary['files_attempted']}")
         print(f"Files loaded    : {summary['files_loaded']}")
         print(f"Items inserted  : {summary['items_inserted']}")
+
+
+def _base_cli(scraper_cls):
+    """Shared CLI entry point for all chain scrapers."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    city   = next((a for a in sys.argv[1:] if not a.startswith("-")), "ירושלים")
+    n      = int(next((sys.argv[i+1] for i, a in enumerate(sys.argv) if a == "-n"), 5))
+    keep   = "--keep-raw" in sys.argv
+    append = "--append" in sys.argv
+    scraper_cls().run(city=city, n_stores=n, keep_raw=keep, append=append)
