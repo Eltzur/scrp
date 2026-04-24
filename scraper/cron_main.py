@@ -70,6 +70,8 @@ def main():
         format="%(asctime)s %(levelname)s %(message)s",
         stream=sys.stdout,
     )
+    import os
+    log.info(f"DATABASE_URL set: {'YES' if os.environ.get('DATABASE_URL') else 'NO - WILL FAIL'}")
 
     config = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
     chains = config.get("chains", [])

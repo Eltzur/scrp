@@ -11,14 +11,22 @@ DEFAULT_DB = Path(__file__).parent.parent / "prices.db"
 
 def _database_url() -> str:
     url = os.environ.get("DATABASE_URL", "")
+    if not url:
+        raise RuntimeError(
+            "DATABASE_URL environment variable is not set! "
+            "Set it in Railway Variables tab."
+        )
     if url.startswith("postgres://"):
         url = "postgresql://" + url[len("postgres://"):]
-    return url or f"sqlite:///{DEFAULT_DB}"
+    return url
 
 
 @lru_cache(maxsize=1)
 def get_engine() -> Engine:
-    url = _database_url()
+    url = os.environ.get("DATABASE_URL", "")
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    url = url or f"sqlite:///{DEFAULT_DB}"
     if url.startswith("sqlite"):
         engine = create_engine(url, connect_args={"check_same_thread": False})
 
