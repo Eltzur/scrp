@@ -1,0 +1,6 @@
+{
+  "deploy": {
+    "startCommand": "python -m scraper.cron_main",
+    "cronSchedule": "0 1 * * *"
+  }
+}
