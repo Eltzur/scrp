@@ -10,7 +10,9 @@ export type SearchResult    = components['schemas']['SearchResult'];
 export type StatsResponse   = components['schemas']['StatsResponse'];
 export type CityInfo        = components['schemas']['CityInfo'];
 
-const http = axios.create({ baseURL: 'http://localhost:8000' });
+const http = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+});
 
 export interface SearchOpts {
   limit?: number;
