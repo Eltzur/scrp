@@ -27,8 +27,13 @@ scraper/    — per-chain downloaders
   shufersal.py  — ShufersalScraper (public HTML listing)
   ramilevi.py   — RamiLeviScraper (Cerberus authenticated portal)
   osherad.py    — OsherAdScraper (Cerberus portal)
+  victory.py    — VictoryScraper (laibcatalog.co.il REST API)
+  yochananof.py — YochananofScraper (Cerberus portal)
+  keshet.py     — KeshetScraper (Cerberus portal)
   registry.py   — chain_id → scraper class mapping
   city_names.py — Hebrew city normalization
+  cron_main.py  — daily cron entry point (reads scheduled_stores.yaml)
+  scheduled_stores.yaml — which stores to scrape per chain per run
 parser/     — XML parsers (price_parser.py)
 db/         — schema.sql (SQLite), schema_postgres.sql (PG), db.py helpers, query.py, chain_overlap.py
               migrate_sqlite_to_postgres.py — one-shot data migration script
@@ -109,14 +114,37 @@ fetch_runs  — id, chain_id, run_at, files_attempted, files_loaded,
 - Both old and new PriceFull filename formats handled in `CerberusScraper.build_pricefull_index()`
 - Adding a new Cerberus chain = 6-line subclass (CHAIN_ID, USERNAME, CHAIN_NAME)
 
+### Victory (7290696200003)
+- Portal: `laibcatalog.co.il` REST API — no auth required
+- Branches: `GET /webapi/api/getbranches?edi={chain_id}` → `[{number, name}]`
+- File list: `GET /webapi/api/getfiles?edi={chain_id}` → `[{branchNumber, fileName, fileType, fileDate, fileSize}]`
+- Download: `GET /webapi/{chain_id}/{fileName}` (public HTTPS, no session)
+- `fileType == "pricefull"` for price files; filter and keep newest per `branchNumber`
+- 25 stores; branch `name` field is used as both store_name and city (neighbourhood-level, normalize_city gives partial matches)
+- Implementation: `VictoryScraper(ChainScraper)` — custom `load_stores` + `build_pricefull_index`
+
+### Yochananof (7290803800003)
+- Portal: Cerberus (username: `yohananof`, empty password)
+- 50 stores; city codes from Stores XML often not in CITY_CODES dict → city_norm NULL for most stores
+- Filename format: OLD format `PriceFull{ChainId}-{StoreId}-{Timestamp12}.gz`
+- Implementation: `YochananofScraper(CerberusScraper)` — 6-line subclass
+
+### Keshet (7290785400000)
+- Portal: Cerberus (username: `Keshet`, empty password)
+- 27 stores; city codes mostly absent from CITY_CODES → city_norm NULL for most stores
+- Filename format: OLD format
+- Implementation: `KeshetScraper(CerberusScraper)` — 6-line subclass
+
 ## Multi-Chain Architecture
-Hierarchy: `ChainScraper` (base.py) → `CerberusScraper` (cerberus.py) → `RamiLeviScraper` / `OsherAdScraper`
+Hierarchy: `ChainScraper` (base.py) → `CerberusScraper` (cerberus.py) → `RamiLeviScraper` / `OsherAdScraper` / `YochananofScraper` / `KeshetScraper`
 
 All scrapers inherit from `ChainScraper` (scraper/base.py):
 - Implement `load_stores(conn)` → populate stores table, return store_id → metadata
 - Implement `build_pricefull_index(target_store_ids)` → return store_id → entry with filename/url
 - Inherited: `load_prices_for_stores()`, `run()`, `_download_gz()`, `_decompress()`
 - entry["filename"] must be WITHOUT .gz — base class appends .gz for download, .xml for temp
+- `load_prices_for_stores(replace=True)` — snapshot mode: deletes existing prices before re-inserting
+- `--append` flag on each chain's CLI disables replace (for debugging/manual runs)
 
 ## Search Architecture (barcode-first, name-second)
 search.py uses a two-phase approach:
@@ -250,13 +278,19 @@ venv/Scripts/python.exe -m pytest api/tests/test_smoke.py -v
 ```
 
 ### Production (Railway)
-- **URL**: set after Railway domain generation (see Session 7b for custom domain)
+- **Web service URL**: https://api-super.xxl.co.il (custom domain)
+- **Frontend URL**: https://super.xxl.co.il (Hostinger static hosting)
 - **Auto-deploy**: every push to `main` triggers a Railway redeploy
-- **Start command** (in `Procfile` + `railway.json`):
+- **Start command** (set in Railway UI — no railway.json in repo):
   ```
-  gunicorn -k uvicorn.workers.UvicornWorker api.main:app --bind 0.0.0.0:$PORT --workers 2
+  gunicorn -k uvicorn.workers.UvicornWorker api.main:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
   ```
 - **Health check**: Railway pings `/health` after deploy
+
+### Deploying frontend updates
+1. Run `cd web && npm run build` locally
+2. Zip `web/dist/` contents: `Compress-Archive -Path web\dist\* -DestinationPath dist.zip -Force`
+3. Upload zip to Hostinger File Manager → `public_html/super.xxl.co.il/` → Extract
 
 ### Railway environment variables
 | Variable | Value |
@@ -299,8 +333,39 @@ the tuple automatically for both SQLite and PostgreSQL.
 `STRING_AGG` (PostgreSQL) to stay dialect-neutral.
 
 ## Conventions
-- All DB writes use INSERT OR IGNORE / ON CONFLICT upserts — safe to re-run
+- All DB writes use ON CONFLICT upserts — safe to re-run
 - Hebrew text is UTF-8 throughout; stdout wrapped for Windows terminal compat
 - Rate limit: 0.5s between HTTP requests to chain servers
 - Raw .gz files saved to sample_data/raw/ then deleted after parsing
 - upsert_store matches by (chain_id, store_id) first to avoid orphan rows when sub_chain_id differs
+- All scraper DB calls use SQLAlchemy `text()` with `:named` params — works on SQLite and PostgreSQL
+- ON CONFLICT DO UPDATE bare column refs must be table-prefixed (e.g. `stores.city`) for PostgreSQL compatibility
+
+## Session 8a — Completed
+
+### What was built
+- **3 new scrapers**: Victory (REST API), Yochananof (Cerberus), Keshet (Cerberus)
+- **SQLAlchemy port**: `db/db.py:connect()` now returns SA Connection; all upsert functions use `text()` + `:named` params — works on both SQLite and PostgreSQL
+- **Snapshot/replace mode**: `load_prices_for_stores(replace=True)` deletes existing prices before re-inserting; `--append` flag preserves old behaviour
+- **Cron infrastructure**: `scraper/cron_main.py` + `scraper/scheduled_stores.yaml`; `scraper-cron` service on Railway
+
+### Cron service setup
+- Railway service: `scraper-cron` (same repo, separate service from web)
+- Start command (set in Railway UI): `python -m scraper.cron_main`
+- Schedule: `0 1 * * *` (UTC) = 03:00 Israel time
+- `DATABASE_URL` must use `DATABASE_PUBLIC_URL` value (not internal Railway URL) for cron services
+- To adjust which stores run: edit `scraper/scheduled_stores.yaml` and push
+
+### Deployment fixes discovered during 8a
+- `railway.json` in repo root was overriding the scraper-cron start command — fixed by deleting `railway.json` and setting all service configs in Railway UI
+- Ambiguous column refs in `ON CONFLICT DO UPDATE` (e.g. bare `name`, `store_name`, `city`) work in SQLite but fail in PostgreSQL — fixed by prefixing with table names in `cerberus.py`, `shufersal.py`, `victory.py`, `db/db.py`
+- `DATABASE_URL` for the cron service must be the public URL, not the Railway-internal URL
+
+### Current production state (after 8a)
+- 6 chains / ~24 stores with prices / ~214K prices
+- Victory chain (7290696200003) had one failed cron run — to investigate in 8b
+
+### Pending for Session 8b
+- Investigate and fix Victory scraper error on Railway
+- Fix search relevance (AND logic / ranking improvements)
+- Canonical naming: consensus-tokens + majority voting + OpenFoodFacts + manual override
