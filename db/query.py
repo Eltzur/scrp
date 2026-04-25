@@ -17,9 +17,19 @@ from scraper.city_names import normalize_city
 # Barcode discovery
 # ---------------------------------------------------------------------------
 
+def _is_meaningful(token: str) -> bool:
+    """Return False for tokens that add noise rather than signal to a search."""
+    if len(token) < 2:
+        return False
+    if token.rstrip("%").isdigit():  # pure numbers and percentage values like "3%"
+        return False
+    return True
+
+
 def build_word_clause(words: list[str], offset: int = 0, prefix: str = "") -> tuple[str, dict]:
     """
-    SQL WHERE fragment requiring ALL words in item_name OR manufacturer_name.
+    SQL WHERE fragment requiring ALL meaningful words in item_name OR manufacturer_name.
+    Skips tokens that are pure numbers, percentages, or shorter than 2 characters.
     Returns (sql_fragment, params_dict) using SQLAlchemy :named params.
     offset avoids param name collisions when the clause is used twice in a UNION.
     """
@@ -27,6 +37,8 @@ def build_word_clause(words: list[str], offset: int = 0, prefix: str = "") -> tu
     clauses: list[str] = []
     params: dict[str, str] = {}
     for i, w in enumerate(words, start=offset):
+        if not _is_meaningful(w):
+            continue
         pat = f"%{w}%"
         clauses.append(f"({p}item_name LIKE :w{i}n OR {p}manufacturer_name LIKE :w{i}m)")
         params[f"w{i}n"] = pat
@@ -35,12 +47,14 @@ def build_word_clause(words: list[str], offset: int = 0, prefix: str = "") -> tu
 
 
 def find_barcodes(conn: Connection, words: list[str]) -> list[str]:
-    """Return item_codes matching ALL words across item_chain_names ∪ items."""
+    """Return item_codes matching ALL meaningful words across item_chain_names ∪ items."""
     if not words:
         return []
     # Use different param offsets so each half of the UNION has unique names
     clause1, params1 = build_word_clause(words, offset=0)
     clause2, params2 = build_word_clause(words, offset=len(words))
+    if not clause1 and not clause2:
+        return []  # all tokens were filtered out (numbers/percentages/single chars)
     sql = text(f"""
         SELECT DISTINCT item_code FROM item_chain_names WHERE {clause1}
         UNION
