@@ -47,20 +47,16 @@ def build_word_clause(words: list[str], offset: int = 0, prefix: str = "") -> tu
 
 
 def find_barcodes(conn: Connection, words: list[str]) -> list[str]:
-    """Return item_codes matching ALL meaningful words across item_chain_names ∪ items."""
+    """Return item_codes matching ALL meaningful words in items.item_name / manufacturer_name."""
     if not words:
         return []
-    # Use different param offsets so each half of the UNION has unique names
-    clause1, params1 = build_word_clause(words, offset=0)
-    clause2, params2 = build_word_clause(words, offset=len(words))
-    if not clause1 and not clause2:
+    clause, params = build_word_clause(words)
+    if not clause:
         return []  # all tokens were filtered out (numbers/percentages/single chars)
-    sql = text(f"""
-        SELECT DISTINCT item_code FROM item_chain_names WHERE {clause1}
-        UNION
-        SELECT item_code FROM items WHERE {clause2}
-    """)
-    rows = conn.execute(sql, {**params1, **params2}).mappings().all()
+    rows = conn.execute(
+        text(f"SELECT item_code FROM items WHERE {clause}"),
+        params,
+    ).mappings().all()
     return [r["item_code"] for r in rows]
 
 
