@@ -21,14 +21,22 @@ class VictoryScraper(ChainScraper):
     def load_stores(self, conn) -> dict:
         upsert_chain(conn, self.CHAIN_ID, self.CHAIN_NAME)
 
-        resp = self._session.get(
-            f"{_API_BASE}/webapi/api/getbranches",
-            params={"edi": self.CHAIN_ID},
-            timeout=30,
-        )
-        resp.raise_for_status()
+        for attempt in range(1, 4):
+            try:
+                resp = self._session.get(
+                    f"{_API_BASE}/webapi/api/getbranches",
+                    params={"edi": self.CHAIN_ID},
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                branches = resp.json()
+                break
+            except Exception as e:
+                log.warning(f"{self.CHAIN_NAME}: getbranches attempt {attempt}/3 failed: {e}")
+                if attempt == 3:
+                    raise
+                time.sleep(10)
         time.sleep(self.REQUEST_DELAY)
-        branches = resp.json()
 
         seen = {}
         for b in branches:
@@ -54,14 +62,22 @@ class VictoryScraper(ChainScraper):
         return seen
 
     def build_pricefull_index(self, target_store_ids: set) -> dict:
-        resp = self._session.get(
-            f"{_API_BASE}/webapi/api/getfiles",
-            params={"edi": self.CHAIN_ID},
-            timeout=30,
-        )
-        resp.raise_for_status()
+        for attempt in range(1, 4):
+            try:
+                resp = self._session.get(
+                    f"{_API_BASE}/webapi/api/getfiles",
+                    params={"edi": self.CHAIN_ID},
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                files = resp.json()
+                break
+            except Exception as e:
+                log.warning(f"{self.CHAIN_NAME}: getfiles attempt {attempt}/3 failed: {e}")
+                if attempt == 3:
+                    raise
+                time.sleep(10)
         time.sleep(self.REQUEST_DELAY)
-        files = resp.json()
 
         index: dict[str, dict] = {}
         for f in files:
