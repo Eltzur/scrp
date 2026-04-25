@@ -370,3 +370,25 @@ the tuple automatically for both SQLite and PostgreSQL.
 - Fix search relevance (AND logic / ranking improvements)
 - Canonical naming: consensus-tokens + majority voting + OpenFoodFacts + manual override
 - Search: numeric/percentage tokens (e.g. '3%') are currently filtered out as noise. In a future session, add fat-percentage search support so users can search for '3%' and find items by fat content.
+
+## Session 8b — Completed (partial)
+
+### What was built
+- **`scraper/canonical.py`**: majority token voting to compute canonical names across chains
+- **`update_canonical_names()`** hooked into `cron_main.py` (runs after every scrape) and `scraper/run_canonical.py` (one-off script)
+- 11,908 barcodes processed, 7,050 canonical names updated in production
+- **Search simplified**: `find_barcodes` now queries `items.item_name` only (not `item_chain_names`) — canonical name is the single source of truth for search
+- **Numeric/percentage tokens filtered**: tokens like `"3%"` or `"100"` excluded from search queries
+
+### Root cause identified for search quality
+Per-chain item names are unreliable for search — different chains describe the same product differently. Majority voting helps but is limited. The real fix is an authoritative external product database.
+
+**Solution**: OpenFoodFacts API lookup by barcode provides clean Hebrew product names + product photos.
+
+## Session 8c — Planned
+
+- For each barcode in `items`, query OpenFoodFacts API for clean Hebrew name + photo URL
+- Add `product_image_url` column to `items` table (and PG schema)
+- Replace majority-vote canonical names with OpenFoodFacts names where available
+- Search remains `items.item_name`-based but now uses authoritative product names
+- Display product photos in search results on frontend
