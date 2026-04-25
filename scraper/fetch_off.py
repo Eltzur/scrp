@@ -99,7 +99,7 @@ def fetch_off(
     Enrich items table with OpenFoodFacts data.
     Returns summary dict with keys: found_hebrew, found_english, not_found, images_added.
     """
-    rows = conn.execute(text("SELECT item_code FROM items ORDER BY item_code")).fetchall()
+    rows = conn.execute(text("SELECT item_code FROM items ORDER BY RANDOM()")).fetchall()
     if israel_only:
         rows = [r for r in rows if str(r[0]).startswith("729")]
     if offset:
