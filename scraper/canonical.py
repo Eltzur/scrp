@@ -1,10 +1,12 @@
-"""Canonical name computation via majority token voting.
+"""Canonical name computation via weighted token voting.
 
 For each barcode present in 2+ chains, picks the best item_name by:
 1. Counting how many names contain each token (whitespace-split).
-2. Keeping tokens that appear in strictly more than half the names.
-3. Returning the original name that contains the most such majority tokens.
-4. Falling back to the longest name when no majority tokens exist.
+2. Winning tokens: those appearing in >50% of names (tokens in ALL names are
+   a strict subset and are automatically included).
+3. Returning the original name containing the most winning tokens (preserving
+   natural word order since we return a whole name, not a reconstructed string).
+4. Fallback to longest name when fewer than 2 winning tokens exist.
 """
 import logging
 from collections import Counter, defaultdict
@@ -17,12 +19,14 @@ log = logging.getLogger(__name__)
 def compute_canonical_name(names: list[str]) -> str:
     """
     Given a list of item names from different chains for the same barcode,
-    return the best canonical name via majority token voting.
+    return the best canonical name via weighted token voting.
     """
     if not names:
         return ""
     if len(names) == 1:
         return names[0]
+
+    n = len(names)
 
     # Count how many distinct names contain each token
     token_support: Counter = Counter()
@@ -30,16 +34,16 @@ def compute_canonical_name(names: list[str]) -> str:
         for token in set(name.split()):
             token_support[token] += 1
 
-    threshold = len(names) / 2  # strictly more than half
-    majority_tokens = {t for t, count in token_support.items() if count > threshold}
+    # Winning tokens: appear in strictly more than half the names.
+    # Tokens present in ALL names are a subset and always win.
+    winning_tokens = {t for t, count in token_support.items() if count > n / 2}
 
-    if not majority_tokens:
+    # Fewer than 2 winning tokens = no real consensus; fall back to longest name
+    if len(winning_tokens) < 2:
         return max(names, key=len)
 
-    def majority_score(name: str) -> int:
-        return len(set(name.split()) & majority_tokens)
-
-    return max(names, key=majority_score)
+    # Return the name containing the most winning tokens (natural word order preserved)
+    return max(names, key=lambda name: len(set(name.split()) & winning_tokens))
 
 
 def update_canonical_names(conn) -> dict:
