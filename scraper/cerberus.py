@@ -216,10 +216,10 @@ class CerberusScraper(ChainScraper):
                     (chain_id, sub_chain_id, store_id, store_name, city, city_norm, address)
                 VALUES (:chain_id, :sub_chain_id, :store_id, :store_name, :city, :city_norm, :address)
                 ON CONFLICT(chain_id, sub_chain_id, store_id) DO UPDATE SET
-                    store_name = COALESCE(excluded.store_name, store_name),
-                    city       = COALESCE(excluded.city, city),
-                    city_norm  = COALESCE(excluded.city_norm, city_norm),
-                    address    = COALESCE(excluded.address, address)
+                    store_name = COALESCE(excluded.store_name, stores.store_name),
+                    city       = COALESCE(excluded.city, stores.city),
+                    city_norm  = COALESCE(excluded.city_norm, stores.city_norm),
+                    address    = COALESCE(excluded.address, stores.address)
                 """), {
                 "chain_id": self.CHAIN_ID, "sub_chain_id": "001", "store_id": sid,
                 "store_name": name, "city": city, "city_norm": city_norm, "address": addr,
