@@ -50,14 +50,16 @@ def _fetch_off(session: requests.Session, barcode: str) -> dict | None:
         return None
 
 
-def fetch_off(conn) -> dict:
+def fetch_off(conn, limit: int | None = None) -> dict:
     """
     Enrich items table with OpenFoodFacts data.
     Returns summary dict with keys: found_hebrew, found_english, not_found, images_added.
     """
     rows = conn.execute(text("SELECT item_code FROM items ORDER BY item_code")).fetchall()
+    if limit is not None:
+        rows = rows[:limit]
     total = len(rows)
-    log.info(f"Fetching OpenFoodFacts data for {total} barcodes...")
+    log.info(f"Fetching OpenFoodFacts data for {total} barcodes{f' (limit={limit})' if limit else ''}...")
 
     session = requests.Session()
     session.headers["User-Agent"] = _USER_AGENT
@@ -129,15 +131,21 @@ def fetch_off(conn) -> dict:
 
 
 def main():
+    import argparse
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
         stream=sys.stdout,
     )
+    parser = argparse.ArgumentParser(description="Enrich items with OpenFoodFacts data")
+    parser.add_argument("--limit", type=int, default=None, metavar="N",
+                        help="Process only the first N barcodes (default: all)")
+    args = parser.parse_args()
+
     conn = connect()
     init_db(conn)
-    summary = fetch_off(conn)
+    summary = fetch_off(conn, limit=args.limit)
     conn.close()
     print(f"\nDone: {summary}")
 
