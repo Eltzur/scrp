@@ -369,3 +369,4 @@ the tuple automatically for both SQLite and PostgreSQL.
 - Investigate and fix Victory scraper error on Railway
 - Fix search relevance (AND logic / ranking improvements)
 - Canonical naming: consensus-tokens + majority voting + OpenFoodFacts + manual override
+- Search: numeric/percentage tokens (e.g. '3%') are currently filtered out as noise. In a future session, add fat-percentage search support so users can search for '3%' and find items by fat content.
