@@ -91,6 +91,7 @@ def _fetch_off(session: requests.Session, barcode: str, skip_il: bool = False) -
 def fetch_off(
     conn,
     limit: int | None = None,
+    offset: int = 0,
     israel_only: bool = False,
     skip_il: bool = False,
 ) -> dict:
@@ -101,12 +102,16 @@ def fetch_off(
     rows = conn.execute(text("SELECT item_code FROM items ORDER BY item_code")).fetchall()
     if israel_only:
         rows = [r for r in rows if str(r[0]).startswith("729")]
+    if offset:
+        rows = rows[offset:]
     if limit is not None:
         rows = rows[:limit]
     total = len(rows)
     flags = []
     if israel_only:
         flags.append("israel-only")
+    if offset:
+        flags.append(f"offset={offset}")
     if limit:
         flags.append(f"limit={limit}")
     if skip_il:
@@ -192,7 +197,9 @@ def main():
     )
     parser = argparse.ArgumentParser(description="Enrich items with OpenFoodFacts data")
     parser.add_argument("--limit", type=int, default=None, metavar="N",
-                        help="Process only the first N barcodes (default: all)")
+                        help="Process only N barcodes after offset (default: all)")
+    parser.add_argument("--offset", type=int, default=0, metavar="N",
+                        help="Skip the first N barcodes before starting (default: 0)")
     parser.add_argument("--israel-only", action="store_true",
                         help="Only process barcodes starting with '729' (Israeli EAN prefix)")
     parser.add_argument("--skip-il-mirror", action="store_true",
@@ -201,7 +208,13 @@ def main():
 
     conn = connect()
     init_db(conn)
-    summary = fetch_off(conn, limit=args.limit, israel_only=args.israel_only, skip_il=args.skip_il_mirror)
+    summary = fetch_off(
+        conn,
+        limit=args.limit,
+        offset=args.offset,
+        israel_only=args.israel_only,
+        skip_il=args.skip_il_mirror,
+    )
     conn.close()
     print(f"\nDone: {summary}")
 
