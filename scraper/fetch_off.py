@@ -1,7 +1,10 @@
 """Enrich items table with OpenFoodFacts data (Hebrew names + product images).
 
-For each barcode in the items table, queries:
-  https://world.openfoodfacts.org/api/v0/product/{barcode}.json
+For each barcode, queries two sources in order:
+  1. https://world.openfoodfacts.org/api/v0/product/{barcode}.json
+  2. https://il.openfoodfacts.org/api/v0/product/{barcode}.json (Israeli mirror, better Hebrew)
+
+Best result wins: Hebrew name from either source takes priority.
 
 Name source priority:
   'off_hebrew'  — Hebrew name found → update item_name + image
@@ -29,25 +32,57 @@ from db.db import connect, init_db
 
 log = logging.getLogger(__name__)
 
-_OFF_URL = "https://world.openfoodfacts.org/api/v0/product/{barcode}.json"
+_OFF_WORLD = "https://world.openfoodfacts.org/api/v0/product/{barcode}.json"
+_OFF_IL    = "https://il.openfoodfacts.org/api/v0/product/{barcode}.json"
 _USER_AGENT = "IsraeliPriceComparison/1.0 (research; github.com/Eltzur/scrp)"
 
 
-def _fetch_off(session: requests.Session, barcode: str) -> dict | None:
-    """Query OFF for one barcode. Returns parsed product dict or None."""
+def _query(session: requests.Session, url: str) -> dict | None:
+    """Fetch one OFF URL. Returns product dict or None."""
     try:
-        resp = session.get(
-            _OFF_URL.format(barcode=barcode),
-            timeout=15,
-        )
+        resp = session.get(url, timeout=15)
         resp.raise_for_status()
         data = resp.json()
         if data.get("status") != 1:
             return None
         return data.get("product") or None
     except Exception as e:
-        log.debug(f"OFF request failed for {barcode}: {e}")
+        log.debug(f"OFF request failed ({url}): {e}")
         return None
+
+
+def _fetch_off(session: requests.Session, barcode: str) -> dict | None:
+    """
+    Query world then IL mirror. Merge results, preferring Hebrew name from either source.
+    Returns a synthetic product dict with the best available data, or None if not found.
+    """
+    world = _query(session, _OFF_WORLD.format(barcode=barcode))
+    time.sleep(0.5)
+    il    = _query(session, _OFF_IL.format(barcode=barcode))
+    time.sleep(0.5)
+
+    if not world and not il:
+        return None
+
+    def _get(p, *keys):
+        for k in keys:
+            v = (p or {}).get(k, "")
+            if v and str(v).strip():
+                return str(v).strip()
+        return ""
+
+    # Prefer Hebrew name from either source
+    name_he = _get(world, "product_name_he") or _get(il, "product_name_he")
+    name_en = (
+        _get(world, "product_name_en", "product_name") or
+        _get(il,    "product_name_en", "product_name")
+    )
+    image = (
+        _get(world, "image_front_url", "image_url") or
+        _get(il,    "image_front_url", "image_url")
+    )
+
+    return {"product_name_he": name_he, "product_name_en": name_en, "image_front_url": image}
 
 
 def fetch_off(conn, limit: int | None = None) -> dict:
@@ -68,8 +103,7 @@ def fetch_off(conn, limit: int | None = None) -> dict:
     pending = 0
 
     for i, (barcode,) in enumerate(rows, start=1):
-        product = _fetch_off(session, barcode)
-        time.sleep(1.0)
+        product = _fetch_off(session, barcode)  # sleeps 0.5s × 2 internally
 
         if product is None:
             not_found += 1
