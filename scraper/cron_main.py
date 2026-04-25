@@ -13,6 +13,7 @@ from sqlalchemy import text
 
 from db.db import connect, init_db
 from scraper.registry import get_scraper
+from scraper.canonical import update_canonical_names
 
 log = logging.getLogger(__name__)
 CONFIG = Path(__file__).parent / "scheduled_stores.yaml"
@@ -98,6 +99,16 @@ def main():
         except Exception as exc:
             log.error(f"[{chain_id}] FAILED: {exc}", exc_info=True)
             errors.append(chain_id)
+
+    log.info("Running canonical name update...")
+    try:
+        canonical_summary = update_canonical_names(conn)
+        log.info(
+            f"Canonical names: {canonical_summary['total_processed']} processed, "
+            f"{canonical_summary['total_updated']} updated."
+        )
+    except Exception as exc:
+        log.error(f"Canonical name update failed: {exc}", exc_info=True)
 
     conn.close()
     total = time.monotonic() - t_start
