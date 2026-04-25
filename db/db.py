@@ -76,7 +76,7 @@ def upsert_chain(conn: Connection, chain_id: str, name: str = "") -> None:
     conn.execute(text("""
         INSERT INTO chains (chain_id, name) VALUES (:chain_id, :name)
         ON CONFLICT(chain_id) DO UPDATE SET
-            name = CASE WHEN excluded.name != '' THEN excluded.name ELSE name END
+            name = CASE WHEN excluded.name != '' THEN excluded.name ELSE chains.name END
     """), {"chain_id": chain_id, "name": name})
 
 
