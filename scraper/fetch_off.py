@@ -51,15 +51,18 @@ def _query(session: requests.Session, url: str) -> dict | None:
         return None
 
 
-def _fetch_off(session: requests.Session, barcode: str) -> dict | None:
+def _fetch_off(session: requests.Session, barcode: str, skip_il: bool = False) -> dict | None:
     """
-    Query world then IL mirror. Merge results, preferring Hebrew name from either source.
+    Query world then (optionally) IL mirror. Merge results, preferring Hebrew name.
     Returns a synthetic product dict with the best available data, or None if not found.
     """
     world = _query(session, _OFF_WORLD.format(barcode=barcode))
     time.sleep(0.5)
-    il    = _query(session, _OFF_IL.format(barcode=barcode))
-    time.sleep(0.5)
+    if skip_il:
+        il = None
+    else:
+        il = _query(session, _OFF_IL.format(barcode=barcode))
+        time.sleep(0.5)
 
     if not world and not il:
         return None
@@ -85,16 +88,31 @@ def _fetch_off(session: requests.Session, barcode: str) -> dict | None:
     return {"product_name_he": name_he, "product_name_en": name_en, "image_front_url": image}
 
 
-def fetch_off(conn, limit: int | None = None) -> dict:
+def fetch_off(
+    conn,
+    limit: int | None = None,
+    israel_only: bool = False,
+    skip_il: bool = False,
+) -> dict:
     """
     Enrich items table with OpenFoodFacts data.
     Returns summary dict with keys: found_hebrew, found_english, not_found, images_added.
     """
     rows = conn.execute(text("SELECT item_code FROM items ORDER BY item_code")).fetchall()
+    if israel_only:
+        rows = [r for r in rows if str(r[0]).startswith("729")]
     if limit is not None:
         rows = rows[:limit]
     total = len(rows)
-    log.info(f"Fetching OpenFoodFacts data for {total} barcodes{f' (limit={limit})' if limit else ''}...")
+    flags = []
+    if israel_only:
+        flags.append("israel-only")
+    if limit:
+        flags.append(f"limit={limit}")
+    if skip_il:
+        flags.append("skip-il-mirror")
+    suffix = f" ({', '.join(flags)})" if flags else ""
+    log.info(f"Fetching OpenFoodFacts data for {total} barcodes{suffix}...")
 
     session = requests.Session()
     session.headers["User-Agent"] = _USER_AGENT
@@ -103,7 +121,7 @@ def fetch_off(conn, limit: int | None = None) -> dict:
     pending = 0
 
     for i, (barcode,) in enumerate(rows, start=1):
-        product = _fetch_off(session, barcode)  # sleeps 0.5s × 2 internally
+        product = _fetch_off(session, barcode, skip_il=skip_il)
 
         if product is None:
             not_found += 1
@@ -175,11 +193,15 @@ def main():
     parser = argparse.ArgumentParser(description="Enrich items with OpenFoodFacts data")
     parser.add_argument("--limit", type=int, default=None, metavar="N",
                         help="Process only the first N barcodes (default: all)")
+    parser.add_argument("--israel-only", action="store_true",
+                        help="Only process barcodes starting with '729' (Israeli EAN prefix)")
+    parser.add_argument("--skip-il-mirror", action="store_true",
+                        help="Skip the IL mirror query, use world.openfoodfacts.org only")
     args = parser.parse_args()
 
     conn = connect()
     init_db(conn)
-    summary = fetch_off(conn, limit=args.limit)
+    summary = fetch_off(conn, limit=args.limit, israel_only=args.israel_only, skip_il=args.skip_il_mirror)
     conn.close()
     print(f"\nDone: {summary}")
 
