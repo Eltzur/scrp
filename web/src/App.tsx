@@ -6,6 +6,8 @@ import SearchBar from './components/SearchBar';
 import Filters, { type FilterState } from './components/Filters';
 import StatsBar from './components/StatsBar';
 import ResultsList from './components/ResultsList';
+import BasketDrawer from './components/BasketDrawer';
+import { BasketProvider } from './components/BasketContext';
 import { useSearch, useCompare } from './api/hooks';
 import { searchProducts, compareProducts } from './api/client';
 import type { ProductWithPrices } from './api/client';
@@ -100,6 +102,8 @@ export default function App() {
     : undefined;
 
   return (
+    <BasketProvider>
+    <BasketDrawer />
     <div className="min-h-screen bg-gray-50">
       <Header />
 
@@ -129,5 +133,6 @@ export default function App() {
         </p>
       </footer>
     </div>
+    </BasketProvider>
   );
 }

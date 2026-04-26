@@ -2,6 +2,7 @@ import { Star } from 'lucide-react';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import type { ProductWithPrices, PriceQuote } from '../api/client';
+import BasketButton from './BasketButton';
 
 interface Props {
   item: ProductWithPrices;
@@ -107,21 +108,26 @@ export default function ProductCard({ item }: Props) {
         })}
       </div>
 
-      {/* Savings + barcode */}
-      <div className="flex items-end justify-between mt-auto">
-        {savings > 0.005 ? (
-          <p className="text-xs text-emerald-600 font-medium" dir="auto">
-            {t('product_card.save', {
-              amount: fmtPrice(savings),
-              pct: savingsPct.toFixed(0),
-            })}
+      {/* Savings + barcode + basket */}
+      <div className="flex items-end justify-between mt-auto gap-2">
+        <div className="flex flex-col gap-1 min-w-0">
+          {savings > 0.005 && (
+            <p className="text-xs text-emerald-600 font-medium" dir="auto">
+              {t('product_card.save', {
+                amount: fmtPrice(savings),
+                pct: savingsPct.toFixed(0),
+              })}
+            </p>
+          )}
+          <p className="text-xs text-gray-300 font-mono" dir="ltr">
+            {t('product_card.barcode', { code: product.item_code })}
           </p>
-        ) : (
-          <span />
-        )}
-        <p className="text-xs text-gray-300 font-mono" dir="ltr">
-          {t('product_card.barcode', { code: product.item_code })}
-        </p>
+        </div>
+        <BasketButton
+          item_code={product.item_code}
+          item_name={displayName}
+          is_weighted={product.is_weighted}
+        />
       </div>
     </div>
   );

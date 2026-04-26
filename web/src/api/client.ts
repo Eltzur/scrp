@@ -48,3 +48,39 @@ export const getStores = (opts: { chain?: string; city?: string } = {}): Promise
 
 export const getStats = (): Promise<StatsResponse> =>
   http.get<StatsResponse>('/stats').then(r => r.data);
+
+// ---------------------------------------------------------------------------
+// Basket types (defined here; not yet in generated types/api.ts)
+// ---------------------------------------------------------------------------
+
+export interface BasketBreakdownItem {
+  item_code: string;
+  item_name: string | null;
+  price: number | null;
+  quantity: number;
+  subtotal: number | null;
+  found: boolean;
+}
+
+export interface BasketChainResult {
+  chain_id: string;
+  chain_name: string | null;
+  total_price: number;
+  items_found: number;
+  items_missing: number;
+  breakdown: BasketBreakdownItem[];
+}
+
+export interface BasketCompareResponse {
+  chains: BasketChainResult[];
+  winner_chain_id: string | null;
+  item_limit: number;
+  items_requested: number;
+}
+
+export const compareBasket = (body: {
+  items: { item_code: string; quantity: number }[];
+  chain_ids?: string[] | null;
+  cities?: string[] | null;
+}): Promise<BasketCompareResponse> =>
+  http.post<BasketCompareResponse>('/basket/compare', body).then(r => r.data);
