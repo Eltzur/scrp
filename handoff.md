@@ -118,6 +118,43 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 
 ---
 
+### Session 8L (April 29, 2026) — Brand Identity & Animated Logo
+
+**Done:**
+- Brand strategy: chose master `xxl.co.il` brand-first approach (Option B). Bold/energetic personality. Hebrew-native naming.
+- Brand identity finalized:
+  - **Name:** XXL (Latin wordmark)
+  - **Hebrew tagline:** חוסכים בענקקק (with stretched ק's for "saving big" emphasis — tagline arches over the wordmark)
+  - **English tagline:** SAVING **BIG** (2× size ratio between SAVING and BIG)
+  - **Personality:** Fast & Furious — speed lines, hard slam entrance, basketball-team-banner-break energy
+- Color palette codified:
+  - Primary emerald: `#059669` (Tailwind emerald-600)
+  - Shadow emerald: `#064E3B` (Tailwind emerald-900)
+  - Accent orange: `#EA580C` (Tailwind orange-600)
+  - Dark text: `#022C22`
+- Typography: **Rubik** (Hebrew + Latin) at weight 900 italic for the wordmark, weight 900 upright for tagline. Font preloaded from Google Fonts.
+- Animation choreography (1.5s total, plays once per session via `sessionStorage`):
+  - 0.0–0.4s: Speed lines streak in from both sides (orange left, emerald right, staggered)
+  - 0.45–1.45s: XXL slams in from above with 1.85× overshoot, deep squash to 0.78×, hard rebound to 1.18×, settle to 1×. Camera shake on impact (7px range), white flash (95% opacity), shadow layer materializes in sync.
+  - 1.45–2.15s: Tagline appears above with fade + subtle slide-down
+- React component `XxlLogo.tsx` with three variants: `hero` (large animated), `header` (small static), `favicon` (XXL-only stripped down). Accepts `lang` prop for Hebrew/English tagline switch.
+- Hero section added above search bar on homepage.
+- Header text "השוואת מחירים בסופרמרקט" replaced with static XXL header logo. Removed redundant ShoppingCart decorative icon.
+- Custom favicon.svg created (XXL wordmark + shadow, no tagline).
+- Page title updated to `XXL — חוסכים בענקקק`.
+
+**Decisions made:**
+- Master-brand-first strategy (Option B) chosen over per-vertical branding to ensure visual coherence across future xxl.co.il subdomains (fly, hotel, fashion).
+- "Pure slam" animation chosen over "paper banner break" variant — pure version ages better, less visual complexity, more brand-mark-iconic.
+- English tagline kept as 2× size jump (SAVING vs BIG) rather than 3× — clean ratio, avoids verticality issues.
+- Animation runs once per session (via `sessionStorage.getItem('xxl_animated_this_session')`), not per page load — encourages "first impression" feel without becoming annoying on navigation.
+- React `useId()` hook used for unique SVG path IDs (with colon-stripping to ensure XML validity) — prevents id clashes when both header and hero variants are on the same page.
+
+**Outcome:** Site now has a distinctive, ownable brand identity. Animated hero on first session load, static logo in header, custom favicon, browser tab title updated. All brand decisions documented and codified in code (no more loose hex codes scattered through the app).
+
+**Next:** Session 9b — User authentication (signup flow, login, account management). The "הירשמו" CTA button on the basket-limit toast will finally do something real.
+
+===END===
 ## 🛠️ Common Operations Cookbook
 
 ### Build & deploy frontend
