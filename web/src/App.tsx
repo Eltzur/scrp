@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Toaster } from 'sonner';
 import Header from './components/Header';
+import XxlLogo from './components/XxlLogo';
 import SearchBar from './components/SearchBar';
 import Filters, { type FilterState } from './components/Filters';
 import StatsBar from './components/StatsBar';
@@ -41,7 +42,8 @@ function useActiveResults(query: string, filters: FilterState) {
 }
 
 export default function App() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language.startsWith('he') ? 'he' : 'en' as const;
   const [query, setQuery]     = useState('');
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const queryClient           = useQueryClient();
@@ -110,6 +112,10 @@ export default function App() {
       <Header />
 
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-4">
+        <section className="w-full py-8 md:py-12 flex justify-center">
+          <XxlLogo variant="hero" lang={lang} className="w-full max-w-2xl" />
+        </section>
+
         <SearchBar onSearch={handleSearch} />
 
         <div className="flex flex-wrap items-center justify-between gap-3">
