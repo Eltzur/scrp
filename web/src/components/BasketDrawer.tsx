@@ -11,7 +11,7 @@ import BasketResults from './BasketResults';
 type View = 'basket' | 'results';
 
 export default function BasketDrawer() {
-  const { items, isOpen, setIsOpen, removeItem, updateQuantity, clearBasket, warning } = useBasket();
+  const { items, isOpen, setIsOpen, removeItem, updateQuantity, clearBasket } = useBasket();
   const { data: chains = [] } = useChains();
   const { data: cities = [] } = useCities();
 
@@ -92,13 +92,6 @@ export default function BasketDrawer() {
             </button>
           </div>
         </div>
-
-        {/* Warning toast */}
-        {warning && (
-          <div className="mx-4 mt-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 shrink-0">
-            {warning}
-          </div>
-        )}
 
         {view === 'basket' ? (
           <>

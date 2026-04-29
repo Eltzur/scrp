@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { Toaster } from 'sonner';
 import Header from './components/Header';
 import SearchBar from './components/SearchBar';
 import Filters, { type FilterState } from './components/Filters';
@@ -103,6 +104,7 @@ export default function App() {
 
   return (
     <BasketProvider>
+    <Toaster position="top-center" duration={4000} dir="rtl" />
     <BasketDrawer />
     <div className="min-h-screen bg-gray-50">
       <Header />

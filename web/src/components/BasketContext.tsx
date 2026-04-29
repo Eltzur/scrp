@@ -1,7 +1,8 @@
 import {
-  createContext, useContext, useEffect, useRef, useState,
+  createContext, useContext, useEffect, useState,
   type ReactNode,
 } from 'react';
+import { toast } from 'sonner';
 
 export interface BasketEntry {
   item_code: string;
@@ -13,7 +14,6 @@ export interface BasketEntry {
 interface BasketContextType {
   items: BasketEntry[];
   isOpen: boolean;
-  warning: string | null;
   setIsOpen: (open: boolean) => void;
   addItem: (entry: Omit<BasketEntry, 'quantity'>) => void;
   removeItem: (item_code: string) => void;
@@ -21,7 +21,7 @@ interface BasketContextType {
   clearBasket: () => void;
 }
 
-export const BASKET_LIMIT = 25;
+export const FREE_TIER_LIMIT = 25;
 const LS_KEY = 'basket_items';
 
 const BasketContext = createContext<BasketContextType | null>(null);
@@ -35,32 +35,44 @@ export function BasketProvider({ children }: { children: ReactNode }) {
       return [];
     }
   });
-  const [isOpen, setIsOpen]   = useState(false);
-  const [warning, setWarning] = useState<string | null>(null);
-  const warnRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(LS_KEY, JSON.stringify(items));
   }, [items]);
 
-  const showWarning = (msg: string) => {
-    setWarning(msg);
-    if (warnRef.current) clearTimeout(warnRef.current);
-    warnRef.current = setTimeout(() => setWarning(null), 3000);
-  };
-
   const addItem = (entry: Omit<BasketEntry, 'quantity'>) => {
+    const existing = items.find(i => i.item_code === entry.item_code);
+
+    if (!existing && items.length >= FREE_TIER_LIMIT) {
+      toast(
+        'סל הקניות מוגבל ל-25 פריטים למשתמשים לא רשומים. אנא הירשמו כדי להנות מסל גדול יותר והטבות נוספות',
+        {
+          icon: '🔒',
+          action: {
+            label: 'הירשמו',
+            onClick: () => console.log('Signup clicked - will be wired in session 9b'),
+          },
+          style: {
+            background: '#059669',
+            color: '#ffffff',
+          },
+          actionButtonStyle: {
+            background: '#ffffff',
+            color: '#059669',
+            fontWeight: '600',
+          },
+        },
+      );
+      return;
+    }
+
     setItems(prev => {
-      const existing = prev.find(i => i.item_code === entry.item_code);
       if (existing) {
         const step = existing.is_weighted ? 100 : 1;
         return prev.map(i =>
-          i.item_code === entry.item_code ? { ...i, quantity: i.quantity + step } : i
+          i.item_code === entry.item_code ? { ...i, quantity: i.quantity + step } : i,
         );
-      }
-      if (prev.length >= BASKET_LIMIT) {
-        showWarning(`הסל מוגבל ל-${BASKET_LIMIT} מוצרים שונים`);
-        return prev;
       }
       return [...prev, { ...entry, quantity: entry.is_weighted ? 100 : 1 }];
     });
@@ -78,7 +90,7 @@ export function BasketProvider({ children }: { children: ReactNode }) {
 
   return (
     <BasketContext.Provider value={{
-      items, isOpen, warning, setIsOpen,
+      items, isOpen, setIsOpen,
       addItem, removeItem, updateQuantity, clearBasket,
     }}>
       {children}
