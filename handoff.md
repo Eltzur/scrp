@@ -1,8 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: April 29, 2026 (end of session 9a)
-
+> Last updated: April 30, 2026 (end of session 8L)
 ---
 
 ## 🎯 Vision
@@ -78,6 +77,7 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 | 8c | OpenFoodFacts enrichment (Hebrew names, images) | ✅ Code ready, partial production data |
 | 8d | (skipped/deferred — was about Shufersal image scraping) | — |
 | 9a | Basket feature (UI + API) + Hostinger deployment fix + 25-item limit toast | ✅ |
+| 8L | Brand identity + animated XXL logo + custom favicon | ✅ |
 
 ---
 
@@ -85,8 +85,7 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 
 | Session | What | Notes |
 |---|---|---|
-| **8L** | **Logo + banner + brand identity** | Next up. Creative break before 9b. |
-| 9b | User authentication | Prerequisite for 9c. Save baskets, favorites, history. |
+| **9b** | **User authentication** | Next up. Email/pass primary, Google OAuth as option. Prerequisite for 9c. |
 | 9c | Freemium gating | Enforce 25-item limit server-side per-account, paid tier benefits |
 | 9d | More chains, promotions, price history | Add Mega/Carrefour/AM:PM etc., parse Promo XML files, history charts |
 
@@ -97,7 +96,7 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 - **Railway for hosting** — staying until $0–5/month tier outgrown. No premature AWS migration.
 - **SQLAlchemy everywhere** — scrapers are DB-agnostic.
 - **Snapshot pricing only** — not yet tracking history (deferred to 9d).
-- **5 stores per chain × 6 chains** — covers main geography without over-scraping.
+- **Phased city expansion strategy** — currently 26 stores in Jerusalem/Bnei Brak. Session 9d-1 expands to 7 cities (~86 stores). Sessions 9d-2+ expand to all 100K+ cities (~216 stores). Sessions 11+ expand to 50K+ cities (~540 stores). Full coverage requires AWS/GCP migration when Railway hits limits.
 - **Daily cron at 3am Israel time (1am UTC)**.
 - **Canonical names via weighted token voting** — ~93% stability across runs, ~7% updated per fresh canonical run.
 - **Skipped Hazi-Hinam scraper** — HTML-scraping is too fragile vs Cerberus JSON APIs.
@@ -112,7 +111,7 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 - **Shufersal direct** (`prices.shufersal.co.il`) — open HTTP, no auth.
 - **Rami Levy direct** — open HTTP.
 - **Victory** — REST API, custom scraper (~55 lines).
-- **OpenFoodFacts** — enrichment for Hebrew names + images. Partial coverage.
+- - **OpenFoodFacts** — ❌ ABANDONED. Tested in past sessions, found it out of date and nearly empty for Israeli barcodes. Code exists in repo but do not invest more effort here.
 - **StoreNext** — outreach pending. Could be a silver bullet for catalog/categories/images. Status: waiting on response.
 - **OpenIsraeliSupermarkets Kaggle dataset** — bookmarked for future price history (9d).
 
@@ -154,7 +153,46 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 
 **Next:** Session 9b — User authentication (signup flow, login, account management). The "הירשמו" CTA button on the basket-limit toast will finally do something real.
 
-===END===
+### Planning Session (April 30, 2026) — Strategy & Roadmap Refinement
+
+**Done (no code shipped, planning only):**
+- Discussed multi-PC continuation workflow (clone repo + handoff.md = ready to work)
+- Confirmed GitHub backup status — code safe, but Railway DB is single-point-of-failure (mitigation deferred to post-9c)
+- Detailed analysis of "all 700 stores" tradeoff — decided to expand in tiers
+- **Long-term vision clarified:** Premium tier will eventually include cross-chain ordering (~12+ months out), which requires full coverage and chain partnerships. Documented as future direction, not in current scope.
+- Confirmed OpenFoodFacts is **abandoned** (was already in handoff but reinforced) — out of date, nearly empty for Israeli barcodes.
+- Researched Israeli city populations (CBS data via web search): 18 cities >100K, ~45-50 cities >50K
+- Locked the **city expansion plan**:
+
+**City Expansion Plan (Sessions 9d-1 through 9d-N):**
+
+Phase 1 — Session 9d-1 (Option C, geographic diversity):
+- New cities: Tel Aviv-Yafo, Haifa, Be'er Sheva, Rishon LeZion, Ashdod
+- Existing: Jerusalem, Bnei Brak (unchanged)
+- 2 stores per chain per city → ~60 new stores
+- Total post-rollout: ~86 stores across 7 cities
+- Goal: validate scraper performance + Cerberus rate limits before scaling
+
+Phase 2+ — Sessions 9d-2 onward:
+- Expand to remaining 100K+ cities (12 more): Petah Tikva, Netanya, Holon, Ramat Gan, Ashkelon, Rehovot, Bat Yam, Beit Shemesh, Kfar Saba, Herzliya, Modi'in
+- Target end-state for "100K+ tier": 18 cities × 6 chains × 2 stores = ~216 stores
+
+Phase 3+ — Sessions 11+:
+- Expand to 50K+ population cities (~25-30 more)
+- Total target: ~540 stores
+
+**Decisions made:**
+- **Tier-based city expansion** beats "everything at once" — controls risk, gives natural scaling milestones, validates infra at each step
+- **Defer infrastructure migration** — stay on Railway until $20+/mo costs OR DB > 8GB OR scrape > 4hrs OR >1000 active monthly users. Then migrate to AWS/GCP.
+- **9b (user auth) remains the priority** — keystone for 9c (freemium) and unlocks the "save my basket" retention feature. Will be tackled before city expansion phases.
+- **Auth approach for 9b:** Email/password primary + Google OAuth as option (decided yesterday).
+- **OpenFoodFacts:** Will not retry. Code stays in repo for archaeological purposes only.
+- **Premium ordering vision:** Acknowledged as long-term (12+ months), not blocking near-term sessions.
+
+**Outcome:** Roadmap clarified, scope locked, ready to execute. No code changes, but the next session can start immediately with a clear plan.
+
+**Next:** Session 9b — User authentication (email/password + Google OAuth). After 9b, evaluate whether to do 9c (freemium gating) or 9d-1 (city phase 1) next based on energy/mood.
+
 ## 🛠️ Common Operations Cookbook
 
 ### Build & deploy frontend
