@@ -58,7 +58,7 @@ def create_basket(
 ):
     row = conn.execute(text("""
         INSERT INTO saved_baskets (user_id, name, items)
-        VALUES (:user_id, :name, :items::jsonb)
+        VALUES (:user_id, :name, CAST(:items AS jsonb))
         RETURNING id, name, items, created_at, updated_at
     """), {
         "user_id": user["id"],
@@ -107,7 +107,7 @@ def update_basket(
         clauses.append("name = :name")
         params["name"] = body.name
     if body.items is not None:
-        clauses.append("items = :items::jsonb")
+        clauses.append("items = CAST(:items AS jsonb)")
         params["items"] = json.dumps([i.model_dump() for i in body.items])
 
     row = conn.execute(text(f"""
