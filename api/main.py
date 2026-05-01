@@ -4,7 +4,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import health, catalog, search, product, basket
+from api.routers import health, catalog, search, product, basket, saved_baskets
 
 app = FastAPI(
     title="Israeli Price Comparison API",
@@ -26,7 +26,7 @@ ALLOWED_ORIGINS = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -35,3 +35,4 @@ app.include_router(catalog.router)
 app.include_router(search.router)
 app.include_router(product.router)
 app.include_router(basket.router)
+app.include_router(saved_baskets.router)

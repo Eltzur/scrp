@@ -1,4 +1,7 @@
 lxml==6.1.0
+supabase>=2.0.0
+python-jose[cryptography]>=3.3.0
+python-multipart>=0.0.9
 requests==2.33.1
 cssselect==1.4.0
 fastapi==0.136.0

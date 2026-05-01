@@ -1,10 +1,13 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  X, Trash2, Plus, Minus, ShoppingCart, ArrowRight, Loader2,
+  X, Trash2, Plus, Minus, ShoppingCart, ArrowRight, Loader2, Save,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useBasket } from './BasketContext';
+import { useAuth } from './AuthContext';
 import { useChains, useCities } from '../api/hooks';
-import { compareBasket } from '../api/client';
+import { compareBasket, createSavedBasket } from '../api/client';
 import type { BasketCompareResponse } from '../api/client';
 import BasketResults from './BasketResults';
 
@@ -12,6 +15,8 @@ type View = 'basket' | 'results';
 
 export default function BasketDrawer() {
   const { items, isOpen, setIsOpen, removeItem, updateQuantity, clearBasket } = useBasket();
+  const { user }                          = useAuth();
+  const navigate                          = useNavigate();
   const { data: chains = [] } = useChains();
   const { data: cities = [] } = useCities();
 
@@ -21,6 +26,11 @@ export default function BasketDrawer() {
   const [result, setResult]               = useState<BasketCompareResponse | null>(null);
   const [isComparing, setIsComparing]     = useState(false);
   const [compareError, setCompareError]   = useState<string | null>(null);
+
+  // Save basket
+  const [savePromptOpen, setSavePromptOpen] = useState(false);
+  const [basketName,     setBasketName]     = useState('');
+  const [isSaving,       setIsSaving]       = useState(false);
 
   const qtyStep = (weighted: boolean) => weighted ? 100 : 1;
   const qtyLabel = (qty: number, weighted: boolean) => weighted ? `${qty}g` : String(qty);
@@ -46,6 +56,25 @@ export default function BasketDrawer() {
       setCompareError(detail ?? 'שגיאה בהשוואה');
     } finally {
       setIsComparing(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!basketName.trim()) return;
+    setIsSaving(true);
+    try {
+      await createSavedBasket({
+        name:  basketName.trim(),
+        items: items.map(i => ({ barcode: i.item_code, name: i.item_name ?? '', qty: i.quantity })),
+      });
+      toast('שמירת סל הצליחה');
+      setSavePromptOpen(false);
+      setBasketName('');
+      navigate('/baskets');
+    } catch {
+      toast('שגיאה בשמירת הסל');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -92,6 +121,59 @@ export default function BasketDrawer() {
             </button>
           </div>
         </div>
+
+        {/* Save basket bar — visible only in basket view with items */}
+        {view === 'basket' && items.length > 0 && (
+          <div className="px-4 py-2 border-b border-gray-100 shrink-0">
+            {!savePromptOpen ? (
+              user ? (
+                <button
+                  onClick={() => setSavePromptOpen(true)}
+                  className="flex items-center gap-1.5 text-xs font-medium text-emerald-700
+                             hover:text-emerald-800 transition-colors"
+                >
+                  <Save size={13} />
+                  שמור סל
+                </button>
+              ) : (
+                <span
+                  title="התחברו כדי לשמור סלים"
+                  className="flex items-center gap-1.5 text-xs font-medium text-gray-300 cursor-not-allowed select-none"
+                >
+                  <Save size={13} />
+                  שמור סל
+                </span>
+              )
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={basketName}
+                  onChange={e => setBasketName(e.target.value)}
+                  placeholder="שם הסל…"
+                  onKeyDown={e => e.key === 'Enter' && handleSave()}
+                  className="flex-1 text-xs px-2 py-1 border border-gray-300 rounded-lg
+                             focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  autoFocus
+                />
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving || !basketName.trim()}
+                  className="text-xs px-3 py-1 bg-emerald-600 text-white rounded-lg
+                             hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                >
+                  {isSaving ? '…' : 'שמור'}
+                </button>
+                <button
+                  onClick={() => { setSavePromptOpen(false); setBasketName(''); }}
+                  className="text-xs text-gray-400 hover:text-gray-600"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {view === 'basket' ? (
           <>

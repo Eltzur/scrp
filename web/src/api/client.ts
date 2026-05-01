@@ -10,8 +10,19 @@ export type SearchResult    = components['schemas']['SearchResult'];
 export type StatsResponse   = components['schemas']['StatsResponse'];
 export type CityInfo        = components['schemas']['CityInfo'];
 
+import { supabase } from '../lib/supabase';
+
 const http = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+});
+
+// Attach Supabase access token to every request when the user is logged in
+http.interceptors.request.use(async (config) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    config.headers.Authorization = `Bearer ${session.access_token}`;
+  }
+  return config;
 });
 
 export interface SearchOpts {
@@ -48,6 +59,40 @@ export const getStores = (opts: { chain?: string; city?: string } = {}): Promise
 
 export const getStats = (): Promise<StatsResponse> =>
   http.get<StatsResponse>('/stats').then(r => r.data);
+
+// ---------------------------------------------------------------------------
+// Saved basket API
+// ---------------------------------------------------------------------------
+
+export interface SavedBasketSummary {
+  id:         number;
+  name:       string;
+  item_count: number;
+  updated_at: string;
+}
+
+export interface SavedBasketFull {
+  id:         number;
+  name:       string;
+  items:      { barcode: string; name: string; qty: number }[];
+  created_at: string;
+  updated_at: string;
+}
+
+export const getSavedBaskets = (): Promise<SavedBasketSummary[]> =>
+  http.get<SavedBasketSummary[]>('/baskets').then(r => r.data);
+
+export const getSavedBasket = (id: number): Promise<SavedBasketFull> =>
+  http.get<SavedBasketFull>(`/baskets/${id}`).then(r => r.data);
+
+export const createSavedBasket = (body: {
+  name: string;
+  items: { barcode: string; name: string; qty: number }[];
+}): Promise<SavedBasketFull> =>
+  http.post<SavedBasketFull>('/baskets', body).then(r => r.data);
+
+export const deleteSavedBasket = (id: number): Promise<void> =>
+  http.delete(`/baskets/${id}`).then(() => undefined);
 
 // ---------------------------------------------------------------------------
 // Basket types (defined here; not yet in generated types/api.ts)

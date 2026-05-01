@@ -2,6 +2,7 @@ import {
   createContext, useContext, useEffect, useState,
   type ReactNode,
 } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 export interface BasketEntry {
@@ -36,6 +37,7 @@ export function BasketProvider({ children }: { children: ReactNode }) {
     }
   });
   const [isOpen, setIsOpen] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     localStorage.setItem(LS_KEY, JSON.stringify(items));
@@ -50,8 +52,8 @@ export function BasketProvider({ children }: { children: ReactNode }) {
         {
           icon: '🔒',
           action: {
-            label: 'הירשמו',
-            onClick: () => console.log('Signup clicked - will be wired in session 9b'),
+            label: 'להרשמה',
+            onClick: () => navigate('/signup'),
           },
           style: {
             background: '#059669',
