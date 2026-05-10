@@ -78,8 +78,8 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 | 8d | (skipped/deferred — was about Shufersal image scraping) | — |
 | 9a | Basket feature (UI + API) + Hostinger deployment fix + 25-item limit toast | ✅ |
 | 8L | Brand identity + animated XXL logo + custom favicon | ✅ |
-| **9b** | **User authentication** | Next up. Email/pass primary, Google OAuth as option. Prerequisite for 9c. |
-| **9c** | **Mini-9c + engagement features** | Lift 25-item cap to 150 for logged-in users (free tier stays at 25 with להרשמה toast). Add Favorites (logged-in only, server-side) + Recent Searches (localStorage, dropdown only). Original "freemium gating" framing retired — see freemium model decision below. |
+| 9b | User authentication via Supabase + saved baskets | ✅ Email/pass + saved baskets in production. Google OAuth deferred. |
+| 9c | Mini-9c + Favorites + Recent Searches | ✅ 150-item logged-in cap, server-side favorites with heart icon, localStorage recent searches dropdown, cheapest-indicator visual fix |
 
 ---
 
@@ -106,7 +106,7 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 - **Canonical names via weighted token voting** — ~93% stability across runs, ~7% updated per fresh canonical run.
 - **Skipped Hazi-Hinam scraper** — HTML-scraping is too fragile vs Cerberus JSON APIs.
 - **Brand color: emerald-600 (#059669)** — used for primary CTAs, basket-limit toast.
-- **Freemium model REDEFINED (session 9a → confirmed 9c)** — Free tier is the honeypot: search, view prices, basket comparison, save baskets, favorites, recent searches — ALL free, ALL unrestricted. Paid tier benefits will be: ordering through us (12+ months out, requires chain partnerships), exclusive deals, price-drop email alerts. The original "freemium = limit free users to 25 basket items" framing was retired in 9a and codified in 9c — only logged-out users see the 25-item cap (as a signup nudge); logged-in users get a generous 150 (effectively unlimited for human use).- **Freemium model REDEFINED (session 9a → confirmed 9c)** — Free tier is the honeypot: search, view prices, basket comparison, save baskets, favorites, recent searches — ALL free, ALL unrestricted. Paid tier benefits will be: ordering through us (12+ months out, requires chain partnerships), exclusive deals, price-drop email alerts. The original "freemium = limit free users to 25 basket items" framing was retired in 9a and codified in 9c — only logged-out users see the 25-item cap (as a signup nudge); logged-in users get a generous 150 (effectively unlimited for human use).
+- **Freemium model REDEFINED (session 9a → confirmed 9c)** — Free tier is the honeypot: search, view prices, basket comparison, save baskets, favorites, recent searches — ALL free, ALL unrestricted. Paid tier benefits will be: ordering through us (12+ months out, requires chain partnerships), exclusive deals, price-drop email alerts. The original "freemium = limit free users to 25 basket items" framing was retired in 9a and codified in 9c — only logged-out users see the 25-item cap (as a signup nudge); logged-in users get a generous 150 (effectively unlimited for human use).-
 
 ---
 ## Operating patterns Established
@@ -344,6 +344,3 @@ Recommended order: 9c next (small, completes the auth → freemium picture befor
 - ✅ Cheapest indicator visual fix in production
 
 
-## 🛠️ Common Operations Cookbook
-
-### Build & deploy frontend
