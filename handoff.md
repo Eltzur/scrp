@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: May 2, 2026 (start of session 9c)
+> Last updated: May 2, 2026 (end of session 9c)
 ---
 
 ## 🎯 Vision
@@ -78,6 +78,8 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 | 8d | (skipped/deferred — was about Shufersal image scraping) | — |
 | 9a | Basket feature (UI + API) + Hostinger deployment fix + 25-item limit toast | ✅ |
 | 8L | Brand identity + animated XXL logo + custom favicon | ✅ |
+| **9b** | **User authentication** | Next up. Email/pass primary, Google OAuth as option. Prerequisite for 9c. |
+| **9c** | **Mini-9c + engagement features** | Lift 25-item cap to 150 for logged-in users (free tier stays at 25 with להרשמה toast). Add Favorites (logged-in only, server-side) + Recent Searches (localStorage, dropdown only). Original "freemium gating" framing retired — see freemium model decision below. |
 
 ---
 
@@ -85,9 +87,12 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 
 | Session | What | Notes |
 |---|---|---|
-| **9b** | **User authentication** | Next up. Email/pass primary, Google OAuth as option. Prerequisite for 9c. |
-| **9c** | **Mini-9c + engagement features** | Lift 25-item cap to 150 for logged-in users (free tier stays at 25 with להרשמה toast). Add Favorites (logged-in only, server-side) + Recent Searches (localStorage, dropdown only). Original "freemium gating" framing retired — see freemium model decision below. |
-| 9d | More chains, promotions, price history | Add Mega/Carrefour/AM:PM etc., parse Promo XML files, history charts |
+| **9d-1** | **City + chain expansion (Phase 1)** | Add 5 cities: Tel Aviv, Haifa, Be'er Sheva, Rishon LeZion, Ashdod. ~2 stores per chain per city = ~60 new stores, total ~86 across 7 cities. Eltzur also wants to add more chains in this session — TBD which (Mega, Carrefour, AM:PM are candidates). |
+| 9d-2+ | City expansion Phase 2 | Remaining 12 cities >100K pop (Petah Tikva, Netanya, Holon, Ramat Gan, Ashkelon, Rehovot, Bat Yam, Beit Shemesh, Kfar Saba, Herzliya, Modi'in). Target ~216 stores total. |
+| 9d-3+ | City expansion Phase 3 | 50K+ cities (~25-30 more). Target ~540 stores. |
+| Promotions + price history | Parse Promo XML files, build history charts | Originally part of old 9d row; now its own session. Requires sufficient daily snapshots first. |
+| Google OAuth | Wire up deferred-from-9b option | Requires Google Cloud Console OAuth client setup |
+| Investigate disappearing tables | Risk hygiene | Deferred pending future AWS/GCP migration (decided in 9c planning) |
 
 ---
 
@@ -104,6 +109,9 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 - **Freemium model REDEFINED (session 9a → confirmed 9c)** — Free tier is the honeypot: search, view prices, basket comparison, save baskets, favorites, recent searches — ALL free, ALL unrestricted. Paid tier benefits will be: ordering through us (12+ months out, requires chain partnerships), exclusive deals, price-drop email alerts. The original "freemium = limit free users to 25 basket items" framing was retired in 9a and codified in 9c — only logged-out users see the 25-item cap (as a signup nudge); logged-in users get a generous 150 (effectively unlimited for human use).- **Freemium model REDEFINED (session 9a → confirmed 9c)** — Free tier is the honeypot: search, view prices, basket comparison, save baskets, favorites, recent searches — ALL free, ALL unrestricted. Paid tier benefits will be: ordering through us (12+ months out, requires chain partnerships), exclusive deals, price-drop email alerts. The original "freemium = limit free users to 25 basket items" framing was retired in 9a and codified in 9c — only logged-out users see the 25-item cap (as a signup nudge); logged-in users get a generous 150 (effectively unlimited for human use).
 
 ---
+## Operating patterns Established
+
+- **One chat = one session** — Long conversations balloon in token cost (cumulative history is re-read every turn, so turn 60 of a chat costs much more than turn 5 of a new one). At natural breakpoints (end of session, deploy verified, phase complete), START A FRESH CHAT and paste handoff.md as the first message. Yesterday's debugging context isn't useful for today's feature work — it's just expensive baggage. Especially: avoid trying to squeeze a new session into an existing long chat just because we're already talking. Lesson learned in 9c when token budget hit limits faster than expected during Phase 2.
 
 ## 🔗 External Data Source Status
 
@@ -290,6 +298,50 @@ Recommended order: 9c next (small, completes the auth → freemium picture befor
 **Outcome:** 9c scope locked, two CC prompts ready (Phase 1 surgical, Phase 2 larger). Each phase ships independently — Phase 1 is frontend-only (one file), Phase 2 touches multiple files (backend migration + endpoints + frontend pages).
 
 **Next:** Run Phase 1 → deploy → test → run Phase 2 → deploy → test. Then session 9d-1 (city + chain expansion).
+
+
+### Session 9c (May 2, 2026) — Mini-9c + Favorites + Recent Searches
+
+**Done:**
+- **Phase 1 (Mini-9c)**: Logged-in users now have a 150-item basket cap (vs 25 for logged-out). Logged-in cap-hit fires an amber/orange (#EA580C) Sonner toast "הסל הגיע למקסימום של 150 פריטים" with no CTA. Logged-out 25-item toast with "להרשמה" emerald CTA preserved exactly as before.
+- **Phase 2A (Favorites — server-side, logged-in only)**:
+  - New `favorites` table (composite PK on user_id + barcode, FK to users with ON DELETE CASCADE)
+  - New endpoints: `POST /favorites/{barcode}` (toggle, idempotent), `GET /favorites` (list with item details), `DELETE /favorites/{barcode}` — all auth-required, queries inherently scoped via composite PK
+  - New `FavoritesContext` with optimistic toggle + revert-on-error
+  - Heart icon (lucide-react `Heart`) on every ProductCard, top-right of badge row. Brand orange (#EA580C) when filled, gray-300 outlined when not
+  - Logged-out users clicking heart get a toast "התחברו כדי לסמן מועדפים" with "להתחברות" CTA → /login
+  - New `/favorites` page rendering favorited items as ProductCards (auth-required, redirects to /login if not authed)
+  - "המועדפים שלי" link added to account dropdown in Header
+- **Phase 2B (Recent Searches — client-side, dropdown only)**:
+  - New `useRecentSearches` hook backed by localStorage (key: `xxl_recent_searches`)
+  - Stores up to 10 most recent unique queries (case-insensitive dedup, trims, ignores < 2 char), most recent first
+  - Dropdown appears when search input is FOCUSED + EMPTY + has at least one entry
+  - Each row: query text + × to remove that one. "נקה הכל" link to clear all
+  - Click row → fills input + triggers search. `onMouseDown: e.preventDefault()` on dropdown items prevents blur-before-click race
+- **Cheapest indicator visual fix**: Replaced the in-row star (which collided visually with the favorite star) with `CheckCircle2` (outlined, emerald-600). No more double-star ambiguity.
+
+**Decisions made:**
+- **Logged-in cap = 150**: generous enough no human hits it, low enough to prevent runaway memory in pathological cases.
+- **No server-side enforcement of basket cap**: frontend check sufficient until abuse seen.
+- **Favorites server-side, recent searches client-side**: favorites are about cross-device persistence (users expect stars to follow them); recent searches are ephemeral and per-device. Path 1 (localStorage) for searches kept scope tight.
+- **FavoritesPage uses N+1 fetch pattern** (Promise.allSettled per favorite): acceptable for typical usage (<50 favorites). If users hit much higher counts, build a `/product/batch?barcodes=...` endpoint.
+- **Heart in brand orange (#EA580C), not red**: cohesive with XXL palette (orange already used in logo speed lines + basket-limit toast). Avoids red's "danger" connotation in a savings-positive context.
+- **CheckCircle2 outlined, not filled**: subtler than a filled badge. Lets the row itself (with emerald-50 background) carry the "cheapest" signal; the icon is just confirmation.
+- **Original "freemium gating" 9c framing retired**: no server-side per-account 25-item enforcement. The free tier is the honeypot; only logged-out users see the 25-item nudge as a signup driver.
+
+**Files changed:**
+- New: `db/migrations/add_favorites.sql`, `api/routers/favorites.py`, `web/src/components/FavoritesContext.tsx`, `web/src/pages/FavoritesPage.tsx`, `web/src/hooks/useRecentSearches.ts`
+- Modified: `api/main.py`, `web/src/api/client.ts`, `web/src/App.tsx`, `web/src/components/Header.tsx`, `web/src/components/ProductCard.tsx`, `web/src/components/SearchBar.tsx`, `web/src/components/BasketContext.tsx`
+
+**Bugs encountered & resolved:**
+1. ✅ Initial CC implementation reused the existing `Star` icon for both "favorites" and "cheapest indicator" — visually ambiguous. Caught during sanity check, swapped to `Heart` (favorites) and `CheckCircle2` (cheapest) before deploy.
+2. ⚠️ False alarm: CC's terminal report rendered Hebrew strings reversed (e.g., `ילש םיפדעומה` instead of `המועדפים שלי`). Verified via VS Code Find that file content is correct. Same RTL terminal display bug seen in 9b and 9c Phase 1. **From now on, treat reversed-Hebrew in CC reports as a non-issue unless VS Code Find can't locate the correctly-spelled string.**
+
+**Outcome:**
+- ✅ Phase 1 verified: logged-out 25-cap toast unchanged (regression test passed); logged-in 150-cap toast fires correctly with orange styling
+- ✅ Phase 2A verified: heart toggles, persists across reload, /favorites page renders, dropdown link works
+- ✅ Phase 2B verified: recent searches stored, dropdown appears on empty-focused input, click re-runs search, × removes individual, "נקה הכל" clears all
+- ✅ Cheapest indicator visual fix in production
 
 
 ## 🛠️ Common Operations Cookbook
