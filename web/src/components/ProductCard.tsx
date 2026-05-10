@@ -1,8 +1,12 @@
-import { Star } from 'lucide-react';
+import { Heart, CheckCircle2 } from 'lucide-react';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import type { ProductWithPrices, PriceQuote } from '../api/client';
 import BasketButton from './BasketButton';
+import { useAuth } from './AuthContext';
+import { useFavorites } from './FavoritesContext';
 
 interface Props {
   item: ProductWithPrices;
@@ -18,10 +22,16 @@ function cheapestPerChain(quotes: PriceQuote[]): PriceQuote[] {
 }
 
 export default function ProductCard({ item }: Props) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n }   = useTranslation();
+  const navigate      = useNavigate();
+  const { user }      = useAuth();
+  const { isFavorited, toggleFavorite } = useFavorites();
+
   const { product, cheapest_price, most_expensive_price, chains_count } = item;
-  const quotes = cheapestPerChain(item.quotes);
+  const quotes       = cheapestPerChain(item.quotes);
   const isComparable = chains_count >= 2;
+  const barcode      = product.item_code;
+  const favorited    = isFavorited(barcode);
 
   const fmtPrice = (n: number) =>
     new Intl.NumberFormat(i18n.language, { style: 'currency', currency: 'ILS', minimumFractionDigits: 2 })
@@ -39,19 +49,53 @@ export default function ProductCard({ item }: Props) {
     Object.values(product.names_per_chain ?? {})[0] ||
     product.item_code;
 
+  const handleFavClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!user) {
+      toast('התחברו כדי לסמן מועדפים', {
+        duration: 3000,
+        action: {
+          label: 'להתחברות',
+          onClick: () => navigate('/login'),
+        },
+      });
+      return;
+    }
+    toggleFavorite(barcode);
+  };
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
-      {/* Badge */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {isComparable ? (
-          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-            {t('product_card.chains_count', { count: chains_count })}
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-            {t('product_card.only_at', { chain: quotes[0]?.chain_name ?? '' })}
-          </span>
-        )}
+      {/* Badge row + favorite star */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {isComparable ? (
+            <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+              {t('product_card.chains_count', { count: chains_count })}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+              {t('product_card.only_at', { chain: quotes[0]?.chain_name ?? '' })}
+            </span>
+          )}
+        </div>
+
+        {/* Favorite star */}
+        <button
+          onClick={handleFavClick}
+          className="shrink-0 p-0.5 -mt-0.5 -me-0.5 transition-transform hover:scale-110"
+          aria-label={favorited ? 'הסר ממועדפים' : 'הוסף למועדפים'}
+        >
+          <Heart
+            size={16}
+            className={clsx(
+              'transition-colors',
+              favorited
+                ? 'fill-orange-600 text-orange-600'
+                : 'fill-none text-gray-300 hover:text-orange-500',
+            )}
+          />
+        </button>
       </div>
 
       {/* Name + manufacturer */}
@@ -77,7 +121,7 @@ export default function ProductCard({ item }: Props) {
               {/* Chain + city */}
               <div className="flex items-center gap-1.5 min-w-0">
                 {isCheapest && (
-                  <Star size={12} className="text-emerald-600 shrink-0 fill-emerald-600" />
+                  <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
                 )}
                 <span className={clsx('font-medium truncate', isCheapest ? 'text-emerald-800' : 'text-gray-700')}>
                   {q.chain_name ?? q.chain_id}

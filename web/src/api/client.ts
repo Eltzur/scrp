@@ -95,6 +95,25 @@ export const deleteSavedBasket = (id: number): Promise<void> =>
   http.delete(`/baskets/${id}`).then(() => undefined);
 
 // ---------------------------------------------------------------------------
+// Favorites API
+// ---------------------------------------------------------------------------
+
+export interface FavoriteItem {
+  barcode:    string;
+  item_name:  string | null;
+  created_at: string;
+}
+
+export const toggleFavorite = (barcode: string): Promise<{ favorited: boolean }> =>
+  http.post<{ favorited: boolean }>(`/favorites/${barcode}`).then(r => r.data);
+
+export const getFavorites = (): Promise<FavoriteItem[]> =>
+  http.get<FavoriteItem[]>('/favorites').then(r => r.data);
+
+export const removeFavorite = (barcode: string): Promise<void> =>
+  http.delete(`/favorites/${barcode}`).then(() => undefined);
+
+// ---------------------------------------------------------------------------
 // Basket types (defined here; not yet in generated types/api.ts)
 // ---------------------------------------------------------------------------
 

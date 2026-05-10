@@ -91,6 +91,13 @@ export default function Header() {
                   >
                     הסלים שלי
                   </Link>
+                  <Link
+                    to="/favorites"
+                    onClick={() => setDropdownOpen(false)}
+                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    המועדפים שלי
+                  </Link>
                   <button
                     onClick={handleSignOut}
                     className="w-full text-start px-4 py-2 text-sm text-rose-600
