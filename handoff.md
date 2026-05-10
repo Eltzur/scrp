@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: April 30, 2026 (during session 9b)
+> Last updated: May 2, 2026 (start of session 9c)
 ---
 
 ## 🎯 Vision
@@ -86,7 +86,7 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 | Session | What | Notes |
 |---|---|---|
 | **9b** | **User authentication** | Next up. Email/pass primary, Google OAuth as option. Prerequisite for 9c. |
-| 9c | Freemium gating | Enforce 25-item limit server-side per-account, paid tier benefits |
+| **9c** | **Mini-9c + engagement features** | Lift 25-item cap to 150 for logged-in users (free tier stays at 25 with להרשמה toast). Add Favorites (logged-in only, server-side) + Recent Searches (localStorage, dropdown only). Original "freemium gating" framing retired — see freemium model decision below. |
 | 9d | More chains, promotions, price history | Add Mega/Carrefour/AM:PM etc., parse Promo XML files, history charts |
 
 ---
@@ -101,6 +101,7 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 - **Canonical names via weighted token voting** — ~93% stability across runs, ~7% updated per fresh canonical run.
 - **Skipped Hazi-Hinam scraper** — HTML-scraping is too fragile vs Cerberus JSON APIs.
 - **Brand color: emerald-600 (#059669)** — used for primary CTAs, basket-limit toast.
+- **Freemium model REDEFINED (session 9a → confirmed 9c)** — Free tier is the honeypot: search, view prices, basket comparison, save baskets, favorites, recent searches — ALL free, ALL unrestricted. Paid tier benefits will be: ordering through us (12+ months out, requires chain partnerships), exclusive deals, price-drop email alerts. The original "freemium = limit free users to 25 basket items" framing was retired in 9a and codified in 9c — only logged-out users see the 25-item cap (as a signup nudge); logged-in users get a generous 150 (effectively unlimited for human use).- **Freemium model REDEFINED (session 9a → confirmed 9c)** — Free tier is the honeypot: search, view prices, basket comparison, save baskets, favorites, recent searches — ALL free, ALL unrestricted. Paid tier benefits will be: ordering through us (12+ months out, requires chain partnerships), exclusive deals, price-drop email alerts. The original "freemium = limit free users to 25 basket items" framing was retired in 9a and codified in 9c — only logged-out users see the 25-item cap (as a signup nudge); logged-in users get a generous 150 (effectively unlimited for human use).
 
 ---
 
@@ -256,6 +257,39 @@ Phase 3+ — Sessions 11+:
 - **Google OAuth follow-up** — wire up the option that was deferred from 9b
 
 Recommended order: 9c next (small, completes the auth → freemium picture before building more features). Then either 9d-1 or Google OAuth.
+
+
+### Planning Session (May 2, 2026) — 9c Scope Refinement
+
+**Done (planning + scoping, code coming next):**
+- Reviewed handoff and confirmed 9b shipped successfully (auth + saved baskets all green in production)
+- Reviewed the original 9c plan ("freemium gating, server-side 25-item limit per account") and concluded it was misaligned with the freemium model that was actually decided in session 9a (everything-but-ordering is free)
+- Restructured 9c into two phases:
+  - **Phase 1 (Mini-9c):** Lift 25-item basket cap to 150 for logged-in users. Logged-out users stay at 25 with the existing emerald להרשמה toast. Logged-in users at 150 see a brief amber/orange toast "הסל הגיע למקסימום של 150 פריטים" — no CTA, no signup nudge.
+  - **Phase 2 (Engagement features):** Favorites (server-side, logged-in only) + Recent Searches (localStorage, search-bar dropdown only).
+
+**Scope decisions for Phase 2:**
+- **Favorites:** Logged-in only (cleanest). New `favorites` table (user_id, barcode, created_at, composite PK). Endpoints `POST /favorites/{barcode}`, `GET /favorites`, `DELETE /favorites/{barcode}`. Star icon on ProductCard. New `/favorites` route + page. "המועדפים שלי" link in account dropdown.
+- **Recent Searches:** Client-side only (localStorage, max 10 items, deduped). Dropdown shown when search input is focused and empty. Path 1 from earlier scoping — Path 2 (server-side sync) deferred indefinitely; if users ask for cross-device sync, we add it then.
+
+**Decisions made:**
+- **Logged-in basket cap = 150** — generous enough that no real human will hit it, low enough to prevent runaway client memory in pathological cases.
+- **No server-side enforcement of basket cap** — frontend check is sufficient; we'll add server-side validation only if/when we see abuse.
+- **No CTA button on the 150-cap toast** — different intent from the signup nudge; this is just a "you've hit the ceiling, sorry" message. Orange/amber instead of brand emerald to visually differentiate.
+- **Favorites is server-side from day 1** — unlike recent searches, favorites are about cross-device persistence. Users expect their stars to follow them.
+- **Skipped: Database migration mystery investigation** — Eltzur decided to defer pending future AWS/GCP migration, where this becomes moot.
+
+**Out of scope for 9c (deferred to future sessions):**
+- Multiple named baskets (e.g., "Weekly", "Shabbat") — interesting but no clear user demand yet
+- Saved-basket renaming/duplication — minor polish
+- Basket sharing via public link — interesting but post-monetization
+- Price-drop notifications UI — paid tier feature, comes with the email infrastructure
+- Google OAuth — still deferred from 9b, will tackle separately when we have appetite for Google Cloud Console setup
+- Server-side recent searches sync — only if users ask
+
+**Outcome:** 9c scope locked, two CC prompts ready (Phase 1 surgical, Phase 2 larger). Each phase ships independently — Phase 1 is frontend-only (one file), Phase 2 touches multiple files (backend migration + endpoints + frontend pages).
+
+**Next:** Run Phase 1 → deploy → test → run Phase 2 → deploy → test. Then session 9d-1 (city + chain expansion).
 
 
 ## 🛠️ Common Operations Cookbook

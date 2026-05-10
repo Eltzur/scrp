@@ -4,6 +4,7 @@ import {
 } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { useAuth } from './AuthContext';
 
 export interface BasketEntry {
   item_code: string;
@@ -23,6 +24,7 @@ interface BasketContextType {
 }
 
 export const FREE_TIER_LIMIT = 25;
+const LOGGED_IN_LIMIT       = 150;
 const LS_KEY = 'basket_items';
 
 const BasketContext = createContext<BasketContextType | null>(null);
@@ -37,6 +39,7 @@ export function BasketProvider({ children }: { children: ReactNode }) {
     }
   });
   const [isOpen, setIsOpen] = useState(false);
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -46,26 +49,41 @@ export function BasketProvider({ children }: { children: ReactNode }) {
   const addItem = (entry: Omit<BasketEntry, 'quantity'>) => {
     const existing = items.find(i => i.item_code === entry.item_code);
 
-    if (!existing && items.length >= FREE_TIER_LIMIT) {
-      toast(
-        'סל הקניות מוגבל ל-25 פריטים למשתמשים לא רשומים. אנא הירשמו כדי להנות מסל גדול יותר והטבות נוספות',
-        {
-          icon: '🔒',
-          action: {
-            label: 'להרשמה',
-            onClick: () => navigate('/signup'),
+    const limit = user ? LOGGED_IN_LIMIT : FREE_TIER_LIMIT;
+
+    if (!existing && items.length >= limit) {
+      if (!user) {
+        // Logged-out: existing signup-CTA toast — DO NOT modify
+        toast(
+          'סל הקניות מוגבל ל-25 פריטים למשתמשים לא רשומים. אנא הירשמו כדי להנות מסל גדול יותר והטבות נוספות',
+          {
+            icon: '🔒',
+            action: {
+              label: 'להרשמה',
+              onClick: () => navigate('/signup'),
+            },
+            style: {
+              background: '#059669',
+              color: '#ffffff',
+            },
+            actionButtonStyle: {
+              background: '#ffffff',
+              color: '#059669',
+              fontWeight: '600',
+            },
           },
+        );
+      } else {
+        // Logged-in: gentle warning, no CTA
+        toast('הסל הגיע למקסימום של 150 פריטים', {
+          icon: '⚠️',
+          duration: 4000,
           style: {
-            background: '#059669',
+            background: '#EA580C',
             color: '#ffffff',
           },
-          actionButtonStyle: {
-            background: '#ffffff',
-            color: '#059669',
-            fontWeight: '600',
-          },
-        },
-      );
+        });
+      }
       return;
     }
 
