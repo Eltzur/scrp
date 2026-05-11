@@ -159,9 +159,10 @@ class ShufersalScraper(ChainScraper):
     def build_pricefull_index(self, target_store_ids: set, start_page: int = 36) -> dict:
         index: dict[str, dict] = {}
         found: set[str] = set()
+        safety_cap = start_page + 200  # never scan more than 200 pages regardless
 
         log.info(f"Shufersal: building PriceFull index (from page {start_page})…")
-        for page in range(start_page, 101):
+        for page in range(start_page, safety_cap + 1):
             log.info(f"  Scanning page {page}…")
             try:
                 rows = self._fetch_raw_page(page)
@@ -193,8 +194,12 @@ class ShufersalScraper(ChainScraper):
                 log.info(f"  All {len(target_store_ids)} target stores found on page {page}.")
                 break
 
-            if page >= start_page + 25:
-                log.warning(f"  Scanned 25 pages past start, stopping. Found: {found}")
+            if page >= safety_cap:
+                missing = target_store_ids - found
+                log.warning(
+                    f"  Safety cap reached ({safety_cap} pages scanned). "
+                    f"NOT FOUND: {missing}"
+                )
                 break
 
         return index
