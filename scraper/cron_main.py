@@ -16,7 +16,8 @@ from scraper.registry import get_scraper
 from scraper.canonical import update_canonical_names
 
 log = logging.getLogger(__name__)
-CONFIG = Path(__file__).parent / "scheduled_stores.yaml"
+CONFIG          = Path(__file__).parent / "active_stores.yaml"   # verified stores only
+CONFIG_INTENDED = Path(__file__).parent / "scheduled_stores.yaml" # full intent list
 
 
 def pick_stores(conn, chain_id: str, n: int) -> list[str]:
@@ -74,8 +75,18 @@ def main():
     import os
     log.info(f"DATABASE_URL set: {'YES' if os.environ.get('DATABASE_URL') else 'NO - WILL FAIL'}")
 
-    config = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
-    chains = config.get("chains", [])
+    config          = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
+    intended_config = yaml.safe_load(CONFIG_INTENDED.read_text(encoding="utf-8"))
+    chains          = config.get("chains", [])
+
+    active_total   = sum(len(e.get("store_ids", [])) for e in chains)
+    intended_total = sum(len(e.get("store_ids", [])) for e in intended_config.get("chains", []))
+    excluded       = intended_total - active_total
+    log.info(
+        f"Loaded {active_total} verified stores from active_stores.yaml. "
+        f"{excluded} stores in scheduled_stores.yaml excluded (no PriceFull) — "
+        f"see db/verification_report_9d1.md."
+    )
 
     conn = connect()
     init_db(conn)
