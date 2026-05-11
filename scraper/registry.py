@@ -5,6 +5,7 @@ from scraper.osherad import OsherAdScraper
 from scraper.victory import VictoryScraper
 from scraper.yochananof import YochananofScraper
 from scraper.keshet import KeshetScraper
+from scraper.carrefour import CarrefourScraper
 
 SCRAPERS: dict[str, type] = {
     "7290027600007": ShufersalScraper,
@@ -13,6 +14,7 @@ SCRAPERS: dict[str, type] = {
     "7290696200003": VictoryScraper,
     "7290803800003": YochananofScraper,
     "7290785400000": KeshetScraper,
+    "7290055700007": CarrefourScraper,
 }
 
 

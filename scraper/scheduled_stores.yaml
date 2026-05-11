@@ -1,32 +1,148 @@
 # Daily scrape schedule.
 # To add/remove stores: edit the store_ids list for any chain.
 # To add a chain: add a block with chain_id, name, and store_ids.
-# store_ids are 3-digit zero-padded strings matching the stores table.
+# Cerberus/Victory chains use 3-digit zero-padded store_ids ("005", "020").
+# PublishPrice chains (Carrefour) use unpadded ids matching the stores table ("6", "85").
+# Selection rule: lowest 2 store_ids per (chain, city) compared as integers.
+# Stores marked "city inferred from store_name" need re-verification in a future CITY_CODES audit.
 
 chains:
   - chain_id: "7290027600007"
     name: "Shufersal"
-    store_ids: ["001", "002", "003", "007", "010"]
+    store_ids:
+      # Existing (9b): Jerusalem, Tel Aviv
+      - "001"  # Tel Aviv - בן יהודה
+      - "002"  # Jerusalem - אגרון
+      - "003"  # Givatayim - סירקין
+      - "007"  # Tel Aviv - ארלוזורוב
+      - "010"
+      # New in 9d-1: Haifa
+      - "004"  # חיפה - כרמל
+      - "017"  # חיפה - חורב
+      # New in 9d-1: Be'er Sheva
+      - "035"  # באר שבע - וולפסון
+      - "040"  # באר שבע - עומר
+      # New in 9d-1: Rishon LeZion
+      - "618"  # ראשון לציון
+      # New in 9d-1: Ashdod
+      - "024"  # אשדוד - הנביאים
+      - "073"  # אשדוד
 
   - chain_id: "7290058140886"
     name: "Rami Levy"
-    store_ids: ["001", "002", "003", "004", "005"]
+    store_ids:
+      # Existing (9b): Jerusalem
+      - "001"
+      - "002"
+      - "003"
+      - "004"
+      - "005"
+      # New in 9d-1: Tel Aviv
+      - "055"  # רמת החייל תל אביב
+      - "733"  # בן יהודה תל אביב
+      # New in 9d-1: Haifa
+      - "019"  # אדמרליטי חיפה
+      - "057"  # עזריאלי חיפה
+      # New in 9d-1: Be'er Sheva
+      - "027"  # באר שבע
+      - "063"  # ביג באר שבע
+      # New in 9d-1: Rishon LeZion
+      - "043"  # ראשון לציון
+      - "729"  # קניון הבאר ראשון לציון
+      # New in 9d-1: Ashdod
+      - "026"  # אשדוד
+      - "709"  # שבט לוי אשדוד
 
   - chain_id: "7290103152017"
     name: "Osher Ad"
-    store_ids: ["001", "002", "003", "004", "005"]
+    store_ids:
+      # Existing (9b): Jerusalem, Migdal HaEmek, Kiryat Bialik
+      - "001"
+      - "002"
+      - "003"
+      - "004"
+      - "005"
+      # New in 9d-1: Tel Aviv
+      - "024"  # תל אביב
+      # New in 9d-1: Haifa
+      - "030"  # חיפה
+      # New in 9d-1: Be'er Sheva
+      - "013"  # באר שבע
+      # New in 9d-1: Rishon LeZion
+      - "025"  # ראשון לציון
+      # New in 9d-1: Ashdod
+      - "009"  # אשדוד
 
   - chain_id: "7290696200003"
     name: "Victory"
-    # 008=Ashdod, 009=TA, 022=Hadera, 025=Akko, 029=Ramat Gan
-    store_ids: ["008", "009", "022", "025", "029"]
+    store_ids:
+      # Existing (9b): Ashdod, Tel Aviv branch, Hadera, Akko, Ramat Gan
+      - "008"  # אשדוד
+      - "009"  # הארבעה ת"א — city inferred from store_name
+      - "022"  # חדרה
+      - "025"  # עכו
+      - "029"  # רמת גן
+      # New in 9d-1: Tel Aviv (2nd store, city inferred from store_name)
+      - "016"  # פלורנטין — city inferred from store_name
+      # New in 9d-1: Haifa (city inferred from store_name)
+      - "027"  # שער העליה — city inferred from store_name
+      # New in 9d-1: Rishon LeZion (city inferred from store_name)
+      - "023"  # ראשון פרס נובל — city inferred from store_name
+      # New in 9d-1: Ashdod (2nd store, city inferred from store_name)
+      - "037"  # קניון אשדוד — city inferred from store_name
 
   - chain_id: "7290803800003"
     name: "Yochananof"
-    # 005=Ashdod, 020=Jerusalem, 022=Hadera, 030=Netanya, 040=Beer Sheva
-    store_ids: ["005", "020", "022", "030", "040"]
+    store_ids:
+      # Existing (9b): Ashdod, Jerusalem, Hadera, Netanya, Be'er Sheva
+      - "005"  # אשדוד
+      - "020"  # ירושלים תלפיות
+      - "022"  # חדרה
+      - "030"  # נתניה
+      - "040"  # באר שבע
+      # New in 9d-1: Tel Aviv (city inferred from store_name)
+      - "008"  # אחד העם — city inferred from store_name
+      - "027"  # יד אליהו — city inferred from store_name
+      # New in 9d-1: Be'er Sheva 2nd store (city inferred from store_name)
+      - "042"  # קניון הבאר — city inferred from store_name
+      # New in 9d-1: Rishon LeZion (city inferred from store_name)
+      - "028"  # ראשלצ רמת אליהו — city inferred from store_name
 
   - chain_id: "7290785400000"
     name: "Keshet"
-    # 002=Nahariya, 013=Rishon, 018=Beer Sheva, 019=Kfar Saba, 022=Ashdod
-    store_ids: ["002", "013", "018", "019", "022"]
+    store_ids:
+      # Existing (9b): Nahariya, Rishon, Be'er Sheva, Kfar Saba, Ashdod
+      - "002"  # נהריה
+      - "013"  # ראשון לציון
+      - "018"  # באר שבע
+      - "019"  # כפר סבא
+      - "022"  # אשדוד
+      # New in 9d-1: Haifa (Hadar HaCarmel neighborhood; city inferred from store_name)
+      - "004"  # הדר — city inferred from store_name
+      # New in 9d-1: Be'er Sheva 2nd store
+      - "318"  # באר שבע וולט
+      # New in 9d-1: Rishon LeZion 2nd store (city inferred from store_name)
+      - "024"  # ראשון לציון מערב — city inferred from store_name
+
+  - chain_id: "7290055700007"
+    name: "Carrefour"
+    # Note: store_ids are NOT zero-padded — PublishPrice portal strips leading zeros.
+    # Covers Carrefour Hyper/Market/City + Mega + Yenot Bitan (same legal entity).
+    # IMPORTANT: Many Carrefour City stores (IDs 63-999) do NOT publish PriceFull files.
+    # Only Hyper/Market stores and 4-digit-ID City stores reliably have PriceFull.
+    # Store IDs below were verified against today's live PriceFull file listing.
+    store_ids:
+      # New in 9d-1: Tel Aviv (stores 85/89 have no PriceFull — using Market/4-digit stores)
+      - "205"   # קרפור מרקט לה גרדיה תל אביב
+      - "1228"  # קרפור מרקט תל כביר תל אביב
+      # New in 9d-1: Haifa (stores 140/470 have no PriceFull — using 4-digit stores)
+      - "2040"  # קרפור כרמליה חיפה
+      - "2530"  # בעיר בת גלים חיפה
+      # New in 9d-1: Be'er Sheva (stores 117/610 have no PriceFull — using 4-digit stores)
+      - "2976"  # קרפור סיטי צפון באר שבע
+      - "3300"  # קרפור מרקט קניון אביה באר שבע
+      # New in 9d-1: Rishon LeZion (only 1 store has PriceFull)
+      - "81"    # קרפור סיטי ראשון מערב
+      # New in 9d-1: Ashdod
+      - "6"     # קרפור היפר אשדוד צפוני
+      - "60"    # קרפור מרקט אשדוד
