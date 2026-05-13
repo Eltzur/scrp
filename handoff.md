@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: May 2, 2026 (end of session 9c)
+> Last updated: May 12, 2026 (end of session 9d-1)
 ---
 
 ## 🎯 Vision
@@ -25,7 +25,7 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 | Frontend | React + Vite + TypeScript + Tailwind | Hostinger static (`public_html/`) | ✅ Live |
 | Backend | FastAPI (Python) | Railway `web` service | ✅ Live |
 | Database | Postgres | Railway `Postgres` service | ✅ Live |
-| Scraper cron | Python (`scraper.cron_main`) | Railway `scraper-cron` service | ✅ Daily 1am UTC |
+| Scraper cron | Python (`scraper.cron_main`) | Railway `scraper-cron` service (EU-West, Amsterdam) | ✅ Daily 1am UTC |
 | DNS | box.co.il (ns1/2/3.box.co.il) | — | ✅ |
 
 **Local dev:** `C:\scrp` on Windows 10/11. PowerShell + VS Code + Claude Code in VS Code terminal.
@@ -57,11 +57,13 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 
 ## 📊 Current Production State
 
-- **6 chains** scraping daily: Shufersal, Rami Levy, Osher Ad, Victory, Yochananof, Keshet
-- **26 stores** (varies slightly by session — verify with `/stats` endpoint)
-- **214,064 prices** as of last cron run
+- **7 chains** scraping daily: Shufersal, Rami Levy, Osher Ad, Victory, Yochananof, Keshet, **Carrefour** (added 9d-1)
+- **49 stores across 7 cities**: Jerusalem, Bnei Brak, Tel Aviv, Haifa, Be'er Sheva, Rishon LeZion, Ashdod (verify with `/stats`)
+- **~372,000 prices** as of last cron run
+- **Verification gate**: `active_stores.yaml` (verified to publish PriceFull) is what cron uses; `scheduled_stores.yaml` is the wish-list. See `db/verification_report_9d1.md` for excluded stores.
 - **Canonical names** computed via weighted token voting (session 8b)
 - **Search** uses canonical names only, numeric/percentage tokens filtered (session 8b)
+- **Known coverage gap**: Bnei Brak has no Carrefour/Yenot Bitan/Mega presence (verified via carrefour.co.il store locator) — accepted, not a bug.
 
 ---
 
@@ -80,6 +82,7 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 | 8L | Brand identity + animated XXL logo + custom favicon | ✅ |
 | 9b | User authentication via Supabase + saved baskets | ✅ Email/pass + saved baskets in production. Google OAuth deferred. |
 | 9c | Mini-9c + Favorites + Recent Searches | ✅ 150-item logged-in cap, server-side favorites with heart icon, localStorage recent searches dropdown, cheapest-indicator visual fix |
+| 9d-1 | City expansion Phase 1 + Carrefour scraper + verification system | ✅ Carrefour scraper + `publishprice.py` base class shipped. 5 new cities added. PriceFull-verification gate (`active_stores.yaml`) shipped. 58 verified / 14 excluded. Cron-command persistence bug found and fixed (Procfile now authoritative). Surfaced: geo-blocking on 2 chains, ~2min/store scrape bottleneck, Shufersal sub-chain heterogeneity. |
 
 ---
 
@@ -87,10 +90,13 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 
 | Session | What | Notes |
 |---|---|---|
-| **9d-1** | **City + chain expansion (Phase 1)** | Add 5 cities: Tel Aviv, Haifa, Be'er Sheva, Rishon LeZion, Ashdod. ~2 stores per chain per city = ~60 new stores, total ~86 across 7 cities. Eltzur also wants to add more chains in this session — TBD which (Mega, Carrefour, AM:PM are candidates). |
-| 9d-2+ | City expansion Phase 2 | Remaining 12 cities >100K pop (Petah Tikva, Netanya, Holon, Ramat Gan, Ashkelon, Rehovot, Bat Yam, Beit Shemesh, Kfar Saba, Herzliya, Modi'in). Target ~216 stores total. |
-| 9d-3+ | City expansion Phase 3 | 50K+ cities (~25-30 more). Target ~540 stores. |
-| Promotions + price history | Parse Promo XML files, build history charts | Originally part of old 9d row; now its own session. Requires sufficient daily snapshots first. |
+| **9g** | **Scraper Infrastructure: Performance + Geographic Correctness** | (1) Bulk inserts (Postgres COPY or batched VALUES) — current ~1.5min/store driven by per-row INSERT round-trips. (2) Parallel chain execution via `concurrent.futures`. (3) Geographic fix for Victory + Carrefour geo-blocking — if EU-West region change isn't enough, migrate scraper-cron to Israeli VPS ($5-12/mo). Target: 58 stores in <10 min vs current ~70 min. Unblocks 9d-2 and beyond. **Priority: do this FIRST after 9d-1**, before more city expansion. |
+| 9e | StoreNext Registry Ingestion | Ingest StoreNext branch lists (all 7 chains available, free CSV export) into a new `chain_stores_registry` table with sub-format classification (Sheli/Deal/Express/Yesh/Universe/BE for Shufersal; similar for others). Refactor Phase B selection to be format-aware. Solves Shufersal sub-chain heterogeneity systematically. **StoreNext outreach pending** — if their paid tier includes product catalog, re-prioritize 9e ahead of 9g. |
+| 9d-2 | City expansion Phase 2 | Remaining 12 cities >100K pop (Petah Tikva, Netanya, Holon, Ramat Gan, Ashkelon, Rehovot, Bat Yam, Beit Shemesh, Kfar Saba, Herzliya, Modi'in). Target ~216 stores total. **Requires 9g first** — running 216-store cron at current 1.5min/store = 5+ hours. |
+| 9d-3 | City expansion Phase 3 | 50K+ cities (~25-30 more). Target ~540 stores. |
+| 9f | XXL Portal Page (xxl.co.il root) | Build the multi-vertical landing page. Hero (XXL logo + tagline "קונים חכם · חוסכים בענק"). AI-powered universal search bar (Claude Haiku for intent classification, ~$5/mo at 1K daily queries). Vertical tiles: Groceries (live), Flights/Hotels/Fashion (coming soon). Parallel track — can happen anytime after 9e. |
+| CITY_CODES audit | Patch missing gov.il city codes | 9d-1 surfaced 23 NULL-city Carrefour stores (Or Akiva, Tel Mond, Dimona, Maalot, Kiryat Ata, Even Yehuda, Kfar Yona, Karkur, Tamra, Daliyat al-Karmel, Arad, Atlit, Kiryat Tivon, Matan, Tzur Yitzhak). Pre-existing dict gap in `scraper/cerberus.py`. Small fix, defer to alongside 9d-2 or as a quick patch session. |
+| Promotions + price history | Parse Promo XML files, build history charts | Sample Promo XML files captured in 9d-1 for future analysis. Requires sufficient daily snapshots first. |
 | Google OAuth | Wire up deferred-from-9b option | Requires Google Cloud Console OAuth client setup |
 | Investigate disappearing tables | Risk hygiene | Deferred pending future AWS/GCP migration (decided in 9c planning) |
 
@@ -106,8 +112,15 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 - **Canonical names via weighted token voting** — ~93% stability across runs, ~7% updated per fresh canonical run.
 - **Skipped Hazi-Hinam scraper** — HTML-scraping is too fragile vs Cerberus JSON APIs.
 - **Brand color: emerald-600 (#059669)** — used for primary CTAs, basket-limit toast.
-- **Freemium model REDEFINED (session 9a → confirmed 9c)** — Free tier is the honeypot: search, view prices, basket comparison, save baskets, favorites, recent searches — ALL free, ALL unrestricted. Paid tier benefits will be: ordering through us (12+ months out, requires chain partnerships), exclusive deals, price-drop email alerts. The original "freemium = limit free users to 25 basket items" framing was retired in 9a and codified in 9c — only logged-out users see the 25-item cap (as a signup nudge); logged-in users get a generous 150 (effectively unlimited for human use).-
-
+- **Freemium model REDEFINED (session 9a → confirmed 9c)** — Free tier is the honeypot: search, view prices, basket comparison, save baskets, favorites, recent searches — ALL free, ALL unrestricted. Paid tier benefits will be: ordering through us (12+ months out, requires chain partnerships), exclusive deals, price-drop email alerts. The original "freemium = limit free users to 25 basket items" framing was retired in 9a and codified in 9c — only logged-out users see the 25-item cap (as a signup nudge); logged-in users get a generous 150 (effectively unlimited for human use).
+- **Verification-before-scrape pattern (9d-1)** — `scheduled_stores.yaml` is the intent/wish-list, `active_stores.yaml` is the actually-scraped list, gated by per-portal `verify_publishes_pricefull()` check. Prevents silent scrape failures from sub-chain heterogeneity (Shufersal Sheli format, warehouse nodes, etc.). Verification reports go in `db/verification_report_9d1.md`.
+- **Procfile is authoritative for Railway commands (9d-1)** — was Railway-UI-only before, which caused scraper-cron to silently revert to `fetch_off` on scheduled runs while manual triggers worked. Procfile now defines both `web:` (gunicorn API) and `cron:` (scraper price scrape). Survives service recreation.
+- **Carrefour Israel under Global Retail C.I.** — chain_id `7290055700007` publishes Carrefour + Mega + Yenot Bitan stores combined. We display as "קרפור" but accept all sub-brands. Bnei Brak has zero Carrefour/Mega/Yenot Bitan presence (verified manually) — not a data bug.
+- **`publishprice` portal type (9d-1)** — new base class `scraper/publishprice.py`. JS-embedded file listing pattern. Currently only Carrefour, but reusable.
+- **Geo-blocking discovered (9d-1)** — `prices.carrefour.co.il` and `laibcatalog.co.il` (Victory) block non-Israeli IPs. Confirmed by Eltzur via VPN test. Other 5 chains' portals don't enforce this. Migration path TBD in 9g (EU-West region trial first, Israeli VPS as fallback).
+- **Scraper performance bottleneck (9d-1)** — current ~1.5min/store driven by per-row INSERT round-trips to Railway Postgres. At 58 stores = ~70 min; at 216 stores = ~5 hours (untenable). Fix planned in 9g via bulk inserts + parallel chains.
+- **Shufersal sub-chain landscape (9d-1, field intel from Eltzur)** — same chain_id `7290027600007` publishes: דיל (Deal, mainstream discount), שלי (Sheli, neighborhood), אקספרס (Express, convenience), יש/יש חסד (Yesh, haredi sector — dominates Jerusalem/Bnei Brak), Universe (hypermarket), BE (pharmacy/health). NOT all sub-formats publish individual PriceFull files. "Lowest store_id" selection rule biased toward old Jerusalem Sheli stores in 9d-1 — needs format-aware refactor in 9e.
+- **StoreNext as canonical chain registry source (9d-1 discovery)** — `storenext.co.il/תמיכה-ושירות/` publishes free CSV branch lists for every EDI-using chain (all 7 of ours). Includes store_id, EDI barcode, store name with format prefix. Could become the basis for the `chain_stores_registry` table in 9e. Paid tier (product catalog?) under investigation.
 ---
 ## Operating patterns Established
 
@@ -120,8 +133,8 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 - **Shufersal direct** (`prices.shufersal.co.il`) — open HTTP, no auth.
 - **Rami Levy direct** — open HTTP.
 - **Victory** — REST API, custom scraper (~55 lines).
-- - **OpenFoodFacts** — ❌ ABANDONED. Tested in past sessions, found it out of date and nearly empty for Israeli barcodes. Code exists in repo but do not invest more effort here.
-- **StoreNext** — outreach pending. Could be a silver bullet for catalog/categories/images. Status: waiting on response.
+- **OpenFoodFacts** — ❌ ABANDONED. Tested in past sessions, found it out of date and nearly empty for Israeli barcodes. Code exists in repo but do not invest more effort here.
+- **StoreNext** — outreach pending (Eltzur left contact details May 12). Free CSV branch lists per chain confirmed working (`storenext.co.il/תמיכה-ושירות/`). Paid tier scope TBD. Will inform 9e Registry session.
 - **OpenIsraeliSupermarkets Kaggle dataset** — bookmarked for future price history (9d).
 
 ---
@@ -343,4 +356,49 @@ Recommended order: 9c next (small, completes the auth → freemium picture befor
 - ✅ Phase 2B verified: recent searches stored, dropdown appears on empty-focused input, click re-runs search, × removes individual, "נקה הכל" clears all
 - ✅ Cheapest indicator visual fix in production
 
+### Session 9d-1 (May 11-12, 2026) — City Expansion Phase 1 + Carrefour + Verification System
 
+**Done:**
+- **New chain shipped: Carrefour Israel** (chain_id `7290055700007`, operated by Global Retail C.I. — includes Carrefour + Mega + Yenot Bitan sub-brands under one publisher).
+- **New portal type abstracted**: `scraper/publishprice.py` base class (~130 lines) for JS-embedded file listing portals. `scraper/carrefour.py` is a 6-line subclass. Reusable for future chains.
+- **City expansion Phase 1**: added 5 new cities (Tel Aviv, Haifa, Be'er Sheva, Rishon LeZion, Ashdod) on top of existing Jerusalem + Bnei Brak. Total: 7 cities.
+- **Store selection rule documented**: lowest 2 `store_id` integers per (chain_id, city) from chain's `stores` table. Deterministic, reproducible. Falls back to store_name pattern matching for chains with NULL city data (Victory, Yochananof, Keshet — pre-existing 8a issue).
+- **Verification-before-scrape system (Path C)**: new `scraper/active_stores.yaml` populated by per-store `verify_publishes_pricefull()` check. `scraper/scheduled_stores.yaml` retained as intent/wish-list. `scraper/cron_main.py` reads from active_stores. **58 of 72 stores verified.** 14 excluded breakdown:
+  - 11 Shufersal (mostly Sheli format — old Jerusalem stores without per-store PriceFull files; 1 Universe-format unknown; 1 BE-format not found in scan; 1 store missing from local DB)
+  - 1 Rami Levy 004 (warehouse, no city)
+  - 2 Osher Ad 002, 004 (warehouses, no city)
+- **Verification report**: `db/verification_report_9d1.md` documents excluded stores by category for 9e replacement work.
+- **Shufersal page-limit patch**: scraper's hardcoded `start_page + 25` cutoff replaced with "scan until all requested stores found, OR safety cap at 200 pages with logged not-found list."
+- **Procfile fix**: added `cron: python -m scraper.cron_main` process type so Railway commands are repo-authoritative, not UI-only. Root cause of weeks of OFF-enrichment-instead-of-price-scrape silent failure.
+- **Sample Promo XML captured** for future promotions session: `Promo7290661400001-250-202605112159-001.xml.gz` and `Price7290055700007-3210-202605112200.gz` saved as reference samples.
+
+**Decisions made:**
+- **Carrefour publisher returns Mega + Yenot Bitan stores too — take them all under "קרפור" display name.** Cleaner UX than trying to split.
+- **Bnei Brak zero-Carrefour-stores is real**, not a CITY_CODES dict gap — verified via carrefour.co.il store locator manually.
+- **Store_name inference approved** for Victory/Yochananof/Keshet city assignment when `stores.city` is NULL. YAML entries get a "city inferred from store_name" comment for future audit.
+- **Keshet Haifa includes Hadar (real Haifa neighborhood) but EXCLUDES Nesher (separate municipality)** — sets a precedent: when sub-city names are ambiguous, prefer narrow interpretation over wide.
+- **Path C (verification gate) chosen over Path A (Shufersal-specific patch)** — surfaces heterogeneity across all chains at once; sets architecture for 9e Registry work.
+- **Sub-chain heterogeneity ("Yesh" = Shufersal haredi, "Mega" = Carrefour publisher) is a class of problem, not chain-specific.** Solving via systemic StoreNext-based registry (9e) rather than per-chain patches.
+- **9g (Scraper Infrastructure) prioritized AHEAD of 9e (StoreNext Registry)** — performance + geographic correctness unblocks all subsequent sessions; registry's payoff is architecturally cleaner selection but doesn't unblock anything urgent.
+
+**Files changed:**
+- New: `scraper/publishprice.py`, `scraper/carrefour.py`, `scraper/active_stores.yaml`, `db/verification_report_9d1.md`
+- Modified: `scraper/registry.py` (added Carrefour), `scraper/scheduled_stores.yaml` (added 46 new-city entries), `scraper/shufersal.py` (page-limit patch), `scraper/cron_main.py` (read from active_stores.yaml), `Procfile` (added cron: line)
+
+**Bugs encountered & resolved:**
+1. ✅ **Shufersal `start_page + 25` silent cutoff** — page-limit on `build_pricefull_index` was hiding the real issue (Sheli-format heterogeneity). Patched to 200-page safety cap with explicit not-found logging.
+2. ✅ **Phase B "lowest 2 store_ids" selection picked stores that don't publish PriceFull** — primarily affected Shufersal (11 of 12 new-city stores excluded). Path C verification gate now catches this before runtime.
+3. ✅ **Procfile missing `cron:` process type** — scraper-cron service was silently running `python -m scraper.fetch_off` from Railway UI config, not the actual price scrape. Last successful price load before fix was April 25 (16 days stale). Production prices were intact but not refreshing. Caught by reviewing build logs after first 9d-1 cron run "succeeded" in ~5 min instead of expected 15-25 min.
+4. ⚠️ **Geo-blocking on Victory + Carrefour** — both `laibcatalog.co.il` (Victory) and `prices.carrefour.co.il` (Carrefour) reject Railway US-West IPs. Confirmed via VPN test (works from Israeli IP, fails from US/India). Other 5 chains' portals don't enforce this. **Status at session close: trying Railway EU-West region as zero-cost mitigation; if insufficient, Israeli VPS migration planned in 9g.**
+
+**Outcome:**
+- ✅ Carrefour scraper shipped and verified locally (153 stores in StoresFull catalog, 130 city-mapped, 23 NULL-city for cities not in CITY_CODES dict)
+- ✅ Verification system shipped — 58/72 store gate working as designed
+- ✅ Procfile bug fixed, repo now source of truth
+- ✅ 5 of 7 chains successfully loaded fresh prices to production: Shufersal, Rami Levy, Osher Ad, Yochananof, Keshet (Carrefour + Victory blocked pending 9g geo fix)
+- ✅ Production state at session close: 7 chains, 49 stores, 372,159 prices (5 chains with fresh data from 5/11 evening; Carrefour + Victory pending 9g geo-fix). EU-West region experiment failed — caused 30× slowdown on Cerberus chains and didn't bypass geo-block. Reverted to US-West.
+- 📝 New session 9g queued for infrastructure work; 9e (StoreNext Registry) queued behind it
+- 📝 New session 9f queued for portal page (parallel track)
+- 📝 CITY_CODES audit added as small follow-up patch session
+
+**Next:** Session 9g — Scraper Infrastructure (performance + geographic correctness). Priority over 9e because (a) bulk inserts + parallelism unblocks all future city expansions, and (b) Victory + Carrefour need a geographic fix to get fresh data. StoreNext investigation continues in parallel; if their paid tier offers product catalog, 9e may re-prioritize ahead of 9g.
