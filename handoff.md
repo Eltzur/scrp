@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: May 13, 2026 (end of session 9f)
+> Last updated: May 14, 2026 (end of session 9f-followup)
 ---
 
 ## 🎯 Vision
@@ -95,6 +95,7 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 | 9c | Mini-9c + Favorites + Recent Searches | ✅ 150-item logged-in cap, server-side favorites with heart icon, localStorage recent searches dropdown, cheapest-indicator visual fix |
 | 9d-1 | City expansion Phase 1 + Carrefour scraper + verification system | ✅ Carrefour scraper + `publishprice.py` base class shipped. 5 new cities added. PriceFull-verification gate (`active_stores.yaml`) shipped. 58 verified / 14 excluded. Cron-command persistence bug found and fixed (Procfile now authoritative). Surfaced: geo-blocking on 2 chains, ~2min/store scrape bottleneck, Shufersal sub-chain heterogeneity. |
 | **9f** | **XXL Portal Page — live on xxl.co.il** | ✅ Portal landing live at https://xxl.co.il with 3 vertical tiles, AI search bar (mocked router), 2 בקרוב sub-pages, hostname-based routing in React. Hebrew defaults fixed. DNS + parked domain + SSL + clean root URL all working. |
+| **9f-followup** | **Portal polish: SEO, OG, email signup backend, GA4 + cookie banner** | ✅ SEO/OG meta tags hostname-aware. Email signup writes to Supabase portal_email_signups table. GA4 wired (pending Eltzur measurement ID swap). Minimal Hebrew cookie banner with X-dismiss-as-consent. |
 
 ---
 
@@ -102,7 +103,7 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 
 | Session | What | Notes |
 |---|---|---|
-| **9f-followup** | **Portal polish (post-launch)** | SEO meta tags + OG images (separate for xxl.co.il vs super.xxl.co.il for WhatsApp link previews), portal favicon decision, email signup backend wiring (vacation/fashion pages currently `console.log` only — wire to Formspree or similar), analytics (Plausible or GA), real-device mobile pass. ~1-2 hrs. |
+| **9f-followup** | ~~Portal polish~~ | ✅ Done May 14, 2026. See session detail below. |
 | **9h** | **Claude Haiku integration for portal search** | Replace `web/src/utils/portalSearchRouter.ts` mock classifier with real Claude Haiku API call. Function signature already designed for one-line swap. Budget: ~$5/mo at 1K daily queries. |
 | **Titan email setup** | Activate xxl.co.il mailboxes | DNS already configured (MX → Titan). Eltzur to set up `info@xxl.co.il` + aliases himself in Hostinger Emails panel. Catch-all + aliases pattern recommended to minimize cost. |
 | **9g** | **Scraper Infrastructure: Performance + Geographic Correctness** | (1) Bulk inserts (Postgres COPY or batched VALUES) — current ~1.5min/store driven by per-row INSERT round-trips. (2) Parallel chain execution via `concurrent.futures`. (3) Geographic fix for Victory + Carrefour geo-blocking — if EU-West region change isn't enough, migrate scraper-cron to Israeli VPS ($5-12/mo). Target: 58 stores in <10 min vs current ~70 min. Unblocks 9d-2 and beyond. **Priority: do this FIRST after 9d-1**, before more city expansion. | **Update (May 14 cron run)**: Shufersal portal timing out from US-West on most pages — not just the geo-blocked chains. Increases urgency of Israeli VPS migration; not just a Carrefour/Victory problem anymore.
@@ -114,7 +115,7 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 | Google OAuth | Wire up deferred-from-9b option | Requires Google Cloud Console OAuth client setup |
 | Investigate disappearing tables | Risk hygiene | Deferred pending future AWS/GCP migration (decided in 9c planning) |
 | **Search Quality** | Hebrew search precision fixes | Word-boundary matching, kosher-marker filtering ("חלבי"/"פרווה"/"בשרי" leaking into "חלב"/"בשר" searches — example: jelly appearing under "חלב" because it's labeled "חלבי"). Stretch: Hebrew stemming. Defer until after StoreNext data is in hand (may solve upstream via better categorization). |
-| **OS scraper research** | Review OpenIsraeliSupermarkets repos + Kaggle dataset | ~1 hour. Read `il-supermarket-parser` API for fields we're missing (images, categories, brands). Sample Kaggle dataset for update cadence — could be Carrefour/Victory stopgap. Output: short writeup on what to borrow. Note license — read for ideas, don't copy code wholesale (likely GPL/AGPL). Links: github.com/OpenIsraeliSupermarkets/israeli-supermarket-scarpers, pypi.org/project/il-supermarket-parser, kaggle.com/datasets/erlichsefi/israeli-supermarkets-2024 |
+| **OS scraper research** | ~~Review OpenIsraeliSupermarkets repos + Kaggle dataset~~ | ✅ Done May 14, 2026. Writeup at docs/research/os_scraper_2026_05_14.md. Key findings: MIT-licensed (not GPL/AGPL as feared), geo-block is industry-wide (confirms 9g VPS plan), Kaggle dataset NOT a Carrefour/Victory stopgap, no new sources for images/categories/brands (StoreNext still the path). |
 
 ---
 
@@ -401,6 +402,52 @@ Recommended order: 9c next (small, completes the auth → freemium picture befor
 - ✅ Phase 2A verified: heart toggles, persists across reload, /favorites page renders, dropdown link works
 - ✅ Phase 2B verified: recent searches stored, dropdown appears on empty-focused input, click re-runs search, × removes individual, "נקה הכל" clears all
 - ✅ Cheapest indicator visual fix in production
+
+### Session 9f-followup (May 14, 2026) — Portal Polish
+
+**Done:**
+- Hostname-aware SEO meta tags (title/description/OG/Twitter cards differ for xxl.co.il vs super.xxl.co.il). Static tags in index.html default to portal; runtime override in App.tsx via `seoMeta.applyHostnameMeta()` switches to supermarket-app variant on super.xxl.co.il.
+- OG image URLs reference `/og-portal.png` (xxl.co.il) and `/og-super.png` (super.xxl.co.il) — 1200×630 PNGs uploaded separately by Eltzur to Hostinger public_html/.
+- Portal email signup (ComingSoonPage on /vacation + /fashion) now writes to Supabase `portal_email_signups` table via supabase-js. Anonymous insert allowed via RLS + explicit GRANT (future-proof for Oct 30 Data API policy change).
+- GA4 wired via VITE_GA_MEASUREMENT_ID env var. Pageviews tracked manually on SPA route changes (gtag config has send_page_view: false). Idempotent init, gated on cookie consent.
+- Minimal Hebrew cookie banner ("נמשיך, אנו משתמשים בעוגיות לשיפור החוויה") with X-dismiss-as-consent. localStorage key: `xxl_cookie_consent`. Banner only renders when key absent.
+- `isPortalHostname()` refactored from App.tsx-inline to `web/src/utils/hostname.ts` for reuse by seoMeta.ts.
+
+**Decisions made:**
+- Cookie banner X-dismiss = implicit consent (per Eltzur, soft-launch UX over strict GDPR-style explicit opt-in). IL-targeted product; revisit if/when expanding to EU users.
+- One GA4 property covers both hostnames; filter in reports by page_location host.
+- Supabase direct write from frontend (not via FastAPI endpoint) — anonymous signup, no auth flow needed, simpler. Explicit GRANT statements in migration to future-proof against Oct 30 Data API policy default change.
+- Static fallback meta tags default to portal version (xxl.co.il) since it's the new marketing surface; super.xxl.co.il SEO is well-established already and SPA crawlers (Google) execute the JS overrides anyway.
+- Did NOT modify XxlLogo.tsx or XxlLogoPortal.tsx — favicon decision was "same XXL logo for both," which means no work needed since existing favicon already serves both.
+
+**Files changed:**
+- New: `web/src/utils/seoMeta.ts`, `web/src/utils/hostname.ts`, `web/src/utils/analytics.ts`, `web/src/components/CookieBanner.tsx`, `db/migrations/9f_followup_portal_email_signups.sql`, `web/.env.example`
+- Modified: `web/index.html` (meta tags), `web/src/App.tsx` (hostname import + useEffect for meta/GA + CookieBanner mount), `web/src/pages/ComingSoonPage.tsx` (Supabase insert + vertical prop), `web/src/pages/VacationPage.tsx` + `FashionPage.tsx` (vertical prop), `web/.env.production` (VITE_GA_MEASUREMENT_ID), `web/.gitignore` (!.env.example exception)
+
+**Outcome:**
+- ✅ SEO meta tags hostname-aware
+- ✅ OG image refs in place (PNGs to be uploaded separately by Eltzur)
+- ✅ Email signups persist to Supabase
+- ✅ GA4 stub wired, awaiting Eltzur's real G-XXXXXXXXXX
+- ✅ Cookie banner shipped
+
+**Pending Eltzur post-deploy:**
+1. Run `db/migrations/9f_followup_portal_email_signups.sql` in Supabase SQL Editor
+2. Upload `og-portal.png` + `og-super.png` to Hostinger public_html/ (1200×630 each)
+3. Create GA4 property → grab G-XXXXXXXXXX → swap into `web/.env.production` → rebuild + redeploy
+4. Mobile QA: test /vacation + /fashion signup on real phone, verify WhatsApp link preview after PNGs uploaded, verify cookie banner dismiss works
+**Post-deploy state (end of session):**
+- ✅ SQL migration ran successfully in Supabase
+- ✅ GA4 wired with real Measurement ID G-YB4X4E5ZKM (baked into web/.env.production)
+- ✅ OG images uploaded to Hostinger public_html/ (og-portal.png, og-super.png)
+- ✅ Cookie banner verified live on xxl.co.il
+- ✅ Test email signup verified landing in portal_email_signups table
+- ⏳ Mobile QA pass on real device — deferred
+- ⏳ WhatsApp link preview shows title+desc but no image on first scrape — likely Facebook scraper cache. Fix via https://developers.facebook.com/tools/debug → paste URL → Scrape Again. Defer until pre-marketing-push.
+
+**Incident note:** og-super.png initially returned blank/404 due to filename typo during upload to Hostinger. Re-uploaded correctly via File Manager. Lesson: when uploading single files manually to Hostinger, double-check filenames against the index.html meta references — a typo there fails silently (blank response, not 404).
+
+---
 
 ### Session 9f (May 12-13, 2026) — XXL Portal Page → Live on xxl.co.il
 
