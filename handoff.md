@@ -1,20 +1,22 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: May 12, 2026 (end of session 9d-1)
+> Last updated: May 13, 2026 (end of session 9f)
 ---
 
 ## 🎯 Vision
 
-**Short-term:** Israeli supermarket price comparison app at `super.xxl.co.il`.
+**Short-term:** Israeli supermarket price comparison app at `super.xxl.co.il`. ✅ Live.
 
-**Long-term:** `xxl.co.il` as a portal — "האתר שהופך את הכסף שלך לכסף חכם" (the site that turns your money into smart money). Subdomains for verticals:
-- `super.xxl.co.il` — supermarket prices ✅ live
-- `fly.xxl.co.il` — flights (future)
-- `hotel.xxl.co.il` — hotels (future)
-- `fashion.xxl.co.il` — shoes/clothing (future)
+**Live now:** `xxl.co.il` portal — multi-vertical savings landing page with AI-powered universal search bar. Sub-header: "XXL — הפורטל שהופך כסף רגיל לכסף חכם". ✅ Live as of session 9f.
 
-Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "השוואה חכמה. קנייה חכמה."
+**Verticals (paths on xxl.co.il, NOT subdomains):**
+- `xxl.co.il/` → portal landing ✅ live
+- מצרכים (Groceries) → routes to `super.xxl.co.il` ✅ live
+- חופשות (Vacations — flights + hotels combined) → `/vacation` בקרוב page live, real comparison engine planned
+- אופנה (Fashion) → `/fashion` בקרוב page live, real comparison engine planned
+
+Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קונים חכם · חוסכים בענקקק" above the XXL wordmark.
 
 ---
 
@@ -22,19 +24,28 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 
 | Layer | Tech | Where | Status |
 |---|---|---|---|
-| Frontend | React + Vite + TypeScript + Tailwind | Hostinger static (`public_html/`) | ✅ Live |
+| Frontend | React + Vite + TypeScript + Tailwind | Hostinger static (`public_html/`) — serves BOTH xxl.co.il and super.xxl.co.il | ✅ Live |
 | Backend | FastAPI (Python) | Railway `web` service | ✅ Live |
 | Database | Postgres | Railway `Postgres` service | ✅ Live |
 | Scraper cron | Python (`scraper.cron_main`) | Railway `scraper-cron` service (EU-West, Amsterdam) | ✅ Daily 1am UTC |
 | DNS | box.co.il (ns1/2/3.box.co.il) | — | ✅ |
+| Auth | Supabase | Supabase project (auth only — no Data API usage from client) | ✅ Live |
 
 **Local dev:** `C:\scrp` on Windows 10/11. PowerShell + VS Code + Claude Code in VS Code terminal.
 
 **Repo:** github.com/Eltzur/scrp (main branch is production)
 
 **Production URLs:**
-- Frontend: https://super.xxl.co.il
+- Portal: https://xxl.co.il (and https://www.xxl.co.il)
+- Supermarket app: https://super.xxl.co.il
 - Backend: https://api-super.xxl.co.il
+
+**Hostinger setup (added 9f):**
+- One website (`super.xxl.co.il`) serves both domains
+- `xxl.co.il` is **parked** on top of `super.xxl.co.il` via hPanel → Domains → Parked Domains
+- DNS: A records at box.co.il for `xxl.co.il` and `www.xxl.co.il` → `82.198.227.247`
+- SSL: Lifetime SSL auto-provisioned by Hostinger for both
+- **Routing logic lives in React, NOT .htaccess.** `App.tsx` has `isPortalHostname()` that checks `window.location.hostname` and renders `PortalPage` at `/` when on xxl.co.il, else renders `AppShell` (supermarket app).
 
 **Key Railway commands:**
 - `web` start: `gunicorn -k uvicorn.workers.UvicornWorker api.main:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120`
@@ -51,7 +62,7 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 **Hostinger deployment:**
 - Document root is `public_html/` at the account root (NOT `super.xxl.co.il/` folder)
 - Deploy = build `web/` → zip `dist/*` contents → upload+extract in `public_html/`
-- `.htaccess` for SPA routing lives in `web/public/` (auto-copied to `dist/` on build)
+- .htaccess for SPA routing lives in web/public/ (auto-copied to dist/ on build). Current production .htaccess is minimal React Router SPA fallback only — no hostname rewrites (handled in React)
 
 ---
 
@@ -83,6 +94,7 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 | 9b | User authentication via Supabase + saved baskets | ✅ Email/pass + saved baskets in production. Google OAuth deferred. |
 | 9c | Mini-9c + Favorites + Recent Searches | ✅ 150-item logged-in cap, server-side favorites with heart icon, localStorage recent searches dropdown, cheapest-indicator visual fix |
 | 9d-1 | City expansion Phase 1 + Carrefour scraper + verification system | ✅ Carrefour scraper + `publishprice.py` base class shipped. 5 new cities added. PriceFull-verification gate (`active_stores.yaml`) shipped. 58 verified / 14 excluded. Cron-command persistence bug found and fixed (Procfile now authoritative). Surfaced: geo-blocking on 2 chains, ~2min/store scrape bottleneck, Shufersal sub-chain heterogeneity. |
+| **9f** | **XXL Portal Page — live on xxl.co.il** | ✅ Portal landing live at https://xxl.co.il with 3 vertical tiles, AI search bar (mocked router), 2 בקרוב sub-pages, hostname-based routing in React. Hebrew defaults fixed. DNS + parked domain + SSL + clean root URL all working. |
 
 ---
 
@@ -90,15 +102,23 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 
 | Session | What | Notes |
 |---|---|---|
+| **9f-followup** | **Portal polish (post-launch)** | SEO meta tags + OG images (separate for xxl.co.il vs super.xxl.co.il for WhatsApp link previews), portal favicon decision, email signup backend wiring (vacation/fashion pages currently `console.log` only — wire to Formspree or similar), analytics (Plausible or GA), real-device mobile pass. ~1-2 hrs. |
+| **9h** | **Claude Haiku integration for portal search** | Replace `web/src/utils/portalSearchRouter.ts` mock classifier with real Claude Haiku API call. Function signature already designed for one-line swap. Budget: ~$5/mo at 1K daily queries. |
+| **Titan email setup** | Activate xxl.co.il mailboxes | DNS already configured (MX → Titan). Eltzur to set up `info@xxl.co.il` + aliases himself in Hostinger Emails panel. Catch-all + aliases pattern recommended to minimize cost. |
 | **9g** | **Scraper Infrastructure: Performance + Geographic Correctness** | (1) Bulk inserts (Postgres COPY or batched VALUES) — current ~1.5min/store driven by per-row INSERT round-trips. (2) Parallel chain execution via `concurrent.futures`. (3) Geographic fix for Victory + Carrefour geo-blocking — if EU-West region change isn't enough, migrate scraper-cron to Israeli VPS ($5-12/mo). Target: 58 stores in <10 min vs current ~70 min. Unblocks 9d-2 and beyond. **Priority: do this FIRST after 9d-1**, before more city expansion. |
 | 9e | StoreNext Registry Ingestion | Ingest StoreNext branch lists (all 7 chains available, free CSV export) into a new `chain_stores_registry` table with sub-format classification (Sheli/Deal/Express/Yesh/Universe/BE for Shufersal; similar for others). Refactor Phase B selection to be format-aware. Solves Shufersal sub-chain heterogeneity systematically. **StoreNext outreach pending** — if their paid tier includes product catalog, re-prioritize 9e ahead of 9g. |
 | 9d-2 | City expansion Phase 2 | Remaining 12 cities >100K pop (Petah Tikva, Netanya, Holon, Ramat Gan, Ashkelon, Rehovot, Bat Yam, Beit Shemesh, Kfar Saba, Herzliya, Modi'in). Target ~216 stores total. **Requires 9g first** — running 216-store cron at current 1.5min/store = 5+ hours. |
 | 9d-3 | City expansion Phase 3 | 50K+ cities (~25-30 more). Target ~540 stores. |
-| 9f | XXL Portal Page (xxl.co.il root) | Build the multi-vertical landing page. Hero (XXL logo + tagline "קונים חכם · חוסכים בענק"). AI-powered universal search bar (Claude Haiku for intent classification, ~$5/mo at 1K daily queries). Vertical tiles: Groceries (live), Flights/Hotels/Fashion (coming soon). Parallel track — can happen anytime after 9e. |
 | CITY_CODES audit | Patch missing gov.il city codes | 9d-1 surfaced 23 NULL-city Carrefour stores (Or Akiva, Tel Mond, Dimona, Maalot, Kiryat Ata, Even Yehuda, Kfar Yona, Karkur, Tamra, Daliyat al-Karmel, Arad, Atlit, Kiryat Tivon, Matan, Tzur Yitzhak). Pre-existing dict gap in `scraper/cerberus.py`. Small fix, defer to alongside 9d-2 or as a quick patch session. |
 | Promotions + price history | Parse Promo XML files, build history charts | Sample Promo XML files captured in 9d-1 for future analysis. Requires sufficient daily snapshots first. |
 | Google OAuth | Wire up deferred-from-9b option | Requires Google Cloud Console OAuth client setup |
 | Investigate disappearing tables | Risk hygiene | Deferred pending future AWS/GCP migration (decided in 9c planning) |
+
+---
+
+## ⚠️ Watch Items (low priority, but don't forget)
+
+- **Supabase Data API default change** (email received May 12, 2026): starting May 30 for new projects, October 30 for existing projects, new tables in `public` schema won't be exposed via supabase-js / REST / GraphQL by default. **Existing tables keep their grants**, so super.xxl.co.il is unaffected for current code. For NEW tables created after Oct 30, 2026, must run explicit GRANT statements if they need to be reachable from the frontend. Pattern: `GRANT SELECT, INSERT, UPDATE, DELETE ON public.your_table TO authenticated;` + RLS policy. Backend-only tables (FastAPI direct connection) are unaffected. Review Security Advisor in Supabase dashboard.
 
 ---
 
@@ -121,6 +141,12 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 - **Scraper performance bottleneck (9d-1)** — current ~1.5min/store driven by per-row INSERT round-trips to Railway Postgres. At 58 stores = ~70 min; at 216 stores = ~5 hours (untenable). Fix planned in 9g via bulk inserts + parallel chains.
 - **Shufersal sub-chain landscape (9d-1, field intel from Eltzur)** — same chain_id `7290027600007` publishes: דיל (Deal, mainstream discount), שלי (Sheli, neighborhood), אקספרס (Express, convenience), יש/יש חסד (Yesh, haredi sector — dominates Jerusalem/Bnei Brak), Universe (hypermarket), BE (pharmacy/health). NOT all sub-formats publish individual PriceFull files. "Lowest store_id" selection rule biased toward old Jerusalem Sheli stores in 9d-1 — needs format-aware refactor in 9e.
 - **StoreNext as canonical chain registry source (9d-1 discovery)** — `storenext.co.il/תמיכה-ושירות/` publishes free CSV branch lists for every EDI-using chain (all 7 of ours). Includes store_id, EDI barcode, store name with format prefix. Could become the basis for the `chain_stores_registry` table in 9e. Paid tier (product catalog?) under investigation.
+- **Master brand (xxl.co.il) is the canonical surface (9f)** — xxl.co.il is the portal; verticals are paths on it (`/vacation`, `/fashion`) NOT subdomains. Earlier plans for `fly.xxl.co.il`, `hotel.xxl.co.il` etc. are obsolete.
+- **Portal verticals collapsed: חופשות = flights + hotels (9f)** — earlier 4-tile design reduced to 3-tile (מצרכים, חופשות, אופנה). חופשות is the single travel vertical covering both.
+- **AI search bar uses mocked keyword router for now (9f)** — `web/src/utils/portalSearchRouter.ts` exports `classifyAndRoute(query)` with hardcoded Hebrew + English keyword lists. Function signature designed for one-line swap to Claude Haiku in 9h.
+- **Hostname-based routing in React (9f)** — `App.tsx` has `isPortalHostname()` checking `window.location.hostname`. When true (xxl.co.il / www.xxl.co.il / localhost?portal=1), `/` renders `PortalPage`. When false, falls through to `AppShell`. Briefly tried .htaccess 302 redirect mid-session but rejected — left `/portal-preview` in URL bar.
+- **Email signup on בקרוב pages is intentionally dummy (9f)** — `console.log` only. Wiring to real backend deferred to 9f-followup.
+
 ---
 ## Operating patterns Established
 
@@ -136,6 +162,24 @@ Brand tagline candidates: "תקנה חכם", "כל מחיר. כל מקום.", "�
 - **OpenFoodFacts** — ❌ ABANDONED. Tested in past sessions, found it out of date and nearly empty for Israeli barcodes. Code exists in repo but do not invest more effort here.
 - **StoreNext** — outreach pending (Eltzur left contact details May 12). Free CSV branch lists per chain confirmed working (`storenext.co.il/תמיכה-ושירות/`). Paid tier scope TBD. Will inform 9e Registry session.
 - **OpenIsraeliSupermarkets Kaggle dataset** — bookmarked for future price history (9d).
+
+---
+
+## 📂 File Location Reference (portal files added in 9f)
+
+When asking CC to modify portal/supermarket code, here are the key files and what to look for. Line numbers omitted (they drift) — use the descriptive anchors instead.
+
+| File | Purpose | Anchors when modifying |
+|---|---|---|
+| `web/src/pages/PortalPage.tsx` | Portal landing page | Search for: `<XxlLogoPortal>` hero, rotating placeholder `useEffect` with 4 examples, the 3 vertical tiles (search "מצרכים"), value-props strip (search "חינם לחלוטין"), sub-header "הפורטל שהופך כסף רגיל לכסף חכם" |
+| `web/src/pages/ComingSoonPage.tsx` | Shared template for /vacation and /fashion | Email form, regex validation, `console.log('[ComingSoonPage] Email signup:', ...)` — this is the line 9f-followup replaces with real backend |
+| `web/src/pages/VacationPage.tsx` | Thin wrapper passing חופשות + Sun icon to ComingSoonPage | — |
+| `web/src/pages/FashionPage.tsx` | Thin wrapper passing אופנה + Shirt icon to ComingSoonPage | — |
+| `web/src/components/XxlLogoPortal.tsx` | Portal animated logo (duplicate of XxlLogo.tsx with portal tagline) | Tagline "קונים חכם · חוסכים בענקקק" on SVG textPath, fontSize 28, letterSpacing -0.5. sessionStorage key `xxl_portal_animated_this_session`. |
+| `web/src/components/XxlLogo.tsx` | Supermarket app logo — **DO NOT modify for portal changes** | Hardcoded tagline "חוסכים בענקקק". Duplicate this file if a new tagline is needed elsewhere. |
+| `web/src/utils/portalSearchRouter.ts` | Mocked AI intent classifier | Exports `classifyAndRoute(query)`. **Swap this function body when wiring Claude Haiku in 9h** — keep the signature. |
+| `web/src/App.tsx` | Top-level routing + hostname detection | `isPortalHostname()` at top of file. Top-level `<Routes>` with portal routes, conditional `/`, and `/*` catch-all → `<AppShell />`. AppShell wraps the supermarket app with its own internal `<Routes>`. |
+| Hostinger `public_html/.htaccess` | Server-level routing (NOT in repo) | Minimal React Router SPA fallback only. If adding server-level rules later (cache headers etc.), insert BEFORE the SPA fallback block. |
 
 ---
 
@@ -355,6 +399,57 @@ Recommended order: 9c next (small, completes the auth → freemium picture befor
 - ✅ Phase 2A verified: heart toggles, persists across reload, /favorites page renders, dropdown link works
 - ✅ Phase 2B verified: recent searches stored, dropdown appears on empty-focused input, click re-runs search, × removes individual, "נקה הכל" clears all
 - ✅ Cheapest indicator visual fix in production
+
+### Session 9f (May 12-13, 2026) — XXL Portal Page → Live on xxl.co.il
+
+**Done:**
+- **Designed and built the xxl.co.il portal landing page**: hero with animated logo, AI search bar (rotating placeholders), 3 vertical tiles (מצרכים live, חופשות + אופנה בקרוב), value-props strip, footer.
+- **3-tile design (down from initial 4-tile)**: collapsed flights + hotels into "חופשות — טיסות ומלונות" with Sun icon. אופנה uses Shirt icon. מצרכים uses ShoppingCart with emerald LIVE badge.
+- **Mocked AI search router shipped**: `portalSearchRouter.ts` with Hebrew + English keyword lists. Groceries → external nav to super.xxl.co.il, vacation/fashion → internal React Router, unknown → Hebrew error hint.
+- **2 בקרוב sub-pages live** at `/vacation` and `/fashion`: hero + email signup card + "חזרה לדף הבית" link. Email signup `console.log` only (intentional, real wiring deferred to 9f-followup).
+- **XxlLogoPortal component created** as duplicate of XxlLogo.tsx with tagline "קונים חכם · חוסכים בענקקק" arching above wordmark. fontSize 28 + letterSpacing -0.5 to fit longer string. Distinct sessionStorage key.
+- **Sub-header polish**: "XXL — הפורטל שהופך כסף רגיל לכסף חכם" → final "הפורטל שהופך כסף רגיל לכסף חכם" (dropped XXL prefix; logo above establishes brand). `text-2xl md:text-4xl font-bold`.
+- **Hebrew default fixed**: app was loading English on first visit. Now defaults Hebrew with localStorage preservation of user's explicit choice.
+- **DNS setup**: A records at box.co.il for `xxl.co.il` and `www.xxl.co.il` → `82.198.227.247`. MX records for Titan email kept untouched.
+- **Hostinger parked domain**: `xxl.co.il` parked on top of `super.xxl.co.il`. Both serve from same `public_html/`.
+- **SSL**: Lifetime SSL auto-provisioned for `xxl.co.il` within ~30 min of parking.
+- **Hostname-based routing in React (final approach)**: `App.tsx` checks `window.location.hostname`; on xxl.co.il, `/` renders PortalPage. Clean URL — `xxl.co.il/` shows portal at `xxl.co.il/`, no `/portal-preview` suffix.
+- **Local dev override**: `localhost?portal=1` simulates portal hostname for testing.
+- **Two deploys to Hostinger this session**: first got portal pages onto production; second finalized clean URLs after hostname routing change.
+
+**Decisions made:**
+- **Multi-vertical portal = paths on xxl.co.il, NOT subdomains**. Simpler routing, one codebase, one deploy.
+- **חופשות collapses flights + hotels** — cleaner UX, matches how Israeli travelers actually shop (package vacations).
+- **Mocked keyword router over real Haiku for MVP** — ships UI without API key complexity; Haiku becomes its own clean session (9h).
+- **Email signup intentionally dummy at launch** — soft-launch acceptance: low signup volume expected, easier to wire backend later than delay launch.
+- **Hostname-based routing in React (not .htaccess)** — `.htaccess` 302 redirect approach worked but left `/portal-preview` in URL bar. Final: hostname detection in React, .htaccess back to minimal SPA fallback only.
+- **Softened "freemium" claim on value-props**: "ההשוואה תמיד חינם, ללא הגבלות" → "ההשוואה תמיד חינם" (no "unlimited" claim, since 25-item cap exists for logged-out users).
+- **XxlLogo.tsx untouched, XxlLogoPortal duplicated** — keeps super.xxl.co.il logo 100% safe from portal changes. Code duplication accepted as right tradeoff for visual isolation.
+
+**Files changed:**
+- New: `web/src/pages/PortalPage.tsx`, `web/src/pages/ComingSoonPage.tsx`, `web/src/pages/VacationPage.tsx`, `web/src/pages/FashionPage.tsx`, `web/src/components/XxlLogoPortal.tsx`, `web/src/utils/portalSearchRouter.ts`
+- Modified: `web/src/App.tsx` — added `isPortalHostname()` at top, restructured top-level `<Routes>` to include portal routes + conditional `/` for portal hostname + catch-all to `AppShell`. Existing supermarket logic preserved inside AppShell.
+- Modified: supermarket app's language initialization logic — now defaults Hebrew when no localStorage preference, preserves user choice when set.
+- Hostinger-side (not in repo): `.htaccess` briefly held portal-rewrite block mid-session, ended at minimal SPA fallback only.
+
+**Bugs encountered & resolved:**
+1. ✅ **Tagline clipping on portal logo arc** — "קונים חכם · חוסכים בענקקק" is ~60% longer than original. First fix (fontSize 42 → 36) insufficient. Final: fontSize 28 + letterSpacing -0.5.
+2. ✅ **First parked domain typo** — entered `xxk.co.il` instead of `xxl.co.il` in Hostinger. Caught before clicking nameserver-change guide (would have wiped DNS records). Deleted typo entry, re-added correctly.
+3. ✅ **.htaccess 302 redirect approach** — initial `^$` pattern didn't match Apache root requests on Hostinger's config. Fixed with `^/?$` + `[R=302]`, which worked but left "/portal-preview" in URL bar. Final work replaced this entirely with React hostname detection.
+4. ✅ **English-by-default on first load** — language init defaulted to 'en'. Fixed to default Hebrew while preserving localStorage choice.
+5. ✅ **Two `.htaccess` files after zip extraction** — Vite generates `.htaccess` in dist/. Resolved by deleting redundant copy.
+
+**Outcome:**
+- ✅ https://xxl.co.il loads portal at clean root URL
+- ✅ https://www.xxl.co.il same
+- ✅ https://xxl.co.il/vacation and /fashion show בקרוב pages
+- ✅ https://super.xxl.co.il/ unchanged, Hebrew default
+- ✅ SSL active on both (Lifetime)
+- ✅ All React Router routes work on both hostnames
+- ✅ Mobile responsive
+- ✅ Rotating placeholder cycles 4 examples
+
+**Next:** Session 9g — Scraper Infrastructure (performance + geo correctness). Sessions 9f-followup (portal polish) and 9h (Claude Haiku integration) are parallel tracks, can happen anytime.
 
 ### Session 9d-1 (May 11-12, 2026) — City Expansion Phase 1 + Carrefour + Verification System
 
