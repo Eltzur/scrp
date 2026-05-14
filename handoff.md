@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: May 14, 2026 (end of session 9f-followup)
+> Last updated: May 14, 2026 (end of session 9f-followup + GS1 IL lead added to data sources tracker)
 ---
 
 ## 🎯 Vision
@@ -96,6 +96,67 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 | 9d-1 | City expansion Phase 1 + Carrefour scraper + verification system | ✅ Carrefour scraper + `publishprice.py` base class shipped. 5 new cities added. PriceFull-verification gate (`active_stores.yaml`) shipped. 58 verified / 14 excluded. Cron-command persistence bug found and fixed (Procfile now authoritative). Surfaced: geo-blocking on 2 chains, ~2min/store scrape bottleneck, Shufersal sub-chain heterogeneity. |
 | **9f** | **XXL Portal Page — live on xxl.co.il** | ✅ Portal landing live at https://xxl.co.il with 3 vertical tiles, AI search bar (mocked router), 2 בקרוב sub-pages, hostname-based routing in React. Hebrew defaults fixed. DNS + parked domain + SSL + clean root URL all working. |
 | **9f-followup** | **Portal polish: SEO, OG, email signup backend, GA4 + cookie banner** | ✅ SEO/OG meta tags hostname-aware. Email signup writes to Supabase portal_email_signups table. GA4 wired (pending Eltzur measurement ID swap). Minimal Hebrew cookie banner with X-dismiss-as-consent. |
+
+---
+
+## Potential Data Sources
+
+External data sources we're evaluating for catalog enrichment. Each entry tracks status, key questions, and decision gates. **Single source of truth — do not split into separate files.**
+
+### GS1 Israel — Digital Catalog of Items (added May 14, 2026)
+
+**What it is:** GS1 IL's digital catalog — barcode-keyed (GTIN) product master data. GS1 is the global NGO that owns the barcode standard. The Israeli chapter operates the local catalog at https://www.gs1il.org/what-is-the-digital-catalog-of-items/
+
+**Fields offered (per their marketing page):**
+- Barcode (GTIN) — canonical product ID
+- Full product name + description (canonical, brand-owner authored)
+- Images — including 360° and marketing imagery
+- Nutritional info
+- Kashrut certifications
+- Logistics data (pack sizes, weights)
+- Brand / marketing metadata
+
+**Why high-priority:** Closes the three gaps the OS scraper research (May 14) flagged — canonical names, brands, images — from a single authoritative source. Bonus fields (kashrut, nutrition, 360° images) unlock future verticals like dietary filtering, allergen flagging, and richer product detail pages.
+
+**Architecture fit:** Enrichment layer joined to existing scraper output via barcode (GTIN). NOT a replacement for the gov.il scraper — gov.il still needed for prices. Clean add-on, not a rewrite.
+
+**Status:** Eltzur registered via gs1il.org website on May 14, 2026. Awaiting contact from GS1 IL with details.
+
+**Open questions for GS1 IL (in priority order, ask in first reply):**
+1. Is a price-comparison / consumer-info platform eligible as a data consumer, or is read access restricted to retailers/manufacturers?
+2. Pricing structure for read-only API or data feed access for our use case?
+3. API specification — REST / bulk file download / GraphQL? Rate limits? Update frequency?
+4. Coverage — what % of Israeli grocery SKUs are currently in the catalog?
+5. Image licensing — can we display catalog images on a consumer-facing site at no extra cost, or is there a per-display / per-API-call fee?
+6. Data freshness SLA — how often do brand owners update their listings?
+
+**Decision gates:**
+- 🟢 GREEN: Platform-eligible access, ≤₪3k/month, REST API or bulk feed, ≥70% SKU coverage → prioritize integration immediately after 9g
+- 🟡 YELLOW: Eligible but pricier (₪3-10k/month) → defer until pre-revenue funding lands or revenue covers it
+- 🔴 RED: Retailer-only access OR ≥₪10k/month → file under "revisit at scale"
+
+**Important caveats (don't assume too much from marketing page):**
+- GS1 is non-profit but NOT free. Pricing varies wildly by country and tier — could be hundreds or tens of thousands of shekels annually. Unknown until they reply.
+- Catalog only covers products whose brand owners have opted in. Israeli participation rate unknown.
+- Doesn't replace gov.il for prices — GS1 carries product master data, not commercial pricing.
+
+**Follow-up cadence:** If no reply from GS1 IL within 5 business days (target: May 21, 2026), Eltzur sends a polite follow-up via their contact form or phone (03-5198714).
+
+**Relationship to other sources:** GS1 and StoreNext are PARALLEL candidates, not mutually exclusive. GS1 is brand-owner-sourced (manufacturer-uploaded); StoreNext is retailer-sourced. They may complement each other — GS1 fills the canonical-name + image gap, StoreNext could fill chain-specific pricing/promo metadata. Pursue both threads in parallel.
+
+---
+
+### StoreNext (status: outreach pending)
+
+**Status:** Identified in earlier research (session 9a) as a promising B2B catalog data source for IL grocery. Outreach not yet initiated. Specific contact path, pricing, and access tier unknown. Lower priority than GS1 since GS1 lead is now active.
+
+**Action:** Initiate outreach to StoreNext post-9g if GS1 path doesn't pan out, OR in parallel if GS1 reply takes >5 business days.
+
+---
+
+### OpenFoodFacts (status: abandoned)
+
+Tried during earlier catalog enrichment exploration. Abandoned due to poor Israeli barcode coverage (most IL grocery SKUs absent from the global OFF database). **Do not revisit.**
 
 ---
 
