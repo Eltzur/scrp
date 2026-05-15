@@ -8,6 +8,12 @@ from sqlalchemy.engine import Connection, Engine
 SCHEMA = Path(__file__).parent / "schema.sql"
 DEFAULT_DB = Path(__file__).parent.parent / "prices.db"
 
+# Rows per INSERT statement for bulk operations.
+# 1000 reduces ~7000 per-row round-trips to ~7 statements per store.
+# Safe for both SQLite (no param limit) and PostgreSQL (65535 positional limit;
+# 1000 rows × 10 cols = 10000 named params — well within bounds).
+PRICE_INSERT_BATCH_SIZE = 1000
+
 
 def _database_url() -> str:
     url = os.environ.get("DATABASE_URL", "")
@@ -137,3 +143,125 @@ def upsert_price(conn: Connection, store_fk: int, item: dict) -> None:
             allow_discount        = excluded.allow_discount,
             item_status           = excluded.item_status
     """), {"store_fk": store_fk, **item})
+
+
+# ---------------------------------------------------------------------------
+# Bulk insert helpers (9g-1 performance improvement)
+# ---------------------------------------------------------------------------
+
+def bulk_upsert_items(conn: Connection, items: list[dict]) -> None:
+    """
+    Bulk-insert items in batches of PRICE_INSERT_BATCH_SIZE.
+    ON CONFLICT(item_code) DO NOTHING — first writer wins canonical name.
+    Applied in both replace and append modes (items table is never DELETEd).
+    """
+    if not items:
+        return
+    cols = (
+        "item_code", "item_type", "item_name", "manufacturer_name",
+        "manufacture_country", "unit_qty", "quantity", "is_weighted",
+        "unit_of_measure", "qty_in_package",
+    )
+    for i0 in range(0, len(items), PRICE_INSERT_BATCH_SIZE):
+        batch = items[i0 : i0 + PRICE_INSERT_BATCH_SIZE]
+        placeholders, params = [], {}
+        for j, item in enumerate(batch):
+            placeholders.append(
+                f"(:a{j}0,:a{j}1,:a{j}2,:a{j}3,:a{j}4,"
+                f":a{j}5,:a{j}6,:a{j}7,:a{j}8,:a{j}9)"
+            )
+            params.update({
+                f"a{j}0": item.get("item_code"),
+                f"a{j}1": item.get("item_type"),
+                f"a{j}2": item.get("item_name"),
+                f"a{j}3": item.get("manufacturer_name"),
+                f"a{j}4": item.get("manufacture_country"),
+                f"a{j}5": item.get("unit_qty"),
+                f"a{j}6": item.get("quantity"),
+                f"a{j}7": item.get("is_weighted"),
+                f"a{j}8": item.get("unit_of_measure"),
+                f"a{j}9": item.get("qty_in_package"),
+            })
+        conn.execute(text(
+            f"INSERT INTO items ({','.join(cols)}) VALUES {','.join(placeholders)}"
+            " ON CONFLICT(item_code) DO NOTHING"
+        ), params)
+
+
+def bulk_upsert_item_chain_names(conn: Connection, chain_id: str, items: list[dict]) -> None:
+    """
+    Bulk-upsert per-chain item names in batches.
+    ON CONFLICT(item_code, chain_id) DO UPDATE — always refreshes chain name.
+    Applied in both replace and append modes (item_chain_names is never DELETEd).
+    """
+    if not items:
+        return
+    cols = ("item_code", "chain_id", "item_name", "manufacturer_name")
+    for i0 in range(0, len(items), PRICE_INSERT_BATCH_SIZE):
+        batch = items[i0 : i0 + PRICE_INSERT_BATCH_SIZE]
+        placeholders, params = [], {}
+        for j, item in enumerate(batch):
+            placeholders.append(f"(:b{j}0,:b{j}1,:b{j}2,:b{j}3)")
+            params.update({
+                f"b{j}0": item.get("item_code"),
+                f"b{j}1": chain_id,
+                f"b{j}2": item.get("item_name"),
+                f"b{j}3": item.get("manufacturer_name"),
+            })
+        conn.execute(text(
+            f"INSERT INTO item_chain_names ({','.join(cols)}) VALUES {','.join(placeholders)}"
+            " ON CONFLICT(item_code, chain_id) DO UPDATE SET"
+            " item_name=excluded.item_name,"
+            " manufacturer_name=excluded.manufacturer_name"
+        ), params)
+
+
+def bulk_insert_prices(conn: Connection, store_fk: int, items: list[dict],
+                       replace: bool) -> int:
+    """
+    Bulk-insert price rows in batches. Returns total rows inserted.
+
+    replace=True:  plain INSERT, no ON CONFLICT clause.
+                   Safe because the caller already DELETEd all prices for this
+                   store_fk — there are no existing rows that could conflict.
+    replace=False: INSERT ... ON CONFLICT(store_fk, item_code) DO UPDATE
+                   (append mode — existing rows are updated in place).
+    """
+    if not items:
+        return 0
+    cols = (
+        "store_fk", "item_code", "price_update_date", "item_price",
+        "unit_of_measure_price", "allow_discount", "item_status",
+    )
+    conflict_clause = (
+        "" if replace else
+        " ON CONFLICT(store_fk, item_code) DO UPDATE SET"
+        " price_update_date=excluded.price_update_date,"
+        " item_price=excluded.item_price,"
+        " unit_of_measure_price=excluded.unit_of_measure_price,"
+        " allow_discount=excluded.allow_discount,"
+        " item_status=excluded.item_status"
+    )
+    total = 0
+    for i0 in range(0, len(items), PRICE_INSERT_BATCH_SIZE):
+        batch = items[i0 : i0 + PRICE_INSERT_BATCH_SIZE]
+        placeholders, params = [], {}
+        for j, item in enumerate(batch):
+            placeholders.append(
+                f"(:c{j}0,:c{j}1,:c{j}2,:c{j}3,:c{j}4,:c{j}5,:c{j}6)"
+            )
+            params.update({
+                f"c{j}0": store_fk,
+                f"c{j}1": item["item_code"],
+                f"c{j}2": item.get("price_update_date"),
+                f"c{j}3": item["item_price"],
+                f"c{j}4": item.get("unit_of_measure_price"),
+                f"c{j}5": item.get("allow_discount"),
+                f"c{j}6": item.get("item_status"),
+            })
+        conn.execute(text(
+            f"INSERT INTO prices ({','.join(cols)})"
+            f" VALUES {','.join(placeholders)}{conflict_clause}"
+        ), params)
+        total += len(batch)
+    return total

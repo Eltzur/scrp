@@ -12,7 +12,9 @@ from sqlalchemy import text
 
 from db.db import (
     connect, init_db, upsert_chain, upsert_store,
-    upsert_item, upsert_item_chain_name, upsert_price, DEFAULT_DB
+    upsert_item, upsert_item_chain_name, upsert_price,
+    bulk_upsert_items, bulk_upsert_item_chain_names, bulk_insert_prices,
+    DEFAULT_DB
 )
 from parser.price_parser import parse_file as parse_price_file
 from scraper.city_names import normalize_city
@@ -98,16 +100,18 @@ class ChainScraper(abc.ABC):
                         {"store_fk": store_fk},
                     )
 
-                count = 0
-                for item in items:
-                    if not item["item_code"] or item["item_price"] is None:
-                        continue
-                    upsert_item(conn, item)
-                    upsert_item_chain_name(conn, chain_id, item)
-                    upsert_price(conn, store_fk, item)
-                    count += 1
-                    if count % 500 == 0:
-                        conn.commit()
+                # Filter once; valid items feed all three bulk inserts below.
+                valid = [
+                    item for item in items
+                    if item.get("item_code") and item.get("item_price") is not None
+                ]
+
+                # Bulk inserts — all three tables in one transaction per store.
+                # items/item_chain_names always use ON CONFLICT (never DELETEd).
+                # prices skips ON CONFLICT in replace mode (store was just cleared).
+                bulk_upsert_items(conn, valid)
+                bulk_upsert_item_chain_names(conn, chain_id, valid)
+                count = bulk_insert_prices(conn, store_fk, valid, replace=replace)
 
                 conn.commit()
                 items_inserted += count
