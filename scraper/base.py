@@ -106,6 +106,31 @@ class ChainScraper(abc.ABC):
                     if item.get("item_code") and item.get("item_price") is not None
                 ]
 
+                # Deduplicate by item_code — source XMLs occasionally emit the same
+                # barcode twice. Postgres raises "ON CONFLICT DO UPDATE cannot affect
+                # row a second time" when a single INSERT batch contains two rows that
+                # target the same conflict key. Last-wins matches ON CONFLICT DO UPDATE
+                # semantics; also prevents UNIQUE-constraint violations in replace mode.
+                raw_count = len(valid)
+                first_seen: dict = {}
+                diff_count = 0
+                for item in valid:
+                    code = item["item_code"]
+                    if code in first_seen:
+                        prev = first_seen[code]
+                        if (item.get("item_price")        != prev.get("item_price") or
+                                item.get("item_name")     != prev.get("item_name") or
+                                item.get("manufacturer_name") != prev.get("manufacturer_name")):
+                            diff_count += 1
+                    else:
+                        first_seen[code] = item
+                valid = list({item["item_code"]: item for item in valid}.values())
+                if raw_count != len(valid) and diff_count > 0:
+                    log.warning(
+                        "Store %s: %d duplicate item_codes (%d with differing values, last-wins)",
+                        sid, raw_count - len(valid), diff_count,
+                    )
+
                 # Bulk inserts — all three tables in one transaction per store.
                 # items/item_chain_names always use ON CONFLICT (never DELETEd).
                 # prices skips ON CONFLICT in replace mode (store was just cleared).
