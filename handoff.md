@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: May 14, 2026 (end of session 9f-followup + GS1 IL lead added to data sources tracker)
+> Last updated: May 17, 2026 (end of session 9g Phases 1-6: bulk inserts deployed + full migration to Kamatera Tel Aviv VPS. Phase 7 frontend reroute and Phase 9 backups still pending.)
 ---
 
 ## 🎯 Vision
@@ -25,9 +25,9 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 | Layer | Tech | Where | Status |
 |---|---|---|---|
 | Frontend | React + Vite + TypeScript + Tailwind | Hostinger static (`public_html/`) — serves BOTH xxl.co.il and super.xxl.co.il | ✅ Live |
-| Backend | FastAPI (Python) | Railway `web` service | ✅ Live |
-| Database | Postgres | Railway `Postgres` service | ✅ Live |
-| Scraper cron | Python (`scraper.cron_main`) | Railway `scraper-cron` service (EU-West, Amsterdam) | ✅ Daily 1am UTC |
+| Backend | FastAPI (Python) | Railway `web` service (will move to Kamatera in Phase 7) | ⚠️ Live but pointing at dead Railway Postgres until Phase 7 reroutes DATABASE_URL |
+| Database | Postgres 18.4 | Kamatera `scrp-prod-il` Tel Aviv VPS (`185.229.226.190`) | ✅ Live since May 17, 2026 |
+| Scraper cron | Python (`scraper.cron_main`) | Kamatera `scrp-prod-il` via systemd timer | ✅ Daily 03:00 IDT, DST-aware |
 | DNS | box.co.il (ns1/2/3.box.co.il) | — | ✅ |
 | Auth | Supabase | Supabase project (auth only — no Data API usage from client) | ✅ Live |
 
@@ -39,6 +39,7 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 - Portal: https://xxl.co.il (and https://www.xxl.co.il)
 - Supermarket app: https://super.xxl.co.il
 - Backend: https://api-super.xxl.co.il
+- Scraper/DB server (SSH only): `ssh dude@185.229.226.190` (Kamatera Tel Aviv, scrp-prod-il)
 
 **Hostinger setup (added 9f):**
 - One website (`super.xxl.co.il`) serves both domains
@@ -47,10 +48,20 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 - SSL: Lifetime SSL auto-provisioned by Hostinger for both
 - **Routing logic lives in React, NOT .htaccess.** `App.tsx` has `isPortalHostname()` that checks `window.location.hostname` and renders `PortalPage` at `/` when on xxl.co.il, else renders `AppShell` (supermarket app).
 
-**Key Railway commands:**
+**Key infrastructure commands:**
+
+*Railway (web service only — Postgres decommissioned):*
 - `web` start: `gunicorn -k uvicorn.workers.UvicornWorker api.main:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120`
-- `scraper-cron` start: `python -m scraper.cron_main`
-- DATABASE_URL uses `${{Postgres.DATABASE_PUBLIC_URL}}`
+- DATABASE_URL: currently pointing at dead Railway Postgres. **Phase 7 will repoint to `postgresql://scrp_app:<password>@185.229.226.190:5432/xxl_super?sslmode=require`**
+
+*Kamatera (scraper + Postgres host):*
+- SSH: `ssh dude@185.229.226.190`
+- Manual scrape (ad-hoc): `cd ~/scrp && venv/bin/python -m scraper.cron_main`
+- Scheduled scrape: `systemctl start scrp-cron.service` (or wait for daily 03:00 IDT timer)
+- View latest scrape logs: `journalctl -u scrp-cron.service --since "yesterday" | tail -50`
+- Timer status: `systemctl list-timers scrp-cron.timer`
+- Postgres console: `sudo -u postgres psql xxl_super`
+- Disk check: `df -h /`
 
 **Folder layout (matters because some folders are misleadingly named):**
 - `web/` — React frontend (NOT the backend, despite the name)
@@ -68,13 +79,15 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 
 ## 📊 Current Production State
 
-- **7 chains** scraping daily: Shufersal, Rami Levy, Osher Ad, Victory, Yochananof, Keshet, **Carrefour** (added 9d-1)
-- **49 stores across 7 cities**: Jerusalem, Bnei Brak, Tel Aviv, Haifa, Be'er Sheva, Rishon LeZion, Ashdod (verify with `/stats`)
-- **~372,000 prices** as of last cron run
+- **7 chains** scraping daily: Shufersal, Rami Levy, Osher Ad, Victory, Yochananof, Keshet, Carrefour — ✅ ALL working from Kamatera Tel Aviv IP as of May 17, 2026 (geo-block resolved)
+- **58 stores across 7 cities**: Jerusalem, Bnei Brak, Tel Aviv, Haifa, Be'er Sheva, Rishon LeZion, Ashdod
+- **~430,000 prices** as of May 17, 2026 full cron run
+- **Cron runtime**: 3 min 31 sec (down from ~90 min on Railway US-West — 25× improvement via bulk inserts + localhost Postgres + Israeli IP)
 - **Verification gate**: `active_stores.yaml` (verified to publish PriceFull) is what cron uses; `scheduled_stores.yaml` is the wish-list. See `db/verification_report_9d1.md` for excluded stores.
 - **Canonical names** computed via weighted token voting (session 8b)
 - **Search** uses canonical names only, numeric/percentage tokens filtered (session 8b)
 - **Known coverage gap**: Bnei Brak has no Carrefour/Yenot Bitan/Mega presence (verified via carrefour.co.il store locator) — accepted, not a bug.
+- **Live site status**: super.xxl.co.il is currently broken — Railway web service still points at dead Railway Postgres. Phase 7 (frontend reroute) will fix.
 
 ---
 
@@ -96,6 +109,7 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 | 9d-1 | City expansion Phase 1 + Carrefour scraper + verification system | ✅ Carrefour scraper + `publishprice.py` base class shipped. 5 new cities added. PriceFull-verification gate (`active_stores.yaml`) shipped. 58 verified / 14 excluded. Cron-command persistence bug found and fixed (Procfile now authoritative). Surfaced: geo-blocking on 2 chains, ~2min/store scrape bottleneck, Shufersal sub-chain heterogeneity. |
 | **9f** | **XXL Portal Page — live on xxl.co.il** | ✅ Portal landing live at https://xxl.co.il with 3 vertical tiles, AI search bar (mocked router), 2 בקרוב sub-pages, hostname-based routing in React. Hebrew defaults fixed. DNS + parked domain + SSL + clean root URL all working. |
 | **9f-followup** | **Portal polish: SEO, OG, email signup backend, GA4 + cookie banner** | ✅ SEO/OG meta tags hostname-aware. Email signup writes to Supabase portal_email_signups table. GA4 wired (pending Eltzur measurement ID swap). Minimal Hebrew cookie banner with X-dismiss-as-consent. |
+| **9g (Phases 1-6)** | **Scraper performance + Kamatera migration** | ✅ Bulk inserts deployed (9g-1, commit 4678207). Migrated scraper + Postgres to Kamatera Tel Aviv VPS. Geo-block resolved on Victory/Carrefour/Shufersal. Full cron runs 7 chains × 58 stores in 3m31s (vs 90 min on Railway). systemd timer scheduled daily 03:00 IDT. Phase 7 (frontend reroute) + Phase 9 (backups) deferred to next session. |
 
 ---
 
@@ -146,11 +160,22 @@ External data sources we're evaluating for catalog enrichment. Each entry tracks
 
 ---
 
-### StoreNext (status: outreach pending)
+### StoreNext (status: REJECTED — pricing prohibitive, May 17, 2026)
 
-**Status:** Identified in earlier research (session 9a) as a promising B2B catalog data source for IL grocery. Outreach not yet initiated. Specific contact path, pricing, and access tier unknown. Lower priority than GS1 since GS1 lead is now active.
+**Status:** Outreach completed May 2026. StoreNext quoted **NIS 30,000 (~$8,000 USD) for a one-time Excel export** of their catalog data. Pricing is approximately 4 years of scrp's total infrastructure budget for a static, single delivery (not even an ongoing API or feed). Hard pass at current stage.
 
-**Action:** Initiate outreach to StoreNext post-9g if GS1 path doesn't pan out, OR in parallel if GS1 reply takes >5 business days.
+**What we'd have gotten:** Branch lists for all 7 chains with sub-format classification, potentially product catalog data. Free CSV branch lists at `storenext.co.il/תמיכה-ושירות/` remain accessible — those are still useful for the 9e Registry idea if we revisit it (see decision below).
+
+**Why rejected:**
+- Price is one-time, not subscription — no obvious "grow into it" tier
+- Single Excel export means data goes stale; not an ongoing relationship
+- ROI doesn't work pre-revenue. Even if StoreNext data unlocked premium tier conversions, NIS 30K is years of recouping at hobby pricing
+- GS1 IL (pending reply) is the better-shaped data source — barcode-keyed canonical product master data with images, kashrut, nutrition. Different layer than StoreNext's chain-store-registry focus
+- The actual gaps we wanted to close (images, brands, canonical names) are addressed by GS1, not StoreNext
+
+**Future:** Revisit only if (a) GS1 path doesn't pan out AND (b) scrp has revenue or funding to absorb the cost. Re-engage StoreNext at scale (5K+ MAU, paying premium tier exists) when the value calculation flips.
+
+**Free StoreNext data still usable:** Branch CSVs at `storenext.co.il/תמיכה-ושירות/` are free and can power the 9e Registry concept independently of the paid catalog. Re-scoped 9e (see Pending Sessions) reflects this.
 
 ---
 
@@ -167,8 +192,11 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 | **9f-followup** | ~~Portal polish~~ | ✅ Done May 14, 2026. See session detail below. |
 | **9h** | **Claude Haiku integration for portal search** | Replace `web/src/utils/portalSearchRouter.ts` mock classifier with real Claude Haiku API call. Function signature already designed for one-line swap. Budget: ~$5/mo at 1K daily queries. |
 | **Titan email setup** | Activate xxl.co.il mailboxes | DNS already configured (MX → Titan). Eltzur to set up `info@xxl.co.il` + aliases himself in Hostinger Emails panel. Catch-all + aliases pattern recommended to minimize cost. |
-| **9g** | **Scraper Infrastructure: Performance + Geographic Correctness** | (1) Bulk inserts (Postgres COPY or batched VALUES) — current ~1.5min/store driven by per-row INSERT round-trips. (2) Parallel chain execution via `concurrent.futures`. (3) Geographic fix for Victory + Carrefour geo-blocking — if EU-West region change isn't enough, migrate scraper-cron to Israeli VPS ($5-12/mo). Target: 58 stores in <10 min vs current ~70 min. Unblocks 9d-2 and beyond. **Priority: do this FIRST after 9d-1**, before more city expansion. | **Update (May 14 cron run)**: Shufersal portal timing out from US-West on most pages — not just the geo-blocked chains. Increases urgency of Israeli VPS migration; not just a Carrefour/Victory problem anymore.
-| 9e | StoreNext Registry Ingestion | Ingest StoreNext branch lists (all 7 chains available, free CSV export) into a new `chain_stores_registry` table with sub-format classification (Sheli/Deal/Express/Yesh/Universe/BE for Shufersal; similar for others). Refactor Phase B selection to be format-aware. Solves Shufersal sub-chain heterogeneity systematically. **StoreNext outreach pending** — if their paid tier includes product catalog, re-prioritize 9e ahead of 9g. |
+| **9g Phase 7** | **Reroute Railway web to Kamatera Postgres** | One-line env var change on Railway: DATABASE_URL → Kamatera. After this, super.xxl.co.il works again. Pre-work: identify Railway egress IP to narrow pg_hba.conf and UFW from temporary `0.0.0.0/0`. ~30-60 min. **Do with fresh focus, touches live site.** |
+| **9g Phase 9** | **pg_dump backups for Kamatera Postgres** | Daily backup cron (04:00 IDT, after scraper) + offsite (Backblaze B2 ~$0.005/GB/mo). Local rotation: 7 daily, 4 weekly, 6 monthly. Test restore once before trusting. ~45 min. |
+| **9g-2** (deferred) | **Parallel chain execution** | Skipped after 9g-1 results. Sequential cron now 3m31s; parallelism would save ~2.8 min. Low ROI until something specific unblocks it. Revisit when full cron pressure returns. |
+| **Shufersal page-scan cache** | **Reduce Shufersal store-discovery from 200 pages to 1-2** | Shufersal's portal forces paginating up to 200 listing pages to find a store's PriceFull. Cache "last known page for store X" in SQLite. Drops Shufersal from ~41s to ~5s per store. Total cron from 3m31s to ~1m. ~30 min session. |
+| 9e (rescoped) | StoreNext FREE branch CSV ingestion | Original 9e premise (paid product catalog) dead — StoreNext paid tier rejected (NIS 30K one-time, May 2026). Free CSV branch lists at `storenext.co.il/תמיכה-ושירות/` remain usable. Rescoped to: ingest free branch CSVs only into `chain_stores_registry` table with sub-format classification (Sheli/Deal/Express/Yesh/Universe/BE for Shufersal; similar for others). Refactor Phase B selection to be format-aware. Solves Shufersal sub-chain heterogeneity systematically. No longer urgent since verification gate (9d-1) already prevents silent failures — quality-of-life, not blocker. |
 | 9d-2 | City expansion Phase 2 | Remaining 12 cities >100K pop (Petah Tikva, Netanya, Holon, Ramat Gan, Ashkelon, Rehovot, Bat Yam, Beit Shemesh, Kfar Saba, Herzliya, Modi'in). Target ~216 stores total. **Requires 9g first** — running 216-store cron at current 1.5min/store = 5+ hours. |
 | 9d-3 | City expansion Phase 3 | 50K+ cities (~25-30 more). Target ~540 stores. |
 | CITY_CODES audit | Patch missing gov.il city codes | 9d-1 surfaced 23 NULL-city Carrefour stores (Or Akiva, Tel Mond, Dimona, Maalot, Kiryat Ata, Even Yehuda, Kfar Yona, Karkur, Tamra, Daliyat al-Karmel, Arad, Atlit, Kiryat Tivon, Matan, Tzur Yitzhak). Pre-existing dict gap in `scraper/cerberus.py`. Small fix, defer to alongside 9d-2 or as a quick patch session. |
@@ -188,7 +216,7 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 
 ## 🔑 Key Architectural Decisions
 
-- **Railway for hosting** — staying until $0–5/month tier outgrown. No premature AWS migration.
+- **Hosting split (May 17, 2026)** — Kamatera Tel Aviv VPS for scraper + Postgres ($17/mo paid tier after 30-day free trial). Railway for web service only (will likely move to Kamatera too in a future consolidation session). Decided after Railway free tier ran out of disk and Railway's tier curve didn't fit our data-ingestion shape (PaaS optimized for app + small DB, not scrape-the-internet pipelines).
 - **SQLAlchemy everywhere** — scrapers are DB-agnostic.
 - **Snapshot pricing only** — not yet tracking history (deferred to 9d).
 - **Phased city expansion strategy** — currently 26 stores in Jerusalem/Bnei Brak. Session 9d-1 expands to 7 cities (~86 stores). Sessions 9d-2+ expand to all 100K+ cities (~216 stores). Sessions 11+ expand to 50K+ cities (~540 stores). Full coverage requires AWS/GCP migration when Railway hits limits.
@@ -202,9 +230,9 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 - **Carrefour Israel under Global Retail C.I.** — chain_id `7290055700007` publishes Carrefour + Mega + Yenot Bitan stores combined. We display as "קרפור" but accept all sub-brands. Bnei Brak has zero Carrefour/Mega/Yenot Bitan presence (verified manually) — not a data bug.
 - **`publishprice` portal type (9d-1)** — new base class `scraper/publishprice.py`. JS-embedded file listing pattern. Currently only Carrefour, but reusable.
 - **Geo-blocking discovered (9d-1)** — `prices.carrefour.co.il` and `laibcatalog.co.il` (Victory) block non-Israeli IPs. Confirmed by Eltzur via VPN test. Other 5 chains' portals don't enforce this. Migration path TBD in 9g (EU-West region trial first, Israeli VPS as fallback).
-- **Scraper performance bottleneck (9d-1)** — current ~1.5min/store driven by per-row INSERT round-trips to Railway Postgres. At 58 stores = ~70 min; at 216 stores = ~5 hours (untenable). Fix planned in 9g via bulk inserts + parallel chains.
+- **Scraper performance bottleneck — resolved 9g-1 + 9g-3 (May 17, 2026)** — Old Railway US-West: ~1.5min/store from per-row INSERT round-trips + cross-continent DB writes. Resolved via (a) batched VALUES inserts at 1000 rows/statement across items, item_chain_names, prices tables, (b) deduplication of source-XML duplicate item_codes to prevent Postgres CardinalityViolation on ON CONFLICT, (c) Postgres on same Kamatera VPS as scraper = localhost writes. Result: 58 stores in 3m31s. Scales fine to 216 stores (estimated ~13 min) and 540 stores (estimated ~30 min) without further changes.
 - **Shufersal sub-chain landscape (9d-1, field intel from Eltzur)** — same chain_id `7290027600007` publishes: דיל (Deal, mainstream discount), שלי (Sheli, neighborhood), אקספרס (Express, convenience), יש/יש חסד (Yesh, haredi sector — dominates Jerusalem/Bnei Brak), Universe (hypermarket), BE (pharmacy/health). NOT all sub-formats publish individual PriceFull files. "Lowest store_id" selection rule biased toward old Jerusalem Sheli stores in 9d-1 — needs format-aware refactor in 9e.
-- **StoreNext as canonical chain registry source (9d-1 discovery)** — `storenext.co.il/תמיכה-ושירות/` publishes free CSV branch lists for every EDI-using chain (all 7 of ours). Includes store_id, EDI barcode, store name with format prefix. Could become the basis for the `chain_stores_registry` table in 9e. Paid tier (product catalog?) under investigation.
+- **StoreNext: free CSVs only, paid tier rejected (May 17, 2026)** — Free CSV branch lists at `storenext.co.il/תמיכה-ושירות/` remain usable for 9e Registry (store_id, EDI barcode, store name with format prefix, all 7 EDI-using chains). **Paid tier was investigated and rejected: NIS 30K one-time for a single Excel catalog export — pricing doesn't fit pre-revenue stage.** Revisit at scale. GS1 IL is the better-shaped catalog data source going forward.
 - **Master brand (xxl.co.il) is the canonical surface (9f)** — xxl.co.il is the portal; verticals are paths on it (`/vacation`, `/fashion`) NOT subdomains. Earlier plans for `fly.xxl.co.il`, `hotel.xxl.co.il` etc. are obsolete.
 - **Portal verticals collapsed: חופשות = flights + hotels (9f)** — earlier 4-tile design reduced to 3-tile (מצרכים, חופשות, אופנה). חופשות is the single travel vertical covering both.
 - **AI search bar uses mocked keyword router for now (9f)** — `web/src/utils/portalSearchRouter.ts` exports `classifyAndRoute(query)` with hardcoded Hebrew + English keyword lists. Function signature designed for one-line swap to Claude Haiku in 9h.
@@ -607,3 +635,95 @@ Recommended order: 9c next (small, completes the auth → freemium picture befor
 - 📝 CITY_CODES audit added as small follow-up patch session
 
 **Next:** Session 9g — Scraper Infrastructure (performance + geographic correctness). Priority over 9e because (a) bulk inserts + parallelism unblocks all future city expansions, and (b) Victory + Carrefour need a geographic fix to get fresh data. StoreNext investigation continues in parallel; if their paid tier offers product catalog, 9e may re-prioritize ahead of 9g.
+
+### Session 9g (May 17, 2026) — Scraper Performance + Kamatera Migration
+
+**Scope at session start:** Three workstreams — (1) bulk inserts replacing per-row INSERTs, (2) parallel chain execution, (3) geographic fix for Victory/Carrefour geo-block. Chose order: bulk inserts → parallel → geo fix.
+
+**What actually happened (order shifted by reality):**
+
+**9g-1: Bulk inserts** — Implemented as batched `INSERT ... VALUES (...), (...)` at 1000 rows/statement across items, item_chain_names, prices tables. Local SQLite tests passed (5.8s per store, 15× speedup over baseline). First Railway production run crashed with Postgres `CardinalityViolation: ON CONFLICT DO UPDATE command cannot affect row a second time` — Rami Levy's source XML had 9 duplicate item_codes per store with identical prices. SQLite tolerated this silently; Postgres did not.
+
+Dedup hotfix: deduplicate by `item_code` once per store before all three bulk calls in `scraper/base.py`. Last-wins semantics matches existing ON CONFLICT DO UPDATE. Added warning log for the rare case where duplicates have *differing* values (genuine data quality signal). Commit `4678207`. Local SQLite + Postgres-via-Docker validation passed.
+
+**Railway Postgres disk-full crash** — Second Railway production attempt failed differently: scraper couldn't even connect because Postgres was in a crash loop. Root cause: Railway free trial 0.5 GB volume exhausted by accumulated WAL from previous failed runs. Postgres logs showed `FATAL: could not write to file "pg_wal/xlogtemp.33": No space left on device` looping. Investigated Railway dashboard — trial status was "6 days or $2.45 left", no easy fix without paid tier upgrade.
+
+**Decision: skip Path C "Railway Hobby probation" and go directly to Path B "all-in on Kamatera."** Reasoning: Railway's tier curve doesn't fit a data-ingestion workload; we'd outgrow Hobby's 5GB in ~3 months anyway. GCP free tier rejected after fact-check (Always-Free e2-micro is US-only, doesn't solve geo-block). Kamatera chosen: Tel Aviv DC, 30-day free trial, ~$17/mo for 1 vCPU / 2 GB RAM / 30 GB SSD, simple operational model.
+
+**Kamatera migration (Phases 2-6):**
+- Provisioned `scrp-prod-il` at `185.229.226.190` (Tel Aviv, Type B General, Ubuntu 24.04 LTS)
+- Server hardening: non-root `dude` user with sudo, SSH key auth, password SSH disabled, UFW firewall (22 + 5432), fail2ban, timezone Asia/Jerusalem
+- Postgres 18.4 from PGDG official repo (not Ubuntu's default), tuned for 2GB RAM (shared_buffers 512MB, effective_cache_size 1GB, work_mem 16MB, wal_compression on)
+- Database `xxl_super` owned by `scrp_app` user (password generated via `openssl rand -base64 32`, stored in password manager)
+- Scrp repo cloned to `/home/dude/scrp`, venv created, requirements installed, `.env` at `~/scrp/.env` with permissions 600
+- All 9 expected tables created (chains, stores, items, item_chain_names, prices, favorites, fetch_runs, saved_baskets, users)
+- systemd timer `scrp-cron.timer` scheduled daily 03:00 IDT (DST-aware via OnCalendar). Service exits inactive on success; `Restart=no` so failures are visible.
+
+**Validation results — the moment of truth:**
+
+Three-chain geo-block test:
+| Chain | Store | Prices | Time | Result |
+|---|---|---|---|---|
+| Victory | 008 | 4,684 | 4.2s | ✅ Geo-block resolved |
+| Carrefour | 6 | 3,943 | 3.0s | ✅ Geo-block resolved |
+| Shufersal | 073 | 4,823 | 40.3s | ✅ (page-scan bottleneck unrelated to geo) |
+
+Full cron run, 7 chains × 58 stores:
+| Chain | Stores | Prices | Time |
+|---|---|---|---|
+| Shufersal | 1/1 | 4,823 | 41s |
+| Rami Levy | 14/14 | 101,620 | 39s |
+| Osher Ad | 8/8 | 57,713 | 24s |
+| Victory | 9/9 | 74,675 | 29s |
+| Yochananof | 9/9 | 62,666 | 25s |
+| Keshet | 8/8 | 96,301 | 35s |
+| Carrefour | 9/9 | 33,392 | 15s |
+| **Total** | **58 stores** | **430,190 prices** | **3m 31s** |
+
+Exit code 0, no errors. Keshet logged 2 stores with duplicate item_codes having differing values (dedup last-wins applied, warning logged — working as designed).
+
+**Decisions made:**
+- **All-in on Kamatera (Path B) over Path C "Railway Hobby probation"** — sunk-cost-fallacy avoidance; Railway tier curve wrong for our shape regardless of immediate fix
+- **GCP free tier rejected** — Always-Free e2-micro is US-only (wrong region, geo-block remains); $300 credit burns in ~4 weeks under real load; complexity tax not worth saving $4/mo
+- **9g-2 (parallel chains) deferred indefinitely** — sequential is 3m31s; parallelism saves ~2.8 min; low ROI vs other levers
+- **Shufersal page-scan caching identified as higher-leverage future optimization** than parallelism — would drop full cron from 3m31s to ~1m
+- **Postgres tuning explicitly captured in postgresql.conf** rather than left at defaults — 2GB RAM box needs hand-tuning to perform well
+
+**Files changed:**
+- `scraper/base.py` — added `valid_deduped = list({item['item_code']: item for item in valid}.values())` dedup before bulk insert calls + warning log for differing-value duplicates
+- `db/db.py` — bulk insert functions for items, item_chain_names, prices (batched VALUES at 1000 rows/statement)
+- Server-side new files (not in git, on Kamatera only):
+  - `/etc/systemd/system/scrp-cron.service` — runs `cron_main` as `dude` user, sources `.env`
+  - `/etc/systemd/system/scrp-cron.timer` — daily 03:00 IDT, DST-aware
+  - `/etc/postgresql/18/main/postgresql.conf` — tuned for 2GB RAM
+  - `/etc/postgresql/18/main/pg_hba.conf` — temporary `0.0.0.0/0` for scrp_app (to be narrowed in Phase 7)
+  - `/home/dude/scrp/.env` — DATABASE_URL with localhost Postgres connection
+
+**Bugs encountered & resolved:**
+1. ✅ Postgres CardinalityViolation on ON CONFLICT — duplicate item_codes in source XML, fixed via dedup in base.py (commit 4678207)
+2. ✅ SQLite vs Postgres semantic mismatch — SQLite tolerates ON CONFLICT duplicates in a single statement, Postgres rejects. Local SQLite tests were insufficient. Going forward, Docker Postgres test recommended for any DB-touching code change.
+3. ✅ Railway Postgres disk-full → crash loop — accepted data loss (reproducible from gov.il), migrated to Kamatera with proper disk sizing (30 GB vs 0.5 GB)
+4. ⚠️ CC's automated SSH password auth failed on Kamatera even though manual SSH worked — root cause unclear (possibly special chars in password or rate limiting). Worked around by manually installing SSH key on server, then having CC use key-based auth thereafter. **Note for future sessions**: use SSH key auth from day 1, don't fight password auth through CC's transport layer.
+
+**Outcome:**
+- ✅ Scraper migrated end-to-end to Kamatera Tel Aviv
+- ✅ Geo-block resolved (all 7 chains working)
+- ✅ 25× performance improvement (90 min → 3m31s)
+- ✅ Postgres on same host as scraper = localhost writes, no network latency for bulk inserts
+- ✅ systemd cron scheduled daily 03:00 IDT
+- ✅ Server hardened (key-only SSH, UFW, fail2ban)
+- ⏸️ Phase 7 (frontend reroute) deferred to next session — touches live site, better with fresh focus
+- ⏸️ Phase 9 (backups) deferred — important but not urgent
+- 📝 super.xxl.co.il is currently broken until Phase 7 lands. Acceptable: it was already broken from Railway Postgres crash, so this isn't new user-facing breakage.
+
+**Cost summary:**
+- Kamatera: $0 (in 30-day free trial, ~$17/mo after Jun 17, 2026)
+- Railway: ~$2.45 trial credit remaining, will expire ~May 23, 2026 — let it lapse naturally rather than actively cancel (web service still needed until Phase 7 completes)
+- Net cost: $0 this month, $17/mo from Jun onwards (vs estimated $25+/mo if we'd stayed on Railway Hobby + paid for bigger volume)
+
+**Credentials added to password manager this session:**
+- `scrp-prod-il root` (Kamatera root user)
+- `scrp-prod-il dude` (sudo user, daily driver)
+- `scrp_app Postgres password` (used in DATABASE_URL — will go into Railway web env var in Phase 7)
+
+**Next:** Session 9g Phase 7 — Reroute Railway web service `DATABASE_URL` env var to point at Kamatera Postgres (`185.229.226.190:5432/xxl_super`). Pre-work: identify Railway's egress IP to narrow `pg_hba.conf` from temporary `0.0.0.0/0`. Risk: touches live site, do with fresh focus. After Phase 7, super.xxl.co.il is healthy again. Then Phase 9 (pg_dump backups + Backblaze B2 offsite).
