@@ -165,7 +165,13 @@ export default function PortalPage() {
 
       {/* Footer */}
       <footer className="mt-12 pt-6 border-t border-gray-200 text-center text-sm text-gray-500 pb-6">
-        © XXL 2026 · כל הזכויות שמורות
+        <p>© XXL 2026 · כל הזכויות שמורות</p>
+        <p className="mt-1">
+          צור קשר:{' '}
+          <a href="mailto:info@xxl.co.il" className="hover:text-emerald-600 transition-colors">
+            info@xxl.co.il
+          </a>
+        </p>
       </footer>
     </div>
   );
