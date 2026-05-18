@@ -9,9 +9,9 @@ i18n
   .use(initReactI18next)
   .init({
     resources: { en: { translation: en }, he: { translation: he } },
-    fallbackLng: 'en',
+    fallbackLng: 'he',
     detection: {
-      order: ['localStorage', 'navigator'],
+      order: ['localStorage'],
       caches: ['localStorage'],
       lookupLocalStorage: 'lang',
     },
