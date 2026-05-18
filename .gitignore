@@ -214,3 +214,6 @@ sample_data/*.xml
 
 # Claude Code local config
 .claude/
+
+# Deploy artifacts
+web/*.zip
