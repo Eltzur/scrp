@@ -1,7 +1,8 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: May 17, 2026 (end of session 9g Phases 1-6: bulk inserts deployed + full migration to Kamatera Tel Aviv VPS. Phase 7 frontend reroute and Phase 9 backups still pending.)
+> Last updated: May 18, 2026 (end of session 9g complete — Phase 7 done, Railway fully decommissioned, all infra on Kamatera Tel Aviv)
+
 ---
 
 ## 🎯 Vision
@@ -25,8 +26,8 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 | Layer | Tech | Where | Status |
 |---|---|---|---|
 | Frontend | React + Vite + TypeScript + Tailwind | Hostinger static (`public_html/`) — serves BOTH xxl.co.il and super.xxl.co.il | ✅ Live |
-| Backend | FastAPI (Python) | Railway `web` service (will move to Kamatera in Phase 7) | ⚠️ Live but pointing at dead Railway Postgres until Phase 7 reroutes DATABASE_URL |
-| Database | Postgres 18.4 | Kamatera `scrp-prod-il` Tel Aviv VPS (`185.229.226.190`) | ✅ Live since May 17, 2026 |
+| Backend | FastAPI + gunicorn + uvicorn | Kamatera `scrp-prod-il` via systemd `scrp-api.service`, behind nginx + Let's Encrypt | ✅ Live since May 18, 2026 |
+| Database | Postgres 18.4 | Kamatera `scrp-prod-il` (`185.229.226.190`), localhost-only (5432 closed at UFW) | ✅ Live |
 | Scraper cron | Python (`scraper.cron_main`) | Kamatera `scrp-prod-il` via systemd timer | ✅ Daily 03:00 IDT, DST-aware |
 | DNS | box.co.il (ns1/2/3.box.co.il) | — | ✅ |
 | Auth | Supabase | Supabase project (auth only — no Data API usage from client) | ✅ Live |
@@ -50,18 +51,18 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 
 **Key infrastructure commands:**
 
-*Railway (web service only — Postgres decommissioned):*
-- `web` start: `gunicorn -k uvicorn.workers.UvicornWorker api.main:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120`
-- DATABASE_URL: currently pointing at dead Railway Postgres. **Phase 7 will repoint to `postgresql://scrp_app:<password>@185.229.226.190:5432/xxl_super?sslmode=require`**
-
-*Kamatera (scraper + Postgres host):*
-- SSH: `ssh dude@185.229.226.190`
-- Manual scrape (ad-hoc): `cd ~/scrp && venv/bin/python -m scraper.cron_main`
-- Scheduled scrape: `systemctl start scrp-cron.service` (or wait for daily 03:00 IDT timer)
-- View latest scrape logs: `journalctl -u scrp-cron.service --since "yesterday" | tail -50`
-- Timer status: `systemctl list-timers scrp-cron.timer`
+*Kamatera (all production infra):*
+- SSH: `ssh dude@185.229.226.190` (or `ssh root@...` via key for admin)
+- API service: `systemctl status scrp-api.service` (gunicorn on 127.0.0.1:8000, nginx proxy on 443)
+- Reload API: `systemctl restart scrp-api.service`
+- nginx config: `/etc/nginx/sites-available/api-super.xxl.co.il` (managed by certbot)
+- Manual scrape: `cd ~/scrp && venv/bin/python -m scraper.cron_main`
+- Scheduled scrape: `systemctl start scrp-cron.service` (daily 03:00 IDT timer)
+- Scrape logs: `journalctl -u scrp-cron.service --since "yesterday" | tail -50`
+- API logs: `journalctl -u scrp-api.service -f`
 - Postgres console: `sudo -u postgres psql xxl_super`
-- Disk check: `df -h /`
+- Cert renewal: auto via `certbot.timer` (next ~02:30 IDT daily), expires 2026-08-16
+- UFW open ports: 22, 80, 443
 
 **Folder layout (matters because some folders are misleadingly named):**
 - `web/` — React frontend (NOT the backend, despite the name)
@@ -87,7 +88,7 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 - **Canonical names** computed via weighted token voting (session 8b)
 - **Search** uses canonical names only, numeric/percentage tokens filtered (session 8b)
 - **Known coverage gap**: Bnei Brak has no Carrefour/Yenot Bitan/Mega presence (verified via carrefour.co.il store locator) — accepted, not a bug.
-- **Live site status**: super.xxl.co.il is currently broken — Railway web service still points at dead Railway Postgres. Phase 7 (frontend reroute) will fix.
+- **Live site status**:  ✅ super.xxl.co.il + xxl.co.il fully operational, all API calls served from Kamatera over HTTPS.
 
 ---
 
@@ -109,7 +110,7 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 | 9d-1 | City expansion Phase 1 + Carrefour scraper + verification system | ✅ Carrefour scraper + `publishprice.py` base class shipped. 5 new cities added. PriceFull-verification gate (`active_stores.yaml`) shipped. 58 verified / 14 excluded. Cron-command persistence bug found and fixed (Procfile now authoritative). Surfaced: geo-blocking on 2 chains, ~2min/store scrape bottleneck, Shufersal sub-chain heterogeneity. |
 | **9f** | **XXL Portal Page — live on xxl.co.il** | ✅ Portal landing live at https://xxl.co.il with 3 vertical tiles, AI search bar (mocked router), 2 בקרוב sub-pages, hostname-based routing in React. Hebrew defaults fixed. DNS + parked domain + SSL + clean root URL all working. |
 | **9f-followup** | **Portal polish: SEO, OG, email signup backend, GA4 + cookie banner** | ✅ SEO/OG meta tags hostname-aware. Email signup writes to Supabase portal_email_signups table. GA4 wired (pending Eltzur measurement ID swap). Minimal Hebrew cookie banner with X-dismiss-as-consent. |
-| **9g (Phases 1-6)** | **Scraper performance + Kamatera migration** | ✅ Bulk inserts deployed (9g-1, commit 4678207). Migrated scraper + Postgres to Kamatera Tel Aviv VPS. Geo-block resolved on Victory/Carrefour/Shufersal. Full cron runs 7 chains × 58 stores in 3m31s (vs 90 min on Railway). systemd timer scheduled daily 03:00 IDT. Phase 7 (frontend reroute) + Phase 9 (backups) deferred to next session. |
+| **9g** | **Scraper performance + full Railway → Kamatera migration** | ✅ Bulk inserts (9g-1). Scraper + Postgres migrated to Kamatera (9g Phases 2-6). FastAPI web service migrated to Kamatera with nginx + Let's Encrypt (9g Phase 7). Railway fully decommissioned. Cron 3m31s, 7 chains, all geo-blocks resolved. |
 
 ---
 
@@ -191,9 +192,9 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 |---|---|---|
 | **9f-followup** | ~~Portal polish~~ | ✅ Done May 14, 2026. See session detail below. |
 | **9h** | **Claude Haiku integration for portal search** | Replace `web/src/utils/portalSearchRouter.ts` mock classifier with real Claude Haiku API call. Function signature already designed for one-line swap. Budget: ~$5/mo at 1K daily queries. |
-| **Titan email setup** | Activate xxl.co.il mailboxes | DNS already configured (MX → Titan). Eltzur to set up `info@xxl.co.il` + aliases himself in Hostinger Emails panel. Catch-all + aliases pattern recommended to minimize cost. |
-| **9g Phase 7** | **Reroute Railway web to Kamatera Postgres** | One-line env var change on Railway: DATABASE_URL → Kamatera. After this, super.xxl.co.il works again. Pre-work: identify Railway egress IP to narrow pg_hba.conf and UFW from temporary `0.0.0.0/0`. ~30-60 min. **Do with fresh focus, touches live site.** |
-| **9g Phase 9** | **pg_dump backups for Kamatera Postgres** | Daily backup cron (04:00 IDT, after scraper) + offsite (Backblaze B2 ~$0.005/GB/mo). Local rotation: 7 daily, 4 weekly, 6 monthly. Test restore once before trusting. ~45 min. |
+| **9g Phase 9** | pg_dump backups for Kamatera Postgres | Daily 04:00 IDT, offsite to Backblaze B2. ~45 min. |
+| **9i** | Contact form on xxl.co.il | Real form with Supabase backend + spam protection + email notifications. Currently footer has mailto link only. |
+| **Server hardening** | sudo NOPASSWD for dude, disable root SSH, HSTS header, compress OG images (~5.6MB each) | Small cleanups, batch into one ~30 min session. |
 | **9g-2** (deferred) | **Parallel chain execution** | Skipped after 9g-1 results. Sequential cron now 3m31s; parallelism would save ~2.8 min. Low ROI until something specific unblocks it. Revisit when full cron pressure returns. |
 | **Shufersal page-scan cache** | **Reduce Shufersal store-discovery from 200 pages to 1-2** | Shufersal's portal forces paginating up to 200 listing pages to find a store's PriceFull. Cache "last known page for store X" in SQLite. Drops Shufersal from ~41s to ~5s per store. Total cron from 3m31s to ~1m. ~30 min session. |
 | 9e (rescoped) | StoreNext FREE branch CSV ingestion | Original 9e premise (paid product catalog) dead — StoreNext paid tier rejected (NIS 30K one-time, May 2026). Free CSV branch lists at `storenext.co.il/תמיכה-ושירות/` remain usable. Rescoped to: ingest free branch CSVs only into `chain_stores_registry` table with sub-format classification (Sheli/Deal/Express/Yesh/Universe/BE for Shufersal; similar for others). Refactor Phase B selection to be format-aware. Solves Shufersal sub-chain heterogeneity systematically. No longer urgent since verification gate (9d-1) already prevents silent failures — quality-of-life, not blocker. |
@@ -211,12 +212,13 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 ## ⚠️ Watch Items (low priority, but don't forget)
 
 - **Supabase Data API default change** (email received May 12, 2026): starting May 30 for new projects, October 30 for existing projects, new tables in `public` schema won't be exposed via supabase-js / REST / GraphQL by default. **Existing tables keep their grants**, so super.xxl.co.il is unaffected for current code. For NEW tables created after Oct 30, 2026, must run explicit GRANT statements if they need to be reachable from the frontend. Pattern: `GRANT SELECT, INSERT, UPDATE, DELETE ON public.your_table TO authenticated;` + RLS policy. Backend-only tables (FastAPI direct connection) are unaffected. Review Security Advisor in Supabase dashboard.
+- **Carrefour 0-items on May 18, 2026 cron run** — Upstream gov.il published only 1 PriceFull file (vs 7 expected). May be transient (weekend/Monday publishing gap) or persistent. Recheck May 19 logs.
 
 ---
 
 ## 🔑 Key Architectural Decisions
 
-- **Hosting split (May 17, 2026)** — Kamatera Tel Aviv VPS for scraper + Postgres ($17/mo paid tier after 30-day free trial). Railway for web service only (will likely move to Kamatera too in a future consolidation session). Decided after Railway free tier ran out of disk and Railway's tier curve didn't fit our data-ingestion shape (PaaS optimized for app + small DB, not scrape-the-internet pipelines).
+- **Full Kamatera consolidation (May 18, 2026)** — All production infra on Kamatera Tel Aviv VPS ($17/mo after Jun 17 free trial expires): Postgres + scraper cron + FastAPI behind nginx + Let's Encrypt. Railway fully decommissioned May 18. Single host, single bill, no cross-host network latency, no geo-block issues.
 - **SQLAlchemy everywhere** — scrapers are DB-agnostic.
 - **Snapshot pricing only** — not yet tracking history (deferred to 9d).
 - **Phased city expansion strategy** — currently 26 stores in Jerusalem/Bnei Brak. Session 9d-1 expands to 7 cities (~86 stores). Sessions 9d-2+ expand to all 100K+ cities (~216 stores). Sessions 11+ expand to 50K+ cities (~540 stores). Full coverage requires AWS/GCP migration when Railway hits limits.
