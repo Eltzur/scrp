@@ -217,3 +217,5 @@ sample_data/*.xml
 
 # Deploy artifacts
 web/*.zip
+
+Microsoft.PowerShell_profile.ps1
