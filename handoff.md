@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: May 18, 2026 (end of session 9g complete — Phase 7 done, Railway fully decommissioned, all infra on Kamatera Tel Aviv)
+> Last updated: May 19, 2026 (end of session 9g+ — Phase 9 backups live, Shufersal timeout fix, 9j scoped)
 
 ---
 
@@ -200,7 +200,7 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 | **9i** | Contact form on xxl.co.il | Real form with Supabase backend + spam protection + email notifications. Currently footer has mailto link only. |
 | **Server hardening** | sudo NOPASSWD for dude, disable root SSH, HSTS header, compress OG images (~5.6MB each) | Small cleanups, batch into one ~30 min session. |
 | **9g-2** (deferred) | **Parallel chain execution** | Skipped after 9g-1 results. Sequential cron now 3m31s; parallelism would save ~2.8 min. Low ROI until something specific unblocks it. Revisit when full cron pressure returns. |
-| **Shufersal page-scan cache** | **Reduce Shufersal store-discovery from 200 pages to 1-2** | Shufersal's portal forces paginating up to 200 listing pages to find a store's PriceFull. Cache "last known page for store X" in SQLite. Drops Shufersal from ~41s to ~5s per store. Total cron from 3m31s to ~1m. ~30 min session. |
+| **Shufersal page-scan cache** | **Reduce Shufersal store-discovery from 200 pages to 1-2** | Shufersal's portal forces paginating up to 200 listing pages to find a store's PriceFull. Cache "last known page for store X" in SQLite. Drops Shufersal from ~41s to ~5s per store. Total cron from 3m31s to ~1m. ~30 min session. PRIORITY: today's Shufersal outage exposed how badly the cron suffers (28 min just for Shufersal page scanning). Should jump ahead of 9d-2.|
 | 9e (rescoped) | StoreNext FREE branch CSV ingestion | Original 9e premise (paid product catalog) dead — StoreNext paid tier rejected (NIS 30K one-time, May 2026). Free CSV branch lists at `storenext.co.il/תמיכה-ושירות/` remain usable. Rescoped to: ingest free branch CSVs only into `chain_stores_registry` table with sub-format classification (Sheli/Deal/Express/Yesh/Universe/BE for Shufersal; similar for others). Refactor Phase B selection to be format-aware. Solves Shufersal sub-chain heterogeneity systematically. No longer urgent since verification gate (9d-1) already prevents silent failures — quality-of-life, not blocker. |
 | 9d-2 | City expansion Phase 2 | Remaining 12 cities >100K pop (Petah Tikva, Netanya, Holon, Ramat Gan, Ashkelon, Rehovot, Bat Yam, Beit Shemesh, Kfar Saba, Herzliya, Modi'in). Target ~216 stores total. **Requires 9g first** — running 216-store cron at current 1.5min/store = 5+ hours. |
 | 9d-3 | City expansion Phase 3 | 50K+ cities (~25-30 more). Target ~540 stores. |
@@ -217,7 +217,8 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 ## ⚠️ Watch Items (low priority, but don't forget)
 
 - **Supabase Data API default change** (email received May 12, 2026): starting May 30 for new projects, October 30 for existing projects, new tables in `public` schema won't be exposed via supabase-js / REST / GraphQL by default. **Existing tables keep their grants**, so super.xxl.co.il is unaffected for current code. For NEW tables created after Oct 30, 2026, must run explicit GRANT statements if they need to be reachable from the frontend. Pattern: `GRANT SELECT, INSERT, UPDATE, DELETE ON public.your_table TO authenticated;` + RLS policy. Backend-only tables (FastAPI direct connection) are unaffected. Review Security Advisor in Supabase dashboard.
-- **Carrefour 0-items on May 18, 2026 cron run** — Upstream gov.il published only 1 PriceFull file (vs 7 expected). May be transient (weekend/Monday publishing gap) or persistent. Recheck May 19 logs.
+- **Carrefour 0-items issue (May 18, 2026)** — ✅ Resolved May 19. Transient upstream gap. Cron picked up 9/9 stores (32,060 items) next day.
+- **Shufersal `prices.shufersal.co.il` portal outage (May 19, 2026)** — Server-side outage from ~03:00 IDT through ~16:00 IDT. Confirmed not on our end (timed out from laptop + Kamatera + multiple browsers). Recovered late afternoon — 16:35 IDT cron run got 1/1 files, 4,939 items. Total chain still slow (~28 min in Shufersal phase) due to page-scan bottleneck — accelerates the "Shufersal page-scan cache" pending session priority.
 
 ---
 
@@ -246,6 +247,7 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 - **Hostname-based routing in React (9f)** — `App.tsx` has `isPortalHostname()` checking `window.location.hostname`. When true (xxl.co.il / www.xxl.co.il / localhost?portal=1), `/` renders `PortalPage`. When false, falls through to `AppShell`. Briefly tried .htaccess 302 redirect mid-session but rejected — left `/portal-preview` in URL bar.
 - **Email signup on בקרוב pages is intentionally dummy (9f)** — `console.log` only. Wiring to real backend deferred to 9f-followup.
 - **Offsite backups via Backblaze B2 (May 19, 2026)** — Daily pg_dump custom-format → local `/var/backups/scrp` (rotation: 7 daily, 4 weekly Sundays, 6 monthly 1st-of-month) → uploaded to B2 bucket `xxl-scrp-backups/daily/`. Uses rclone native B2 backend (NOT S3-compat — S3 layer rejects bucket-scoped keys with "not entitled" error due to object-lock metadata queries). Cost: ~$0/mo (10 GB B2 free tier; current ~10 MB/day × 365 = ~3.6 GB/year max with rotation).
+- **Shufersal scraper timeout bumped 30s → 60s (May 19, 2026)** — `scraper/shufersal.py:77`. Shufersal's portal goes through slow patches; 30s was tripping on healthy responses. Committed `389bd3e`. Not a fix for actual outages, but improves resilience to slow-but-up days.
 
 ---
 ## Operating patterns Established
