@@ -74,7 +74,7 @@ class ShufersalScraper(ChainScraper):
 
     def _fetch_raw_page(self, page: int) -> list:
         url = f"{LISTING_BASE}?catname=PriceFull&page={page}&sort=Time&sortdir=DESC"
-        resp = self._session.get(url, timeout=30)
+        resp = self._session.get(url, timeout=60)
         resp.raise_for_status()
         time.sleep(self.REQUEST_DELAY)
 
