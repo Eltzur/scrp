@@ -210,6 +210,7 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 | Investigate disappearing tables | Risk hygiene | Deferred pending future AWS/GCP migration (decided in 9c planning) |
 | **Search Quality** | Hebrew search precision fixes | Word-boundary matching, kosher-marker filtering ("חלבי"/"פרווה"/"בשרי" leaking into "חלב"/"בשר" searches — example: jelly appearing under "חלב" because it's labeled "חלבי"). Stretch: Hebrew stemming. Defer until after StoreNext data is in hand (may solve upstream via better categorization). |
 | **OS scraper research** | ~~Review OpenIsraeliSupermarkets repos + Kaggle dataset~~ | ✅ Done May 14, 2026. Writeup at docs/research/os_scraper_2026_05_14.md. Key findings: MIT-licensed (not GPL/AGPL as feared), geo-block is industry-wide (confirms 9g VPS plan), Kaggle dataset NOT a Carrefour/Victory stopgap, no new sources for images/categories/brands (StoreNext still the path). |
+- **City field is NULL on 355 stores** (Shufersal ~205, Yochananof ~77, Keshet ~26, Carrefour ~25, Rami Levy ~22). Two distinct issues: (1) CITY_CODES dict is incomplete (53 entries, needs ~150+), (2) some chains report city in store_name text not numeric field. Requires chain-by-chain XML inspection. Blocks 9d-2 city expansion logic. Plan as session 9j: "City field normalization across all chains."
 
 ---
 
