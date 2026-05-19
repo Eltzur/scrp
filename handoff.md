@@ -29,6 +29,7 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 | Backend | FastAPI + gunicorn + uvicorn | Kamatera `scrp-prod-il` via systemd `scrp-api.service`, behind nginx + Let's Encrypt | ✅ Live since May 18, 2026 |
 | Database | Postgres 18.4 | Kamatera `scrp-prod-il` (`185.229.226.190`), localhost-only (5432 closed at UFW) | ✅ Live |
 | Scraper cron | Python (`scraper.cron_main`) | Kamatera `scrp-prod-il` via systemd timer | ✅ Daily 03:00 IDT, DST-aware |
+| Backups | pg_dump → rclone → Backblaze B2 | Kamatera systemd timer `scrp-backup.timer` (daily 04:00 IDT) + B2 bucket `xxl-scrp-backups` | ✅ Live since May 19, 2026 |
 | DNS | box.co.il (ns1/2/3.box.co.il) | — | ✅ |
 | Auth | Supabase | Supabase project (auth only — no Data API usage from client) | ✅ Live |
 
@@ -63,6 +64,10 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 - Postgres console: `sudo -u postgres psql xxl_super`
 - Cert renewal: auto via `certbot.timer` (next ~02:30 IDT daily), expires 2026-08-16
 - UFW open ports: 22, 80, 443
+- Manual backup: `systemctl start scrp-backup.service`
+- Backup logs: `journalctl -u scrp-backup.service --since "yesterday"`
+- List B2 backups: `rclone ls b2:xxl-scrp-backups/daily/`
+- Restore (scratch DB): `sudo -u postgres createdb test_restore && sudo -u postgres pg_restore -d test_restore /var/backups/scrp/xxl_super-YYYY-MM-DD.dump`
 
 **Folder layout (matters because some folders are misleadingly named):**
 - `web/` — React frontend (NOT the backend, despite the name)
@@ -192,7 +197,6 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 |---|---|---|
 | **9f-followup** | ~~Portal polish~~ | ✅ Done May 14, 2026. See session detail below. |
 | **9h** | **Claude Haiku integration for portal search** | Replace `web/src/utils/portalSearchRouter.ts` mock classifier with real Claude Haiku API call. Function signature already designed for one-line swap. Budget: ~$5/mo at 1K daily queries. |
-| **9g Phase 9** | pg_dump backups for Kamatera Postgres | Daily 04:00 IDT, offsite to Backblaze B2. ~45 min. |
 | **9i** | Contact form on xxl.co.il | Real form with Supabase backend + spam protection + email notifications. Currently footer has mailto link only. |
 | **Server hardening** | sudo NOPASSWD for dude, disable root SSH, HSTS header, compress OG images (~5.6MB each) | Small cleanups, batch into one ~30 min session. |
 | **9g-2** (deferred) | **Parallel chain execution** | Skipped after 9g-1 results. Sequential cron now 3m31s; parallelism would save ~2.8 min. Low ROI until something specific unblocks it. Revisit when full cron pressure returns. |
@@ -240,6 +244,7 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 - **AI search bar uses mocked keyword router for now (9f)** — `web/src/utils/portalSearchRouter.ts` exports `classifyAndRoute(query)` with hardcoded Hebrew + English keyword lists. Function signature designed for one-line swap to Claude Haiku in 9h.
 - **Hostname-based routing in React (9f)** — `App.tsx` has `isPortalHostname()` checking `window.location.hostname`. When true (xxl.co.il / www.xxl.co.il / localhost?portal=1), `/` renders `PortalPage`. When false, falls through to `AppShell`. Briefly tried .htaccess 302 redirect mid-session but rejected — left `/portal-preview` in URL bar.
 - **Email signup on בקרוב pages is intentionally dummy (9f)** — `console.log` only. Wiring to real backend deferred to 9f-followup.
+- **Offsite backups via Backblaze B2 (May 19, 2026)** — Daily pg_dump custom-format → local `/var/backups/scrp` (rotation: 7 daily, 4 weekly Sundays, 6 monthly 1st-of-month) → uploaded to B2 bucket `xxl-scrp-backups/daily/`. Uses rclone native B2 backend (NOT S3-compat — S3 layer rejects bucket-scoped keys with "not entitled" error due to object-lock metadata queries). Cost: ~$0/mo (10 GB B2 free tier; current ~10 MB/day × 365 = ~3.6 GB/year max with rotation).
 
 ---
 ## Operating patterns Established
