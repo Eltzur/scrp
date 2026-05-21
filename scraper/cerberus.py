@@ -24,6 +24,7 @@ from sqlalchemy import text
 from scraper.base import ChainScraper
 from db.db import upsert_chain
 from scraper.city_names import normalize_city
+from scraper.city_matcher import resolve_city
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 log = logging.getLogger(__name__)
@@ -208,7 +209,11 @@ class CerberusScraper(ChainScraper):
                 city_code = int((store.findtext("City") or "0").strip())
             except ValueError:
                 city_code = 0
-            city      = self.CITY_CODES.get(city_code)
+            city = self.CITY_CODES.get(city_code)
+            if not city:
+                guess, conf = resolve_city(name, addr, self.CHAIN_ID)
+                if conf >= 0.80:
+                    city = guess
             city_norm = normalize_city(city) if city else None
 
             conn.execute(text("""

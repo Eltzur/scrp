@@ -23,6 +23,7 @@ from scraper.base import ChainScraper
 from scraper.cerberus import CITY_CODES  # same government city-code system
 from db.db import upsert_chain
 from scraper.city_names import normalize_city
+from scraper.city_matcher import resolve_city
 
 log = logging.getLogger(__name__)
 
@@ -100,7 +101,7 @@ class PublishPriceScraper(ChainScraper):
             if not raw_sid:
                 continue
             try:
-                sid = str(int(raw_sid))  # canonical: strip leading zeros ("002" → "2")
+                sid = str(int(raw_sid)).zfill(3)  # canonical: zero-padded 3-digit
             except ValueError:
                 continue
 
@@ -110,7 +111,11 @@ class PublishPriceScraper(ChainScraper):
                 city_code = int((store.findtext('City') or '0').strip())
             except ValueError:
                 city_code = 0
-            city      = self.CITY_CODES.get(city_code)
+            city = self.CITY_CODES.get(city_code)
+            if not city:
+                guess, conf = resolve_city(name, addr, self.CHAIN_ID)
+                if conf >= 0.80:
+                    city = guess
             city_norm = normalize_city(city) if city else None
 
             conn.execute(text("""
@@ -148,7 +153,7 @@ class PublishPriceScraper(ChainScraper):
             m = pattern.match(f['name'])
             if not m:
                 continue
-            sid = str(int(m.group(1)))  # canonical: no leading zeros
+            sid = str(int(m.group(1))).zfill(3)  # canonical: zero-padded 3-digit
             # Keep the most recently published file per store.
             # modified format is "HH:MM DD-MM-YYYY" — sorts correctly for same-day.
             if sid not in index or f['modified'] > index[sid]['modified']:

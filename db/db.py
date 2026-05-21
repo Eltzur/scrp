@@ -86,7 +86,15 @@ def upsert_chain(conn: Connection, chain_id: str, name: str = "") -> None:
     """), {"chain_id": chain_id, "name": name})
 
 
+def _pad_store_id(store_id: str) -> str:
+    """Canonical store_id format: zero-padded 3-digit when numeric."""
+    s = str(store_id).strip()
+    return s.zfill(3) if s.isdigit() else s
+
+
 def upsert_store(conn: Connection, chain_id: str, sub_chain_id: str, store_id: str) -> int:
+    store_id = _pad_store_id(store_id)
+    sub_chain_id = _pad_store_id(sub_chain_id)
     row = conn.execute(
         text("SELECT id FROM stores WHERE chain_id=:chain_id AND store_id=:store_id"),
         {"chain_id": chain_id, "store_id": store_id},
