@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: May 19, 2026 (end of session 9g+ — Phase 9 backups live, Shufersal timeout fix, 9j scoped)
+> Last updated: May 21, 2026 (end of 9j-followup — city matcher ported into scrapers, store_id padding migrated; NEW critical bug found: Rami Levy split-store records)
 
 ---
 
@@ -195,6 +195,7 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 
 | Session | What | Notes |
 |---|---|---|
+| **9k — Rami Levy split-store reconciliation** | **CRITICAL — data integrity** | Every Rami Levy store exists as TWO rows in the `stores` table with different `sub_chain_id` (`'1'` vs `'001'`), same `chain_id`+`store_id`. Prices are SPLIT across both — e.g. store 001 has 8,212 price rows on the `sub='001'` row AND 8,328 on the `sub='1'` row. Neither row is complete. Basket comparison reading Rami Levy joins to one row and sees ~half the catalog. Root cause: `load_stores` creates rows from StoresFull XML with `sub_chain_id='001'`; the price-load path writes with `sub_chain_id='1'` (from PriceFull filenames / header). Confirmed on store_ids 001/002/003; almost certainly affects all ~113 Rami Levy stores. **Scope:** (1) determine canonical sub_chain_id for Rami Levy, (2) backup first, (3) merge — pick surviving row per store, repoint all `prices.store_fk`, delete loser, (4) fix the scraper write-path so it stops re-splitting on next cron, (5) verify price counts across all Rami Levy stores. Touches ~110K+ price rows live — needs dry-run + verify-count discipline. Full session. |
 | **9f-followup** | ~~Portal polish~~ | ✅ Done May 14, 2026. See session detail below. |
 | **9h** | **Claude Haiku integration for portal search** | Replace `web/src/utils/portalSearchRouter.ts` mock classifier with real Claude Haiku API call. Function signature already designed for one-line swap. Budget: ~$5/mo at 1K daily queries. |
 | **9i** | Contact form on xxl.co.il | Real form with Supabase backend + spam protection + email notifications. Currently footer has mailto link only. |
@@ -204,13 +205,12 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 | 9e (rescoped) | StoreNext FREE branch CSV ingestion | Original 9e premise (paid product catalog) dead — StoreNext paid tier rejected (NIS 30K one-time, May 2026). Free CSV branch lists at `storenext.co.il/תמיכה-ושירות/` remain usable. Rescoped to: ingest free branch CSVs only into `chain_stores_registry` table with sub-format classification (Sheli/Deal/Express/Yesh/Universe/BE for Shufersal; similar for others). Refactor Phase B selection to be format-aware. Solves Shufersal sub-chain heterogeneity systematically. No longer urgent since verification gate (9d-1) already prevents silent failures — quality-of-life, not blocker. |
 | 9d-2 | City expansion Phase 2 | Remaining 12 cities >100K pop (Petah Tikva, Netanya, Holon, Ramat Gan, Ashkelon, Rehovot, Bat Yam, Beit Shemesh, Kfar Saba, Herzliya, Modi'in). Target ~216 stores total. **Requires 9g first** — running 216-store cron at current 1.5min/store = 5+ hours. |
 | 9d-3 | City expansion Phase 3 | 50K+ cities (~25-30 more). Target ~540 stores. |
-| CITY_CODES audit | Patch missing gov.il city codes | 9d-1 surfaced 23 NULL-city Carrefour stores (Or Akiva, Tel Mond, Dimona, Maalot, Kiryat Ata, Even Yehuda, Kfar Yona, Karkur, Tamra, Daliyat al-Karmel, Arad, Atlit, Kiryat Tivon, Matan, Tzur Yitzhak). Pre-existing dict gap in `scraper/cerberus.py`. Small fix, defer to alongside 9d-2 or as a quick patch session. |
+| **stores table data hygiene** | **Normalize `sub_chain_id` and `store_id` formats** | The DB is inconsistent: Rami Levy NULL rows had `sub_chain_id='1'` while others use `'001'`; Carrefour `store_id` mixes `'6'`, `'0006'`, `'19'`. This inconsistency caused two silent-skip bugs in 9j's apply script (had to write two fix-up scripts). Pick one canonical format (recommend zero-padded 3-digit for both) and migrate. Add a CHECK constraint or normalize-on-insert. ~30 min. |
 | Promotions + price history | Parse Promo XML files, build history charts | Sample Promo XML files captured in 9d-1 for future analysis. Requires sufficient daily snapshots first. |
 | Google OAuth | Wire up deferred-from-9b option | Requires Google Cloud Console OAuth client setup |
 | Investigate disappearing tables | Risk hygiene | Deferred pending future AWS/GCP migration (decided in 9c planning) |
 | **Search Quality** | Hebrew search precision fixes | Word-boundary matching, kosher-marker filtering ("חלבי"/"פרווה"/"בשרי" leaking into "חלב"/"בשר" searches — example: jelly appearing under "חלב" because it's labeled "חלבי"). Stretch: Hebrew stemming. Defer until after StoreNext data is in hand (may solve upstream via better categorization). |
 | **OS scraper research** | ~~Review OpenIsraeliSupermarkets repos + Kaggle dataset~~ | ✅ Done May 14, 2026. Writeup at docs/research/os_scraper_2026_05_14.md. Key findings: MIT-licensed (not GPL/AGPL as feared), geo-block is industry-wide (confirms 9g VPS plan), Kaggle dataset NOT a Carrefour/Victory stopgap, no new sources for images/categories/brands (StoreNext still the path). |
-- **City field is NULL on 355 stores** (Shufersal ~205, Yochananof ~77, Keshet ~26, Carrefour ~25, Rami Levy ~22). Two distinct issues: (1) CITY_CODES dict is incomplete (53 entries, needs ~150+), (2) some chains report city in store_name text not numeric field. Requires chain-by-chain XML inspection. Blocks 9d-2 city expansion logic. Plan as session 9j: "City field normalization across all chains."
 
 ---
 
@@ -284,6 +284,52 @@ When asking CC to modify portal/supermarket code, here are the key files and wha
 | Hostinger `public_html/.htaccess` | Server-level routing (NOT in repo) | Minimal React Router SPA fallback only. If adding server-level rules later (cache headers etc.), insert BEFORE the SPA fallback block. |
 
 ---
+```
+### Session 9j-followup (May 21, 2026) — City Matcher Ported to Scrapers + store_id Padding
+
+**Done:**
+- Created `scraper/city_matcher.py` — the 9j matcher logic (city dictionary, abbreviation expansion, sub-format prefix stripping, per-chain matchers, Hebrew-safe boundary matching) extracted into a reusable module. Public API: `resolve_city(store_name, address, chain_id) -> (city, confidence)`. Verified against the 355-store 9j dataset: identical results (296 high-confidence matches).
+- Wired `resolve_city` as a fallback into both scraper store-load paths (`cerberus.py`, `publishprice.py`): when the numeric government city-code lookup returns nothing, the matcher fills `city` if confidence ≥0.80. New stores now get a city at scrape time instead of accumulating as NULLs. (This was step 5 of the original 9j plan.)
+- `store_id` / `sub_chain_id` padding normalization: `publishprice.py` historically stored Carrefour store_ids unpadded (`'6'`) while `cerberus.py` zero-padded (`'006'`). Changed `publishprice.py` to zero-pad (2 spots); `db.py` `upsert_store` now defensively pads via `_pad_store_id`. Ran `migrate_store_id_padding.py` — **40 Carrefour rows migrated** to canonical 3-digit format.
+- Server hotfix committed: Shufersal `_fetch_raw_page` timeout 30s→60s (was applied directly on server during 9g, never committed).
+
+**NEW BUG FOUND (logged as session 9k):**
+- The padding migration surfaced 14 "collision" rows — Rami Levy stores that exist twice (`sub_chain_id='1'` and `'001'`). Investigation showed **both copies carry prices** (~8K rows each) — the catalog is split across duplicate store records. This is a data-integrity bug affecting basket comparison. See 9k pending session above. The migration correctly skipped these 14 rather than auto-merging.
+
+**Scripts:** `migrate_store_id_padding.py` committed to repo root. The 9j one-shot scripts (`apply_matches.py`, `fix_9j_residual.py`, `fix_ramilevy.py`, `normalize_cities.py`, `review_matches.py`) remain untracked local artifacts per the Option-A decision.
+
+**Files changed:** `scraper/city_matcher.py` (new), `scraper/publishprice.py`, `scraper/cerberus.py`, `db/db.py`, `scraper/shufersal.py`, `migrate_store_id_padding.py` (new).
+
+**Note on Claude Code:** CC initially generated its own simplified `city_matcher.py` from scratch (the real file wasn't in its prompt) — caught and overwritten with the correct tested version. Lesson: when handing CC a pre-built file, save it first and tell CC explicitly not to recreate it.
+```
+
+### Session 9j (May 21, 2026) — City Field Normalization
+
+**Goal:** resolve 355 stores with NULL `city` via progressive auto-matching.
+
+**Done:**
+- Built `normalize_cities.py` — a per-chain city matcher: city dictionary (~190 Hebrew cities), abbreviation expansion (כ"ס→כפר סבא, ראשל"צ→ראשון לציון, etc.), Shufersal sub-format prefix stripping (שלי/דיל/אקספרס/BE/יש חסד), Hebrew-safe word-boundary matching. Output: `matches.csv` with per-store confidence scores. No DB writes — analysis only.
+- Auto-matcher resolved 299/355 (84%), 296 at confidence ≥0.80. Eltzur manually reviewed `matches.csv` in Excel and corrected/filled ~50 rows (everything below 90% confidence), bringing it to 350 clean fills.
+- Built `apply_matches.py` — dry-run + `--commit` modes, updates `city`/`city_norm` only where currently NULL. Committed: 318 rows + 1 online store moved to `sub_chain_id=1234`.
+- Built `fix_9j_residual.py` — fixed 14 Carrefour stores skipped due to `store_id` format mismatch + deleted 2 orphaned Yochananof rows (150/152, renumbered to 50/52).
+- Built `fix_ramilevy.py` — fixed 14 Rami Levy stores skipped because the DB stored them with `sub_chain_id='1'` while the apply script padded to `'001'`.
+- **Result: 349/355 resolved. 6 NULL remain, all intentional** — Shufersal 000, Yochananof 002 (יוחננוף ישן), Keshet 102-105 (Kulinarik). Final city coverage: 827/833 stores = 99.3%.
+
+**Decisions made:**
+- Online stores (e.g. Shufersal ONLINE) → `city='אונליין'`, moved to reserved `sub_chain_id='1234'`.
+- Kulinarik (Keshet store_ids 102-105) — identified as a separate chain (would-be chain_id `7690058200000`), but **left as Keshet rows for now**; too small to be worth a migration. Revisit if Kulinarik grows.
+- Yochananof pickup points 150/152 were the wrong store codes — corrected to 50/52, old rows deleted.
+
+**Bugs found (logged as pending work):**
+- Scrapers don't populate `city` on new stores → `9j-followup` 
+- `stores.sub_chain_id` / `store_id` format inconsistency caused two apply-script silent skips → `stores table data hygiene` pending session.
+
+**Corrections to this handoff:**
+- Rami Levy chain_id was wrong here (`7290058108879` — that's actually KingStore per Kaggle). **Correct Rami Levy chain_id: `7290058140886`.** Fixed throughout where it appears.
+
+**Scripts:** all four live in `~/scrp/scripts/` on Kamatera and `C:\scrp\` locally:
+`normalize_cities.py`, `review_matches.py`, `apply_matches.py`, `fix_9j_residual.py`, `fix_ramilevy.py`.
+
 
 ### Session 8L (April 29, 2026) — Brand Identity & Animated Logo
 
