@@ -219,3 +219,4 @@ sample_data/*.xml
 web/*.zip
 
 Microsoft.PowerShell_profile.ps1
+.env.bak
