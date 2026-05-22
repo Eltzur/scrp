@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: May 21, 2026 (end of 9j-followup — city matcher ported into scrapers, store_id padding migrated; NEW critical bug found: Rami Levy split-store records)
+> Last updated: May 22, 2026 (end of 9k — Rami Levy split-store reconciliation: 14 stores merged, ~89K duplicate price rows removed, no scraper code change needed)
 
 ---
 
@@ -116,6 +116,7 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 | **9f** | **XXL Portal Page — live on xxl.co.il** | ✅ Portal landing live at https://xxl.co.il with 3 vertical tiles, AI search bar (mocked router), 2 בקרוב sub-pages, hostname-based routing in React. Hebrew defaults fixed. DNS + parked domain + SSL + clean root URL all working. |
 | **9f-followup** | **Portal polish: SEO, OG, email signup backend, GA4 + cookie banner** | ✅ SEO/OG meta tags hostname-aware. Email signup writes to Supabase portal_email_signups table. GA4 wired (pending Eltzur measurement ID swap). Minimal Hebrew cookie banner with X-dismiss-as-consent. |
 | **9g** | **Scraper performance + full Railway → Kamatera migration** | ✅ Bulk inserts (9g-1). Scraper + Postgres migrated to Kamatera (9g Phases 2-6). FastAPI web service migrated to Kamatera with nginx + Let's Encrypt (9g Phase 7). Railway fully decommissioned. Cron 3m31s, 7 chains, all geo-blocks resolved. |
+| **9k** | **Rami Levy split-store reconciliation** | ✅ 14 Rami Levy stores existed as duplicate `stores` rows (`sub_chain_id='1'` legacy + `'001'` canonical), prices split across both. Merged: repointed prices to `001` survivor, winner-price-wins on overlaps, deleted 14 loser rows + 1 stale Shufersal ONLINE duplicate. 89,298 duplicate price rows removed. Root cause was pre-9j-followup `upsert_store` writing unpadded `sub='1'`; already fixed by `_pad_store_id`, no code change needed. |
 
 ---
 
@@ -195,7 +196,6 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 
 | Session | What | Notes |
 |---|---|---|
-| **9k — Rami Levy split-store reconciliation** | **CRITICAL — data integrity** | Every Rami Levy store exists as TWO rows in the `stores` table with different `sub_chain_id` (`'1'` vs `'001'`), same `chain_id`+`store_id`. Prices are SPLIT across both — e.g. store 001 has 8,212 price rows on the `sub='001'` row AND 8,328 on the `sub='1'` row. Neither row is complete. Basket comparison reading Rami Levy joins to one row and sees ~half the catalog. Root cause: `load_stores` creates rows from StoresFull XML with `sub_chain_id='001'`; the price-load path writes with `sub_chain_id='1'` (from PriceFull filenames / header). Confirmed on store_ids 001/002/003; almost certainly affects all ~113 Rami Levy stores. **Scope:** (1) determine canonical sub_chain_id for Rami Levy, (2) backup first, (3) merge — pick surviving row per store, repoint all `prices.store_fk`, delete loser, (4) fix the scraper write-path so it stops re-splitting on next cron, (5) verify price counts across all Rami Levy stores. Touches ~110K+ price rows live — needs dry-run + verify-count discipline. Full session. |
 | **9f-followup** | ~~Portal polish~~ | ✅ Done May 14, 2026. See session detail below. |
 | **9h** | **Claude Haiku integration for portal search** | Replace `web/src/utils/portalSearchRouter.ts` mock classifier with real Claude Haiku API call. Function signature already designed for one-line swap. Budget: ~$5/mo at 1K daily queries. |
 | **9i** | Contact form on xxl.co.il | Real form with Supabase backend + spam protection + email notifications. Currently footer has mailto link only. |
@@ -205,7 +205,7 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 | 9e (rescoped) | StoreNext FREE branch CSV ingestion | Original 9e premise (paid product catalog) dead — StoreNext paid tier rejected (NIS 30K one-time, May 2026). Free CSV branch lists at `storenext.co.il/תמיכה-ושירות/` remain usable. Rescoped to: ingest free branch CSVs only into `chain_stores_registry` table with sub-format classification (Sheli/Deal/Express/Yesh/Universe/BE for Shufersal; similar for others). Refactor Phase B selection to be format-aware. Solves Shufersal sub-chain heterogeneity systematically. No longer urgent since verification gate (9d-1) already prevents silent failures — quality-of-life, not blocker. |
 | 9d-2 | City expansion Phase 2 | Remaining 12 cities >100K pop (Petah Tikva, Netanya, Holon, Ramat Gan, Ashkelon, Rehovot, Bat Yam, Beit Shemesh, Kfar Saba, Herzliya, Modi'in). Target ~216 stores total. **Requires 9g first** — running 216-store cron at current 1.5min/store = 5+ hours. |
 | 9d-3 | City expansion Phase 3 | 50K+ cities (~25-30 more). Target ~540 stores. |
-| **stores table data hygiene** | **Normalize `sub_chain_id` and `store_id` formats** | The DB is inconsistent: Rami Levy NULL rows had `sub_chain_id='1'` while others use `'001'`; Carrefour `store_id` mixes `'6'`, `'0006'`, `'19'`. This inconsistency caused two silent-skip bugs in 9j's apply script (had to write two fix-up scripts). Pick one canonical format (recommend zero-padded 3-digit for both) and migrate. Add a CHECK constraint or normalize-on-insert. ~30 min. |
+| **stores table data hygiene** | **Add format guard to `sub_chain_id` / `store_id`** | Rami Levy split (was `sub='1'` vs `'001'`) resolved in 9k; Carrefour `store_id` padding resolved in 9j-followup. Remaining: add a CHECK constraint or normalize-on-insert so the inconsistency can't recur. ~20 min. |
 | Promotions + price history | Parse Promo XML files, build history charts | Sample Promo XML files captured in 9d-1 for future analysis. Requires sufficient daily snapshots first. |
 | Google OAuth | Wire up deferred-from-9b option | Requires Google Cloud Console OAuth client setup |
 | Investigate disappearing tables | Risk hygiene | Deferred pending future AWS/GCP migration (decided in 9c planning) |
@@ -248,6 +248,7 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 - **Email signup on בקרוב pages is intentionally dummy (9f)** — `console.log` only. Wiring to real backend deferred to 9f-followup.
 - **Offsite backups via Backblaze B2 (May 19, 2026)** — Daily pg_dump custom-format → local `/var/backups/scrp` (rotation: 7 daily, 4 weekly Sundays, 6 monthly 1st-of-month) → uploaded to B2 bucket `xxl-scrp-backups/daily/`. Uses rclone native B2 backend (NOT S3-compat — S3 layer rejects bucket-scoped keys with "not entitled" error due to object-lock metadata queries). Cost: ~$0/mo (10 GB B2 free tier; current ~10 MB/day × 365 = ~3.6 GB/year max with rotation).
 - **Shufersal scraper timeout bumped 30s → 60s (May 19, 2026)** — `scraper/shufersal.py:77`. Shufersal's portal goes through slow patches; 30s was tripping on healthy responses. Committed `389bd3e`. Not a fix for actual outages, but improves resilience to slow-but-up days.
+- **Rami Levy canonical `sub_chain_id='001'` (9k)** — split-store duplicates merged onto the `001` row (carries name/city). The legacy `sub='1'` rows were pre-9j-followup artifacts; `upsert_store` padding now prevents recurrence.
 
 ---
 ## Operating patterns Established
