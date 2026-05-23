@@ -10,6 +10,7 @@ Store metadata (name, city) is extracted directly from the HTML branch column
 (e.g. "357 - דיל קדימה לב השרון") since StoresFull files are not reliably
 present in the listing.
 """
+import json
 import logging
 import re
 import time
@@ -27,6 +28,38 @@ log = logging.getLogger(__name__)
 
 CHAIN_ID     = "7290027600007"
 LISTING_BASE = "http://prices.shufersal.co.il/FileObject/UpdateCategory"
+
+# --- PriceFull page-scan cache -------------------------------------------
+# Shufersal's listing is one global time-sorted feed; PriceFull files cluster
+# together but the block's start page drifts a little each day as new files
+# push older ones down. We cache the page where the PriceFull block started on
+# the last successful run and begin the next scan a few pages earlier as a
+# safety margin. One integer — degrades gracefully: if the cached page is
+# wrong, the scan simply continues forward as before.
+_CACHE_FILE   = Path(__file__).parent / ".shufersal_cache.json"
+_CACHE_MARGIN = 5     # start this many pages before the cached block start
+_DEFAULT_START_PAGE = 36
+
+
+def _load_cached_start_page() -> int:
+    """Return the cached PriceFull start page, or the default if unavailable."""
+    try:
+        data = json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+        page = int(data.get("pricefull_start_page", _DEFAULT_START_PAGE))
+        return max(_DEFAULT_START_PAGE, page - _CACHE_MARGIN)
+    except (FileNotFoundError, ValueError, json.JSONDecodeError):
+        return _DEFAULT_START_PAGE
+
+
+def _save_cached_start_page(page: int) -> None:
+    """Persist the page where the PriceFull block began this run."""
+    try:
+        _CACHE_FILE.write_text(
+            json.dumps({"pricefull_start_page": int(page)}),
+            encoding="utf-8",
+        )
+    except OSError as e:
+        log.warning(f"Shufersal: could not write page cache: {e}")
 
 _CITY_HINTS: list[tuple[str, list[str]]] = [
     (canonical, [canonical] + variants)
@@ -156,10 +189,18 @@ class ShufersalScraper(ChainScraper):
         log.info(f"Shufersal: {len(seen)} stores collected.")
         return seen
 
-    def build_pricefull_index(self, target_store_ids: set, start_page: int = 36) -> dict:
+    def build_pricefull_index(self, target_store_ids: set,
+                              start_page: int | None = None) -> dict:
         index: dict[str, dict] = {}
         found: set[str] = set()
-        safety_cap = start_page + 200  # never scan more than 200 pages regardless
+
+        # Start from the cached PriceFull-block page (minus a safety margin)
+        # unless an explicit start_page was passed by the caller.
+        if start_page is None:
+            start_page = _load_cached_start_page()
+        safety_cap = _DEFAULT_START_PAGE + 200  # never scan more than 200 pages
+
+        first_pricefull_page: int | None = None  # for the cache
 
         log.info(f"Shufersal: building PriceFull index (from page {start_page})…")
         for page in range(start_page, safety_cap + 1):
@@ -177,6 +218,8 @@ class ShufersalScraper(ChainScraper):
             for row in rows:
                 if row["file_type"] != "PriceFull":
                     continue
+                if first_pricefull_page is None:
+                    first_pricefull_page = page
                 sid = row["store_id"]
                 if sid not in index:
                     # Strip .gz so base class can add it back consistently
@@ -201,6 +244,10 @@ class ShufersalScraper(ChainScraper):
                     f"NOT FOUND: {missing}"
                 )
                 break
+
+        # Persist where the PriceFull block began so the next run starts close to it.
+        if first_pricefull_page is not None:
+            _save_cached_start_page(first_pricefull_page)
 
         return index
 
