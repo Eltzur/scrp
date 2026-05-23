@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: May 23, 2026 (end of session 9k + 9m partial + city-data fix)
+> Last updated: May 23, 2026 (end of session 9m)
 
 ---
 
@@ -197,7 +197,7 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 
 | Session | What | Notes |
 |---|---|---|
-| **9m** | Cron hardening (PARTIAL) | ⚠️ Carrefour listing-fetch retry/backoff (publishprice.py) — done, committed, live. Shufersal PriceFull-block page cache (shufersal.py) — committed & live but UNVERIFIED (smoke-tested during a holiday, 0 stores found, inconclusive). See "Open Items — Next Session" below. |
+| **9m** | Cron hardening + post-holiday cleanup | ✅ Carrefour retry/backoff (9m partial, prior). This session: Shufersal parse_filename store_id padding bug FOUND & FIXED (commit 63ec27e — both return paths now .zfill(3); was returning unpadded '2'/'5'/'21' so PriceFull index never matched padded DB targets). City dropdowns sorted alphabetically (Hebrew localeCompare) instead of by chain count. Stale Railway DATABASE_URL removed from local .env. .gitattributes added (*.py eol=lf) + shufersal.py renormalized (kills phantom 261-line CRLF diffs). Carrefour store 1167 split-pair resolved. Shufersal page-cache verification DEFERRED to next session (holiday — no fresh PriceFull files, inconclusive). |
 | **9f-followup** | ~~Portal polish~~ | ✅ Done May 14, 2026. See session detail below. |
 | **9h** | **Claude Haiku integration for portal search** | Replace `web/src/utils/portalSearchRouter.ts` mock classifier with real Claude Haiku API call. Function signature already designed for one-line swap. Budget: ~$5/mo at 1K daily queries. |
 | **9i** | Contact form on xxl.co.il | Real form with Supabase backend + spam protection + email notifications. Currently footer has mailto link only. |
@@ -217,17 +217,38 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 
 ## 📌 Open Items — Next Session (post-holiday)
 
-- **Shufersal retest:** run `python -m scraper.shufersal ירושלים 3` twice on a business day. If stores still NOT FOUND → apply the `parse_filename` store_id `.zfill(3)` fix (suspected padding bug, not yet deployed). If found → page cache confirmed working.
-- **Check Shufersal price counts** post-holiday — if the padding bug is real, recent cron runs under-loaded Shufersal.
-- **9d-2 city expansion** — deferred until Shufersal store selection is reworked.
-- **Carrefour store 1167** (store_id='0205', leading zero, empty name) — possible duplicate-row split like Rami Levy 9k. Investigate.
-- **Stale Railway DATABASE_URL** in local `C:\scrp\.env` — remove it; it causes CC to attempt the dead Railway DB.
-- **shufersal.py CRLF line endings** — phantom 261-line diffs. Add `.gitattributes` with `*.py text eol=lf` and renormalize.
+- **Shufersal page-cache verification (Tasks 1+2 — do FIRST, business day only).**
+  The parse_filename padding fix (commit 63ec27e) is pushed but UNVERIFIED —
+  9m smoke test fell on a holiday with no fresh PriceFull files (inconclusive).
+  On the server: `cd ~/scrp && git pull` first (picks up 63ec27e + .gitattributes),
+  then `set -a && source .env && set +a` and run
+  `venv/bin/python -m scraper.shufersal ירושלים 3` TWICE.
+  Expect: run 1 finds stores 002/005/021 and stops early; run 2 starts ~5 pages
+  lower than run 1 (confirms page cache). Then Task 2: check Shufersal price
+  counts per store — `SELECT s.store_id, COUNT(p.id) FROM stores s LEFT JOIN
+  prices p ON p.store_fk=s.id WHERE s.chain_id='7290027600007' GROUP BY
+  s.store_id ORDER BY s.store_id;` — to see if recent cron runs under-loaded
+  Shufersal while the padding bug was live.
+- **9d-2 city expansion — still gated on the Shufersal verification above.**
+  Do not start until Tasks 1+2 are green. Needs a fresh PriceFull verification
+  run at 03:00–04:00 (not 9PM) per verification_report_9d1.md. Expands
+  active_stores.yaml from 58 to ~216 stores across ~12 more cities.
+
+**Pending deploys carried out of 9m:**
+- Server `git pull` — picks up commit 63ec27e (Shufersal padding fix) and
+  .gitattributes/renormalization. Batch with the Shufersal retest above.
+- Hostinger frontend build + upload — deploys the alphabetical city-sort
+  change. Independent of the server pull; do whenever convenient.
 
 ---
 
 ## ⚠️ Watch Items (low priority, but don't forget)
 
+- **RTL terminal display is cosmetic only.** Hebrew store names render
+  reversed in psql/SSH terminal output (e.g. 'קרפור' shows backwards). The
+  data in the DB is correct — verified repeatedly. Do not "fix" reversed-looking
+  Hebrew in SQL strings; copy Hebrew values from the actual DB query output,
+  not from terminal-rendered text.
 - **Supabase Data API default change** (email received May 12, 2026): starting May 30 for new projects, October 30 for existing projects, new tables in `public` schema won't be exposed via supabase-js / REST / GraphQL by default. **Existing tables keep their grants**, so super.xxl.co.il is unaffected for current code. For NEW tables created after Oct 30, 2026, must run explicit GRANT statements if they need to be reachable from the frontend. Pattern: `GRANT SELECT, INSERT, UPDATE, DELETE ON public.your_table TO authenticated;` + RLS policy. Backend-only tables (FastAPI direct connection) are unaffected. Review Security Advisor in Supabase dashboard.
 - **Carrefour 0-items issue (May 18, 2026)** — ✅ Resolved May 19. Transient upstream gap. Cron picked up 9/9 stores (32,060 items) next day.
 - **Shufersal `prices.shufersal.co.il` portal outage (May 19, 2026)** — Server-side outage from ~03:00 IDT through ~16:00 IDT. Confirmed not on our end (timed out from laptop + Kamatera + multiple browsers). Recovered late afternoon — 16:35 IDT cron run got 1/1 files, 4,939 items. Total chain still slow (~28 min in Shufersal phase) due to page-scan bottleneck — accelerates the "Shufersal page-scan cache" pending session priority.
