@@ -53,7 +53,7 @@ export default function Filters({ filters, onChange }: Props) {
         >
           <option value="">{t('filters.all_cities')}</option>
           {[...cities]
-            .sort((a: CityInfo, b: CityInfo) => b.chain_count - a.chain_count || a.city.localeCompare(b.city))
+            .sort((a: CityInfo, b: CityInfo) => a.city.localeCompare(b.city, 'he'))
             .map((c: CityInfo) => (
               <option key={c.city} value={c.city}>
                 {t('filters.city_option', { city: c.city, chains: c.chain_count })}

@@ -275,7 +275,7 @@ export default function BasketDrawer() {
                       dir="rtl"
                     >
                       {[...cities]
-                        .sort((a, b) => b.chain_count - a.chain_count || a.city.localeCompare(b.city))
+                        .sort((a, b) => a.city.localeCompare(b.city, 'he'))
                         .map(c => (
                           <option key={c.city} value={c.city}>{c.city}</option>
                         ))}
