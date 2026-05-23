@@ -265,6 +265,16 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 ---
 ## Operating patterns Established
 
+### Ground Rules (apply to every new chat)
+
+1. **Short responses.** Status or diagnosis, suggested fixes with the
+   recommended option marked, then the tasks/commands. No full thought
+   process, no mid-chat pivots.
+2. **Fool-proof = delegate to Claude Code.** Maximize work handed to CC.
+   All prompts in copy-paste code blocks. Keep manual effort to a minimum.
+3. **Read previous chats for context** before starting work, to avoid
+   repeating past mistakes.
+
 - **One chat = one session** — Long conversations balloon in token cost (cumulative history is re-read every turn, so turn 60 of a chat costs much more than turn 5 of a new one). At natural breakpoints (end of session, deploy verified, phase complete), START A FRESH CHAT and paste handoff.md as the first message. Yesterday's debugging context isn't useful for today's feature work — it's just expensive baggage. Especially: avoid trying to squeeze a new session into an existing long chat just because we're already talking. Lesson learned in 9c when token budget hit limits faster than expected during Phase 2.
 
 ## 🔗 External Data Source Status
