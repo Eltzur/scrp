@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: May 22, 2026 (end of 9k — Rami Levy split-store reconciliation: 14 stores merged, ~89K duplicate price rows removed, no scraper code change needed)
+> Last updated: May 23, 2026 (end of session 9k + 9m partial + city-data fix)
 
 ---
 
@@ -116,7 +116,8 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 | **9f** | **XXL Portal Page — live on xxl.co.il** | ✅ Portal landing live at https://xxl.co.il with 3 vertical tiles, AI search bar (mocked router), 2 בקרוב sub-pages, hostname-based routing in React. Hebrew defaults fixed. DNS + parked domain + SSL + clean root URL all working. |
 | **9f-followup** | **Portal polish: SEO, OG, email signup backend, GA4 + cookie banner** | ✅ SEO/OG meta tags hostname-aware. Email signup writes to Supabase portal_email_signups table. GA4 wired (pending Eltzur measurement ID swap). Minimal Hebrew cookie banner with X-dismiss-as-consent. |
 | **9g** | **Scraper performance + full Railway → Kamatera migration** | ✅ Bulk inserts (9g-1). Scraper + Postgres migrated to Kamatera (9g Phases 2-6). FastAPI web service migrated to Kamatera with nginx + Let's Encrypt (9g Phase 7). Railway fully decommissioned. Cron 3m31s, 7 chains, all geo-blocks resolved. |
-| **9k** | **Rami Levy split-store reconciliation** | ✅ 14 Rami Levy stores existed as duplicate `stores` rows (`sub_chain_id='1'` legacy + `'001'` canonical), prices split across both. Merged: repointed prices to `001` survivor, winner-price-wins on overlaps, deleted 14 loser rows + 1 stale Shufersal ONLINE duplicate. 89,298 duplicate price rows removed. Root cause was pre-9j-followup `upsert_store` writing unpadded `sub='1'`; already fixed by `_pad_store_id`, no code change needed. |
+| **9k** | Rami Levy split-store reconciliation | ✅ 14 Rami Levy stores existed as duplicate stores rows (sub_chain_id='1' legacy + '001' canonical), prices split. Merged onto '001', 89,298 duplicate price rows removed, 1 stale Shufersal ONLINE duplicate cleaned. No scraper code change needed (_pad_store_id from 9j-followup already prevents recurrence). |
+| **City-data fix** | store→city correction | ✅ Victory wrote full store name into city column; Yochananof name-guessing picked streets. 17 stores corrected in DB (9 via override map, 8 Yafo variants). Added STORE_CITY_OVERRIDES in city_names.py + 'תל אביב יפו'/'יפו' normalization. Deployed. |
 
 ---
 
@@ -196,12 +197,12 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 
 | Session | What | Notes |
 |---|---|---|
+| **9m** | Cron hardening (PARTIAL) | ⚠️ Carrefour listing-fetch retry/backoff (publishprice.py) — done, committed, live. Shufersal PriceFull-block page cache (shufersal.py) — committed & live but UNVERIFIED (smoke-tested during a holiday, 0 stores found, inconclusive). See "Open Items — Next Session" below. |
 | **9f-followup** | ~~Portal polish~~ | ✅ Done May 14, 2026. See session detail below. |
 | **9h** | **Claude Haiku integration for portal search** | Replace `web/src/utils/portalSearchRouter.ts` mock classifier with real Claude Haiku API call. Function signature already designed for one-line swap. Budget: ~$5/mo at 1K daily queries. |
 | **9i** | Contact form on xxl.co.il | Real form with Supabase backend + spam protection + email notifications. Currently footer has mailto link only. |
 | **Server hardening** | sudo NOPASSWD for dude, disable root SSH, HSTS header, compress OG images (~5.6MB each) | Small cleanups, batch into one ~30 min session. |
 | **9g-2** (deferred) | **Parallel chain execution** | Skipped after 9g-1 results. Sequential cron now 3m31s; parallelism would save ~2.8 min. Low ROI until something specific unblocks it. Revisit when full cron pressure returns. |
-| **Shufersal page-scan cache** | **Reduce Shufersal store-discovery from 200 pages to 1-2** | Shufersal's portal forces paginating up to 200 listing pages to find a store's PriceFull. Cache "last known page for store X" in SQLite. Drops Shufersal from ~41s to ~5s per store. Total cron from 3m31s to ~1m. ~30 min session. PRIORITY: today's Shufersal outage exposed how badly the cron suffers (28 min just for Shufersal page scanning). Should jump ahead of 9d-2.|
 | 9e (rescoped) | StoreNext FREE branch CSV ingestion | Original 9e premise (paid product catalog) dead — StoreNext paid tier rejected (NIS 30K one-time, May 2026). Free CSV branch lists at `storenext.co.il/תמיכה-ושירות/` remain usable. Rescoped to: ingest free branch CSVs only into `chain_stores_registry` table with sub-format classification (Sheli/Deal/Express/Yesh/Universe/BE for Shufersal; similar for others). Refactor Phase B selection to be format-aware. Solves Shufersal sub-chain heterogeneity systematically. No longer urgent since verification gate (9d-1) already prevents silent failures — quality-of-life, not blocker. |
 | 9d-2 | City expansion Phase 2 | Remaining 12 cities >100K pop (Petah Tikva, Netanya, Holon, Ramat Gan, Ashkelon, Rehovot, Bat Yam, Beit Shemesh, Kfar Saba, Herzliya, Modi'in). Target ~216 stores total. **Requires 9g first** — running 216-store cron at current 1.5min/store = 5+ hours. |
 | 9d-3 | City expansion Phase 3 | 50K+ cities (~25-30 more). Target ~540 stores. |
@@ -211,6 +212,17 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 | Investigate disappearing tables | Risk hygiene | Deferred pending future AWS/GCP migration (decided in 9c planning) |
 | **Search Quality** | Hebrew search precision fixes | Word-boundary matching, kosher-marker filtering ("חלבי"/"פרווה"/"בשרי" leaking into "חלב"/"בשר" searches — example: jelly appearing under "חלב" because it's labeled "חלבי"). Stretch: Hebrew stemming. Defer until after StoreNext data is in hand (may solve upstream via better categorization). |
 | **OS scraper research** | ~~Review OpenIsraeliSupermarkets repos + Kaggle dataset~~ | ✅ Done May 14, 2026. Writeup at docs/research/os_scraper_2026_05_14.md. Key findings: MIT-licensed (not GPL/AGPL as feared), geo-block is industry-wide (confirms 9g VPS plan), Kaggle dataset NOT a Carrefour/Victory stopgap, no new sources for images/categories/brands (StoreNext still the path). |
+
+---
+
+## 📌 Open Items — Next Session (post-holiday)
+
+- **Shufersal retest:** run `python -m scraper.shufersal ירושלים 3` twice on a business day. If stores still NOT FOUND → apply the `parse_filename` store_id `.zfill(3)` fix (suspected padding bug, not yet deployed). If found → page cache confirmed working.
+- **Check Shufersal price counts** post-holiday — if the padding bug is real, recent cron runs under-loaded Shufersal.
+- **9d-2 city expansion** — deferred until Shufersal store selection is reworked.
+- **Carrefour store 1167** (store_id='0205', leading zero, empty name) — possible duplicate-row split like Rami Levy 9k. Investigate.
+- **Stale Railway DATABASE_URL** in local `C:\scrp\.env` — remove it; it causes CC to attempt the dead Railway DB.
+- **shufersal.py CRLF line endings** — phantom 261-line diffs. Add `.gitattributes` with `*.py text eol=lf` and renormalize.
 
 ---
 
