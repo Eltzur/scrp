@@ -82,8 +82,8 @@ def parse_filename(filename: str) -> dict:
         return {}
     chain_id, seg2, seg3, _ts = m.groups()
     if seg3:
-        return {"chain_id": chain_id, "sub_chain_id": seg2, "store_id": seg3}
-    return {"chain_id": chain_id, "sub_chain_id": "001", "store_id": seg2}
+        return {"chain_id": chain_id, "sub_chain_id": seg2, "store_id": seg3.zfill(3)}
+    return {"chain_id": chain_id, "sub_chain_id": "001", "store_id": seg2.zfill(3)}
 
 
 def _city_from_branch_name(branch_name: str) -> Optional[str]:
