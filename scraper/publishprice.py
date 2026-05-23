@@ -17,12 +17,13 @@ import re
 import time
 import xml.etree.ElementTree as ET
 
+import requests
 from sqlalchemy import text
 
 from scraper.base import ChainScraper
 from scraper.cerberus import CITY_CODES  # same government city-code system
 from db.db import upsert_chain
-from scraper.city_names import normalize_city
+from scraper.city_names import normalize_city, city_override
 from scraper.city_matcher import resolve_city
 
 log = logging.getLogger(__name__)
@@ -49,8 +50,30 @@ class PublishPriceScraper(ChainScraper):
             return self._listing_cache  # type: ignore[return-value]
 
         log.info(f"{self.CHAIN_NAME}: fetching file listing from {self._base_url}/")
-        r = self._session.get(self._base_url + "/", timeout=15)
-        r.raise_for_status()
+        # The PublishPrice portal (prices.carrefour.co.il) intermittently
+        # connect-times-out. Retry with backoff so a single transient failure
+        # doesn't lose the whole chain for the day. After all attempts fail the
+        # exception still propagates — the chain is correctly marked errored.
+        attempts = 3
+        last_exc: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                r = self._session.get(self._base_url + "/", timeout=30)
+                r.raise_for_status()
+                break
+            except requests.RequestException as exc:
+                last_exc = exc
+                if attempt < attempts:
+                    backoff = 5 * attempt  # 5s, then 10s
+                    log.warning(
+                        f"{self.CHAIN_NAME}: listing fetch attempt {attempt}/{attempts} "
+                        f"failed ({exc.__class__.__name__}); retrying in {backoff}s…"
+                    )
+                    time.sleep(backoff)
+        else:
+            raise RuntimeError(
+                f"{self.CHAIN_NAME}: file listing fetch failed after {attempts} attempts"
+            ) from last_exc
         time.sleep(self.REQUEST_DELAY)
 
         # The portal hard-codes file metadata in the second-to-last <script> block
@@ -111,7 +134,9 @@ class PublishPriceScraper(ChainScraper):
                 city_code = int((store.findtext('City') or '0').strip())
             except ValueError:
                 city_code = 0
-            city = self.CITY_CODES.get(city_code)
+            city = city_override(self.CHAIN_ID, sid)
+            if not city:
+                city = self.CITY_CODES.get(city_code)
             if not city:
                 guess, conf = resolve_city(name, addr, self.CHAIN_ID)
                 if conf >= 0.80:
