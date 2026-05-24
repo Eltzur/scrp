@@ -14,7 +14,7 @@ from db.db import (
     connect, init_db, upsert_chain, upsert_store,
     upsert_item, upsert_item_chain_name, upsert_price,
     bulk_upsert_items, bulk_upsert_item_chain_names, bulk_insert_prices,
-    DEFAULT_DB
+    DEFAULT_DB, _pad_store_id,
 )
 from parser.price_parser import parse_file as parse_price_file
 from scraper.city_names import normalize_city
@@ -64,7 +64,7 @@ class ChainScraper(abc.ABC):
         files_attempted = files_loaded = items_inserted = 0
 
         for sid in store_ids:
-            entry = index.get(sid)
+            entry = index.get(_pad_store_id(sid))
             if not entry:
                 log.warning(f"  No PriceFull found for store {sid} — skipping.")
                 continue
