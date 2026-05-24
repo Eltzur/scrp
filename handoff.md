@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: May 23, 2026 (end of session 9m)
+> Last updated: May 24, 2026 (end of session 9m-followup)
 
 ---
 
@@ -86,7 +86,7 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 ## 📊 Current Production State
 
 - **7 chains** scraping daily: Shufersal, Rami Levy, Osher Ad, Victory, Yochananof, Keshet, Carrefour — ✅ ALL working from Kamatera Tel Aviv IP as of May 17, 2026 (geo-block resolved)
-- **58 stores across 7 cities**: Jerusalem, Bnei Brak, Tel Aviv, Haifa, Be'er Sheva, Rishon LeZion, Ashdod
+- **58 stores across 14 cities**: Ashdod, Be'er Sheva, Hadera, Haifa, Jerusalem, Kfar Saba, Migdal HaEmek, Nahariya, Netanya, Akko, Kiryat Bialik, Rishon LeZion, Ramat Gan, Tel Aviv (verified from live city dropdown May 24, 2026). Note: Bnei Brak does NOT appear in the live dropdown despite being in earlier handoff drafts — open question for 9d-2 (Carrefour/Mega has zero Bnei Brak presence, but other chains should; may be a city_norm gap).
 - **~430,000 prices** as of May 17, 2026 full cron run
 - **Cron runtime**: 3 min 31 sec (down from ~90 min on Railway US-West — 25× improvement via bulk inserts + localhost Postgres + Israeli IP)
 - **Verification gate**: `active_stores.yaml` (verified to publish PriceFull) is what cron uses; `scheduled_stores.yaml` is the wish-list. See `db/verification_report_9d1.md` for excluded stores.
@@ -198,6 +198,7 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 | Session | What | Notes |
 |---|---|---|
 | **9m** | Cron hardening + post-holiday cleanup | ✅ Carrefour retry/backoff (9m partial, prior). This session: Shufersal parse_filename store_id padding bug FOUND & FIXED (commit 63ec27e — both return paths now .zfill(3); was returning unpadded '2'/'5'/'21' so PriceFull index never matched padded DB targets). City dropdowns sorted alphabetically (Hebrew localeCompare) instead of by chain count. Stale Railway DATABASE_URL removed from local .env. .gitattributes added (*.py eol=lf) + shufersal.py renormalized (kills phantom 261-line CRLF diffs). Carrefour store 1167 split-pair resolved. Shufersal page-cache verification DEFERRED to next session (holiday — no fresh PriceFull files, inconclusive). |
+| **9m-followup** | Shufersal verification + Carrefour padding fix | ✅ Shufersal padding fix (63ec27e) verified — metadata returns 3-digit store IDs. Carrefour PriceFull lookup padding bug found & fixed: base.py now normalizes target store_id via _pad_store_id before index lookup (commit 0812bdc) — stores 60/81 were silently skipped because active_stores.yaml has unpadded IDs ("60") while the index keys are zero-padded ("060"). Store 6 confirmed a genuine upstream Carrefour publishing gap, not a code bug. Hostinger frontend deploy: alphabetical city sort live (85ee335). |
 | **9f-followup** | ~~Portal polish~~ | ✅ Done May 14, 2026. See session detail below. |
 | **9h** | **Claude Haiku integration for portal search** | Replace `web/src/utils/portalSearchRouter.ts` mock classifier with real Claude Haiku API call. Function signature already designed for one-line swap. Budget: ~$5/mo at 1K daily queries. |
 | **9i** | Contact form on xxl.co.il | Real form with Supabase backend + spam protection + email notifications. Currently footer has mailto link only. |
@@ -206,7 +207,7 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 | 9e (rescoped) | StoreNext FREE branch CSV ingestion | Original 9e premise (paid product catalog) dead — StoreNext paid tier rejected (NIS 30K one-time, May 2026). Free CSV branch lists at `storenext.co.il/תמיכה-ושירות/` remain usable. Rescoped to: ingest free branch CSVs only into `chain_stores_registry` table with sub-format classification (Sheli/Deal/Express/Yesh/Universe/BE for Shufersal; similar for others). Refactor Phase B selection to be format-aware. Solves Shufersal sub-chain heterogeneity systematically. No longer urgent since verification gate (9d-1) already prevents silent failures — quality-of-life, not blocker. |
 | 9d-2 | City expansion Phase 2 | Remaining 12 cities >100K pop (Petah Tikva, Netanya, Holon, Ramat Gan, Ashkelon, Rehovot, Bat Yam, Beit Shemesh, Kfar Saba, Herzliya, Modi'in). Target ~216 stores total. **Requires 9g first** — running 216-store cron at current 1.5min/store = 5+ hours. |
 | 9d-3 | City expansion Phase 3 | 50K+ cities (~25-30 more). Target ~540 stores. |
-| **stores table data hygiene** | **Add format guard to `sub_chain_id` / `store_id`** | Rami Levy split (was `sub='1'` vs `'001'`) resolved in 9k; Carrefour `store_id` padding resolved in 9j-followup. Remaining: add a CHECK constraint or normalize-on-insert so the inconsistency can't recur. ~20 min. |
+| **stores table data hygiene** | **Add format guard to `sub_chain_id` / `store_id`** | Rami Levy split (was `sub='1'` vs `'001'`) resolved in 9k; Carrefour `store_id` padding resolved in 9j-followup. base.py lookup now routes through `_pad_store_id` (9m-followup, commit 0812bdc) — a drifted yaml store_id resolves correctly instead of silently failing. A CHECK constraint on the stores table is now optional/nice-to-have, no longer urgent. |
 | Promotions + price history | Parse Promo XML files, build history charts | Sample Promo XML files captured in 9d-1 for future analysis. Requires sufficient daily snapshots first. |
 | Google OAuth | Wire up deferred-from-9b option | Requires Google Cloud Console OAuth client setup |
 | Investigate disappearing tables | Risk hygiene | Deferred pending future AWS/GCP migration (decided in 9c planning) |
@@ -217,28 +218,18 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 
 ## 📌 Open Items — Next Session (post-holiday)
 
-- **Shufersal page-cache verification (Tasks 1+2 — do FIRST, business day only).**
-  The parse_filename padding fix (commit 63ec27e) is pushed but UNVERIFIED —
-  9m smoke test fell on a holiday with no fresh PriceFull files (inconclusive).
-  On the server: `cd ~/scrp && git pull` first (picks up 63ec27e + .gitattributes),
-  then `set -a && source .env && set +a` and run
-  `venv/bin/python -m scraper.shufersal ירושלים 3` TWICE.
-  Expect: run 1 finds stores 002/005/021 and stops early; run 2 starts ~5 pages
-  lower than run 1 (confirms page cache). Then Task 2: check Shufersal price
-  counts per store — `SELECT s.store_id, COUNT(p.id) FROM stores s LEFT JOIN
-  prices p ON p.store_fk=s.id WHERE s.chain_id='7290027600007' GROUP BY
-  s.store_id ORDER BY s.store_id;` — to see if recent cron runs under-loaded
-  Shufersal while the padding bug was live.
-- **9d-2 city expansion — still gated on the Shufersal verification above.**
-  Do not start until Tasks 1+2 are green. Needs a fresh PriceFull verification
-  run at 03:00–04:00 (not 9PM) per verification_report_9d1.md. Expands
-  active_stores.yaml from 58 to ~216 stores across ~12 more cities.
-
-**Pending deploys carried out of 9m:**
-- Server `git pull` — picks up commit 63ec27e (Shufersal padding fix) and
-  .gitattributes/renormalization. Batch with the Shufersal retest above.
-- Hostinger frontend build + upload — deploys the alphabetical city-sort
-  change. Independent of the server pull; do whenever convenient.
+- **Shufersal page-cache verification — CLOSED, not runnable as designed.**
+  The 9m plan (run scraper twice, expect run 2 to start ~5 pages lower)
+  cannot give a clean signal: the page scan is bounded correctly (200-page
+  hard cap, 3 exit conditions) but Shufersal's portal is intermittently slow
+  (page timeouts, 502s — seen in the May 24 cron). A flaky portal makes the
+  cache retest inconclusive every time. The padding fix it was meant to
+  gate is independently verified via the metadata phase. No further action.
+- **9d-2 city expansion — cleared to start.** No remaining blockers. Needs a
+  fresh PriceFull verification run in the 03:00–04:00 window. Begin in a
+  fresh chat. First step: reconcile the handoff's city list against the live
+  DB before picking new cities (the 58→216 math assumed a 7-city baseline
+  that was already wrong).
 
 ---
 
@@ -260,7 +251,7 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 - **Full Kamatera consolidation (May 18, 2026)** — All production infra on Kamatera Tel Aviv VPS ($17/mo after Jun 17 free trial expires): Postgres + scraper cron + FastAPI behind nginx + Let's Encrypt. Railway fully decommissioned May 18. Single host, single bill, no cross-host network latency, no geo-block issues.
 - **SQLAlchemy everywhere** — scrapers are DB-agnostic.
 - **Snapshot pricing only** — not yet tracking history (deferred to 9d).
-- **Phased city expansion strategy** — currently 26 stores in Jerusalem/Bnei Brak. Session 9d-1 expands to 7 cities (~86 stores). Sessions 9d-2+ expand to all 100K+ cities (~216 stores). Sessions 11+ expand to 50K+ cities (~540 stores). Full coverage requires AWS/GCP migration when Railway hits limits.
+- **Phased city expansion strategy** — currently 58 stores across 14 cities (verified May 24, 2026 — see live city dropdown). Sessions 9d-2+ expand to all 100K+ cities (~216 stores). Sessions 11+ expand to 50K+ cities (~540 stores). Full coverage requires AWS/GCP migration when Railway hits limits.
 - **Daily cron at 3am Israel time (1am UTC)**.
 - **Canonical names via weighted token voting** — ~93% stability across runs, ~7% updated per fresh canonical run.
 - **Skipped Hazi-Hinam scraper** — HTML-scraping is too fragile vs Cerberus JSON APIs.
