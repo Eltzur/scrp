@@ -5,6 +5,7 @@ import XxlLogo from '../components/XxlLogo';
 import SearchBar from '../components/SearchBar';
 import Filters, { type FilterState } from '../components/Filters';
 import StatsBar from '../components/StatsBar';
+import FreshnessStrip from '../components/FreshnessStrip';
 import ResultsList from '../components/ResultsList';
 import { useSearch, useCompare } from '../api/hooks';
 import { searchProducts, compareProducts } from '../api/client';
@@ -99,6 +100,8 @@ export default function HomePage() {
           <Filters filters={filters} onChange={handleFiltersChange} />
           <StatsBar />
         </div>
+
+        <FreshnessStrip />
 
         <ResultsList
           result={mergedResult}

@@ -60,6 +60,19 @@ export const getStores = (opts: { chain?: string; city?: string } = {}): Promise
 export const getStats = (): Promise<StatsResponse> =>
   http.get<StatsResponse>('/stats').then(r => r.data);
 
+export interface ChainFreshness {
+  chain_name: string;
+  last_loaded_at: string | null;
+}
+
+export interface FreshnessResponse {
+  oldest_last_loaded_at: string | null;
+  chains: ChainFreshness[];
+}
+
+export const getFreshness = (): Promise<FreshnessResponse> =>
+  http.get<FreshnessResponse>('/freshness').then(r => r.data);
+
 // ---------------------------------------------------------------------------
 // Saved basket API
 // ---------------------------------------------------------------------------

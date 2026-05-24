@@ -343,3 +343,35 @@ def fetch_stats(conn: Connection) -> dict:
 def fetch_product(conn: Connection, barcode: str) -> list[dict]:
     """All price rows for a single barcode across all stores."""
     return fetch_prices(conn, [barcode])
+
+
+def fetch_freshness(conn: Connection) -> dict:
+    """
+    Per-chain: most recent run where files_loaded > 0.
+    oldest_last_loaded_at: earliest such timestamp across chains that have data.
+    Chains with no successful load have last_loaded_at=None (sorted last).
+    """
+    rows = conn.execute(text("""
+        SELECT
+            c.name        AS chain_name,
+            MAX(fr.run_at) AS last_loaded_at
+        FROM chains c
+        LEFT JOIN fetch_runs fr
+               ON fr.chain_id = c.chain_id AND fr.files_loaded > 0
+        GROUP BY c.chain_id, c.name
+    """)).mappings().all()
+
+    chains = [
+        {"chain_name": r["chain_name"], "last_loaded_at": r["last_loaded_at"]}
+        for r in rows
+    ]
+    # Newest data first; chains with no data (None) last.
+    # Key: (1, date) for chains with data, (0, "") for None; reverse=True gives newest first, NULLs last.
+    chains.sort(
+        key=lambda x: (0 if x["last_loaded_at"] is None else 1, x["last_loaded_at"] or ""),
+        reverse=True,
+    )
+
+    oldest = min((c["last_loaded_at"] for c in chains if c["last_loaded_at"]), default=None)
+
+    return {"oldest_last_loaded_at": oldest, "chains": chains}

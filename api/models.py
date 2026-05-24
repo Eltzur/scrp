@@ -90,3 +90,15 @@ class StatsResponse(BaseModel):
     last_fetch_per_chain: dict[str, str | None] = Field(
         description="chain name → ISO timestamp of last successful fetch"
     )
+
+
+class ChainFreshness(BaseModel):
+    """Last successful load timestamp for one chain."""
+    chain_name: str
+    last_loaded_at: str | None = Field(None, description="ISO 8601 UTC timestamp of last run with files_loaded > 0")
+
+
+class FreshnessResponse(BaseModel):
+    """Data freshness snapshot across all chains."""
+    oldest_last_loaded_at: str | None = Field(None, description="Earliest last_loaded_at across chains that have data")
+    chains: list[ChainFreshness]       = Field(description="One entry per chain, sorted oldest-first then nulls")

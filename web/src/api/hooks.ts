@@ -6,6 +6,7 @@ import {
   getChains,
   getCities,
   getStats,
+  getFreshness,
   type SearchOpts,
   type CompareOpts,
 } from './client';
@@ -62,5 +63,13 @@ export const useStats = () =>
     queryKey: ['stats'],
     queryFn: getStats,
     staleTime: STALE,
+    refetchOnWindowFocus: false,
+  });
+
+export const useFreshness = () =>
+  useQuery({
+    queryKey: ['freshness'],
+    queryFn: getFreshness,
+    staleTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
