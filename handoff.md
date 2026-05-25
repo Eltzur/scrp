@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: May 24, 2026 (end of session 9m-followup)
+> Last updated: May 25, 2026 (end of session 9n)
 
 ---
 
@@ -28,7 +28,7 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 | Frontend | React + Vite + TypeScript + Tailwind | Hostinger static (`public_html/`) — serves BOTH xxl.co.il and super.xxl.co.il | ✅ Live |
 | Backend | FastAPI + gunicorn + uvicorn | Kamatera `scrp-prod-il` via systemd `scrp-api.service`, behind nginx + Let's Encrypt | ✅ Live since May 18, 2026 |
 | Database | Postgres 18.4 | Kamatera `scrp-prod-il` (`185.229.226.190`), localhost-only (5432 closed at UFW) | ✅ Live |
-| Scraper cron | Python (`scraper.cron_main`) | Kamatera `scrp-prod-il` via systemd timer | ✅ Daily 03:00 IDT, DST-aware |
+| Scraper cron | Python (`scraper.cron_main`) | Kamatera `scrp-prod-il` via systemd timer | ✅ Daily 10:00 IDT, DST-aware (changed from 03:00 in session 9n — portals publish 02:00–05:00 UTC; 10:00 IDT = 07:00 UTC clears the window) |
 | Backups | pg_dump → rclone → Backblaze B2 | Kamatera systemd timer `scrp-backup.timer` (daily 04:00 IDT) + B2 bucket `xxl-scrp-backups` | ✅ Live since May 19, 2026 |
 | DNS | box.co.il (ns1/2/3.box.co.il) | — | ✅ |
 | Auth | Supabase | Supabase project (auth only — no Data API usage from client) | ✅ Live |
@@ -199,6 +199,7 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 |---|---|---|
 | **9m** | Cron hardening + post-holiday cleanup | ✅ Carrefour retry/backoff (9m partial, prior). This session: Shufersal parse_filename store_id padding bug FOUND & FIXED (commit 63ec27e — both return paths now .zfill(3); was returning unpadded '2'/'5'/'21' so PriceFull index never matched padded DB targets). City dropdowns sorted alphabetically (Hebrew localeCompare) instead of by chain count. Stale Railway DATABASE_URL removed from local .env. .gitattributes added (*.py eol=lf) + shufersal.py renormalized (kills phantom 261-line CRLF diffs). Carrefour store 1167 split-pair resolved. Shufersal page-cache verification DEFERRED to next session (holiday — no fresh PriceFull files, inconclusive). |
 | **9m-followup** | Shufersal verification + Carrefour padding fix | ✅ Shufersal padding fix (63ec27e) verified — metadata returns 3-digit store IDs. Carrefour PriceFull lookup padding bug found & fixed: base.py now normalizes target store_id via _pad_store_id before index lookup (commit 0812bdc) — stores 60/81 were silently skipped because active_stores.yaml has unpadded IDs ("60") while the index keys are zero-padded ("060"). Store 6 confirmed a genuine upstream Carrefour publishing gap, not a code bug. Hostinger frontend deploy: alphabetical city sort live (85ee335). |
+| **9n** | 3-chain diagnostic + cron timing fix + FreshnessStrip deploy | ✅ Root cause of Victory/Osher Ad/Carrefour daily zero-loads identified: timing race — cron at 03:00 IDT (midnight UTC) fires before portals publish. Portals confirmed to publish 02:09–05:00 UTC consistently over 6+ days. Cron timer moved to 10:00 IDT (07:00 UTC) via `sed` on Kamatera `/etc/systemd/system/scrp-cron.timer`. Catch-up run succeeded all 7 chains. FreshnessStrip downward-expand code confirmed correct in web/ source (was never deployed). web/deploy.zip rebuilt — awaiting Hostinger upload. Column-misalignment report in 9n table was RTL terminal rendering artifact; DB data confirmed correct. |
 | **9f-followup** | ~~Portal polish~~ | ✅ Done May 14, 2026. See session detail below. |
 | **9h** | **Claude Haiku integration for portal search** | Replace `web/src/utils/portalSearchRouter.ts` mock classifier with real Claude Haiku API call. Function signature already designed for one-line swap. Budget: ~$5/mo at 1K daily queries. |
 | **9i** | Contact form on xxl.co.il | Real form with Supabase backend + spam protection + email notifications. Currently footer has mailto link only. |
@@ -252,7 +253,7 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 - **SQLAlchemy everywhere** — scrapers are DB-agnostic.
 - **Snapshot pricing only** — not yet tracking history (deferred to 9d).
 - **Phased city expansion strategy** — currently 58 stores across 14 cities (verified May 24, 2026 — see live city dropdown). Sessions 9d-2+ expand to all 100K+ cities (~216 stores). Sessions 11+ expand to 50K+ cities (~540 stores). Full coverage requires AWS/GCP migration when Railway hits limits.
-- **Daily cron at 3am Israel time (1am UTC)**.
+- **Daily cron at 10am Israel time (7am UTC)** (changed from 3am in session 9n — portals publish 02:09–05:00 UTC; 10:00 IDT clears the window).
 - **Canonical names via weighted token voting** — ~93% stability across runs, ~7% updated per fresh canonical run.
 - **Skipped Hazi-Hinam scraper** — HTML-scraping is too fragile vs Cerberus JSON APIs.
 - **Brand color: emerald-600 (#059669)** — used for primary CTAs, basket-limit toast.
@@ -818,3 +819,50 @@ Exit code 0, no errors. Keshet logged 2 stores with duplicate item_codes having 
 - `scrp_app Postgres password` (used in DATABASE_URL — will go into Railway web env var in Phase 7)
 
 **Next:** Session 9g Phase 7 — Reroute Railway web service `DATABASE_URL` env var to point at Kamatera Postgres (`185.229.226.190:5432/xxl_super`). Pre-work: identify Railway's egress IP to narrow `pg_hba.conf` from temporary `0.0.0.0/0`. Risk: touches live site, do with fresh focus. After Phase 7, super.xxl.co.il is healthy again. Then Phase 9 (pg_dump backups + Backblaze B2 offsite).
+
+### Session 9n (May 25, 2026) — 3-Chain Diagnostic + Cron Timing Fix + FreshnessStrip Deploy
+
+**Goal:** Diagnose why Victory, Osher Ad, and Carrefour consistently loaded 0 files on daily cron; fix root cause; two follow-ups from catch-up run.
+
+**Root cause — confirmed timing race:**
+Cron fired at 03:00 IDT = midnight UTC. All three failing portals publish PriceFull files AFTER midnight UTC:
+- Carrefour (publishprice.py): publishes ~02:09 UTC daily (consistent over 6+ days)
+- Osher Ad (Cerberus): publishes ~03:00–04:00 UTC
+- Victory (laibcatalog.co.il): publishes ~04:00–05:00 UTC
+
+Scraper arrived before the files existed → zero loads → but skipped stores **kept old prices** (snapshot fallback is implicit in `base.py`: `DELETE FROM prices WHERE store_fk=:store_fk` only runs when a store has an index entry; skipped stores untouched). Prices were stale but not gone.
+
+**Fix — cron moved to 10:00 IDT (07:00 UTC):**
+```bash
+sed -i 's/OnCalendar=\*-\*-\* 03:00:00/OnCalendar=*-*-* 10:00:00/' /etc/systemd/system/scrp-cron.timer
+systemctl daemon-reload
+systemctl list-timers scrp-cron.timer
+```
+`Persistent=true` in the timer caused an immediate catch-up run on `daemon-reload` since the 10:00 IDT window was already past for the day.
+
+**Catch-up run results — all 7 chains loaded successfully.**
+
+**FreshnessStrip downward-expand:**
+- Code in `web/src/components/FreshnessStrip.tsx` was already correct (document-flow expand with `mt-1` on `<ul>`, no absolute positioning). The upward-expand behavior on the live site was because the old build was never redeployed after the fix was committed.
+- `web/deploy.zip` rebuilt locally at `C:\scrp\web\deploy.zip` (10.6 MB).
+- **Pending Eltzur action:** Upload `C:\scrp\web\deploy.zip` to Hostinger File Manager → `public_html/super.xxl.co.il/` → Extract. This will also ship the alphabetical city sort and any other commits since the last Hostinger deploy.
+
+**Column misalignment (fetch_runs table):**
+Diagnosed as RTL terminal rendering artifact. Raw DB query confirmed: `files_attempted=1`, `files_loaded=1`, `items_inserted=4864` for Shufersal — correct. The reporter's table appeared column-shifted only because RTL layout reversed column order in the terminal viewer. No DB data issue.
+
+**Decisions made:**
+- **10:00 IDT chosen over 06:00 or 08:00** — 07:00 UTC gives 2+ hours of margin past Carrefour's 02:09 UTC publish and 1+ hour past Victory's ~05:00 UTC worst case. No meaningful operational downside (prices still updated same calendar day).
+- **Cron description in `.timer` file NOT updated** (still says "3am Israel time") — low priority, timer behavior is authoritative; comment updated only in handoff.
+- **Carrefour store-ID mismatch NOT fixed in this session** — Carrefour published files for stores the scraper didn't have registered (non-zero `files_attempted` but zero or few matched stores). Logged as open investigation for 9d-2.
+
+**Files changed:**
+- Server-side only: `/etc/systemd/system/scrp-cron.timer` — `OnCalendar` changed `03:00:00` → `10:00:00`
+- `web/deploy.zip` — rebuilt locally (not committed; Hostinger deploy pending)
+
+**Known issue surfaced in 9n scoping:**
+Per-chain freshness (`/freshness` endpoint + FreshnessStrip) reads `MAX(run_at)` per chain — one fresh store makes the whole chain show "updated today." The 9d-2 scoping report found this masks per-store staleness (Keshet 50%, Yochananof 88% on May 25 despite all chains appearing green). A per-store freshness view is Priority 1 of 9d-2.
+
+**Open items carried forward:**
+- Hostinger upload of `web/deploy.zip` (FreshnessStrip fix goes live on upload)
+- Carrefour store-ID mismatch: may be metric artifact — confirm with per-store metric first
+- 9d-2 scoping report saved at `db/scoping_report_9d2.md`
