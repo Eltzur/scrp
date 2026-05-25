@@ -866,3 +866,19 @@ Per-chain freshness (`/freshness` endpoint + FreshnessStrip) reads `MAX(run_at)`
 - Hostinger upload of `web/deploy.zip` (FreshnessStrip fix goes live on upload)
 - Carrefour store-ID mismatch: may be metric artifact — confirm with per-store metric first
 - 9d-2 scoping report saved at `db/scoping_report_9d2.md`
+
+### Session 9d-2 (May 25, 2026) — Per-Store Coverage Metric [Priority 1 complete]
+
+**Done — Priority 1 of 9d-2:**
+- New table `fetch_store_runs` (per-store sibling to per-chain `fetch_runs`): one row per store per cron run, status enum loaded/no_file/error. Migration: `db/migrations/9d2_fetch_store_runs.sql` (includes scrp_app GRANTs — see lesson below).
+- `scraper/base.py`: emits one fetch_store_runs row per store during the load loop; fetch_runs INSERT now uses RETURNING id to correlate. store_id padded via _pad_store_id for consistency with stores table.
+- New view `v_store_coverage_72h` + `/coverage` API endpoint (`db/query.py` fetch_coverage, `api/routers/coverage.py`, `api/models.py`). Denominator is configured count from active_stores.yaml, so never-ran chains show 0% not invisible. Sorted worst-first.
+- Seed run completed (option B): full manual cron, 7 chains, 192s, errors none.
+
+**Key finding:** The scoping report's coverage alarms were price_update_date artifacts. Real per-store load coverage as of seed run: Carrefour 88.9% (8/9), all other 6 chains 100%. Keshet "50%" and Yochananof "88%" from the scoping baseline were stale-XML-date noise, not missing stores.
+
+**Carried into Priority 3:** (1) Carrefour store 6 — in active_stores.yaml but published no PriceFull on the seed run; investigate. (2) Shufersal — 100% is meaningless at 1 store configured; needs expansion.
+
+**Lesson — new tables need explicit GRANTs:** The seed run first failed with "permission denied for table fetch_store_runs" — the table was created as postgres superuser but the scraper connects as scrp_app. Any new table created via `sudo -u postgres psql` MUST include `GRANT ... TO scrp_app` (table + sequence + any views) in the same migration file, or it's invisible to the scraper.
+
+**Note for future migrations:** CC tip — when a migration creates a table, always append the scrp_app grants to the same .sql file.
