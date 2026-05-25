@@ -63,10 +63,28 @@ class ChainScraper(abc.ABC):
         run_at = datetime.now(timezone.utc).isoformat()
         files_attempted = files_loaded = items_inserted = 0
 
+        # One batch lookup so no_file / error paths can find store_fk without per-store SELECTs.
+        store_id_to_fk: dict[str, int] = {
+            _pad_store_id(r[1]): r[0]
+            for r in conn.execute(
+                text("SELECT id, store_id FROM stores WHERE chain_id=:chain_id"),
+                {"chain_id": self.CHAIN_ID},
+            ).fetchall()
+        }
+        store_results: list[dict] = []
+
         for sid in store_ids:
             entry = index.get(_pad_store_id(sid))
             if not entry:
                 log.warning(f"  No PriceFull found for store {sid} — skipping.")
+                fk = store_id_to_fk.get(_pad_store_id(sid))
+                if fk is not None:
+                    store_results.append({
+                        "chain_id": self.CHAIN_ID, "store_fk": fk, "store_id": _pad_store_id(sid),
+                        "files_loaded": 0, "items_inserted": 0, "status": "no_file",
+                    })
+                else:
+                    log.warning(f"  Store {sid}: not in stores table, omitting fetch_store_runs row.")
                 continue
 
             files_attempted += 1
@@ -142,24 +160,61 @@ class ChainScraper(abc.ABC):
                 items_inserted += count
                 files_loaded += 1
                 log.info(f"    -> {count} items loaded for store {sid}.")
+                store_results.append({
+                    "chain_id": self.CHAIN_ID, "store_fk": store_fk, "store_id": _pad_store_id(sid),
+                    "files_loaded": 1, "items_inserted": count, "status": "loaded",
+                })
 
             except Exception as e:
                 log.warning(f"  Store {sid} failed: {e}")
                 gz_path.unlink(missing_ok=True)
+                fk = store_id_to_fk.get(_pad_store_id(sid))
+                if fk is not None:
+                    store_results.append({
+                        "chain_id": self.CHAIN_ID, "store_fk": fk, "store_id": _pad_store_id(sid),
+                        "files_loaded": 0, "items_inserted": 0, "status": "error",
+                    })
+                else:
+                    log.warning(f"  Store {sid}: not in stores table, omitting fetch_store_runs row.")
 
-        conn.execute(text("""
+        fetch_run_id = conn.execute(text("""
             INSERT INTO fetch_runs
                (chain_id, run_at, files_attempted, files_loaded, items_inserted, status)
                VALUES (:chain_id, :run_at, :files_attempted, :files_loaded, :items_inserted, :status)
+            RETURNING id
         """), {
-            "chain_id":       self.CHAIN_ID,
-            "run_at":         run_at,
+            "chain_id":        self.CHAIN_ID,
+            "run_at":          run_at,
             "files_attempted": files_attempted,
-            "files_loaded":   files_loaded,
-            "items_inserted": items_inserted,
-            "status":         "ok" if files_loaded == files_attempted else "partial",
-        })
+            "files_loaded":    files_loaded,
+            "items_inserted":  items_inserted,
+            "status":          "ok" if files_loaded == files_attempted else "partial",
+        }).scalar()
         conn.commit()
+
+        if store_results and fetch_run_id is not None:
+            placeholders, params = [], {}
+            for j, sr in enumerate(store_results):
+                placeholders.append(
+                    f"(:s{j}0,:s{j}1,:s{j}2,:s{j}3,:s{j}4,:s{j}5,:s{j}6,:s{j}7)"
+                )
+                params.update({
+                    f"s{j}0": fetch_run_id,
+                    f"s{j}1": sr["chain_id"],
+                    f"s{j}2": sr["store_fk"],
+                    f"s{j}3": sr["store_id"],
+                    f"s{j}4": run_at,
+                    f"s{j}5": sr["files_loaded"],
+                    f"s{j}6": sr["items_inserted"],
+                    f"s{j}7": sr["status"],
+                })
+            conn.execute(text(
+                "INSERT INTO fetch_store_runs"
+                " (fetch_run_id, chain_id, store_fk, store_id, run_at,"
+                "  files_loaded, items_inserted, status)"
+                f" VALUES {','.join(placeholders)}"
+            ), params)
+            conn.commit()
 
         return {
             "files_attempted": files_attempted,
