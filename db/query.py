@@ -6,11 +6,15 @@ No display logic, no HTTP concerns.
 from __future__ import annotations
 
 from collections import defaultdict
+from pathlib import Path
 
+import yaml
 from sqlalchemy import text, bindparam
 from sqlalchemy.engine import Connection
 
 from scraper.city_names import normalize_city
+
+_ACTIVE_STORES_YAML = Path(__file__).parent.parent / "scraper" / "active_stores.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -343,6 +347,57 @@ def fetch_stats(conn: Connection) -> dict:
 def fetch_product(conn: Connection, barcode: str) -> list[dict]:
     """All price rows for a single barcode across all stores."""
     return fetch_prices(conn, [barcode])
+
+
+def fetch_coverage(conn: Connection) -> dict:
+    """
+    Per-chain 72h coverage using fetch_store_runs.
+    Denominator is the configured store count from active_stores.yaml — chains
+    that never ran at all appear as 0/0/0% rather than being invisible.
+    Sorted by coverage_pct ascending (worst first).
+    """
+    config = yaml.safe_load(_ACTIVE_STORES_YAML.read_text(encoding="utf-8"))
+    configured: dict[str, int] = {
+        entry["chain_id"]: len(entry.get("store_ids", []))
+        for entry in config.get("chains", [])
+    }
+
+    all_chain_names: dict[str, str | None] = {
+        r["chain_id"]: r["name"]
+        for r in conn.execute(text("SELECT chain_id, name FROM chains")).mappings().all()
+    }
+
+    view_by_chain: dict[str, dict] = {
+        r["chain_id"]: dict(r)
+        for r in conn.execute(text("""
+            SELECT
+                v.chain_id,
+                c.name          AS chain_name,
+                v.stores_loaded_72h,
+                v.stores_seen_72h
+            FROM v_store_coverage_72h v
+            JOIN chains c ON c.chain_id = v.chain_id
+        """)).mappings().all()
+    }
+
+    result = []
+    for chain_id, n_configured in configured.items():
+        v = view_by_chain.get(chain_id)
+        loaded = v["stores_loaded_72h"] if v else 0
+        seen   = v["stores_seen_72h"]   if v else 0
+        name   = (v["chain_name"] if v else None) or all_chain_names.get(chain_id)
+        pct    = round(loaded / n_configured * 100, 1) if n_configured else 0.0
+        result.append({
+            "chain_id":          chain_id,
+            "chain_name":        name,
+            "stores_configured": n_configured,
+            "stores_loaded_72h": loaded,
+            "stores_seen_72h":   seen,
+            "coverage_pct":      pct,
+        })
+
+    result.sort(key=lambda x: x["coverage_pct"])
+    return {"chains": result}
 
 
 def fetch_freshness(conn: Connection) -> dict:

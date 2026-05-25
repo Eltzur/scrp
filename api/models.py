@@ -102,3 +102,18 @@ class FreshnessResponse(BaseModel):
     """Data freshness snapshot across all chains."""
     oldest_last_loaded_at: str | None = Field(None, description="Earliest last_loaded_at across chains that have data")
     chains: list[ChainFreshness]       = Field(description="One entry per chain, sorted oldest-first then nulls")
+
+
+class ChainCoverage(BaseModel):
+    """72h per-store coverage for one chain."""
+    chain_id: str
+    chain_name: str | None
+    stores_configured: int  = Field(description="Configured store count from active_stores.yaml")
+    stores_loaded_72h: int  = Field(description="Stores with status='loaded' in fetch_store_runs within 72h")
+    stores_seen_72h: int    = Field(description="Stores that appeared in fetch_store_runs within 72h (any status)")
+    coverage_pct: float     = Field(description="stores_loaded_72h / stores_configured × 100")
+
+
+class CoverageResponse(BaseModel):
+    """Per-store 72h coverage snapshot across all configured chains."""
+    chains: list[ChainCoverage] = Field(description="One entry per chain, sorted by coverage_pct ascending (worst first)")
