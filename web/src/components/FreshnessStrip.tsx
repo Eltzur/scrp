@@ -37,17 +37,19 @@ export default function FreshnessStrip() {
       </button>
 
       {expanded && (
-        <ul className="mt-1 space-y-0.5">
-          {data.chains.map(c => (
-            <li key={c.chain_name}>
-              {c.chain_name} — עודכן{' '}
-              {c.last_loaded_at
-                ? `${relativeHe(c.last_loaded_at)} (${formatDate(c.last_loaded_at)})`
-                : 'לא עודכן'}
-            </li>
-          ))}
-        </ul>
-        <p className="mt-1 text-gray-300">* עדכון מחירים מתבצע בשעות הצהריים</p>
+        <>
+          <ul className="mt-1 space-y-0.5">
+            {data.chains.map(c => (
+              <li key={c.chain_name}>
+                {c.chain_name} — עודכן{' '}
+                {c.last_loaded_at
+                  ? `${relativeHe(c.last_loaded_at)} (${formatDate(c.last_loaded_at)})`
+                  : 'לא עודכן'}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 text-gray-300">* עדכון מחירים מתבצע בשעות הצהריים</p>
+        </>
       )}
     </div>
   );
