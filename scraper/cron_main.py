@@ -78,7 +78,7 @@ def ping_supabase() -> None:
     try:
         import requests as _requests
         r = _requests.get(
-            f"{url}/rest/v1/",
+            f"{url}/auth/v1/health?apikey={key}",
             headers={"apikey": key, "Authorization": f"Bearer {key}"},
             timeout=10,
         )
