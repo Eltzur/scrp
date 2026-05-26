@@ -912,3 +912,47 @@ Per-chain freshness (`/freshness` endpoint + FreshnessStrip) reads `MAX(run_at)`
 **Operating note:** For ad-hoc DB queries with Hebrew or special characters, SSH in interactively first (ssh dude@..., then run the query at the server's bash prompt) — non-interactive ssh "..." from PowerShell mangles quotes and Hebrew.
 
 **Note for future migrations:** CC tip — when a migration creates a table, always append the scrp_app grants to the same .sql file.
+
+### Session 9d-2 (May 26, 2026) — Coverage Metric, City Expansion, Infra
+
+**COMPLETED:**
+
+Priority 1 — per-store coverage metric (DONE):
+- New table fetch_store_runs (per-store, sibling to per-chain fetch_runs); status enum loaded/no_file/error. Migration db/migrations/9d2_fetch_store_runs.sql (includes scrp_app GRANTs).
+- scraper/base.py emits one fetch_store_runs row per store; fetch_runs INSERT uses RETURNING id.
+- New view v_store_coverage_72h + /coverage API endpoint. Denominator = configured count from active_stores.yaml.
+- Finding: the scoping report's coverage alarms (Keshet 50%, Yochananof 88%, Carrefour 22%) were all price_update_date artifacts — real per-store coverage was healthy.
+
+Priority 2 — city expansion (DONE):
+- 9 new cities: Petah Tikva, Holon, Bnei Brak, Ashkelon, Rehovot, Bat Yam, Beit Shemesh, Herzliya, Modi'in.
+- Scripts: scripts/discover_p2_cities.py (catalog discovery), scripts/verify_p2_candidates.py (PriceFull verification).
+- 60 candidates verified, 55 PASSED, added to active_stores.yaml. Store count 58 → 113.
+- Finding: Shufersal יש חסד sub-format DOES publish PriceFull (verified). The assumption that all Shufersal sub-formats fail is wrong for יש חסד.
+- Rami Levy 016 = Bnei Brak Ayalon branch (catalog store_name says "רמת גן", address confirms Bnei Brak) — comment in active_stores.yaml, do not "correct".
+
+Priority 3 — bar met: proof cron run, /coverage shows all 7 chains ≥90% on the 113-store denominator. Shufersal 100% (12/12, was 1), others 100%, Carrefour 95.5%.
+
+City normalization (DONE): victory.py now normalizes city on store insert via resolve_city (Victory tagged branches "חולון קוגל" etc., creating duplicate dropdown cities). Permanent fix — confirmed working. scripts/normalize_store_cities.py exists as a one-time cleanup but was NOT needed and must NOT be run with --apply: its prefix-strip logic false-positives on hyphenated municipalities (פרדס חנה-כרכור, מודיעין-מכבים-רעות).
+
+Supabase keep-alive (DONE): cron_main.py ping_supabase() pings Supabase /auth/v1/health each cron run to reset the 7-day free-tier inactivity timer. Confirmed "ping OK (200)". Server .env has SUPABASE_URL + SUPABASE_ANON_KEY. Note: /rest/v1/ returns 401 for anon key — must use /auth/v1/health.
+
+Freshness strip (DONE): added static footnote "* עדכון מחירים מתבצע בשעות הצהריים" to the expanded FreshnessStrip, so early-morning visitors understand prices update midday.
+
+**DEFERRED / NEXT SESSION:**
+- Priority 4 — Shufersal page-scan optimization (page-scan cache). Includes re-verifying Shufersal stores 014 (Ashkelon) + 018 (Holon): דיל-format, failed verification ONLY due to the 236-page scan cap — likely real, re-verify with higher cap.
+- Priority 5 — new chains. User wants to choose: Tiv Taam (good candidate), King Store (~26 branches, unique Arab-sector coverage). Hazi Hinam stays deferred (HTML-scraped). Decide via portal-type probe (verify against each chain's endpoint) before building.
+- Shufersal שלי/אקספרס/BE/יוניברס sub-formats: not yet tested. Herzliya and Rehovot got zero Shufersal this session (only these formats). Worth a dedicated session.
+- Carrefour non-publishers: store 6, 183 (Bat Yam), 191 (Holon); Yochananof 073 (Holon) — NO_FILE on verify, re-check later.
+- CITY_VARIANTS cleanup: CITIES contains both "זכרון" and "זכרון יעקב". Make "זכרון יעקב" canonical, "זכרון" a variant in CITY_VARIANTS. Small. Check how CITIES and CITY_VARIANTS relate before editing — CITIES is used live by resolve_city.
+- Lod/Ramla, Ramat Gan/Givatayim: possible user-facing city consolidation — separate product decision, own mapping table, not done.
+
+**GS1 — incoming workstream (not started):**
+GS1 Israel can license canonical item data: names, images, barcodes, nutrition, kosher, ingredients. ~₪6,000, affordable. This is the canonical product layer the project lacks (replaces abandoned OpenFoodFacts, parked StoreNext). GS1 constraint: some chains are not GS1 members; GS1 doesn't want non-members getting GS1 data via xxl as a backdoor. Working approach: per-chain gs1_eligible flag — ineligible chains stay listed for price comparison but show no GS1 enrichment. Frame to GS1 as a sales incentive (visible richness gap pushes non-members to join). Before signing: get the eligible-chain list explicit and in writing. Needs a dedicated scoping session.
+
+**INFRA / SECURITY:**
+- Rotate the scrp_app DB password — it was printed to terminal/chat this session. Not urgent (localhost-only DB) but should be done.
+
+**OPERATING NOTES (important for all future sessions):**
+- Terminal RTL display of Hebrew is EXPECTED and normal — it does not indicate a bug, no verification needed for display mangling. Only verify logic when a Hebrew string comparison is load-bearing (use repr() / JSON.stringify, or open the file in VS Code).
+- CC cannot reliably surface file contents back to the operator — its file reads collapse ("Read 1 file / ctrl+o to expand") and don't paste through. Workaround: for any code review, the operator opens the file in VS Code and pastes it directly.
+- PowerShell → ssh → bash quoting mangles Hebrew, special characters, and long strings (JWTs). For ad-hoc DB queries with Hebrew: SSH in interactively first, run the query at the server bash prompt. To get a file/credential onto the server: build it locally and scp it — never interpolate it into an ssh "..." command string.
