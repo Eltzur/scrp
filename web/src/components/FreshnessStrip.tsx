@@ -27,7 +27,7 @@ export default function FreshnessStrip() {
   if (!data) return null;
 
   return (
-    <div className="relative text-xs text-gray-400">
+    <div className="text-xs text-gray-400">
       <button
         onClick={() => setExpanded(e => !e)}
         className="flex items-center gap-1 hover:text-gray-500 transition-colors"
@@ -37,7 +37,7 @@ export default function FreshnessStrip() {
       </button>
 
       {expanded && (
-        <ul className="absolute bottom-full inset-x-0 mb-1 space-y-0.5 bg-gray-50 py-1 z-10">
+        <ul className="mt-1 space-y-0.5">
           {data.chains.map(c => (
             <li key={c.chain_name}>
               {c.chain_name} — עודכן{' '}
@@ -47,6 +47,7 @@ export default function FreshnessStrip() {
             </li>
           ))}
         </ul>
+        <p className="mt-1 text-gray-300">* עדכון מחירים מתבצע בשעות הצהריים</p>
       )}
     </div>
   );
