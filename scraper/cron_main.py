@@ -4,6 +4,7 @@ Reads scheduled_stores.yaml, runs each chain's scraper in snapshot (replace) mod
 Exit 0 = all chains succeeded. Exit 1 = one or more chains errored.
 """
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -66,13 +67,35 @@ def run_chain(chain_id: str, n_stores: int, conn, store_ids: list | None = None)
     return scraper.load_prices_for_stores(store_ids, conn, replace=True)
 
 
+def ping_supabase() -> None:
+    """Ping Supabase REST endpoint to reset its 7-day inactivity timer.
+    Non-fatal — logs result but never raises. Skips gracefully when env vars absent."""
+    url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    key = os.environ.get("SUPABASE_ANON_KEY", "")
+    if not url or not key:
+        log.warning("Supabase keep-alive skipped — SUPABASE_URL or SUPABASE_ANON_KEY not set.")
+        return
+    try:
+        import requests as _requests
+        r = _requests.get(
+            f"{url}/rest/v1/",
+            headers={"apikey": key, "Authorization": f"Bearer {key}"},
+            timeout=10,
+        )
+        if r.ok:
+            log.info(f"Supabase keep-alive ping OK ({r.status_code}).")
+        else:
+            log.warning(f"Supabase keep-alive ping returned {r.status_code} — project may be paused.")
+    except Exception as exc:
+        log.warning(f"Supabase keep-alive ping failed: {exc}")
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
         stream=sys.stdout,
     )
-    import os
     log.info(f"DATABASE_URL set: {'YES' if os.environ.get('DATABASE_URL') else 'NO - WILL FAIL'}")
 
     config          = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
@@ -124,6 +147,8 @@ def main():
     conn.close()
     total = time.monotonic() - t_start
     log.info(f"Cron finished in {total:.0f}s. Errors: {errors or 'none'}")
+
+    ping_supabase()
 
     if errors:
         sys.exit(1)
