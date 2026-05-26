@@ -8,6 +8,7 @@ from sqlalchemy import text
 from scraper.base import ChainScraper
 from db.db import upsert_chain
 from scraper.city_names import normalize_city, city_override
+from scraper.city_matcher import resolve_city
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +43,10 @@ class VictoryScraper(ChainScraper):
         for b in branches:
             sid  = str(b["number"]).zfill(3)
             name = (b.get("name") or "").strip()
-            city = city_override(self.CHAIN_ID, sid) or name
+            city = city_override(self.CHAIN_ID, sid)
+            if not city:
+                guess, conf = resolve_city(name, "", self.CHAIN_ID)
+                city = guess if conf >= 0.80 else name
             city_norm = normalize_city(city) if city else None
             conn.execute(text("""
                 INSERT INTO stores (chain_id, sub_chain_id, store_id, store_name, city, city_norm)
