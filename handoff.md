@@ -881,4 +881,34 @@ Per-chain freshness (`/freshness` endpoint + FreshnessStrip) reads `MAX(run_at)`
 
 **Lesson — new tables need explicit GRANTs:** The seed run first failed with "permission denied for table fetch_store_runs" — the table was created as postgres superuser but the scraper connects as scrp_app. Any new table created via `sudo -u postgres psql` MUST include `GRANT ... TO scrp_app` (table + sequence + any views) in the same migration file, or it's invisible to the scraper.
 
+### Session 9d-2 (May 26, 2026) — Per-Store Coverage Metric + City Expansion
+
+**Priority 1 — DONE (per-store coverage metric):**
+- New table fetch_store_runs (per-store sibling to per-chain fetch_runs): one row per store per cron run, status enum loaded/no_file/error. Migration db/migrations/9d2_fetch_store_runs.sql (includes scrp_app GRANTs).
+- scraper/base.py emits one fetch_store_runs row per store; fetch_runs INSERT now uses RETURNING id. store_id padded via _pad_store_id.
+- New view v_store_coverage_72h + /coverage API endpoint (db/query.py fetch_coverage, api/routers/coverage.py, api/models.py). Denominator = configured count from active_stores.yaml.
+- Key finding: the scoping report's coverage alarms (Keshet 50%, Yochananof 88%, Carrefour 22%) were all price_update_date artifacts. Real per-store load coverage is healthy.
+- Lesson: new tables created via `sudo -u postgres psql` MUST include GRANT ... TO scrp_app (table + sequence + views) in the same migration, or the scraper (connects as scrp_app) gets "permission denied".
+
+**Priority 2 — DONE (city expansion, 9 new 100K+ cities):**
+- 9 cities: Petah Tikva, Holon, Bnei Brak, Ashkelon, Rehovot, Bat Yam, Beit Shemesh, Herzliya, Modi'in.
+- Built two analysis scripts: scripts/discover_p2_cities.py (catalog discovery, 3-bucket output) and scripts/verify_p2_candidates.py (PriceFull verification via build_pricefull_index).
+- 60 candidates verified, 55 PASSED, added to active_stores.yaml. Store count: 58 → 113.
+- Surprise finding: Shufersal יש חסד sub-format DOES publish PriceFull (Bnei Brak 219/295/611, Beit Shemesh 606 all verified PASS). The handoff's assumption that all sub-formats fail is wrong — at least יש חסד works.
+- Rami Levy store 016 (Bnei Brak Ayalon branch): catalog store_name says "רמת גן" but address מבצע קדש 68 confirms Bnei Brak municipality. Comment added in active_stores.yaml — do not "correct" it.
+
+**Priority 3 — bar already met:** Proof cron run (326s, errors none) → /coverage shows all 7 chains ≥90% on the 113-store denominator: Shufersal 100% (12/12, was 1 store), Rami Levy/Osher Ad/Victory/Yochananof/Keshet all 100%, Carrefour 95.5% (21/22).
+
+**Deferred to future sessions:**
+- Shufersal stores 014 (Ashkelon) + 018 (Holon): דיל-format, verification failed ONLY because the page-scan hit its 236-page safety cap — likely real. Re-verify with higher page cap during Priority 4 (Shufersal page-scan optimization).
+- Carrefour non-publishers: store 6, plus 183 (Bat Yam) + 191 (Holon); Yochananof 073 (Holon) — NO_FILE on verify. Carrefour per-store intermittency; re-check on a later run.
+- Shufersal שלי/אקספרס/BE/יוניברס sub-formats: NOT yet tested. Herzliya and Rehovot got zero Shufersal this session because they only have these formats. Worth a dedicated Shufersal sub-format session.
+- Priority 4 (Shufersal page-scan cache) and Priority 5 (new chains) not started.
+
+**New chains note:** User wants to choose chains rather than use the scoping report's AM:PM/Freshmarket/Co-op list. Candidates discussed: Tiv Taam (good), King Store (smaller, ~26 branches, unique Arab-sector coverage). Hazi Hinam stays deferred (HTML-scraped, fragile). Decide via portal-type probe at start of Priority 5.
+
+**Cron timing — confirmed, do NOT change:** Daily cron stays 10:00 IDT. 9n moved it there because Osher Ad publishes ~07:00 IDT; earlier cron re-creates the 9n silent-failure bug. The FreshnessStrip is already real-time (reads /freshness live per page load) — it shows "yesterday" before ~10:05 simply because that day's scrape hasn't run yet. Possible future polish: strip copy noting "updates daily by 10:00" so early-morning visitors don't read it as stale.
+
+**Operating note:** For ad-hoc DB queries with Hebrew or special characters, SSH in interactively first (ssh dude@..., then run the query at the server's bash prompt) — non-interactive ssh "..." from PowerShell mangles quotes and Hebrew.
+
 **Note for future migrations:** CC tip — when a migration creates a table, always append the scrp_app grants to the same .sql file.
