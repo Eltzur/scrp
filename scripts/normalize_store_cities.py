@@ -1,5 +1,18 @@
 """
-One-time cleanup: normalize stores.city to canonical Hebrew city names.
+One-time cleanup: strip neighborhood/qualifier suffixes from stores.city.
+
+Scope: ONLY accepts changes where the resolved canonical city is a leading
+token of the current city string — i.e. we are stripping a suffix off the
+SAME city, never replacing one city with a different city.
+
+  VALID:   "חולון קוגל"  → "חולון"   (qualifier suffix stripped)
+  VALID:   "אשקלון מרכז" → "אשקלון"  (qualifier suffix stripped)
+  INVALID: "חולון"       → "אילת"    (different city — rejected)
+  INVALID: "בני ברק"     → "רמת גן"  (different city — rejected)
+  INVALID: None          → anything  (no existing city to strip from — rejected)
+
+Spelling normalizations (e.g. קריית→קרית) are a DIFFERENT operation and
+belong in normalize_city's CITY_VARIANTS table — NOT handled here.
 
 Dry-run by default — prints proposed changes, no DB writes.
 Pass --apply to commit the UPDATEs.
@@ -34,6 +47,23 @@ CHAIN_NAMES: dict[str, str] = {
 SEP = "=" * 72
 
 
+def _is_suffix_strip(current_city: str | None, new_city: str | None) -> bool:
+    """True only when new_city is a complete leading token of current_city.
+
+    Requires current_city to be non-empty (None → False).
+    Requires current_city to be strictly longer than new_city (equal → False,
+    handled upstream by the no-change check).
+    The separator after new_city must be a space or hyphen — prevents partial
+    word matches (e.g. "חולון" is NOT a leading token of "חולוניה").
+    """
+    if not current_city or not new_city:
+        return False
+    return (
+        current_city.startswith(new_city + " ") or
+        current_city.startswith(new_city + "-")
+    )
+
+
 def main() -> None:
     apply_mode = "--apply" in sys.argv
 
@@ -45,9 +75,10 @@ def main() -> None:
         ORDER BY chain_id, store_id
     """)).mappings().all()
 
-    changes:             list[dict] = []
-    skipped_low_conf:    int        = 0
-    skipped_no_change:   int        = 0
+    changes:                  list[dict] = []
+    skipped_low_conf:         int        = 0
+    skipped_no_change:        int        = 0
+    skipped_not_suffix_strip: int        = 0
 
     for r in rows:
         store_name   = (r["store_name"] or "").strip()
@@ -62,6 +93,11 @@ def main() -> None:
 
         if new_city == current_city:
             skipped_no_change += 1
+            continue
+
+        # GUARD: only accept pure suffix-strips — never swap one city for another.
+        if not _is_suffix_strip(current_city, new_city):
+            skipped_not_suffix_strip += 1
             continue
 
         changes.append({
@@ -79,9 +115,10 @@ def main() -> None:
     print(SEP)
     print(f"normalize_store_cities.py — {mode_label}")
     print(f"  {len(rows)} stores scanned")
-    print(f"  {len(changes)} change(s) found")
-    print(f"  Skipped — already canonical or no resolve result: {skipped_no_change}")
-    print(f"  Skipped — below confidence threshold ({CONF_THRESHOLD:.2f}):  {skipped_low_conf}")
+    print(f"  {len(changes)} change(s) accepted (suffix-strip, conf >= {CONF_THRESHOLD:.2f})")
+    print(f"  Skipped — already canonical or resolver returned None: {skipped_no_change}")
+    print(f"  Skipped — below confidence threshold ({CONF_THRESHOLD:.2f}):        {skipped_low_conf}")
+    print(f"  Skipped — not a suffix-strip (city-swap rejected):        {skipped_not_suffix_strip}")
     print(SEP)
 
     by_chain: dict[str, list] = {}
@@ -89,7 +126,7 @@ def main() -> None:
         by_chain.setdefault(c["chain_id"], []).append(c)
 
     for chain_id in sorted(by_chain):
-        chain_name = CHAIN_NAMES.get(chain_id, chain_id)
+        chain_name    = CHAIN_NAMES.get(chain_id, chain_id)
         chain_changes = by_chain[chain_id]
         print(f"\n  [{chain_name}]  ({len(chain_changes)} change(s))")
         for c in sorted(chain_changes, key=lambda x: x["store_id"]):
