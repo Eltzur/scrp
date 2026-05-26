@@ -1,20 +1,22 @@
 """
 One-time cleanup: strip neighborhood/qualifier suffixes from stores.city.
 
-Scope: ONLY accepts changes where the resolved canonical city is a leading
-token of the current city string — i.e. we are stripping a suffix off the
-SAME city, never replacing one city with a different city.
+Matches the city column directly against the canonical CITIES set from
+city_matcher.py — no resolve_city, no store_name involved.
 
-  VALID:   "חולון קוגל"  → "חולון"   (qualifier suffix stripped)
-  VALID:   "אשקלון מרכז" → "אשקלון"  (qualifier suffix stripped)
-  INVALID: "חולון"       → "אילת"    (different city — rejected)
-  INVALID: "בני ברק"     → "רמת גן"  (different city — rejected)
-  INVALID: None          → anything  (no existing city to strip from — rejected)
+Logic per store:
+  1. city is None/empty           -> skip (no change)
+  2. city EXACTLY in CITIES       -> already canonical, skip
+  3. city STARTS WITH a CITIES member + space or hyphen
+                                  -> strip to longest such prefix (longest-match rule)
+  4. none of the above            -> skip (leave column untouched)
 
-Spelling normalizations (e.g. קריית→קרית) are a DIFFERENT operation and
-belong in normalize_city's CITY_VARIANTS table — NOT handled here.
+Longest-match rule prevents "זכרון יעקב" -> "זכרון":
+  "זכרון יעקב" hits step 2 (exact match) -> skipped before any prefix check.
+  A hypothetical "זכרון יעקב מרכז" would match both "זכרון" and "זכרון יעקב";
+  longest match wins -> "זכרון יעקב".
 
-Dry-run by default — prints proposed changes, no DB writes.
+Dry-run by default -- prints proposed changes, no DB writes.
 Pass --apply to commit the UPDATEs.
 
 Usage (from repo root, with DATABASE_URL set):
@@ -29,10 +31,8 @@ from sqlalchemy import text
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from db.db import connect
-from scraper.city_matcher import resolve_city
+from scraper.city_matcher import CITIES
 from scraper.city_names import normalize_city
-
-CONF_THRESHOLD = 0.80
 
 CHAIN_NAMES: dict[str, str] = {
     "7290027600007": "Shufersal",
@@ -47,21 +47,14 @@ CHAIN_NAMES: dict[str, str] = {
 SEP = "=" * 72
 
 
-def _is_suffix_strip(current_city: str | None, new_city: str | None) -> bool:
-    """True only when new_city is a complete leading token of current_city.
-
-    Requires current_city to be non-empty (None → False).
-    Requires current_city to be strictly longer than new_city (equal → False,
-    handled upstream by the no-change check).
-    The separator after new_city must be a space or hyphen — prevents partial
-    word matches (e.g. "חולון" is NOT a leading token of "חולוניה").
-    """
-    if not current_city or not new_city:
-        return False
-    return (
-        current_city.startswith(new_city + " ") or
-        current_city.startswith(new_city + "-")
-    )
+def _find_canonical_prefix(city: str) -> str | None:
+    """Return the longest CITIES member that is a leading prefix of city,
+    separated by space or hyphen. Returns None if no such prefix exists."""
+    matches = [
+        c for c in CITIES
+        if city.startswith(c + " ") or city.startswith(c + "-")
+    ]
+    return max(matches, key=len) if matches else None
 
 
 def main() -> None:
@@ -70,34 +63,33 @@ def main() -> None:
     conn = connect()
 
     rows = conn.execute(text("""
-        SELECT id, chain_id, store_id, store_name, address, city
+        SELECT id, chain_id, store_id, city
         FROM stores
         ORDER BY chain_id, store_id
     """)).mappings().all()
 
-    changes:                  list[dict] = []
-    skipped_low_conf:         int        = 0
-    skipped_no_change:        int        = 0
-    skipped_not_suffix_strip: int        = 0
+    changes:           list[dict] = []
+    skipped_null:      int        = 0
+    skipped_exact:     int        = 0
+    skipped_no_prefix: int        = 0
 
     for r in rows:
-        store_name   = (r["store_name"] or "").strip()
-        address      = (r["address"]    or "").strip()
-        current_city = r["city"]
+        current_city = (r["city"] or "").strip() or None
 
-        new_city, conf = resolve_city(store_name, address, r["chain_id"])
-
-        if conf < CONF_THRESHOLD:
-            skipped_low_conf += 1
+        # Step 1: null/empty -> skip
+        if not current_city:
+            skipped_null += 1
             continue
 
-        if new_city == current_city:
-            skipped_no_change += 1
+        # Step 2: exact canonical match -> already good, skip
+        if current_city in CITIES:
+            skipped_exact += 1
             continue
 
-        # GUARD: only accept pure suffix-strips — never swap one city for another.
-        if not _is_suffix_strip(current_city, new_city):
-            skipped_not_suffix_strip += 1
+        # Step 3: longest canonical prefix match -> strip suffix
+        new_city = _find_canonical_prefix(current_city)
+        if new_city is None:
+            skipped_no_prefix += 1
             continue
 
         changes.append({
@@ -107,18 +99,17 @@ def main() -> None:
             "current_city":  current_city,
             "new_city":      new_city,
             "new_city_norm": normalize_city(new_city),
-            "conf":          conf,
         })
 
     # --- Report ---
     mode_label = "APPLY" if apply_mode else "DRY-RUN"
     print(SEP)
-    print(f"normalize_store_cities.py — {mode_label}")
+    print(f"normalize_store_cities.py -- {mode_label}")
     print(f"  {len(rows)} stores scanned")
-    print(f"  {len(changes)} change(s) accepted (suffix-strip, conf >= {CONF_THRESHOLD:.2f})")
-    print(f"  Skipped — already canonical or resolver returned None: {skipped_no_change}")
-    print(f"  Skipped — below confidence threshold ({CONF_THRESHOLD:.2f}):        {skipped_low_conf}")
-    print(f"  Skipped — not a suffix-strip (city-swap rejected):        {skipped_not_suffix_strip}")
+    print(f"  {len(changes)} change(s) found (suffix stripped)")
+    print(f"  Skipped -- null/empty city:               {skipped_null}")
+    print(f"  Skipped -- already exact canonical match: {skipped_exact}")
+    print(f"  Skipped -- no canonical prefix found:     {skipped_no_prefix}")
     print(SEP)
 
     by_chain: dict[str, list] = {}
@@ -133,8 +124,7 @@ def main() -> None:
             print(
                 f"    store {c['store_id']:<8}  "
                 f"current={repr(c['current_city']):<36}  "
-                f"canonical={repr(c['new_city']):<26}  "
-                f"conf={c['conf']:.2f}"
+                f"canonical={repr(c['new_city'])}"
             )
 
     print()
@@ -153,9 +143,9 @@ def main() -> None:
                 WHERE id=:id
             """), {"city": c["new_city"], "city_norm": c["new_city_norm"], "id": c["id"]})
         conn.commit()
-        print(f"Applied {len(changes)} UPDATE(s) — committed.")
+        print(f"Applied {len(changes)} UPDATE(s) -- committed.")
     else:
-        print(f"Dry-run complete — {len(changes)} change(s) pending.")
+        print(f"Dry-run complete -- {len(changes)} change(s) pending.")
         print("Re-run with --apply to write to the database.")
 
     conn.close()
