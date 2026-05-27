@@ -20,7 +20,7 @@
 chains:
   - chain_id: "7290027600007"
     name: "Shufersal"
-    # 1/12 verified. שלי stores scan-depth false negatives — deferred to 9d-2.
+    # 14 stores verified via per-store PriceFull fetch (9d-3).
     store_ids:
       - "073"  # יש חסד אשדוד — VERIFIED
       - "181"  # P2
@@ -34,6 +34,8 @@ chains:
       - "119"  # P2
       - "105"  # P2
       - "290"  # P2
+      - "014"  # דיל ברנע אשקלון — verified 9d-3 (per-store fetch)
+      - "018"  # דיל חולון קרן היסוד — verified 9d-3 (per-store fetch)
 
   - chain_id: "7290058140886"
     name: "Rami Levy"
