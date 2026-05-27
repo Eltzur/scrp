@@ -1,16 +1,13 @@
 """Shufersal price scraper.
 
-Key discovery: prices.shufersal.co.il returns one global time-sorted listing
-regardless of the `catname` URL param. Layout (newest-first, ~April 2026):
-  pages  1-15 : Price files  (8 PM daily, old filename format)
-  pages 16-35 : Promo files  (8 PM daily)
-  pages 36+   : PriceFull, PromoFull (3 AM daily, new filename format)
-
 Store metadata (name, city) is extracted directly from the HTML branch column
 (e.g. "357 - דיל קדימה לב השרון") since StoresFull files are not reliably
 present in the listing.
+
+PriceFull discovery uses a direct per-store query:
+  GET /FileObject/UpdateCategory?catID=0&storeId={N}&sort=Time&sortdir=DESC
+Returns the newest PriceFull file for the given store in one request.
 """
-import json
 import logging
 import re
 import time
@@ -29,37 +26,6 @@ log = logging.getLogger(__name__)
 CHAIN_ID     = "7290027600007"
 LISTING_BASE = "http://prices.shufersal.co.il/FileObject/UpdateCategory"
 
-# --- PriceFull page-scan cache -------------------------------------------
-# Shufersal's listing is one global time-sorted feed; PriceFull files cluster
-# together but the block's start page drifts a little each day as new files
-# push older ones down. We cache the page where the PriceFull block started on
-# the last successful run and begin the next scan a few pages earlier as a
-# safety margin. One integer — degrades gracefully: if the cached page is
-# wrong, the scan simply continues forward as before.
-_CACHE_FILE   = Path(__file__).parent / ".shufersal_cache.json"
-_CACHE_MARGIN = 5     # start this many pages before the cached block start
-_DEFAULT_START_PAGE = 36
-
-
-def _load_cached_start_page() -> int:
-    """Return the cached PriceFull start page, or the default if unavailable."""
-    try:
-        data = json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
-        page = int(data.get("pricefull_start_page", _DEFAULT_START_PAGE))
-        return max(_DEFAULT_START_PAGE, page - _CACHE_MARGIN)
-    except (FileNotFoundError, ValueError, json.JSONDecodeError):
-        return _DEFAULT_START_PAGE
-
-
-def _save_cached_start_page(page: int) -> None:
-    """Persist the page where the PriceFull block began this run."""
-    try:
-        _CACHE_FILE.write_text(
-            json.dumps({"pricefull_start_page": int(page)}),
-            encoding="utf-8",
-        )
-    except OSError as e:
-        log.warning(f"Shufersal: could not write page cache: {e}")
 
 _CITY_HINTS: list[tuple[str, list[str]]] = [
     (canonical, [canonical] + variants)
@@ -105,8 +71,7 @@ def _city_from_branch_name(branch_name: str) -> Optional[str]:
 class ShufersalScraper(ChainScraper):
     CHAIN_ID = CHAIN_ID
 
-    def _fetch_raw_page(self, page: int) -> list:
-        url = f"{LISTING_BASE}?catname=PriceFull&page={page}&sort=Time&sortdir=DESC"
+    def _fetch_url(self, url: str) -> list:
         resp = self._session.get(url, timeout=60)
         resp.raise_for_status()
         time.sleep(self.REQUEST_DELAY)
@@ -145,6 +110,10 @@ class ShufersalScraper(ChainScraper):
                 "file_type":   file_type,
             })
         return rows
+
+    def _fetch_raw_page(self, page: int) -> list:
+        url = f"{LISTING_BASE}?catname=PriceFull&page={page}&sort=Time&sortdir=DESC"
+        return self._fetch_url(url)
 
     def load_stores(self, conn, pages_to_scan: int = 18) -> dict:
         upsert_chain(conn, self.CHAIN_ID, "שופרסל")
@@ -191,64 +160,27 @@ class ShufersalScraper(ChainScraper):
 
     def build_pricefull_index(self, target_store_ids: set,
                               start_page: int | None = None) -> dict:
+        # start_page retained for call-site compatibility; no longer used.
         index: dict[str, dict] = {}
-        found: set[str] = set()
-
-        # Start from the cached PriceFull-block page (minus a safety margin)
-        # unless an explicit start_page was passed by the caller.
-        if start_page is None:
-            start_page = _load_cached_start_page()
-        safety_cap = _DEFAULT_START_PAGE + 200  # never scan more than 200 pages
-
-        first_pricefull_page: int | None = None  # for the cache
-
-        log.info(f"Shufersal: building PriceFull index (from page {start_page})…")
-        for page in range(start_page, safety_cap + 1):
-            log.info(f"  Scanning page {page}…")
+        log.info(f"Shufersal: fetching PriceFull for {len(target_store_ids)} stores…")
+        for store_id in sorted(target_store_ids):
+            url = (f"{LISTING_BASE}?catID=0&storeId={int(store_id)}"
+                   f"&sort=Time&sortdir=DESC")
             try:
-                rows = self._fetch_raw_page(page)
+                rows = self._fetch_url(url)
             except Exception as e:
-                log.warning(f"  Page {page} failed: {e}")
+                log.warning(f"Shufersal store {store_id}: fetch failed: {e}")
                 continue
-
-            if not rows:
-                log.info(f"  Empty page {page} — stopping.")
-                break
-
-            for row in rows:
-                if row["file_type"] != "PriceFull":
-                    continue
-                if first_pricefull_page is None:
-                    first_pricefull_page = page
-                sid = row["store_id"]
-                if sid not in index:
-                    # Strip .gz so base class can add it back consistently
-                    fname = row["filename"]
-                    if fname.endswith(".gz"):
-                        fname = fname[:-3]
-                    index[sid] = {
-                        **row,
-                        "filename": fname,
-                    }
-                    if sid in target_store_ids:
-                        found.add(sid)
-
-            if found >= target_store_ids:
-                log.info(f"  All {len(target_store_ids)} target stores found on page {page}.")
-                break
-
-            if page >= safety_cap:
-                missing = target_store_ids - found
-                log.warning(
-                    f"  Safety cap reached ({safety_cap} pages scanned). "
-                    f"NOT FOUND: {missing}"
-                )
-                break
-
-        # Persist where the PriceFull block began so the next run starts close to it.
-        if first_pricefull_page is not None:
-            _save_cached_start_page(first_pricefull_page)
-
+            pf_rows = [r for r in rows if r["file_type"] == "PriceFull"]
+            if not pf_rows:
+                log.warning(f"Shufersal store {store_id}: no PriceFull file found")
+                continue
+            best = max(pf_rows, key=lambda r: r["filename"])
+            fname = best["filename"]
+            if fname.endswith(".gz"):
+                fname = fname[:-3]
+            sid = parse_filename(best["filename"]).get("store_id", store_id)
+            index[sid] = {**best, "filename": fname}
         return index
 
 
