@@ -31,11 +31,25 @@ log = logging.getLogger(__name__)
 
 BASE_URL = "https://url.retail.publishedprices.co.il"
 
-# Israeli government numeric city codes → canonical Hebrew city names.
-# Shared across all Cerberus chains (same government system).
+# CITY_CODES maps Ministry of Interior locality codes to shopper-recognizable
+# city names — the value shown in the city dropdown / search UI.
+#
+# Policy (established session 9d-3, P5):
+#   - Entries MUST be real municipalities a shopper would search for
+#     (cities, towns, local councils). NEVER regional councils
+#     (מועצה אזורית) like נחל שורק, מטה יהודה, עמק חפר, etc. — even if
+#     locality.xls or other MOI sources use the same code for the
+#     administrative wrapper. The city/town within it wins.
+#   - When a new code surfaces from a chain's Stores XML: resolve it
+#     against locality.xls or Israel Post's locality PDF, BUT verify
+#     the result is an actual municipality before adding. Regional
+#     councils get left out — resolve_city handles the fallback from
+#     the store's address.
+#   - Do NOT bulk-import locality.xls — it contains both cities and
+#     regional councils mixed together, and we want only the former.
 CITY_CODES: dict[int, str] = {
     3000: "ירושלים",
-    5000: "תל אביב",
+    5000: "תל אביב-יפו",
     4000: "חיפה",
     9000: "באר שבע",
     6100: "בני ברק",      # government code; some chains label it רמת גן (Ayalon area)
@@ -45,7 +59,7 @@ CITY_CODES: dict[int, str] = {
     7900: "פתח תקווה",
     6900: "כפר סבא",
     8700: "רעננה",
-    6400: "הרצליה",
+    6400: "הרצלייה",
     6600: "חולון",
     6200: "בת ים",
     6500: "חדרה",
@@ -54,7 +68,7 @@ CITY_CODES: dict[int, str] = {
     6700: "טבריה",
     1015: "מבשרת ציון",
     1165: "מודיעין",
-    1200: "מודיעין",
+    1200: "מודיעין-מכבים-רעות",
     2610: "בית שמש",
     2640: "ראש העין",
     2660: "יבנה",
@@ -63,7 +77,7 @@ CITY_CODES: dict[int, str] = {
     8500: "רמלה",
     8400: "רחובות",
     7700: "עפולה",
-    9100: "נהריה",
+    9100: "נהרייה",
     7600: "עכו",
     9200: "בית שאן",
     9300: "זכרון יעקב",
@@ -76,16 +90,28 @@ CITY_CODES: dict[int, str] = {
     9700: "הוד השרון",
     70:   "אשדוד",
     7100: "אשקלון",
-    3780: "ביתר עלית",
+    3780: "ביתר עילית",
     3570: "אריאל",
     874:  "מגדל העמק",
     2006: "כנות",
     2620: "קריית אונו",
     681:  "גבעת שמואל",
-    171:  "פרדסיה",
-    195:  "קדימה",
+    171:  "פרדסייה",
+    195:  "קדימה-צורן",
     246:  "נתיבות",
     31:   "אופקים",
+    104:  "מזרע",
+    346:  "גליל ים",
+    386:  "בני דרור",
+    587:  "סביון",
+    1061: "נצרת עילית",
+    1139: "כרמיאל",
+    1167: "קיסריה",
+    2100: "טירת כרמל",
+    2530: "באר יעקב",
+    6800: "קרית אתא",
+    8200: "קרית מוצקין",
+    9400: "יהוד",
 }
 
 # Handles both old and new Cerberus PriceFull filename formats.
