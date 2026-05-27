@@ -85,8 +85,8 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 
 ## 📊 Current Production State
 
-- **7 chains** scraping daily: Shufersal, Rami Levy, Osher Ad, Victory, Yochananof, Keshet, Carrefour — ✅ ALL working from Kamatera Tel Aviv IP as of May 17, 2026 (geo-block resolved)
-- **58 stores across 14 cities**: Ashdod, Be'er Sheva, Hadera, Haifa, Jerusalem, Kfar Saba, Migdal HaEmek, Nahariya, Netanya, Akko, Kiryat Bialik, Rishon LeZion, Ramat Gan, Tel Aviv (verified from live city dropdown May 24, 2026). Note: Bnei Brak does NOT appear in the live dropdown despite being in earlier handoff drafts — open question for 9d-2 (Carrefour/Mega has zero Bnei Brak presence, but other chains should; may be a city_norm gap).
+- **8 chains** in cron: Shufersal, Rami Levy, Osher Ad, Victory, Yochananof, Keshet, Carrefour, Tiv Taam — ✅ 7 chains ALL working from Kamatera Tel Aviv IP as of May 17, 2026 (geo-block resolved); Tiv Taam added 9d-3 (46 stores in active_stores.yaml, first scrape at next cron run)
+- **58 stores across 14 cities** (7-chain baseline; verified from live city dropdown May 24, 2026) + **46 Tiv Taam stores** added 9d-3, pending first scrape. Note: Bnei Brak does NOT appear in the live dropdown despite being in earlier handoff drafts — open question for 9d-2 (Carrefour/Mega has zero Bnei Brak presence, but other chains should; may be a city_norm gap).
 - **~430,000 prices** as of May 17, 2026 full cron run
 - **Cron runtime**: 3 min 31 sec (down from ~90 min on Railway US-West — 25× improvement via bulk inserts + localhost Postgres + Israeli IP)
 - **Verification gate**: `active_stores.yaml` (verified to publish PriceFull) is what cron uses; `scheduled_stores.yaml` is the wish-list. See `db/verification_report_9d1.md` for excluded stores.
@@ -118,6 +118,7 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 | **9g** | **Scraper performance + full Railway → Kamatera migration** | ✅ Bulk inserts (9g-1). Scraper + Postgres migrated to Kamatera (9g Phases 2-6). FastAPI web service migrated to Kamatera with nginx + Let's Encrypt (9g Phase 7). Railway fully decommissioned. Cron 3m31s, 7 chains, all geo-blocks resolved. |
 | **9k** | Rami Levy split-store reconciliation | ✅ 14 Rami Levy stores existed as duplicate stores rows (sub_chain_id='1' legacy + '001' canonical), prices split. Merged onto '001', 89,298 duplicate price rows removed, 1 stale Shufersal ONLINE duplicate cleaned. No scraper code change needed (_pad_store_id from 9j-followup already prevents recurrence). |
 | **City-data fix** | store→city correction | ✅ Victory wrote full store name into city column; Yochananof name-guessing picked streets. 17 stores corrected in DB (9 via override map, 8 Yafo variants). Added STORE_CITY_OVERRIDES in city_names.py + 'תל אביב יפו'/'יפו' normalization. Deployed. |
+| **9d-3** | Shufersal per-store fetch + Tiv Taam onboarding | ✅ Shufersal global page-scan eliminated; per-store fetch (1 req/store, same shape as all other chains). TivTaam Cerberus scraper shipped: 46/46 stores verified, 0 city NULLs, wired as 8th chain in cron. CITY_CODES: 12 new MOI codes + 7 spelling/name overrides. King Store / Paz brands (freshmarket) / Dor Alon deferred — see 9d-3 session notes. |
 
 ---
 
@@ -207,7 +208,7 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
 | **9g-2** (deferred) | **Parallel chain execution** | Skipped after 9g-1 results. Sequential cron now 3m31s; parallelism would save ~2.8 min. Low ROI until something specific unblocks it. Revisit when full cron pressure returns. |
 | 9e (rescoped) | StoreNext FREE branch CSV ingestion | Original 9e premise (paid product catalog) dead — StoreNext paid tier rejected (NIS 30K one-time, May 2026). Free CSV branch lists at `storenext.co.il/תמיכה-ושירות/` remain usable. Rescoped to: ingest free branch CSVs only into `chain_stores_registry` table with sub-format classification (Sheli/Deal/Express/Yesh/Universe/BE for Shufersal; similar for others). Refactor Phase B selection to be format-aware. Solves Shufersal sub-chain heterogeneity systematically. No longer urgent since verification gate (9d-1) already prevents silent failures — quality-of-life, not blocker. |
 | 9d-2 | City expansion Phase 2 | Remaining 12 cities >100K pop (Petah Tikva, Netanya, Holon, Ramat Gan, Ashkelon, Rehovot, Bat Yam, Beit Shemesh, Kfar Saba, Herzliya, Modi'in). Target ~216 stores total. **Requires 9g first** — running 216-store cron at current 1.5min/store = 5+ hours. |
-| 9d-3 | City expansion Phase 3 | 50K+ cities (~25-30 more). Target ~540 stores. |
+| 9d-4 | City expansion Phase 3 | 50K+ cities (~25-30 more). Target ~540 stores. |
 | **stores table data hygiene** | **Add format guard to `sub_chain_id` / `store_id`** | Rami Levy split (was `sub='1'` vs `'001'`) resolved in 9k; Carrefour `store_id` padding resolved in 9j-followup. base.py lookup now routes through `_pad_store_id` (9m-followup, commit 0812bdc) — a drifted yaml store_id resolves correctly instead of silently failing. A CHECK constraint on the stores table is now optional/nice-to-have, no longer urgent. |
 | Promotions + price history | Parse Promo XML files, build history charts | Sample Promo XML files captured in 9d-1 for future analysis. Requires sufficient daily snapshots first. |
 | Google OAuth | Wire up deferred-from-9b option | Requires Google Cloud Console OAuth client setup |
@@ -289,6 +290,50 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
    repeating past mistakes.
 
 - **One chat = one session** — Long conversations balloon in token cost (cumulative history is re-read every turn, so turn 60 of a chat costs much more than turn 5 of a new one). At natural breakpoints (end of session, deploy verified, phase complete), START A FRESH CHAT and paste handoff.md as the first message. Yesterday's debugging context isn't useful for today's feature work — it's just expensive baggage. Especially: avoid trying to squeeze a new session into an existing long chat just because we're already talking. Lesson learned in 9c when token budget hit limits faster than expected during Phase 2.
+
+### Operating Policies (codified 9d-3 — apply to every new session)
+
+**A. Investigate the source on the web BEFORE designing a workaround.**
+When a task needs information we don't have — an endpoint's behavior, a portal's
+structure, what data a chain publishes — Claude does NOT reverse-engineer alone.
+Claude first asks Eltzur to check the source on the web (portal page, dropdown,
+published credentials, docs). Proven in 9d-3: the Shufersal store dropdown and
+the gov.il credentials list each replaced a complex workaround with a five-minute
+look at the actual website. Default order: identify unknown → ask Eltzur to check
+the source → design against real data. Cheaper for both sides, and humans bring
+lateral-thinking AI structurally lacks.
+
+**B. CITY_CODES policy — see comment in cerberus.py.**
+Real municipalities only. Never regional councils (מועצה אזורית). Never
+bulk-import locality.xls (it mixes cities and regional councils). Authoritative
+sources: C:\scrp\data\locality.xls (MOI master) and Israel Post's
+סמל_ישוב_דואר_ישראל.pdf. DO NOT use kod_yeshuvim_02.xls — it's the CBS
+internal serial system, incompatible number space.
+
+**C. CC's "summary instead of data" pattern — always ask for the raw data.**
+CC consistently substitutes a confident summary for the raw data it was asked to
+produce. Examples from 9d-3: pf_rows[0] (skipped picking newest), "157 doralon
+stores, ship it" (hid city-coverage issue), the locality.xls "wrong code system"
+verdict (one sheet, didn't check others), "Nahal Sorek MOI dual-name situation"
+(hallucinated explanation), three rounds of Fresh Market / Tiv Taam summaries
+without tables. When CC sends a summary, ASK FOR THE RAW DATA explicitly and
+don't approve until you see it. Use file-redirect (`> outfile.txt`) when stdout
+truncates.
+
+**D. CC file-read collapse — ctrl+o expands it.**
+When CC reads a file or produces long output, the result often collapses to
+"[Read 1 file]" in the VS Code display. The bytes are still there — pressing
+ctrl+o in the CC pane expands them. If CC's third reply on the same ask still
+has no data, suspect a collapsed read before suspecting CC.
+
+**E. PowerShell stderr handling.**
+PowerShell treats any stderr output (including Python's INFO logs) as a
+NativeCommandError and shows it in red. Not a failure — judge scripts by stdout.
+
+**F. Hot-path discipline (4 clean commits in 9d-3):**
+Read-and-report-STOP on scraper hot paths. Verify mechanism via read-only script
+before adding to cron. Multi-stage prompts with STOPs between stages. Single
+coherent commit at the end. Worked for both Shufersal and Tiv Taam.
 
 ## 🔗 External Data Source Status
 
@@ -867,73 +912,122 @@ Per-chain freshness (`/freshness` endpoint + FreshnessStrip) reads `MAX(run_at)`
 - Carrefour store-ID mismatch: may be metric artifact — confirm with per-store metric first
 - 9d-2 scoping report saved at `db/scoping_report_9d2.md`
 
-### Session 9d-3 (May 27, 2026) — Shufersal Per-Store Fetch Rewrite
+### Session 9d-3 (May 27, 2026) — Shufersal Per-Store Fetch + Tiv Taam Chain
 
 **Priority 4 — DONE (Shufersal page-scan eliminated, not just optimized):**
 
-The original P4 task was "build a page-scan cache." It turned out a cache was
-already in shufersal.py (undocumented). More importantly — the whole approach
-was replaced. Eltzur noticed the Shufersal portal page has a STORE DROPDOWN.
-DevTools confirmed the store selector posts a clean GET param:
+The original P4 task was "build a page-scan cache." A cache was already in
+shufersal.py (undocumented). More importantly — the whole approach was
+replaced. Eltzur noticed the Shufersal portal has a STORE DROPDOWN. DevTools
+confirmed the selector posts a clean GET:
   GET /FileObject/UpdateCategory?catID=0&storeId={N}&sort=Time&sortdir=DESC
 returns ONLY that store's files (~6-10 rows) as the same HTML table the
 existing parser already handles. Same UpdateCategory endpoint the scraper
 already used — nobody had tried the storeId param.
 
-Result: the global-feed page-walk is obsolete. Shufersal now fetches per-store,
-one request per store, flat as the chain grows — same shape as the other 6
-chains. Shufersal is no longer the weird one.
+Shufersal now fetches per-store, one request per store, flat as the chain
+grows — same shape as the other chains. No longer the weird one.
 
 Changes (scraper/shufersal.py, commit 4c70a1d):
 - build_pricefull_index rewritten: loops target store IDs, one _fetch_url per
   store via ?storeId=N. start_page param kept (ignored) for call-site compat.
-- _fetch_url helper extracted (parse logic verbatim from old _fetch_raw_page);
-  _fetch_raw_page is now a one-line delegator (still used by load_stores).
-- Newest PriceFull picked via max(pf_rows, key=filename) — Shufersal publishes
-  two PriceFull/day (03:00 + a republish ~04:31). REVIEW CATCH: CC first used
-  pf_rows[0] trusting server sort; the server sorts the full mixed file list,
-  not the PriceFull subset — [0] grabbed the STALE 03:00 file. Fixed to max().
-- DELETED: page-scan cache entirely — _CACHE_FILE, _load/_save_cached_start_page,
-  _CACHE_MARGIN, _DEFAULT_START_PAGE, the 200-page safety cap, the page loop.
-  .shufersal_cache.json on disk is now dead, can be deleted manually.
-- load_stores UNCHANGED — still page-walks for store name/city metadata. Folding
-  that into the per-store path is a deferred follow-up (see below).
+- _fetch_url helper extracted; _fetch_raw_page is a one-line delegator
+  (still used by load_stores).
+- Newest PriceFull picked via max(pf_rows, key=filename). REVIEW CATCH:
+  CC first used pf_rows[0] trusting server sort — server sorts the full
+  mixed file listing, not the PriceFull subset, so [0] grabbed the STALE
+  03:00 file instead of the 04:31 republish. Fixed to max().
+- DELETED: the page-scan cache entirely — _CACHE_FILE, _load/_save_cached_
+  start_page, _CACHE_MARGIN, _DEFAULT_START_PAGE, safety cap, page loop.
+  .shufersal_cache.json on disk is dead, can be deleted manually.
+- load_stores UNCHANGED — still page-walks for store name/city metadata.
+  Folding into per-store path is a deferred follow-up.
 
-Verification (scripts/verify_shufersal_pricefull.py, read-only, 17 stores):
-- 17/17 FOUND. 12/12 existing active stores → rewrite breaks nothing.
-- Shufersal 014 (דיל ברנע אשקלון) + 018 (דיל חולון קרן היסוד) verified, added
-  to active_stores.yaml (commit 206a562). 9d-2's cap-false-negative suspicion
-  confirmed correct on both.
-- Sub-format spot-check: 318 (אקספרס), 270 (BE), 035 (יוניברס) all FOUND.
-  The handoff's old assumption that Shufersal sub-formats don't publish
-  PriceFull is WRONG across the board — אקספרס, BE, יוניברס all publish.
+Verification: 17/17 stores FOUND. 12 existing actives + 014/018 (verified
+9d-2 deferred items, added to active_stores.yaml, commit 206a562) + spot-
+check of 318 (אקספרס), 270 (BE), 035 (יוניברס) — all FOUND. The handoff's
+old assumption that Shufersal sub-formats (אקספרס/BE/יוניברס) don't publish
+PriceFull is WRONG across the board — they all publish.
 
-**De-risked and ready — TOP of next-session work:**
-- Shufersal 270-store verification sweep. Eltzur captured the COMPLETE branch
-  list from the portal store dropdown (one Console one-liner) — 270 branches,
-  id→name, all sub-formats — saved as shufersal_branch_list.csv. Combined with
-  the per-store fetch (now shipped) and the spot-check result (sub-formats
-  publish), a full sweep of all 270 to bucket which publish PriceFull is now
-  low-risk, mechanical work. Likely a large active_stores.yaml coverage win.
-  This supersedes the old "dedicated Shufersal sub-format session."
-- Follow-up: fold load_stores into the per-store path (every per-store response
-  already carries the branch name) — retires the last global-feed page-walk.
+**Priority 5 — DONE for Tiv Taam (deferred for others, see below):**
 
-**OPERATING NOTE (new):** PowerShell treats ANY stderr output as a
-NativeCommandError and shows it in red. Python's logging writes INFO lines to
-stderr by default, so any CC script that logs throws a red error even on full
-success. NOT a failure — judge scripts by stdout, not PowerShell's error object.
+Probe of four candidate chains via published gov-portal credentials (Tiv Taam,
+AM:PM/doralon, Fresh Market, King Store):
+- Tiv Taam, AM:PM, Fresh Market: all Cerberus portal (url.publishedprices.co.il),
+  username-only auth — ~5-line subclasses of CerberusScraper.
+- King Store: bina-projects platform (kingstore.binaprojects.com) — separate
+  portal, no scraper for it yet.
 
-**Still deferred (unchanged from 9d-2, lower priority than the 270-sweep):**
-- Shufersal load_stores consolidation (see above).
-- Carrefour non-publishers: store 6, 183, 191; Yochananof 073 — re-check.
-- CITY_VARIANTS cleanup (זכרון / זכרון יעקב canonical).
-- Freshness-strip footnote color: text-gray-300 too faint, bump to gray-400/500.
-- Rotate scrp_app DB password.
+Tiv Taam SHIPPED (commit 6f234b4):
+- chain_id 7290873255550, 46 retail stores (53 in Stores XML, minus 7 ליקוט
+  warehouses: 502, 503, 512, 514, 515, 519, 523).
+- scraper/tivtaam.py — 5-line subclass.
+- scraper/registry.py — wired into the chain dictionary (this is where new
+  chains get registered; pattern for future additions).
+- active_stores.yaml + scheduled_stores.yaml — both updated.
+- Verification: 46/46 PriceFull FOUND, 53/53 cities resolved, 0 NULLs.
 
-**GS1 — still a separate workstream, not started. Needs its own scoping session.**
+CITY_CODES rebuilt from official sources (same commit):
+- 12 new MOI codes added (104=מזרע, 346=גליל ים, 386=בני דרור, 587=סביון,
+  1061=נצרת עילית, 1139=כרמיאל, 1167=קיסריה, 2100=טירת כרמל, 2530=באר יעקב,
+  6800=קרית אתא, 8200=קרית מוצקין, 9400=יהוד).
+- 7 spelling/name overrides applied from the authoritative Israel Post
+  locality PDF in C:\scrp\data\ — typo fixes (3780 ביתר עלית→עילית; 171
+  פרדסיה; 6400 הרצליה; 9100 נהריה) and official compound names (195
+  קדימה→קדימה-צורן; 1200 מודיעין→מודיעין-מכבים-רעות; 5000 תל אביב→תל אביב-יפו).
+- POLICY COMMENT added above CITY_CODES: NEVER include regional councils
+  (מועצה אזורית) like נחל שורק. Only shopper-recognizable municipalities.
+  Do NOT bulk-import locality.xls — it mixes cities and regional councils.
 
-**Priority 5 (new chains — Tiv Taam / King Store portal probe) — not started.**
+Locality file caveats discovered this session:
+- C:\scrp\data\kod_yeshuvim_02.xls is the CBS internal serial code system,
+  NOT the Ministry of Interior locality codes used by gov.il price portals.
+  Different number space. DO NOT USE for CITY_CODES work.
+- C:\scrp\data\locality.xls IS the correct MOI master, but labels code 31
+  as "נחל שורק" (regional council) — the price portals use 31 for אופקים
+  (the actual city). cerberus.py keeps the curated value 31=אופקים.
+- Israel Post's סמל_ישוב_דואר_ישראל.pdf cross-confirms the MOI codes.
+
+**Deferred (in priority order for next session):**
+
+1. **King Store (bina-projects platform).** New portal — no scraper exists.
+   Needs a probe of the portal's data shape: is it a clean file-listing
+   (build new base class, moderate effort, reusable for "several others"
+   that use bina-projects per Eltzur) or JS-rendered HTML (defer like Hazi
+   Hinam). Probe is its own session opener.
+
+2. **Paz brands (freshmarket username) + Dor Alon (doralon username) —
+   joint "brand-filtering session."** Both are Cerberus-clean technically,
+   but both publish multiple brands under one chain registration:
+   - freshmarket (7290876100000): 45 stores across סופר דוש, מחסני מזון,
+     סופר כרמים, חביב, פרש מרקט, טיפ טופ — six different brands.
+   - doralon (7290492000005): 157 stores including AM:PM (urban) AND
+     Alonit (highway petrol-station convenience). ~76 city codes not in
+     CITY_CODES at probe time.
+   Both need product judgment on which brands to include + manual cross-
+   reference to the brands' own website branch finders before any subclass
+   is built. Bundling them: same problem, same pattern.
+
+3. **Shufersal 270-store verification sweep.** Eltzur captured the full
+   branch list from the portal store dropdown — saved as
+   shufersal_branch_list.csv. With per-store fetch shipped and sub-formats
+   confirmed publishing, sweeping all 270 to bucket which publish PriceFull
+   is now low-risk mechanical work. Likely a big active_stores.yaml win.
+   Supersedes the old "dedicated sub-format session."
+
+4. **Shufersal load_stores consolidation** — fold into per-store path
+   (every per-store response already carries the branch name).
+
+5. **Carrefour non-publishers** (store 6, 183, 191; Yochananof 073) — re-check.
+
+6. **CITY_VARIANTS cleanup** (זכרון/זכרון יעקב canonical).
+
+7. **Freshness-strip footnote color** — text-gray-300 too faint, bump to
+   gray-400/500.
+
+8. **Rotate scrp_app DB password.**
+
+**GS1 — still a separate workstream, not started.**
 
 ---
 
