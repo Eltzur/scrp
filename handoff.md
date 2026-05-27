@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: May 25, 2026 (end of session 9n)
+> Last updated: May 27, 2026 (end of session 9d-3)
 
 ---
 
@@ -866,6 +866,76 @@ Per-chain freshness (`/freshness` endpoint + FreshnessStrip) reads `MAX(run_at)`
 - Hostinger upload of `web/deploy.zip` (FreshnessStrip fix goes live on upload)
 - Carrefour store-ID mismatch: may be metric artifact — confirm with per-store metric first
 - 9d-2 scoping report saved at `db/scoping_report_9d2.md`
+
+### Session 9d-3 (May 27, 2026) — Shufersal Per-Store Fetch Rewrite
+
+**Priority 4 — DONE (Shufersal page-scan eliminated, not just optimized):**
+
+The original P4 task was "build a page-scan cache." It turned out a cache was
+already in shufersal.py (undocumented). More importantly — the whole approach
+was replaced. Eltzur noticed the Shufersal portal page has a STORE DROPDOWN.
+DevTools confirmed the store selector posts a clean GET param:
+  GET /FileObject/UpdateCategory?catID=0&storeId={N}&sort=Time&sortdir=DESC
+returns ONLY that store's files (~6-10 rows) as the same HTML table the
+existing parser already handles. Same UpdateCategory endpoint the scraper
+already used — nobody had tried the storeId param.
+
+Result: the global-feed page-walk is obsolete. Shufersal now fetches per-store,
+one request per store, flat as the chain grows — same shape as the other 6
+chains. Shufersal is no longer the weird one.
+
+Changes (scraper/shufersal.py, commit 4c70a1d):
+- build_pricefull_index rewritten: loops target store IDs, one _fetch_url per
+  store via ?storeId=N. start_page param kept (ignored) for call-site compat.
+- _fetch_url helper extracted (parse logic verbatim from old _fetch_raw_page);
+  _fetch_raw_page is now a one-line delegator (still used by load_stores).
+- Newest PriceFull picked via max(pf_rows, key=filename) — Shufersal publishes
+  two PriceFull/day (03:00 + a republish ~04:31). REVIEW CATCH: CC first used
+  pf_rows[0] trusting server sort; the server sorts the full mixed file list,
+  not the PriceFull subset — [0] grabbed the STALE 03:00 file. Fixed to max().
+- DELETED: page-scan cache entirely — _CACHE_FILE, _load/_save_cached_start_page,
+  _CACHE_MARGIN, _DEFAULT_START_PAGE, the 200-page safety cap, the page loop.
+  .shufersal_cache.json on disk is now dead, can be deleted manually.
+- load_stores UNCHANGED — still page-walks for store name/city metadata. Folding
+  that into the per-store path is a deferred follow-up (see below).
+
+Verification (scripts/verify_shufersal_pricefull.py, read-only, 17 stores):
+- 17/17 FOUND. 12/12 existing active stores → rewrite breaks nothing.
+- Shufersal 014 (דיל ברנע אשקלון) + 018 (דיל חולון קרן היסוד) verified, added
+  to active_stores.yaml (commit 206a562). 9d-2's cap-false-negative suspicion
+  confirmed correct on both.
+- Sub-format spot-check: 318 (אקספרס), 270 (BE), 035 (יוניברס) all FOUND.
+  The handoff's old assumption that Shufersal sub-formats don't publish
+  PriceFull is WRONG across the board — אקספרס, BE, יוניברס all publish.
+
+**De-risked and ready — TOP of next-session work:**
+- Shufersal 270-store verification sweep. Eltzur captured the COMPLETE branch
+  list from the portal store dropdown (one Console one-liner) — 270 branches,
+  id→name, all sub-formats — saved as shufersal_branch_list.csv. Combined with
+  the per-store fetch (now shipped) and the spot-check result (sub-formats
+  publish), a full sweep of all 270 to bucket which publish PriceFull is now
+  low-risk, mechanical work. Likely a large active_stores.yaml coverage win.
+  This supersedes the old "dedicated Shufersal sub-format session."
+- Follow-up: fold load_stores into the per-store path (every per-store response
+  already carries the branch name) — retires the last global-feed page-walk.
+
+**OPERATING NOTE (new):** PowerShell treats ANY stderr output as a
+NativeCommandError and shows it in red. Python's logging writes INFO lines to
+stderr by default, so any CC script that logs throws a red error even on full
+success. NOT a failure — judge scripts by stdout, not PowerShell's error object.
+
+**Still deferred (unchanged from 9d-2, lower priority than the 270-sweep):**
+- Shufersal load_stores consolidation (see above).
+- Carrefour non-publishers: store 6, 183, 191; Yochananof 073 — re-check.
+- CITY_VARIANTS cleanup (זכרון / זכרון יעקב canonical).
+- Freshness-strip footnote color: text-gray-300 too faint, bump to gray-400/500.
+- Rotate scrp_app DB password.
+
+**GS1 — still a separate workstream, not started. Needs its own scoping session.**
+
+**Priority 5 (new chains — Tiv Taam / King Store portal probe) — not started.**
+
+---
 
 ### Session 9d-2 (May 25, 2026) — Per-Store Coverage Metric [Priority 1 complete]
 
