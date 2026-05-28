@@ -68,8 +68,12 @@ def run_chain(chain_id: str, n_stores: int, conn, store_ids: list | None = None)
 
 
 def ping_supabase() -> None:
-    """Ping Supabase REST endpoint to reset its 7-day inactivity timer.
-    Non-fatal — logs result but never raises. Skips gracefully when env vars absent."""
+    """Ping Supabase Data API (a real Postgres read) to reset its 7-day
+    inactivity timer. The old /auth/v1/health endpoint returned 200 without
+    touching Postgres, so it did NOT count as activity and the project paused
+    anyway (confirmed May 2026). This reads one row from public.keepalive via
+    /rest/v1/, which is a genuine DB read. Non-fatal — logs result, never
+    raises. Skips gracefully when env vars absent."""
     url = os.environ.get("SUPABASE_URL", "").rstrip("/")
     key = os.environ.get("SUPABASE_ANON_KEY", "")
     if not url or not key:
@@ -78,12 +82,14 @@ def ping_supabase() -> None:
     try:
         import requests as _requests
         r = _requests.get(
-            f"{url}/auth/v1/health?apikey={key}",
+            f"{url}/rest/v1/keepalive?select=id&limit=1",
             headers={"apikey": key, "Authorization": f"Bearer {key}"},
             timeout=10,
         )
-        if r.ok:
-            log.info(f"Supabase keep-alive ping OK ({r.status_code}).")
+        if r.ok and r.json():
+            log.info(f"Supabase keep-alive ping OK ({r.status_code}) — DB read confirmed.")
+        elif r.ok:
+            log.warning(f"Supabase keep-alive returned {r.status_code} but empty body — DB read NOT confirmed.")
         else:
             log.warning(f"Supabase keep-alive ping returned {r.status_code} — project may be paused.")
     except Exception as exc:
