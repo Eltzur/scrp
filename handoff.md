@@ -119,6 +119,7 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 | **9k** | Rami Levy split-store reconciliation | ✅ 14 Rami Levy stores existed as duplicate stores rows (sub_chain_id='1' legacy + '001' canonical), prices split. Merged onto '001', 89,298 duplicate price rows removed, 1 stale Shufersal ONLINE duplicate cleaned. No scraper code change needed (_pad_store_id from 9j-followup already prevents recurrence). |
 | **City-data fix** | store→city correction | ✅ Victory wrote full store name into city column; Yochananof name-guessing picked streets. 17 stores corrected in DB (9 via override map, 8 Yafo variants). Added STORE_CITY_OVERRIDES in city_names.py + 'תל אביב יפו'/'יפו' normalization. Deployed. |
 | **9d-3** | Shufersal per-store fetch + Tiv Taam onboarding | ✅ Shufersal global page-scan eliminated; per-store fetch (1 req/store, same shape as all other chains). TivTaam Cerberus scraper shipped: 46/46 stores verified, 0 city NULLs, wired as 8th chain in cron. CITY_CODES: 12 new MOI codes + 7 spelling/name overrides. King Store / Paz brands (freshmarket) / Dor Alon deferred — see 9d-3 session notes. |
+| **9d-4** | King Store (bina-projects) + Supabase keep-alive fix | ✅ King Store live as 9th chain (chain_id 7290058108879): 28 publishing stores, 148,016 prices, Arab-sector cities. BinaProjectsScraper reusable base class (ZIP-not-gzip fix, 3-endpoint JSON portal). Supabase ping fixed to hit real Postgres via /rest/v1/. scripts/run_one.py added. |
 
 ---
 
@@ -288,6 +289,10 @@ Tried during earlier catalog enrichment exploration. Abandoned due to poor Israe
    All prompts in copy-paste code blocks. Keep manual effort to a minimum.
 3. **Read previous chats for context** before starting work, to avoid
    repeating past mistakes.
+4. **Handoff maintenance is CC's job.** CC updates handoff.md, commits, and
+   pushes automatically at session end (and when asked mid-session). The chat
+   assistant drafts the entry content; CC owns writing it to the file and
+   committing — it's faster and cleaner.
 
 - **One chat = one session** — Long conversations balloon in token cost (cumulative history is re-read every turn, so turn 60 of a chat costs much more than turn 5 of a new one). At natural breakpoints (end of session, deploy verified, phase complete), START A FRESH CHAT and paste handoff.md as the first message. Yesterday's debugging context isn't useful for today's feature work — it's just expensive baggage. Especially: avoid trying to squeeze a new session into an existing long chat just because we're already talking. Lesson learned in 9c when token budget hit limits faster than expected during Phase 2.
 
@@ -911,6 +916,81 @@ Per-chain freshness (`/freshness` endpoint + FreshnessStrip) reads `MAX(run_at)`
 - Hostinger upload of `web/deploy.zip` (FreshnessStrip fix goes live on upload)
 - Carrefour store-ID mismatch: may be metric artifact — confirm with per-store metric first
 - 9d-2 scoping report saved at `db/scoping_report_9d2.md`
+
+### Session 9d-4 (May 28, 2026) — King Store (bina-projects) + Supabase Keep-alive Fix
+
+### ⚠️ SEVERE — RTL IS NEVER A BUG. STOP FLAGGING IT.
+Across multiple sessions the chat assistant has repeatedly raised false
+alarms that Hebrew strings are "reversed/corrupted" in code, yaml, DB
+names, or repr() output. EVERY instance has been a false positive — a
+terminal/paste RTL rendering artifact, never a real data bug. Hebrew in
+repr/screenshots/pasted output frequently APPEARS reversed; the underlying
+bytes are correct. Do NOT flag reversed/corrupted Hebrew as a bug or
+suspected bug. Do NOT propose codepoint rebuilds, byte checks, or
+"just to be safe" verifications. If a string parses and the app runs, it
+is correct. Address ONLY if a genuine reversed-text problem is seen in
+PRODUCTION on the live site. (This wasted real time in 9d-4.)
+
+**King Store — LIVE (9th chain)**
+- chain_id 7290058108879 (confirmed live from filenames; the old 9j scar
+  mislabeling this as Rami Levy is RESOLVED — it is genuinely King Store's).
+- Coverage: Arab-sector + northern/mixed towns no other chain has.
+- Production Postgres: 28 publishing stores, 148,016 prices, all cities
+  resolved (050 אינטרנט intentionally NULL). Rides daily cron (in both
+  active_stores.yaml and scheduled_stores.yaml; cron reads active as CONFIG).
+- 31 stores in yaml; 338 (small village) deliberately excluded.
+
+**bina-projects — REUSABLE BASE CLASS (the real prize)**
+- scraper/binaprojects.py — BinaProjectsScraper(ChainScraper). Several other
+  chains use this portal platform; adding one = ~4-line subclass (BASE_URL,
+  CHAIN_NAME, CHAIN_ID). See scraper/kingstore.py.
+- 3 JSON endpoints, all POST:
+  - {BASE}/Select_Store.aspx (empty) -> [{"Kod","Nm"}]
+  - {BASE}/MainIO_Hok.aspx (form WStore="",WDate="",WFileType="4") -> file
+    list. WFileType: 0=all 1=stores 2=prices 3=promos 4=PriceFull 5=PromoFull.
+    Returns FULL HISTORY (~1000 files); order unreliable.
+  - {BASE}/Download.aspx?FileNm=<name> (empty) -> [{"SPath":"<gz url>"}] (LIST, take [0])
+- Newest-per-store: select by the 12-digit YYYYMMDDHHMM stamp in FileNm, NOT
+  the DateFile display string (display doesn't sort across days).
+- KEY GOTCHA: bina files are ZIP (magic b'PK'), NOT gzip, despite .gz name.
+  binaprojects._decompress overrides base to detect magic bytes; base.py
+  untouched (other chains still gzip).
+
+**Supabase keep-alive — FIXED**
+- Old ping hit /auth/v1/health → 200 without touching Postgres → never
+  counted as activity; project paused despite daily "ping OK" logs.
+- Now reads 1 row from public.keepalive via /rest/v1/ (real DB read);
+  success requires non-empty body. New table public.keepalive (1 dummy row,
+  anon SELECT via RLS + explicit grant, future-proof for Oct 30 Data API
+  change). No .env change. Rides daily cron. Verified: "DB read confirmed."
+
+**Tooling added**
+- scripts/run_one.py — standalone single-chain runner:
+  `python -m scripts.run_one <chain_id> [--yaml active|scheduled]`. Mirrors
+  cron_main setup; no cron logic / no Supabase ping / one chain. DATABASE_URL
+  unset = local sqlite (safe); set from systemd env = Postgres.
+
+**KNOWN ISSUES / DEFERRED**
+- SCHEMA DRIFT: fetch_store_runs exists ONLY in Postgres migration
+  9d2_fetch_store_runs.sql, never added to schema.sql → local sqlite on any
+  machine lacks it; init_db won't create it. Fix: add it (+ fetch_runs/views)
+  to schema.sql. Worked around manually on Kamatera prices.db in 9d-4.
+- King Store load_stores inserts ALL portal stores (33), not just yaml's 31
+  → store rows 000 and 338 exist with no prices (harmless empties). Add a
+  target filter to load_stores if the table should match the yaml exactly.
+- New cities (אום אל פחם, פוריידיס, כפר קאסם, רהט) set via override but not in
+  CITY_VARIANTS — filtering works, but won't alias-group with other chains'
+  spellings. Future consolidation.
+- 2x .env backups (.env.save, .env.save.1) untracked in repo root — contain
+  secrets. Clean up; confirm .gitignore covers .env*.
+- VM "System restart required" — reboot in a maintenance window.
+
+**Commits (9d-4)**
+ea03cf5 Supabase cron fix · 71a335a bina base + KingStore + registry ·
+917c555 store lists · 70218d7 ZIP-not-gzip fix · 3304062 NULL-city overrides ·
+2c3d531 run_one.py · cfaa942 King Store city overrides (8 branches)
+
+---
 
 ### Session 9d-3 (May 27, 2026) — Shufersal Per-Store Fetch + Tiv Taam Chain
 
