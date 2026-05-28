@@ -16,9 +16,12 @@ Portal contract (3 JSON endpoints, all POST):
 Adding a new bina-projects chain = 4-line subclass (BASE_URL, CHAIN_NAME,
 CHAIN_ID).
 """
+import gzip
+import io
 import logging
 import re
 import time
+import zipfile
 
 from sqlalchemy import text
 
@@ -45,6 +48,24 @@ class BinaProjectsScraper(ChainScraper):
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/124.0.0.0 Safari/537.36"
         )
+
+    # ------------------------------------------------------------------
+    # Decompression — bina-projects files use ZIP despite the .gz name
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _decompress(gz_path):
+        raw = gz_path.read_bytes()
+        if raw[:2] == b'\x1f\x8b':            # gzip magic
+            return gzip.decompress(raw)
+        if raw[:2] == b'PK':                  # zip magic
+            with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                names = z.namelist()
+                if not names:
+                    raise ValueError("empty zip archive")
+                # bina-projects zips contain a single XML file
+                return z.read(names[0])
+        raise ValueError(f"unknown archive format, magic={raw[:4]!r}")
 
     # ------------------------------------------------------------------
     # Internal helpers
