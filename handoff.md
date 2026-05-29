@@ -120,6 +120,7 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 | **City-data fix** | store→city correction | ✅ Victory wrote full store name into city column; Yochananof name-guessing picked streets. 17 stores corrected in DB (9 via override map, 8 Yafo variants). Added STORE_CITY_OVERRIDES in city_names.py + 'תל אביב יפו'/'יפו' normalization. Deployed. |
 | **9d-3** | Shufersal per-store fetch + Tiv Taam onboarding | ✅ Shufersal global page-scan eliminated; per-store fetch (1 req/store, same shape as all other chains). TivTaam Cerberus scraper shipped: 46/46 stores verified, 0 city NULLs, wired as 8th chain in cron. CITY_CODES: 12 new MOI codes + 7 spelling/name overrides. King Store / Paz brands (freshmarket) / Dor Alon deferred — see 9d-3 session notes. |
 | **9d-4** | King Store (bina-projects) + Supabase keep-alive fix | ✅ King Store live as 9th chain (chain_id 7290058108879): 28 publishing stores, 148,016 prices, Arab-sector cities. BinaProjectsScraper reusable base class (ZIP-not-gzip fix, 3-endpoint JSON portal). Supabase ping fixed to hit real Postgres via /rest/v1/. scripts/run_one.py added. |
+| 9d-5 | 2026-05-28 | Shefa Birkat Hashem + Shuk Hayir (chains 10 & 11) onboarded via BinaProjectsScraper base class. 50 stores added, ~141K items in production Postgres. |
 
 ---
 
@@ -992,6 +993,94 @@ ea03cf5 Supabase cron fix · 71a335a bina base + KingStore + registry ·
 
 ---
 
+### Session 9d-5 — Shefa Birkat Hashem + Shuk Hayir onboarding (2026-05-28)
+
+**Scope pivot:** Session opened with Paz + Dor Alon brand-filtering as the
+locked priority. Eltzur surfaced two bina-projects portals (Shuk Hayir +
+Shefa Birkat Hashem) that were structurally identical to King Store (9d-4),
+so scope shifted to the cheaper, mechanical onboarding. Paz + Dor Alon
+deferred to a dedicated brand-filtering session.
+
+**Delivered:**
+
+- Two new chains live in production Postgres:
+  - **שפע ברכת השם** (chain_id 7290058134977) — 30 stores configured, 22
+    publishing PriceFull. Haredi-sector coverage: Beitar Ilit (8 stores),
+    Jerusalem (10), Beit Shemesh (3), Modi'in Ilit (2), Bnei Brak (2),
+    plus Givat Ze'ev, Elad, Tel Tzion, Netivot, Ofakim, Ashdod, Afula.
+    Items: 59,971. Coverage on /coverage: 73.3% (8 in-dropdown stores
+    don't publish PriceFull — kept in yaml for future-pickup).
+  - **שוק העיר** (chain_id 7290058148776) — 20 stores configured, 19
+    publishing. Mixed mainstream coverage: Ashkelon, Ashdod, Kiryat Gat,
+    Kfar Saba, Bnei Brak, Ramla, Holon, Timorim, Efrat, Netivot, Or
+    Akiva, Ra'anana, Hadera, Jerusalem. Store 304 = online fulfillment
+    hub (Ramot); 10 online duplicates (305, 307, 309, 311-314, 318, 319,
+    322) deliberately excluded. Items: 81,586. Coverage: 95.0%
+    (store 007 לב אשדוד intermittent).
+
+- Files added/modified (commit 44441b6):
+  - `scraper/shefabirkat.py` — new, 4-line subclass
+  - `scraper/shukhayir.py` — new, 4-line subclass
+  - `scraper/registry.py` — 2 imports + 2 SCRAPERS entries
+  - `scraper/active_stores.yaml` + `scraper/scheduled_stores.yaml` —
+    2 new chain blocks (30 + 20 store_ids each, identical in both files)
+  - `scraper/city_names.py` — 50 STORE_CITY_OVERRIDES entries (30 Shefa
+    + 20 Shuk Hayir), all hand-curated from chain branch lists provided
+    by Eltzur in `city_list_shefa_and_shuk_hayir.xlsx`
+
+- Production Postgres seeded via `scripts/run_one.py` against both chains
+  before commit (DATABASE_URL exported from `/home/dude/scrp/.env` —
+  systemd service uses EnvironmentFile=, not Environment=).
+- /coverage endpoint verified showing 11 chains, 242 stores configured,
+  229 loading 72h.
+- Frontend live smoke test: both chains appear in city dropdown, in price
+  comparison cards, in the all-chains count ("מחפש ב-11 רשתות").
+
+**Confirmed working patterns from 9d-4 (reusable for future bina chains):**
+
+1. BinaProjectsScraper base class is stable across 3 chains now (King
+   Store, Shefa, Shuk Hayir). Future bina onboardings = ~4 line subclass
+   + yaml block + STORE_CITY_OVERRIDES entries.
+2. ZIP-not-gzip magic-byte detection in `_decompress` handled all 3
+   chains correctly without modification.
+3. The "stores in dropdown but not in Stores XML" pattern is normal for
+   bina chains (King Store: 2, Shefa: 8) — they often publish PriceFull
+   anyway, so keep them in the yaml.
+4. `scripts/run_one.py` against local SQLite is the right pre-prod test;
+   reusing `DATABASE_URL` from systemd env file is the right prod seed.
+
+**Process learnings (added to operating notes):**
+
+- **Cheapersal (https://cheapersal.co.il)** is a competitor reference site
+  with full chain/branch/city coverage. Use as a market-spec for which
+  chains exist, how brands are split (e.g., Cheapersal separates AM:PM
+  from Alonit from Dor Alon — direct empirical answer to the Paz/Dor Alon
+  brand-filtering question), and what chains we haven't onboarded yet.
+  Add to general references; consult when scoping new chain waves.
+- **CC compact-summary screen** is NOT tool output — it's CC summarizing
+  its own context to itself when context fills up. If it appears,
+  immediately start a fresh CC chat. Pattern recognition cue: it begins
+  "● Compact summary" with a bulleted "Primary Request" / "Key Technical
+  Concepts" structure.
+- **PowerShell 5.1 `Set-Content -Encoding utf8` prepends a UTF-8 BOM**
+  that lands as a stray  at the start of commit subjects. Cosmetic only,
+  but for clean subjects use `Set-Content -Encoding utf8NoBOM` or
+  `[System.IO.File]::WriteAllText($path, $msg, [System.Text.UTF8Encoding]::new($false))`.
+  Do NOT amend + force-push to fix a BOM after the fact.
+- **Modi'in Ilit ≠ Modi'in-Maccabim-Re'ut.** These are two different
+  municipalities ~15km apart, with completely different demographics
+  (Haredi vs secular/mixed). Eltzur initially requested merging them in
+  CITY_VARIANTS; pushed back successfully. Same class of risk as the
+  Pardes Hanna-Karkur split caught in 9d-2. Future-self warning: never
+  merge cities sharing a name fragment without confirming they're the
+  same municipality.
+
+**Commit:** `44441b6` — "feat(scrapers): Shefa Birkat Hashem + Shuk Hayir
+(bina-projects, chains 10 & 11)" (note: BOM artifact on subject line,
+intentionally not amended).
+
+---
+
 ### Session 9d-3 (May 27, 2026) — Shufersal Per-Store Fetch + Tiv Taam Chain
 
 **Priority 4 — DONE (Shufersal page-scan eliminated, not just optimized):**
@@ -1068,46 +1157,55 @@ Locality file caveats discovered this session:
   (the actual city). cerberus.py keeps the curated value 31=אופקים.
 - Israel Post's סמל_ישוב_דואר_ישראל.pdf cross-confirms the MOI codes.
 
-**Deferred (in priority order for next session):**
+**Deferred queue (ranked by impact × readiness, top of list = next):**
 
-1. **King Store (bina-projects platform).** New portal — no scraper exists.
-   Needs a probe of the portal's data shape: is it a clean file-listing
-   (build new base class, moderate effort, reusable for "several others"
-   that use bina-projects per Eltzur) or JS-rendered HTML (defer like Hazi
-   Hinam). Probe is its own session opener.
+1. **CITY_VARIANTS cleanup** — alias-mapping pass. All surfaced live by
+   users in the city dropdown:
+   a) זכרון / זכרון יעקב → canonical "זכרון יעקב" (from 9d-2)
+   b) תל אביב / תל אביב יפו → canonical "תל אביב-יפו" (from 9d-5)
+   c) מודיעין → canonical "מודיעין-מכבים-רעות" (from 9d-5)
+   d) DO NOT merge מודיעין עילית — separate Haredi municipality (from 9d-5)
+   e) Audit dropdown for other split cities while in there.
+   Pure data work, zero scraper risk, immediate visible improvement.
 
-2. **Paz brands (freshmarket username) + Dor Alon (doralon username) —
-   joint "brand-filtering session."** Both are Cerberus-clean technically,
-   but both publish multiple brands under one chain registration:
-   - freshmarket (7290876100000): 45 stores across סופר דוש, מחסני מזון,
-     סופר כרמים, חביב, פרש מרקט, טיפ טופ — six different brands.
-   - doralon (7290492000005): 157 stores including AM:PM (urban) AND
-     Alonit (highway petrol-station convenience). ~76 city codes not in
-     CITY_CODES at probe time.
-   Both need product judgment on which brands to include + manual cross-
-   reference to the brands' own website branch finders before any subclass
-   is built. Bundling them: same problem, same pattern.
+2. **Search quality — "חלבי" bleed.** From session 9f: searching "חלב"
+   returns "חלבי" (kosher dairy marker) results. Tokenization / stop-word
+   fix. Affects every search on the live site.
 
-3. **Shufersal 270-store verification sweep.** Eltzur captured the full
-   branch list from the portal store dropdown — saved as
-   shufersal_branch_list.csv. With per-store fetch shipped and sub-formats
-   confirmed publishing, sweeping all 270 to bucket which publish PriceFull
-   is now low-risk mechanical work. Likely a big active_stores.yaml win.
-   Supersedes the old "dedicated sub-format session."
+3. **Bina-projects wave 2.** Base class validated 3×. Candidate chains
+   from Cheapersal cross-reference: זול ובגדול, מעיין 2000, סופר ברקת,
+   סופר יודה, פוליצר, סיטי מרקט, KT מרקט, יילו. Could batch 4-6 chains
+   in one session.
 
-4. **Shufersal load_stores consolidation** — fold into per-store path
-   (every per-store response already carries the branch name).
+4. **Shufersal 270-store sweep.** Currently tracking 14 of ~270 stores.
+   `shufersal_branch_list.csv` already captured. Largest single-step
+   coverage expansion available.
 
-5. **Carrefour non-publishers** (store 6, 183, 191; Yochananof 073) — re-check.
+5. **Paz + Dor Alon brand-filtering session.** Both publish multiple
+   brands under one chain_id. Cheapersal already separates these brands
+   (AM:PM / אלונית / סופר אלונית for Dor Alon; freshmarket / סופר חביב
+   / מחסני השוק variants for Paz) — use as empirical target. Operating
+   policy A: fetch each brand's real branch list first.
 
-6. **CITY_VARIANTS cleanup** (זכרון/זכרון יעקב canonical).
+**Lower-priority / housekeeping:**
 
-7. **Freshness-strip footnote color** — text-gray-300 too faint, bump to
-   gray-400/500.
+- Shufersal load_stores consolidation
+- Carrefour non-publishers re-check (store 6, 183, 191; Yochananof 073)
+- fetch_store_runs schema.sql drift fix
+- King Store load_stores target filter
+- .env.save / .env.save.1 cleanup
+- Kamatera VM reboot (System restart required)
+- Shefa coverage-calc fix — distinguish "configured but chain doesn't
+  publish PriceFull" from real misses, so /coverage doesn't penalize us
+  for chain decisions outside our control (would lift Shefa from 73.3%
+  to ~100% honestly)
+- GS1 scoping (separate workstream)
 
-8. **Rotate scrp_app DB password.**
+**General references:**
 
-**GS1 — still a separate workstream, not started.**
+- **Cheapersal** (https://cheapersal.co.il) — competitor site with full
+  chain/branch/city/items coverage. Consult when scoping new chain waves
+  or making brand-split decisions.
 
 ---
 
