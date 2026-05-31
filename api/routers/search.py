@@ -15,8 +15,8 @@ def _build_result(
     conn: Connection,
     limit: int,
     offset: int,
-    city: str | None,
-    chain_id: str | None,
+    city: list[str] | None,
+    chain_id: list[str] | None,
     compare_only: bool,
     group_by: Literal["chain", "store"] = "chain",
 ) -> SearchResult:
@@ -100,8 +100,8 @@ def search(
     q:        str           = Query(..., min_length=1, max_length=200, description="Product name or manufacturer (multi-word AND)"),
     limit:    int           = Query(30, ge=1, le=100, description="Max products returned"),
     offset:   int           = Query(0, ge=0, description="Pagination offset"),
-    city:     str | None    = Query(None, description="Filter to stores in this city"),
-    chain:    str | None    = Query(None, description="Filter to one chain_id"),
+    city:     list[str] | None   = Query(None, description="Filter to stores in these cities (repeat param for multiple)"),
+    chain:    list[str] | None   = Query(None, description="Filter to chain_ids (repeat param for multiple)"),
     group_by: Literal["chain", "store"] = Query("chain", description="Group results by chain or individual store"),
     conn:     Connection = Depends(get_db),
 ):
@@ -118,7 +118,7 @@ def compare(
     q:      str           = Query(..., min_length=1, max_length=200, description="Product name or manufacturer"),
     limit:  int           = Query(30, ge=1, le=100, description="Max products returned"),
     offset: int           = Query(0, ge=0, description="Pagination offset"),
-    city:   str | None    = Query(None, description="Filter to stores in this city"),
+    city:   list[str] | None  = Query(None, description="Filter to stores in these cities (repeat param for multiple)"),
     conn:   Connection = Depends(get_db),
 ):
     """

@@ -14,6 +14,17 @@ import { supabase } from '../lib/supabase';
 
 const http = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  paramsSerializer: (params) => {
+    const sp = new URLSearchParams();
+    for (const [key, val] of Object.entries(params)) {
+      if (Array.isArray(val)) {
+        val.forEach(v => sp.append(key, String(v)));
+      } else if (val != null) {
+        sp.set(key, String(val));
+      }
+    }
+    return sp.toString();
+  },
 });
 
 // Attach Supabase access token to every request when the user is logged in
@@ -28,15 +39,15 @@ http.interceptors.request.use(async (config) => {
 export interface SearchOpts {
   limit?: number;
   offset?: number;
-  city?: string | null;
-  chain?: string | null;
+  city?: string[] | null;
+  chain?: string[] | null;
   group_by?: 'chain' | 'store';
 }
 
 export interface CompareOpts {
   limit?: number;
   offset?: number;
-  city?: string | null;
+  city?: string[] | null;
 }
 
 export const searchProducts = (q: string, opts: SearchOpts = {}): Promise<SearchResult> =>

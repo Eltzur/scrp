@@ -99,25 +99,28 @@ WHERE icn.item_code IN :codes
 def fetch_prices(
     conn: Connection,
     barcodes: list[str],
-    city: str | None = None,
-    chain_id: str | None = None,
+    city: list[str] | None = None,
+    chain_id: list[str] | None = None,
     store_only: str | None = None,
 ) -> list[dict]:
     if not barcodes:
         return []
     sql = _PRICE_SQL
     params: dict = {"codes": tuple(barcodes)}
+    expanding = [bindparam("codes", expanding=True)]
     if city:
-        sql += " AND s.city_norm = :city"
-        params["city"] = normalize_city(city)
+        sql += " AND s.city_norm IN :city"
+        params["city"] = [normalize_city(c) or c for c in city]
+        expanding.append(bindparam("city", expanding=True))
     if chain_id:
-        sql += " AND c.chain_id = :chain_id"
+        sql += " AND c.chain_id IN :chain_id"
         params["chain_id"] = chain_id
+        expanding.append(bindparam("chain_id", expanding=True))
     if store_only:
         sql += " AND s.store_id = :store_only"
         params["store_only"] = store_only
     sql += " ORDER BY p.item_price"
-    stmt = text(sql).bindparams(bindparam("codes", expanding=True))
+    stmt = text(sql).bindparams(*expanding)
     return [dict(r) for r in conn.execute(stmt, params).mappings().all()]
 
 

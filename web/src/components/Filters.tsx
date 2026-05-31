@@ -1,13 +1,104 @@
+import { useRef, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BarChart2 } from 'lucide-react';
+import { BarChart2, ChevronDown } from 'lucide-react';
 import { useChains, useCities } from '../api/hooks';
 import type { CityInfo } from '../api/client';
 
 export interface FilterState {
-  city: string | null;
-  chain: string | null;
+  city: string[] | null;
+  chain: string[] | null;
   compareMode: boolean;
   groupBy: 'chain' | 'store';
+}
+
+interface MultiSelectProps {
+  options: { value: string; label: string }[];
+  selected: string[] | null;
+  onChange: (vals: string[] | null) => void;
+  placeholder: string;
+  disabled?: boolean;
+}
+
+function MultiSelect({ options, selected, onChange, placeholder, disabled = false }: MultiSelectProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const sel = selected ?? [];
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const toggle = (val: string) => {
+    const next = sel.includes(val) ? sel.filter(v => v !== val) : [...sel, val];
+    onChange(next.length ? next : null);
+  };
+
+  const buttonLabel = sel.length === 0
+    ? placeholder
+    : sel.length === 1 ? sel[0] : `${sel.length} נבחרו`;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => !disabled && setOpen(o => !o)}
+        className={`flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 rounded-lg
+                   text-sm text-gray-700 bg-white whitespace-nowrap
+                   ${disabled
+                     ? 'opacity-40 cursor-not-allowed'
+                     : 'hover:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer'}`}
+      >
+        <span>{buttonLabel}</span>
+        <ChevronDown size={13} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div
+          className="absolute top-full mt-1 z-30 bg-white border border-gray-200 rounded-xl shadow-lg
+                     min-w-[180px] max-h-72 flex flex-col"
+          dir="rtl"
+        >
+          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 shrink-0">
+            <button
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => onChange(options.map(o => o.value))}
+              className="text-xs text-emerald-600 hover:text-emerald-800 font-medium"
+            >
+              בחר הכל
+            </button>
+            <button
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => onChange(null)}
+              className="text-xs text-gray-400 hover:text-rose-500"
+            >
+              נקה הכל
+            </button>
+          </div>
+          <ul className="overflow-y-auto">
+            {options.map(o => (
+              <li key={o.value}>
+                <label className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={sel.includes(o.value)}
+                    onChange={() => toggle(o.value)}
+                    className="accent-emerald-600 w-3.5 h-3.5 shrink-0"
+                  />
+                  <span>{o.label}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface Props {
@@ -20,14 +111,20 @@ export default function Filters({ filters, onChange }: Props) {
   const { data: cities = [] } = useCities();
   const { data: chains = [] } = useChains();
 
-  const selectedCity = cities.find((c: CityInfo) => c.city === filters.city);
-  const cityHasLowCoverage = !!selectedCity && selectedCity.chain_count < 2;
-  const chainName =
-    chains.find(c => c.chain_id === selectedCity?.chain_ids?.[0])?.name ??
-    selectedCity?.city ??
-    '';
+  const selectedCities = cities.filter((c: CityInfo) => (filters.city ?? []).includes(c.city));
+  const cityHasLowCoverage =
+    filters.compareMode &&
+    selectedCities.length > 0 &&
+    selectedCities.every((c: CityInfo) => c.chain_count < 2);
 
-  const disabledClass = 'opacity-40 cursor-not-allowed';
+  const cityOptions = [...cities]
+    .sort((a: CityInfo, b: CityInfo) => a.city.localeCompare(b.city, 'he'))
+    .map((c: CityInfo) => ({
+      value: c.city,
+      label: t('filters.city_option', { city: c.city, chains: c.chain_count }),
+    }));
+
+  const chainOptions = chains.map(c => ({ value: c.chain_id, label: c.name }));
 
   return (
     <div className="flex flex-col gap-2">
@@ -44,40 +141,25 @@ export default function Filters({ filters, onChange }: Props) {
           {t('filters.compare_mode')}
         </button>
 
-        {/* City filter */}
-        <select
-          value={filters.city ?? ''}
-          onChange={e => onChange({ ...filters, city: e.target.value || null })}
-          className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700
-                     bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        >
-          <option value="">{t('filters.all_cities')}</option>
-          {[...cities]
-            .sort((a: CityInfo, b: CityInfo) => a.city.localeCompare(b.city, 'he'))
-            .map((c: CityInfo) => (
-              <option key={c.city} value={c.city}>
-                {t('filters.city_option', { city: c.city, chains: c.chain_count })}
-              </option>
-            ))}
-        </select>
+        {/* City multi-select */}
+        <MultiSelect
+          options={cityOptions}
+          selected={filters.city}
+          onChange={city => onChange({ ...filters, city })}
+          placeholder={t('filters.all_cities')}
+        />
 
-        {/* Chain filter — disabled in compare mode */}
-        <select
-          value={filters.chain ?? ''}
+        {/* Chain multi-select — disabled in compare mode */}
+        <MultiSelect
+          options={chainOptions}
+          selected={filters.chain}
+          onChange={chain => onChange({ ...filters, chain })}
+          placeholder={t('filters.all_chains')}
           disabled={filters.compareMode}
-          onChange={e => onChange({ ...filters, chain: e.target.value || null })}
-          className={`px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700
-                     bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500
-                     ${filters.compareMode ? disabledClass : ''}`}
-        >
-          <option value="">{t('filters.all_chains')}</option>
-          {chains.map(c => (
-            <option key={c.chain_id} value={c.chain_id}>{c.name}</option>
-          ))}
-        </select>
+        />
 
         {/* Group by — disabled in compare mode */}
-        <div className={`flex items-center gap-1.5 ${filters.compareMode ? disabledClass : ''}`}>
+        <div className={`flex items-center gap-1.5 ${filters.compareMode ? 'opacity-40 cursor-not-allowed' : ''}`}>
           <span className="text-xs text-gray-500">{t('filters.group_by')}:</span>
           {(['chain', 'store'] as const).map(mode => (
             <button
@@ -97,12 +179,12 @@ export default function Filters({ filters, onChange }: Props) {
       </div>
 
       {/* Low-coverage city warning */}
-      {filters.compareMode && cityHasLowCoverage && selectedCity && (
+      {cityHasLowCoverage && (
         <div className="flex items-center justify-between gap-3 text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
           <span className="text-amber-700">
             {t('filters.compare_disabled_city', {
-              city: selectedCity.city,
-              chain_name: chainName,
+              city: selectedCities[0].city,
+              chain_name: selectedCities[0].city,
             })}
           </span>
           <button

@@ -21,8 +21,8 @@ const DEFAULT_FILTERS: FilterState = {
 const PAGE_SIZE = 30;
 
 function useActiveResults(query: string, filters: FilterState) {
-  const city    = filters.city  ?? undefined;
-  const chain   = filters.chain ?? undefined;
+  const city    = filters.city?.length  ? filters.city  : undefined;
+  const chain   = filters.chain?.length ? filters.chain : undefined;
   const groupBy = filters.groupBy;
   const search  = useSearch(query, { city, chain, group_by: groupBy }, !filters.compareMode);
   const compare = useCompare(query, { city }, filters.compareMode);
@@ -70,9 +70,11 @@ export default function HomePage() {
     const currentCount = data.items.length + extraItems.length;
     setLoadingMore(true);
     try {
+      const city  = lastFilters.city?.length  ? lastFilters.city  : undefined;
+      const chain = lastFilters.chain?.length ? lastFilters.chain : undefined;
       const opts = filters.compareMode
-        ? { city: lastFilters.city ?? undefined, limit: PAGE_SIZE, offset: currentCount }
-        : { city: lastFilters.city ?? undefined, chain: lastFilters.chain ?? undefined, group_by: lastFilters.groupBy, limit: PAGE_SIZE, offset: currentCount };
+        ? { city, limit: PAGE_SIZE, offset: currentCount }
+        : { city, chain, group_by: lastFilters.groupBy, limit: PAGE_SIZE, offset: currentCount };
       const next = filters.compareMode
         ? await compareProducts(lastQuery, opts)
         : await searchProducts(lastQuery, opts);
@@ -89,7 +91,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <main className="max-w-6xl mx-auto px-4 py-6 space-y-4">
+      <main className="max-w-6xl mx-auto px-4 pt-6 pb-24 space-y-4">
         <section className="w-full py-8 md:py-12 flex justify-center">
           <XxlLogo variant="hero" lang={lang} className="w-full max-w-2xl" />
         </section>
