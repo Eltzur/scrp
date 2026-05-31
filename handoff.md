@@ -993,6 +993,52 @@ ea03cf5 Supabase cron fix · 71a335a bina base + KingStore + registry ·
 
 ---
 
+## Session 9d-6 — CITY_VARIANTS cleanup + Shufersal sweep + 4 new chains + Kamatera frontend migration
+
+### Commits
+- 7fae88a: CITY_VARIANTS cleanup — 14 new canonicals, 5 variants added, 17 STORE_CITY_OVERRIDES
+- cab4094: Shufersal full sweep — 25 → 320 stores (95 BE excluded, 2 wholesale excluded, 878 deleted from DB)
+- add0932: 4 new Cerberus scrapers — Dor Alon/AM:PM (157), Paz/Alonit (262), Fresh Market (45), Super Yuda (26). Registry now 15 chains.
+- 74f9880: scripts/deploy_frontend.ps1 — Kamatera frontend deploy script
+
+### Infrastructure
+- super.xxl.co.il frontend migrated from Hostinger to Kamatera (185.229.226.190)
+- nginx static file server configured at /var/www/super.xxl.co.il/
+- SSL cert issued via certbot (expires 2026-08-29, auto-renews)
+- DNS A record updated at box.co.il: super.xxl.co.il → 185.229.226.190
+- Hostinger remains active (2yr subscription paid) — available as cold backup for xxl.co.il portal
+- Deploy process: run scripts/deploy_frontend.ps1 from repo root (builds + scps to Kamatera)
+
+### Key decisions
+- BE-branded Shufersal stores (95) excluded — pharmacy/beauty only, not groceries. Onboard as separate chain later.
+- Dor Alon = AM:PM only (157 stores, IDs 401–992 + 901–905, 991–992)
+- Paz = Alonit gas station stores (262 stores, EV charging nodes 891/4101/4102 excluded)
+- Fresh Market (7290876100000) = federation of 7 sub-brands under one chain_id: Fresh Market, Machsanei Mazon, Machsanei Lahav, Hyper Dudu, Super Dush, Tip Tov, Chaviv
+- סביון is an independent municipality, not part of Petah Tikva
+- מודיעין עילית must NEVER be merged with מודיעין-מכבים-רעות — separate Haredi municipality
+
+### Deferred / next session (9d-7) — priority order
+1. Verify tonight's cron — confirm all 15 chains seed correctly, check city_norm NULLs on new chains (Paz especially)
+2. Hazi Hinam scraper — custom HTML parser, Azure Blob, delta files (NOT PriceFull for most stores). Chain ID: 7290700100008. 12 physical stores (201–219), store 103 = delivery exclude. Price page: https://shop.hazi-hinam.co.il/Prices
+3. Victory coverage check — already in registry, check current store count vs available
+4. StoresFull XML ingestion — every chain publishes a StoresFull XML alongside price files. Should use as ground truth for store metadata instead of manual STORE_CITY_OVERRIDES. Strategic item.
+5. Promo files pipeline — t=2 on Cerberus/price pages returns promotional files. Add to DB and surface on site.
+6. Multi-select city + chain dropdowns — UI feature, add בחירה מרובה to both dropdowns
+7. Search quality — חלבי/חלב bleed (tokenization fix)
+8. Bina wave 2 — זול ובגדול, מעיין 2000 and others (lower priority)
+
+### Still deferred (lower priority)
+- Carrefour non-publishers re-check
+- fetch_store_runs schema.sql drift
+- King Store load_stores target filter
+- .env.save cleanup
+- VM reboot
+- Shefa coverage-calc fix
+- GS1 scoping (separate workstream)
+- DNS TTL: lower _railway-verify TXT record TTL from 7200 → 600 (cosmetic)
+
+---
+
 ### Session 9d-5 — Shefa Birkat Hashem + Shuk Hayir onboarding (2026-05-28)
 
 **Scope pivot:** Session opened with Paz + Dor Alon brand-filtering as the
