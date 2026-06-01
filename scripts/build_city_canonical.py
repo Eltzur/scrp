@@ -6,7 +6,7 @@ human review. Does NOT write to DB.
 
 Layers:
   L1 — exact match of normalized city/city_norm against CBS name
-  L2 — STORE_CITY_OVERRIDES lookup, then re-try L1
+  L2 — STORE_CITY_OVERRIDES (per-store) or CITY_CANONICAL_OVERRIDES (per-city)
   L3 — difflib best match >= 0.85 against all CBS names
   NULL — no match found
 """
@@ -23,7 +23,7 @@ import openpyxl
 from sqlalchemy import text
 
 from db.db import get_engine
-from scraper.city_names import STORE_CITY_OVERRIDES
+from scraper.city_names import CITY_CANONICAL_OVERRIDES, STORE_CITY_OVERRIDES
 
 XLSX_PATH = ROOT / "data" / "bycode2024.xlsx"
 OUT_CSV = ROOT / "data" / "city_canonical_review.csv"
@@ -108,8 +108,9 @@ def main() -> None:
                 confidence = 1.0
                 break
 
-        # Layer 2: STORE_CITY_OVERRIDES → re-try Layer 1
+        # Layer 2: STORE_CITY_OVERRIDES or CITY_CANONICAL_OVERRIDES
         if proposed is None:
+            # 2a: per-store override → re-try Layer 1 against CBS
             override = STORE_CITY_OVERRIDES.get(
                 (str(chain_id), str(store_id).zfill(3))
             )
@@ -119,6 +120,16 @@ def main() -> None:
                     proposed = cbs[n]
                     layer = "L2"
                     confidence = 1.0
+
+            # 2b: city-level canonical override (raw city string match)
+            if proposed is None:
+                for raw in (city, city_norm):
+                    n = _norm(raw)
+                    if n and n in CITY_CANONICAL_OVERRIDES:
+                        proposed = CITY_CANONICAL_OVERRIDES[n]
+                        layer = "L2"
+                        confidence = 1.0
+                        break
 
         # Layer 3: fuzzy match on city/city_norm
         if proposed is None:
