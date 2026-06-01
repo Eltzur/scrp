@@ -993,6 +993,50 @@ ea03cf5 Supabase cron fix · 71a335a bina base + KingStore + registry ·
 
 ---
 
+## Session 9d-7 (June 1 2026) — StoresFull XML ingestion + cron fixes
+
+### Commits
+- a6c2edb: scripts/ingest_store_xml.py — StoresFull XML city ingestion script (dry-run safe, --apply to write)
+- fddc113: fix — never overwrite good city_norm with NULL (safety guard)
+- 2533161: fix — קרית/קריית variants for missing canonicals (קריית מוצקין, קריית שמונה, קריית אתא)
+- d0b0129: fix(ui) — enable chain filter in compare mode
+
+### Data fixes applied
+- 244 city_norm rows updated from StoresFull XMLs across Shufersal, Victory, Carrefour, King Store, Rami Levy, Keshet, Tiv Taam
+- תל אביב consolidated from 3 entries → 1 (90 stores)
+- NULL city_norm: down to 23 (all intentional — online/phantom stores)
+- קשת טעמים name fix in chains table
+
+### Infrastructure fixes
+- systemd TimeoutStopSec + TimeoutStartSec set to infinity (cron was being killed by 1min30s timeout)
+- Added 2G swap (/swapfile2) — total swap now 4G, persisted in /etc/fstab
+- Root cause of OOM kill: Shufersal 320-store scrape peaks at 1.6G RAM + 933M swap. Fix: more swap for now; delta files as long-term solution
+
+### Cron status
+- Ran successfully May 30 (429 stores, 2.45M prices, 11 chains)
+- Killed twice June 1 — first by timeout, then by OOM during Shufersal 320-store scrape
+- Third attempt running now with timeout=infinity + 4G swap
+
+### 9d-8 priorities
+1. Verify tonight's cron completes successfully
+2. Promo files pipeline (t=2 files → DB → surface on site)
+3. Hazi Hinam scraper (delta-aware, custom HTML parser)
+4. Victory coverage check
+5. Search quality — חלבי/חלב bleed
+6. Bina wave 2 — זול ובגדול, סופר ספיר, סיטי צפרير and others from Store_XML unknowns
+7. Delta files architecture (replace PriceFull with Price delta for high-store-count chains)
+
+### Still deferred
+- Carrefour non-publishers re-check
+- fetch_store_runs schema.sql drift
+- King Store load_stores target filter
+- .env.save cleanup
+- VM reboot (deferred again — cron running)
+- Shefa coverage-calc fix
+- GS1 scoping
+
+---
+
 ## Session 9d-6 — CITY_VARIANTS cleanup + Shufersal sweep + 4 new chains + Kamatera frontend migration
 
 ### Commits
