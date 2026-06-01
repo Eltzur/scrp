@@ -252,8 +252,18 @@ def main() -> None:
 
                 cs.db_matched += 1
 
-                # Skip if city_norm already matches
+                # Skip if XML city value is literally "unknown" (bad source data)
+                if s["raw_city"].lower() == "unknown":
+                    cs.skipped += 1
+                    continue
+
+                # Skip if already matches
                 if db_row["city_norm"] == cnorm and db_row["city"] == city:
+                    cs.skipped += 1
+                    continue
+
+                # Safety: never overwrite existing good city_norm with NULL
+                if db_row["city_norm"] is not None and cnorm is None:
                     cs.skipped += 1
                     continue
 
