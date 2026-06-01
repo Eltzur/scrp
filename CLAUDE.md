@@ -16,6 +16,13 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 - **Never merge מודיעין עילית with מודיעין-מכבים-רעות** — separate municipalities.
 - **Never merge BE-branded Shufersal stores into the main chain** — pharmacy/beauty only.
 
+## City normalization — IMPORTANT
+- city_norm column is BROKEN as of June 1 2026. Do NOT run ad-hoc SQL fixes or add CITY_VARIANTS patches.
+- The fix is a full rebuild using Israel CBS official settlement list (9d-8).
+- Until rebuild is complete: accept the messy dropdown, do not attempt manual patches.
+- Cheapersal reference canonical: "תל אביב - יפו" (spaces around hyphen), 238 stores.
+- After rebuild: city_canonical column in stores table is the source of truth, not city_norm.
+
 ## Server access
 - Production VPS: ssh dude@185.229.226.190
 - Repo root: ~/scrp
