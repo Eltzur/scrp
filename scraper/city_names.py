@@ -159,6 +159,32 @@ CITY_VARIANTS: dict[str, list[str]] = {
     "אור יהודה":  ["or yehuda"],
 }
 
+# Maps raw DB city strings → CBS canonical settlement names.
+# Used by build_city_canonical.py (Layer 2) to resolve chains that publish
+# abbreviated, misspelled, or outdated city names.
+CITY_CANONICAL_OVERRIDES: dict[str, str] = {
+    "פתח-תקוה":       "פתח תקווה",
+    "פתח תקוה":       "פתח תקווה",
+    'ראשל"צ':         "ראשון לציון",
+    "ראשל״צ":         "ראשון לציון",
+    'צ"לשאר':         "ראשון לציון",
+    "צ״לשאר":         "ראשון לציון",
+    "יהוד":           "יהוד-מונוסון",
+    "כרכור":          "פרדס חנה-כרכור",
+    "פרדס חנה":       "פרדס חנה-כרכור",
+    "דאלית אל כרמל":  "דאלית אל-כרמל",
+    "יקנעם":          "יקנעם עילית",
+    "מעלות":          "מעלות-תרשיחא",
+    "בנימינה":        "בנימינה-גבעת עדה",
+    "גבעת עדה":       "בנימינה-גבעת עדה",
+    "סכנין":          "סח'נין",
+    "מעלה אדומים":    "מעלה אדומים",
+    "אשדות יעקב":     "אשדות יעקב (מאוחד)",
+    "גוש עציון":      "גוש עציון",
+    "קריית ספר":      "מודיעין עילית",
+}
+
+
 # Inverted lookup: lowercase variant → canonical
 _LOOKUP: dict[str, str] = {}
 for _canonical, _variants in CITY_VARIANTS.items():
