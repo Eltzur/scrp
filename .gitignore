@@ -211,6 +211,7 @@ __marimo__/
 # Project-specific
 sample_data/*.xml
 *.db
+data/bycode2024.xlsx
 
 # Claude Code local config
 .claude/
