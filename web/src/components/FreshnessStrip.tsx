@@ -48,7 +48,7 @@ export default function FreshnessStrip() {
               </li>
             ))}
           </ul>
-          <p className="mt-1 text-gray-300">* עדכון מחירים מתבצע בשעות הצהריים</p>
+          <p className="mt-1">* עדכון מחירים מתבצע בשעות הצהריים</p>
         </>
       )}
     </div>
