@@ -155,7 +155,6 @@ export default function Filters({ filters, onChange }: Props) {
           selected={filters.chain}
           onChange={chain => onChange({ ...filters, chain })}
           placeholder={t('filters.all_chains')}
-          disabled={filters.compareMode}
         />
 
         {/* Group by — disabled in compare mode */}
