@@ -1042,14 +1042,27 @@ ea03cf5 Supabase cron fix · 71a335a bina base + KingStore + registry ·
 - Cron still running at 15:05 on Paz chain (store 541/262) — architectural concern flagged
 - Decision: switch to delta (Price) files for daily scraping in 9d-8
 
-### Additional fixes (city normalization)
-- 105 DB rows normalized (תל אביב splits, מודיעין, קדימה, קרית variants) via direct SQL
-- קרית → קריית global standardization (Hebrew Language Academy ruling) — 6 DB rows + 7 city_names.py lines (9580582)
-- נצרת עילית → נוף הגליל (official name change), עקרון → קרית עקרון
-- FreshnessStrip footnote color normalized (4d06723)
-- Note for 9d-8: cron will re-introduce קרית/תל אביב splits until CITY_VARIANTS canonicals are updated to match — monitor after tomorrow's cron run
+### City normalization — BROKEN, needs rebuild in 9d-8
+
+Current state (June 1 2026 end of session):
+- city_norm column has ~150+ distinct values, many wrong: neighborhoods treated as cities, duplicate spellings, obsolete names (נצרת עילית), non-existent places (כוכב הצפון, כורדני, עמק חפר, צומת גבעת מרדכי, צור יגאל, צור משה)
+- Multiple manual SQL patches applied this session made things worse, not better
+- Cron overwrites fixes every night since scrapers use normalize_city() which maps to our broken canonicals
+- Root cause: no authoritative city reference — we've been patching reactively
+
+What's needed (9d-8 Task 0 — before cron architecture work):
+- Download Israel CBS official settlement list as authoritative reference
+- Build city_canonical mapping table in DB (settlement_code → official_name)
+- Add city_canonical column to stores table
+- One-time migration: fuzzy-match all existing city_norm values to canonical list
+- Update /cities API endpoint to use city_canonical
+- Update cron to write city_canonical on each scrape
+- Reference: Cheapersal uses "תל אביב - יפו" (238 stores, 28 chains) as canonical — confirms official CBS naming
+
+9d-8 kickoff prompt: see below handoff.
 
 ### 9d-8 priorities (revised)
+0. **City normalization rebuild** — see "City normalization — BROKEN" section above; must land before cron architecture work
 1. Verify cron completed all 15 chains + new chains seeded correctly
 2. Delta architecture: switch daily to Price delta + add PromoFull pipeline + chain parallelism
 3. Bina wave 2: זול ובגדול, סופר ספיר, סיטי צפרير + others from Store_XML unknowns
