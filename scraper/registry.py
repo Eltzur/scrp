@@ -10,8 +10,6 @@ from scraper.tivtaam import TivTaamScraper
 from scraper.kingstore import KingStoreScraper
 from scraper.shefabirkat import ShefaBirkatHashemScraper
 from scraper.shukhayir   import ShukHayirScraper
-from scraper.doralon     import DorAlonScraper
-from scraper.paz         import PazScraper
 from scraper.freshmarket import FreshMarketScraper
 from scraper.yuda        import YudaScraper
 
@@ -27,8 +25,6 @@ SCRAPERS: dict[str, type] = {
     "7290058108879": KingStoreScraper,
     "7290058134977": ShefaBirkatHashemScraper,
     "7290058148776": ShukHayirScraper,
-    "7290492000005": DorAlonScraper,
-    "7290644700005": PazScraper,
     "7290876100000": FreshMarketScraper,
     "7290058177776": YudaScraper,
 }
