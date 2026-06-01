@@ -1042,6 +1042,13 @@ ea03cf5 Supabase cron fix · 71a335a bina base + KingStore + registry ·
 - Cron still running at 15:05 on Paz chain (store 541/262) — architectural concern flagged
 - Decision: switch to delta (Price) files for daily scraping in 9d-8
 
+### Additional fixes (city normalization)
+- 105 DB rows normalized (תל אביב splits, מודיעין, קדימה, קרית variants) via direct SQL
+- קרית → קריית global standardization (Hebrew Language Academy ruling) — 6 DB rows + 7 city_names.py lines (9580582)
+- נצרת עילית → נוף הגליל (official name change), עקרון → קרית עקרון
+- FreshnessStrip footnote color normalized (4d06723)
+- Note for 9d-8: cron will re-introduce קרית/תל אביב splits until CITY_VARIANTS canonicals are updated to match — monitor after tomorrow's cron run
+
 ### 9d-8 priorities (revised)
 1. Verify cron completed all 15 chains + new chains seeded correctly
 2. Delta architecture: switch daily to Price delta + add PromoFull pipeline + chain parallelism
