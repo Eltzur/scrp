@@ -1035,6 +1035,21 @@ ea03cf5 Supabase cron fix · 71a335a bina base + KingStore + registry ·
 - Shefa coverage-calc fix
 - GS1 scoping
 
+### Additional items completed late session
+- systemd timeout fix (infinity) + 2G swap added (/swapfile2, persisted in fstab)
+- CLAUDE.md created (ead1a3f) — CC operating guide, replaces handoff paste at session start
+- Cron ran successfully past store 326+ (previous kill point was 283) — swap fix confirmed working
+- Cron still running at 15:05 on Paz chain (store 541/262) — architectural concern flagged
+- Decision: switch to delta (Price) files for daily scraping in 9d-8
+
+### 9d-8 priorities (revised)
+1. Verify cron completed all 15 chains + new chains seeded correctly
+2. Delta architecture: switch daily to Price delta + add PromoFull pipeline + chain parallelism
+3. Bina wave 2: זול ובגדול, סופר ספיר, סיטי צפרير + others from Store_XML unknowns
+4. Search quality: חלבי/חלב bleed fix
+5. Hazi Hinam scraper (dedicated session — delta-aware, custom HTML)
+6. Victory coverage check
+
 ---
 
 ## Session 9d-6 — CITY_VARIANTS cleanup + Shufersal sweep + 4 new chains + Kamatera frontend migration
