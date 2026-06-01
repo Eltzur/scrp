@@ -150,6 +150,7 @@ def main() -> None:
         counts[layer] += 1
         out_rows.append({
             "store_id": store_pk,
+            "chain_id": chain_id or "",
             "store_name": store_name or "",
             "city": city or "",
             "city_norm": city_norm or "",
@@ -160,7 +161,7 @@ def main() -> None:
 
     with OUT_CSV.open("w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=[
-            "store_id", "store_name", "city", "city_norm",
+            "store_id", "chain_id", "store_name", "city", "city_norm",
             "proposed_canonical", "match_layer", "confidence",
         ])
         writer.writeheader()
