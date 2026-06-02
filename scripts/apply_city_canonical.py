@@ -62,8 +62,8 @@ def main() -> None:
                 rec,
             )
         for pk in deletes:
-            conn.execute(text("DELETE FROM prices WHERE store_id = :pk"), {"pk": pk})
-            conn.execute(text("DELETE FROM fetch_store_runs WHERE store_id = :pk"), {"pk": pk})
+            conn.execute(text("DELETE FROM prices WHERE store_fk = :pk"), {"pk": pk})
+            conn.execute(text("DELETE FROM fetch_store_runs WHERE store_fk = :pk"), {"pk": pk})
             conn.execute(text("DELETE FROM stores WHERE id = :pk"), {"pk": pk})
 
     print(f"Updated: {len(updates)}")
