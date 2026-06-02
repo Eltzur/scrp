@@ -32,6 +32,7 @@ def main() -> None:
         rows = list(csv.DictReader(f))
 
     updates = []
+    deletes = []
     skipped = 0
 
     for row in rows:
@@ -39,6 +40,12 @@ def main() -> None:
             store_pk = int(row["store_id"])
         except (ValueError, KeyError):
             skipped += 1
+            continue
+
+        action = row.get("action", "").strip().upper()
+
+        if action == "DELETE":
+            deletes.append(store_pk)
             continue
 
         canonical = _HARDCODED.get(store_pk) or row.get("proposed_canonical", "").strip()
@@ -54,8 +61,13 @@ def main() -> None:
                 text("UPDATE stores SET city_canonical = :canonical WHERE id = :pk"),
                 rec,
             )
+        for pk in deletes:
+            conn.execute(text("DELETE FROM prices WHERE store_id = :pk"), {"pk": pk})
+            conn.execute(text("DELETE FROM fetch_store_runs WHERE store_id = :pk"), {"pk": pk})
+            conn.execute(text("DELETE FROM stores WHERE id = :pk"), {"pk": pk})
 
     print(f"Updated: {len(updates)}")
+    print(f"Deleted: {len(deletes)}")
     print(f"Skipped: {skipped}")
 
 
