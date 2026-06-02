@@ -12,7 +12,6 @@ import yaml
 from sqlalchemy import text, bindparam
 from sqlalchemy.engine import Connection
 
-from scraper.city_names import normalize_city
 
 _ACTIVE_STORES_YAML = Path(__file__).parent.parent / "scraper" / "active_stores.yaml"
 
@@ -109,8 +108,8 @@ def fetch_prices(
     params: dict = {"codes": tuple(barcodes)}
     expanding = [bindparam("codes", expanding=True)]
     if city:
-        sql += " AND s.city_norm IN :city"
-        params["city"] = [normalize_city(c) or c for c in city]
+        sql += " AND s.city_canonical IN :city"
+        params["city"] = list(city)
         expanding.append(bindparam("city", expanding=True))
     if chain_id:
         sql += " AND c.chain_id IN :chain_id"
@@ -271,8 +270,8 @@ def fetch_stores(
         sql += " AND s.chain_id = :chain_id"
         params["chain_id"] = chain_id
     if city:
-        sql += " AND s.city_norm = :city"
-        params["city"] = normalize_city(city)
+        sql += " AND s.city_canonical = :city"
+        params["city"] = city
     sql += " ORDER BY c.name, s.store_id"
     return [dict(r) for r in conn.execute(text(sql), params).mappings().all()]
 
