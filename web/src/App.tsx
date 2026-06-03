@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { BasketProvider } from './components/BasketContext';
@@ -15,6 +15,8 @@ import PortalPage from './pages/PortalPage';
 import VacationPage from './pages/VacationPage';
 import FashionPage from './pages/FashionPage';
 // Utilities
+import { getCities } from './api/client';
+import type { CityInfo } from './api/client';
 import { isPortalHostname } from './utils/hostname';
 import { applyHostnameMeta } from './utils/seoMeta';
 import { initGA, trackPageview } from './utils/analytics';
@@ -22,6 +24,12 @@ import CookieBanner from './components/CookieBanner';
 
 // Supermarket app shell — all existing routes are unchanged inside here
 function AppShell() {
+  const [cities, setCities] = useState<CityInfo[]>([]);
+
+  useEffect(() => {
+    getCities().then(setCities);
+  }, []);
+
   return (
     <BasketProvider>
       <FavoritesProvider>
@@ -29,7 +37,7 @@ function AppShell() {
         <BasketDrawer />
         <Header />
         <Routes>
-          <Route path="/"          element={<HomePage />} />
+          <Route path="/"          element={<HomePage cities={cities} />} />
           <Route path="/login"     element={<LoginPage />} />
           <Route path="/signup"    element={<SignupPage />} />
           <Route path="/baskets"   element={<MyBasketsPage />} />

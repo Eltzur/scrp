@@ -9,7 +9,7 @@ import FreshnessStrip from '../components/FreshnessStrip';
 import ResultsList from '../components/ResultsList';
 import { useSearch, useCompare } from '../api/hooks';
 import { searchProducts, compareProducts } from '../api/client';
-import type { ProductWithPrices } from '../api/client';
+import type { ProductWithPrices, CityInfo } from '../api/client';
 
 const DEFAULT_FILTERS: FilterState = {
   city:        null,
@@ -29,7 +29,7 @@ function useActiveResults(query: string, filters: FilterState) {
   return filters.compareMode ? compare : search;
 }
 
-export default function HomePage() {
+export default function HomePage({ cities }: { cities: CityInfo[] }) {
   const { t, i18n }   = useTranslation();
   const lang          = i18n.language.startsWith('he') ? 'he' : 'en' as const;
   const [query,   setQuery]   = useState('');
@@ -99,7 +99,7 @@ export default function HomePage() {
         <SearchBar onSearch={handleSearch} />
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Filters filters={filters} onChange={handleFiltersChange} />
+          <Filters filters={filters} onChange={handleFiltersChange} cities={cities} />
           <StatsBar />
         </div>
 

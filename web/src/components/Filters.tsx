@@ -2,7 +2,6 @@ import { useRef, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BarChart2, ChevronDown } from 'lucide-react';
 import { useChains } from '../api/hooks';
-import { getCities } from '../api/client';
 import type { CityInfo } from '../api/client';
 
 export interface FilterState {
@@ -105,16 +104,12 @@ function MultiSelect({ options, selected, onChange, placeholder, disabled = fals
 interface Props {
   filters: FilterState;
   onChange: (f: FilterState) => void;
+  cities: CityInfo[];
 }
 
-export default function Filters({ filters, onChange }: Props) {
+export default function Filters({ filters, onChange, cities }: Props) {
   const { t } = useTranslation();
-  const [cities, setCities] = useState<CityInfo[]>([]);
   const { data: chains = [] } = useChains();
-
-  useEffect(() => {
-    getCities().then(setCities);
-  }, []);
 
   const selectedCities = cities.filter((c: CityInfo) => (filters.city ?? []).includes(c.city));
   const cityHasLowCoverage =
