@@ -16,12 +16,9 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 - **Never merge מודיעין עילית with מודיעין-מכבים-רעות** — separate municipalities.
 - **Never merge BE-branded Shufersal stores into the main chain** — pharmacy/beauty only.
 
-## City normalization — IMPORTANT
-- city_norm column is BROKEN as of June 1 2026. Do NOT run ad-hoc SQL fixes or add CITY_VARIANTS patches.
-- The fix is a full rebuild using Israel CBS official settlement list (9d-8).
-- Until rebuild is complete: accept the messy dropdown, do not attempt manual patches.
-- Cheapersal reference canonical: "תל אביב - יפו" (spaces around hyphen), 238 stores.
-- After rebuild: city_canonical column in stores table is the source of truth, not city_norm.
+## City data — IMPORTANT
+- **city_canonical is the source of truth** for all city data (rebuilt from CBS 2024 in 9d-8). Do NOT use city_norm.
+- API, dropdown, and all filtering queries read from city_canonical.
 
 ## Server access
 - Production VPS: ssh dude@185.229.226.190
@@ -29,6 +26,7 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 - Activate venv: source venv/bin/activate
 - Load env: source .env
 - Start scraper manually: python3 -m scripts.run_one <chain_id>
+- Check API service: sudo systemctl status scrp-api
 - Check cron: sudo journalctl -u scrp-cron -n 20 --no-pager
 
 ## Commit conventions
