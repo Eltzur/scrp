@@ -6,7 +6,9 @@ Exit 0 = all chains succeeded. Exit 1 = one or more chains errored.
 import logging
 import os
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import yaml
@@ -50,21 +52,25 @@ def pick_stores(conn, chain_id: str, n: int) -> list[str]:
     return [r[0] for r in rows]
 
 
-def run_chain(chain_id: str, n_stores: int, conn, store_ids: list | None = None) -> dict:
-    scraper = get_scraper(chain_id)
-    if not scraper:
-        raise ValueError(f"No scraper registered for chain_id={chain_id}")
+def run_chain(chain_id: str, n_stores: int, store_ids: list | None = None) -> dict:
+    conn = connect()
+    try:
+        scraper = get_scraper(chain_id)
+        if not scraper:
+            raise ValueError(f"No scraper registered for chain_id={chain_id}")
 
-    log.info(f"[{chain_id}] Loading store list...")
-    scraper.load_stores(conn)
+        log.info(f"[{chain_id}] Loading store list...")
+        scraper.load_stores(conn)
 
-    if not store_ids:
-        store_ids = pick_stores(conn, chain_id, n_stores)
-    if not store_ids:
-        raise RuntimeError(f"No stores found in DB for chain {chain_id} after load_stores")
+        if not store_ids:
+            store_ids = pick_stores(conn, chain_id, n_stores)
+        if not store_ids:
+            raise RuntimeError(f"No stores found in DB for chain {chain_id} after load_stores")
 
-    log.info(f"[{chain_id}] Scraping {len(store_ids)} stores: {store_ids}")
-    return scraper.load_prices_for_stores(store_ids, conn, replace=True)
+        log.info(f"[{chain_id}] Scraping {len(store_ids)} stores: {store_ids}")
+        return scraper.load_prices_for_stores(store_ids, conn, replace=True)
+    finally:
+        conn.close()
 
 
 def ping_supabase() -> None:
@@ -117,19 +123,22 @@ def main():
         f"see db/verification_report_9d1.md."
     )
 
-    conn = connect()
-    init_db(conn)
+    # init_db is a no-op on Postgres; runs schema.sql on SQLite only
+    init_conn = connect()
+    init_db(init_conn)
+    init_conn.close()
 
     errors: list[str] = []
+    errors_lock = threading.Lock()
     t_start = time.monotonic()
 
-    for entry in chains:
+    def _run_entry(entry):
         chain_id  = entry["chain_id"]
-        store_ids = entry.get("store_ids")   # explicit list takes priority
-        n_stores  = entry.get("n_stores", 5) # fallback: pick N by city diversity
+        store_ids = entry.get("store_ids")
+        n_stores  = entry.get("n_stores", 5)
         t0 = time.monotonic()
         try:
-            summary = run_chain(chain_id, n_stores, conn, store_ids=store_ids)
+            summary = run_chain(chain_id, n_stores, store_ids=store_ids)
             elapsed = time.monotonic() - t0
             log.info(
                 f"[{chain_id}] OK — "
@@ -138,9 +147,14 @@ def main():
             )
         except Exception as exc:
             log.error(f"[{chain_id}] FAILED: {exc}", exc_info=True)
-            errors.append(chain_id)
+            with errors_lock:
+                errors.append(chain_id)
+
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        list(executor.map(_run_entry, chains))
 
     log.info("Running canonical name update...")
+    conn = connect()
     try:
         canonical_summary = update_canonical_names(conn)
         log.info(
@@ -149,8 +163,8 @@ def main():
         )
     except Exception as exc:
         log.error(f"Canonical name update failed: {exc}", exc_info=True)
-
     conn.close()
+
     total = time.monotonic() - t_start
     log.info(f"Cron finished in {total:.0f}s. Errors: {errors or 'none'}")
 
