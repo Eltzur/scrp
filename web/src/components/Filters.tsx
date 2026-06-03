@@ -1,7 +1,8 @@
 import { useRef, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BarChart2, ChevronDown } from 'lucide-react';
-import { useChains, useCities } from '../api/hooks';
+import { useChains } from '../api/hooks';
+import { getCities } from '../api/client';
 import type { CityInfo } from '../api/client';
 
 export interface FilterState {
@@ -108,8 +109,12 @@ interface Props {
 
 export default function Filters({ filters, onChange }: Props) {
   const { t } = useTranslation();
-  const { data: cities = [] } = useCities();
+  const [cities, setCities] = useState<CityInfo[]>([]);
   const { data: chains = [] } = useChains();
+
+  useEffect(() => {
+    getCities().then(setCities);
+  }, []);
 
   const selectedCities = cities.filter((c: CityInfo) => (filters.city ?? []).includes(c.city));
   const cityHasLowCoverage =
