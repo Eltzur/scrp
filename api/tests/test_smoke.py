@@ -41,16 +41,8 @@ def test_cities_returns_city_info_shape():
         assert "city" in city
         assert "chain_count" in city
         assert "store_count" in city
-        assert "price_count" in city
         assert isinstance(city["chain_count"], int)
-        assert city["price_count"] > 0  # price-aware: every city has prices
-
-
-def test_cities_are_price_aware():
-    r = client.get("/cities")
-    data = r.json()
-    for city in data:
-        assert city["price_count"] > 0, f"City {city['city']} has no prices — should be excluded"
+        assert city["store_count"] > 0
 
 
 def test_stores_returns_list():

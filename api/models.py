@@ -66,7 +66,6 @@ class CityInfo(BaseModel):
     city: str
     chain_count: int           = Field(description="Number of distinct chains with prices in this city")
     store_count: int           = Field(description="Number of stores with prices in this city")
-    price_count: int           = Field(description="Total price rows in this city")
     chain_ids: list[str]       = Field(default_factory=list, description="chain_ids present in this city")
 
 

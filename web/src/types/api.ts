@@ -117,11 +117,6 @@ export interface components {
        */
       store_count: number;
       /**
-       * Price Count
-       * @description Total price rows in this city
-       */
-      price_count: number;
-      /**
        * Chain Ids
        * @description chain_ids present in this city
        */

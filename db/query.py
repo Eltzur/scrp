@@ -277,26 +277,23 @@ def fetch_stores(
 
 
 def fetch_cities(conn: Connection) -> list[dict]:
-    """Cities that have actual price data, with coverage stats. Dialect-agnostic."""
+    """Cities from stores table only — no prices JOIN."""
     rows = conn.execute(text("""
         SELECT
-            s.city_canonical,
-            COUNT(DISTINCT s.chain_id) AS chain_count,
-            COUNT(DISTINCT s.id)       AS store_count,
-            COUNT(p.id)                AS price_count
-        FROM stores s
-        JOIN prices p ON p.store_fk = s.id
-        WHERE s.city_canonical IS NOT NULL
-        GROUP BY s.city_canonical
-        ORDER BY s.city_canonical
+            city_canonical,
+            COUNT(DISTINCT chain_id) AS chain_count,
+            COUNT(DISTINCT id)       AS store_count
+        FROM stores
+        WHERE city_canonical IS NOT NULL
+        GROUP BY city_canonical
+        ORDER BY city_canonical
     """)).mappings().all()
 
     # Fetch chain_ids per city separately (avoids GROUP_CONCAT vs STRING_AGG dialect split)
     chain_rows = conn.execute(text("""
-        SELECT DISTINCT s.city_canonical, s.chain_id
-        FROM stores s
-        JOIN prices p ON p.store_fk = s.id
-        WHERE s.city_canonical IS NOT NULL
+        SELECT DISTINCT city_canonical, chain_id
+        FROM stores
+        WHERE city_canonical IS NOT NULL
     """)).mappings().all()
 
     city_chains: dict[str, list[str]] = {}
@@ -308,7 +305,6 @@ def fetch_cities(conn: Connection) -> list[dict]:
             "city":        r["city_canonical"],
             "chain_count": r["chain_count"],
             "store_count": r["store_count"],
-            "price_count": r["price_count"],
             "chain_ids":   city_chains.get(r["city_canonical"], []),
         }
         for r in rows
