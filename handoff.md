@@ -1,37 +1,39 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: June 4, 2026 (end of session 9d-8 final)
+> Last updated: June 4, 2026 (end of session 9d-9 priority 1)
 
 ---
 
 ## 🎯 Current State
 
-**Session 9d-8 — COMPLETE.**
+**Session 9d-9 priority 1 — COMPLETE.**
 
-### What was done this session
+### What was done in 9d-9 (priority 1)
 
-- **city_canonical rebuild** — column rebuilt from CBS 2024 official settlement list. 1057 stores, 0 NULLs. city_canonical is now the source of truth for all city data (not city_norm).
-- **Paz and Dor Alon removed** — both chains deleted from registry and active_stores.yaml. 422 stores and 887K prices deleted from DB.
-- **City dropdown** now reads from city_canonical. Response time 0.13s (was 3.7s — prices JOIN removed). Fetch hoisted to app mount level (no per-open delay).
-- **Supabase keep-alive timer installed** — systemd `supabase-keepalive.timer`, fires every 4h. Files in `deploy/systemd/`. Still needs `enable + start` on server (see commands below).
-- **Scripts in place for future rebuilds**: `scripts/apply_city_canonical.py` (UPDATE + DELETE actions from CSV), `scripts/build_city_canonical.py`.
-- **Parallel chain scraping** — `cron_main.py` now uses `ThreadPoolExecutor(max_workers=6)`. Each chain gets its own DB connection. `update_canonical_names` and `ping_supabase` remain sequential after all chains finish.
-- **Shufersal 403 fix** — `ShufersalScraper.load_prices_for_stores` overrides the base class to fetch signed Azure URLs lazily per-store (`fetch_pricefull_entry`) instead of building the full index upfront. Eliminates 403s from URL expiry during parallel runs. **315/320 stores now loading.**
+- **Delta Price file support** — shipped for 7 chains: Shufersal + Cerberus chains (Rami Levy, Osher Ad, Yochananof, Keshet, Fresh Market, Super Yuda). `DELTA_CHAINS` in `registry.py`. `build_price_index` added to `cerberus.py`.
+- **Per-store ThreadPoolExecutor parallelism** — `STORE_WORKERS=4` in `base.py` and `shufersal.py`. `_process_store` / `_process_store_shufersal` each open their own DB connection and write `fetch_store_runs` immediately. `fetch_runs` inserted upfront (status=`running`), updated at end with final counts.
+- **Generator exhaustion bug fixed** — `items = list(items)` added in `shufersal.py` before delta split.
+- **`docs/portals.md`** — portal credentials and delta status for all 13 chains.
 
-### Cron performance (post 9d-8)
+### Cron performance (post 9d-9 priority 1)
 
-| Metric | Value |
-|---|---|
-| Total runtime | ~2.1h (down from ~2.8h sequential) |
-| Bottleneck | Shufersal 4436s (320 stores, 1 req/store) + Tiv Taam 6913s |
-| Chains complete fast | Rami Levy, Osher Ad, Victory, Yochananof, Keshet, Carrefour, King Store, Shefa, Shuk Hayir |
+| Chain | Before | After | Speedup |
+|---|---|---|---|
+| Shufersal | 4436s | 544s | 8× |
+| Tiv Taam | 6913s | 93s | 74× |
+| Rami Levy | — | ~46s (26 stores) | — |
+| Full cron | ~2.1h | target <30 min | TBC at 10:00 IDT |
 
-### Priority for 9d-9
+Full cron result to be confirmed by tomorrow's 10:00 IDT run.
 
-Parallelize stores **within** slow chains — target <30 min total.
-Chains to target: Shufersal (4436s), Tiv Taam (6913s), Rami Levy, Fresh Market.
-Approach: `ThreadPoolExecutor` per-store within each chain's `load_prices_for_stores`, or a shared pool across all stores of all chains.
+### What was done in 9d-8 (for reference)
+
+- city_canonical rebuilt from CBS 2024 (1057 stores, 0 NULLs). city_canonical is now source of truth.
+- Paz and Dor Alon removed (422 stores, 887K prices deleted).
+- City dropdown reads from city_canonical, 0.13s response (was 3.7s).
+- Chain-level parallelism: `cron_main.py` `ThreadPoolExecutor(max_workers=6)`.
+- Supabase keep-alive timer files deployed to `deploy/systemd/` — still needs enable+start on server.
 
 ---
 
@@ -58,38 +60,35 @@ Approach: `ThreadPoolExecutor` per-store within each chain's `load_prices_for_st
 
 ---
 
-## 📊 Current Production State (post 9d-8)
+## 📊 Current Production State (post 9d-9 priority 1)
 
 - **13 chains** in registry (Paz and Dor Alon removed in 9d-8)
 - **1057 stores** in active_stores.yaml, all with city_canonical populated (0 NULLs)
 - **city_canonical** is the source of truth — API, dropdown, and filter queries all use it
 - **City dropdown** response: ~0.13s (stores table only, no prices JOIN)
 - **Shufersal**: 315/320 stores loading (5 stores with no PriceFull — upstream gap, not a bug)
-- **Cron runtime**: ~2.1h with parallel chains (max_workers=6). Bottleneck is per-store HTTP latency in Shufersal + Tiv Taam — needs per-store parallelism in 9d-9
-- **Supabase keep-alive**: timer files deployed to `deploy/systemd/` — still needs `enable + start` on server
+- **Delta mode**: 7 chains active — Shufersal, Rami Levy, Osher Ad, Yochananof, Keshet, Fresh Market, Super Yuda
+- **Cron runtime**: ~2.1h → target <30 min (per-store parallelism shipped, first full run pending)
+- **Supabase keep-alive**: timer files deployed — still needs `enable + start` on server
 
 ---
 
-## 🎯 Next Session: 9d-9
+## 🎯 Next Session: 9d-9 priority 2
 
-**Goal:** Parallelize stores within slow chains — target <30 min total cron runtime.
+**Goal:** Missing stores for existing chains.
 
-**Context:**
-- Chain-level parallelism is done (max_workers=6 in `cron_main.py`)
-- Remaining bottleneck: Shufersal (~4400s) and Tiv Taam (~6900s) run each store sequentially with per-store HTTP round trips
-- Fix: parallelize the per-store loop inside `load_prices_for_stores` (or override per chain like Shufersal already does)
+**Pending from 9d-9 priority 1:**
 
-**Key files:**
-- `scraper/base.py` — `load_prices_for_stores` (the inner store loop to parallelize)
-- `scraper/shufersal.py` — already overrides `load_prices_for_stores`; good template
-- `scraper/cron_main.py` — chain-level parallelism already in place
-
-**Supabase keep-alive — still needs enabling on server:**
+1. **Confirm full cron run** — check 10:00 IDT tomorrow. Expected <30 min with per-store parallelism.
+2. **Supabase keep-alive** — still needs enabling on server:
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable supabase-keepalive.timer
 sudo systemctl start supabase-keepalive.timer
 ```
+3. **Delta for remaining chains** — Victory, King Store, Shefa, Shuk Hayir need `build_price_index` per portal type. Carrefour (portal was down 2026-06-04) — check when back up.
+
+**Priority 2: missing stores for existing chains** (scope TBD at session start).
 
 ---
 
@@ -124,9 +123,13 @@ sudo systemctl start scrp-backup.service
 
 | File | Purpose |
 |---|---|
-| `scraper/registry.py` | Chain registry (13 chains post 9d-8) |
+| `scraper/registry.py` | Chain registry + `DELTA_CHAINS` (7 chains) + `uses_delta()` |
 | `scraper/active_stores.yaml` | Verified stores for cron (1057 stores) |
-| `scraper/cron_main.py` | Cron entry point — chain-level parallelism done (max_workers=6) |
+| `scraper/cron_main.py` | Cron entry point — chain-level parallelism (max_workers=6) |
+| `scraper/base.py` | `_process_store` + `STORE_WORKERS=4` per-store parallelism |
+| `scraper/shufersal.py` | `_process_store_shufersal` + lazy delta URL fetch |
+| `scraper/cerberus.py` | `build_price_index` for Cerberus delta files |
+| `docs/portals.md` | Portal credentials and delta status for all 13 chains |
 | `scraper/city_names.py` | CITY_VARIANTS, STORE_CITY_OVERRIDES (legacy — city_canonical is now authoritative) |
 | `db/query.py` | All DB queries — city dropdown uses `fetch_cities()` (stores table only, no prices JOIN) |
 | `api/routers/` | FastAPI routes |
