@@ -31,19 +31,20 @@ SCRAPERS: dict[str, type] = {
 
 
 DELTA_CHAINS: set[str] = {
-    "7290027600007",  # Shufersal
-    "7290058140886",  # Rami Levy
-    "7290103152017",  # Osher Ad
-    "7290696200003",  # Victory
-    "7290803800003",  # Yochananof
-    "7290785400000",  # Keshet
-    "7290058108879",  # King Store
-    "7290058134977",  # Shefa Birkat Hashem
-    "7290058148776",  # Shuk Hayir
-    "7290876100000",  # Fresh Market
-    "7290058177776",  # Super Yuda
-    # Tiv Taam (7290873255550) excluded — no daily Price delta files
-    # Carrefour (7290055700007) excluded — publishprice portal, no delta support yet
+    "7290027600007",  # Shufersal       — own lazy-fetch implementation
+    "7290058140886",  # Rami Levy       — Cerberus
+    "7290103152017",  # Osher Ad        — Cerberus
+    "7290803800003",  # Yochananof      — Cerberus
+    "7290785400000",  # Keshet          — Cerberus
+    "7290876100000",  # Fresh Market    — Cerberus
+    "7290058177776",  # Super Yuda      — Cerberus
+    # Excluded — build_price_index not implemented for their portal type:
+    # Tiv Taam     (7290873255550) — Cerberus but no daily Price delta files
+    # Carrefour    (7290055700007) — PublishPrice portal
+    # Victory      (7290696200003) — custom REST API
+    # King Store   (7290058108879) — Bina Projects
+    # Shefa        (7290058134977) — Bina Projects
+    # Shuk Hayir   (7290058148776) — Bina Projects
 }
 
 
