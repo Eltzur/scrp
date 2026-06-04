@@ -303,6 +303,7 @@ class ShufersalScraper(ChainScraper):
                 tmp_xml.write_bytes(data)
 
                 header, items = parse_price_file(tmp_xml)
+                items = list(items)
                 tmp_xml.unlink(missing_ok=True)
 
                 chain_id     = header.get("chain_id") or self.CHAIN_ID
