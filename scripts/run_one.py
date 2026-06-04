@@ -36,6 +36,11 @@ def main():
         default="active",
         help="Which store list to use (default: active)",
     )
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Force PriceFull even for delta chains",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -80,7 +85,8 @@ def main():
     scraper.load_stores(conn)
 
     log.info(f"[{args.chain_id}] Scraping {len(store_ids)} stores: {store_ids}")
-    summary = scraper.load_prices_for_stores(store_ids, conn, replace=True, delta=uses_delta(args.chain_id))
+    delta = uses_delta(args.chain_id) and not args.full
+    summary = scraper.load_prices_for_stores(store_ids, conn, replace=True, delta=delta)
 
     conn.close()
     elapsed = time.monotonic() - t_start
