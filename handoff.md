@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: June 3, 2026 (end of session 9d-8)
+> Last updated: June 4, 2026 (end of session 9d-8 final)
 
 ---
 
@@ -11,16 +11,27 @@
 
 ### What was done this session
 
-- **Priority 1 DONE: city_canonical rebuild** — column rebuilt from CBS 2024 official settlement list. 1057 stores, 0 NULLs. city_canonical is now the source of truth for all city data (not city_norm).
+- **city_canonical rebuild** — column rebuilt from CBS 2024 official settlement list. 1057 stores, 0 NULLs. city_canonical is now the source of truth for all city data (not city_norm).
 - **Paz and Dor Alon removed** — both chains deleted from registry and active_stores.yaml. 422 stores and 887K prices deleted from DB.
 - **City dropdown** now reads from city_canonical. Response time 0.13s (was 3.7s — prices JOIN removed). Fetch hoisted to app mount level (no per-open delay).
-- **Supabase keep-alive timer installed** — systemd `supabase-keepalive.timer`, fires every 4h, pings `/rest/v1/stores` to keep Supabase connection warm. Files in `deploy/systemd/`.
+- **Supabase keep-alive timer installed** — systemd `supabase-keepalive.timer`, fires every 4h. Files in `deploy/systemd/`. Still needs `enable + start` on server (see commands below).
 - **Scripts in place for future rebuilds**: `scripts/apply_city_canonical.py` (UPDATE + DELETE actions from CSV), `scripts/build_city_canonical.py`.
+- **Parallel chain scraping** — `cron_main.py` now uses `ThreadPoolExecutor(max_workers=6)`. Each chain gets its own DB connection. `update_canonical_names` and `ping_supabase` remain sequential after all chains finish.
+- **Shufersal 403 fix** — `ShufersalScraper.load_prices_for_stores` overrides the base class to fetch signed Azure URLs lazily per-store (`fetch_pricefull_entry`) instead of building the full index upfront. Eliminates 403s from URL expiry during parallel runs. **315/320 stores now loading.**
 
-### Priority 2 — NOT started, carry to 9d-9
+### Cron performance (post 9d-8)
 
-- Cron parallel scraping — target <30 min for 1057 stores.
-- Current cron is sequential; parallelism work deferred from this session.
+| Metric | Value |
+|---|---|
+| Total runtime | ~2.1h (down from ~2.8h sequential) |
+| Bottleneck | Shufersal 4436s (320 stores, 1 req/store) + Tiv Taam 6913s |
+| Chains complete fast | Rami Levy, Osher Ad, Victory, Yochananof, Keshet, Carrefour, King Store, Shefa, Shuk Hayir |
+
+### Priority for 9d-9
+
+Parallelize stores **within** slow chains — target <30 min total.
+Chains to target: Shufersal (4436s), Tiv Taam (6913s), Rami Levy, Fresh Market.
+Approach: `ThreadPoolExecutor` per-store within each chain's `load_prices_for_stores`, or a shared pool across all stores of all chains.
 
 ---
 
@@ -53,19 +64,25 @@
 - **1057 stores** in active_stores.yaml, all with city_canonical populated (0 NULLs)
 - **city_canonical** is the source of truth — API, dropdown, and filter queries all use it
 - **City dropdown** response: ~0.13s (stores table only, no prices JOIN)
-- **Supabase keep-alive**: every 4h via systemd timer — files deployed, still needs `systemctl enable + start` on server
-- **Cron runtime**: unknown for 1057 stores — sequential, needs parallelism work in 9d-9
+- **Shufersal**: 315/320 stores loading (5 stores with no PriceFull — upstream gap, not a bug)
+- **Cron runtime**: ~2.1h with parallel chains (max_workers=6). Bottleneck is per-store HTTP latency in Shufersal + Tiv Taam — needs per-store parallelism in 9d-9
+- **Supabase keep-alive**: timer files deployed to `deploy/systemd/` — still needs `enable + start` on server
 
 ---
 
 ## 🎯 Next Session: 9d-9
 
-**Goal:** Cron parallel scraping, target <30 min for 1057 stores.
+**Goal:** Parallelize stores within slow chains — target <30 min total cron runtime.
 
-**Starting point:**
-- `scraper/cron_main.py` — current sequential cron entry point
-- `scraper/active_stores.yaml` — 1057 stores across 13 chains
-- Measure actual current runtime first before parallelizing
+**Context:**
+- Chain-level parallelism is done (max_workers=6 in `cron_main.py`)
+- Remaining bottleneck: Shufersal (~4400s) and Tiv Taam (~6900s) run each store sequentially with per-store HTTP round trips
+- Fix: parallelize the per-store loop inside `load_prices_for_stores` (or override per chain like Shufersal already does)
+
+**Key files:**
+- `scraper/base.py` — `load_prices_for_stores` (the inner store loop to parallelize)
+- `scraper/shufersal.py` — already overrides `load_prices_for_stores`; good template
+- `scraper/cron_main.py` — chain-level parallelism already in place
 
 **Supabase keep-alive — still needs enabling on server:**
 ```bash
@@ -109,7 +126,7 @@ sudo systemctl start scrp-backup.service
 |---|---|
 | `scraper/registry.py` | Chain registry (13 chains post 9d-8) |
 | `scraper/active_stores.yaml` | Verified stores for cron (1057 stores) |
-| `scraper/cron_main.py` | Cron entry point — target for 9d-9 parallelism |
+| `scraper/cron_main.py` | Cron entry point — chain-level parallelism done (max_workers=6) |
 | `scraper/city_names.py` | CITY_VARIANTS, STORE_CITY_OVERRIDES (legacy — city_canonical is now authoritative) |
 | `db/query.py` | All DB queries — city dropdown uses `fetch_cities()` (stores table only, no prices JOIN) |
 | `api/routers/` | FastAPI routes |
