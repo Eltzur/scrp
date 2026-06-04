@@ -4,6 +4,7 @@ import gzip
 import logging
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -26,6 +27,7 @@ RAW_DIR = Path(__file__).parent.parent / "sample_data" / "raw"
 class ChainScraper(abc.ABC):
     CHAIN_ID: str = ""
     REQUEST_DELAY: float = 0.5
+    STORE_WORKERS: int = 4
 
     def __init__(self):
         self._session = requests.Session()
@@ -58,6 +60,166 @@ class ChainScraper(abc.ABC):
         with gzip.open(gz_path, "rb") as f:
             return f.read()
 
+    def _process_store(
+        self, sid: str, entry, store_id_to_fk: dict,
+        keep_raw: bool, replace: bool, delta: bool,
+        run_at: str, fetch_run_id: int,
+    ) -> dict:
+        """Process one store in its own DB connection. Writes fetch_store_runs immediately.
+
+        Returns {"attempted": 0/1, "files_loaded": 0/1, "items_inserted": N}.
+        """
+        padded = _pad_store_id(sid)
+        fk = store_id_to_fk.get(padded)
+
+        if entry is None:
+            log.warning(f"  No {'Price' if delta else 'PriceFull'} found for store {sid} — skipping.")
+            if fk is not None:
+                wconn = connect()
+                try:
+                    wconn.execute(text(
+                        "INSERT INTO fetch_store_runs"
+                        " (fetch_run_id, chain_id, store_fk, store_id, run_at,"
+                        "  files_loaded, items_inserted, status)"
+                        " VALUES (:frid, :cid, :sfk, :sid, :rat, 0, 0, 'no_file')"
+                    ), {"frid": fetch_run_id, "cid": self.CHAIN_ID,
+                        "sfk": fk, "sid": padded, "rat": run_at})
+                    wconn.commit()
+                finally:
+                    wconn.close()
+            else:
+                log.warning(f"  Store {sid}: not in stores table, omitting fetch_store_runs row.")
+            return {"attempted": 0, "files_loaded": 0, "items_inserted": 0}
+
+        log.info(f"  Store {sid}: downloading {entry['filename']}...")
+        gz_path = RAW_DIR / (entry["filename"] + ".gz")
+        wconn = connect()
+        try:
+            self._download_gz(entry["url"], gz_path)
+            data = self._decompress(gz_path)
+            if not keep_raw:
+                gz_path.unlink(missing_ok=True)
+
+            RAW_DIR.mkdir(parents=True, exist_ok=True)
+            tmp_xml = RAW_DIR / (entry["filename"] + ".xml")
+            tmp_xml.write_bytes(data)
+
+            header, items = parse_price_file(tmp_xml)
+            items = list(items)
+            tmp_xml.unlink(missing_ok=True)
+
+            chain_id     = header.get("chain_id") or self.CHAIN_ID
+            sub_chain_id = header.get("sub_chain_id") or entry.get("sub_chain_id", "001")
+            store_id_xml = header.get("store_id") or sid
+
+            upsert_chain(wconn, chain_id)
+            store_fk = upsert_store(wconn, chain_id, sub_chain_id, store_id_xml)
+
+            if replace and not delta:
+                # TODO: when price_history table is added, archive rows here before deleting
+                wconn.execute(
+                    text("DELETE FROM prices WHERE store_fk=:store_fk"),
+                    {"store_fk": store_fk},
+                )
+
+            # Delta mode: split items by ItemStatus before filtering.
+            # removed_codes = items with status '0' (delisted); valid = active items.
+            if delta:
+                removed_codes = list({
+                    str(item["item_code"]) for item in items
+                    if item.get("item_code") and str(item.get("item_status", "")) == "0"
+                })
+                valid = [
+                    item for item in items
+                    if item.get("item_code")
+                    and str(item.get("item_status", "")) != "0"
+                    and item.get("item_price") is not None
+                ]
+            else:
+                removed_codes = []
+                valid = [
+                    item for item in items
+                    if item.get("item_code") and item.get("item_price") is not None
+                ]
+
+            # Deduplicate by item_code — source XMLs occasionally emit the same
+            # barcode twice. Postgres raises "ON CONFLICT DO UPDATE cannot affect
+            # row a second time" when a single INSERT batch contains two rows that
+            # target the same conflict key. Last-wins matches ON CONFLICT DO UPDATE
+            # semantics; also prevents UNIQUE-constraint violations in replace mode.
+            raw_count = len(valid)
+            first_seen: dict = {}
+            diff_count = 0
+            for item in valid:
+                code = item["item_code"]
+                if code in first_seen:
+                    prev = first_seen[code]
+                    if (item.get("item_price")        != prev.get("item_price") or
+                            item.get("item_name")     != prev.get("item_name") or
+                            item.get("manufacturer_name") != prev.get("manufacturer_name")):
+                        diff_count += 1
+                else:
+                    first_seen[code] = item
+            valid = list({item["item_code"]: item for item in valid}.values())
+            if raw_count != len(valid) and diff_count > 0:
+                log.warning(
+                    "Store %s: %d duplicate item_codes (%d with differing values, last-wins)",
+                    sid, raw_count - len(valid), diff_count,
+                )
+
+            # Bulk inserts — all three tables in one transaction per store.
+            # items/item_chain_names always use ON CONFLICT (never DELETEd).
+            # prices: in replace mode the store was just cleared (no ON CONFLICT needed);
+            #         in delta mode we need ON CONFLICT DO UPDATE (store NOT cleared).
+            bulk_upsert_items(wconn, valid)
+            bulk_upsert_item_chain_names(wconn, chain_id, valid)
+            count = bulk_insert_prices(wconn, store_fk, valid, replace=(replace and not delta))
+
+            if delta and removed_codes:
+                for i in range(0, len(removed_codes), 1000):
+                    batch = removed_codes[i:i + 1000]
+                    del_params = {f"d{j}": code for j, code in enumerate(batch)}
+                    del_params["store_fk"] = store_fk
+                    wconn.execute(text(
+                        "DELETE FROM prices WHERE store_fk=:store_fk"
+                        f" AND item_code IN ({','.join(f':d{j}' for j in range(len(batch)))})"
+                    ), del_params)
+                log.info(f"    -> {len(removed_codes)} prices removed for store {sid}.")
+
+            wconn.execute(text(
+                "INSERT INTO fetch_store_runs"
+                " (fetch_run_id, chain_id, store_fk, store_id, run_at,"
+                "  files_loaded, items_inserted, status)"
+                " VALUES (:frid, :cid, :sfk, :sid, :rat, 1, :ii, 'loaded')"
+            ), {"frid": fetch_run_id, "cid": self.CHAIN_ID,
+                "sfk": store_fk, "sid": padded, "rat": run_at, "ii": count})
+            wconn.commit()
+            log.info(f"    -> {count} items loaded for store {sid}.")
+            return {"attempted": 1, "files_loaded": 1, "items_inserted": count}
+
+        except Exception as e:
+            log.warning(f"  Store {sid} failed: {e}")
+            gz_path.unlink(missing_ok=True)
+            try:
+                wconn.rollback()
+                if fk is not None:
+                    wconn.execute(text(
+                        "INSERT INTO fetch_store_runs"
+                        " (fetch_run_id, chain_id, store_fk, store_id, run_at,"
+                        "  files_loaded, items_inserted, status)"
+                        " VALUES (:frid, :cid, :sfk, :sid, :rat, 0, 0, 'error')"
+                    ), {"frid": fetch_run_id, "cid": self.CHAIN_ID,
+                        "sfk": fk, "sid": padded, "rat": run_at})
+                    wconn.commit()
+                else:
+                    log.warning(f"  Store {sid}: not in stores table, omitting fetch_store_runs row.")
+            except Exception:
+                pass
+            return {"attempted": 1, "files_loaded": 0, "items_inserted": 0}
+
+        finally:
+            wconn.close()
+
     def load_prices_for_stores(
         self, store_ids: list, conn, keep_raw: bool = False, replace: bool = True,
         delta: bool = False,
@@ -66,9 +228,8 @@ class ChainScraper(abc.ABC):
         index = self.build_price_index(target) if delta else self.build_pricefull_index(target)
 
         run_at = datetime.now(timezone.utc).isoformat()
-        files_attempted = files_loaded = items_inserted = 0
 
-        # One batch lookup so no_file / error paths can find store_fk without per-store SELECTs.
+        # Batch lookup — read-only dict, safely shared across worker threads.
         store_id_to_fk: dict[str, int] = {
             _pad_store_id(r[1]): r[0]
             for r in conn.execute(
@@ -76,176 +237,41 @@ class ChainScraper(abc.ABC):
                 {"chain_id": self.CHAIN_ID},
             ).fetchall()
         }
-        store_results: list[dict] = []
 
-        for sid in store_ids:
-            entry = index.get(_pad_store_id(sid))
-            if not entry:
-                log.warning(f"  No {'Price' if delta else 'PriceFull'} found for store {sid} — skipping.")
-                fk = store_id_to_fk.get(_pad_store_id(sid))
-                if fk is not None:
-                    store_results.append({
-                        "chain_id": self.CHAIN_ID, "store_fk": fk, "store_id": _pad_store_id(sid),
-                        "files_loaded": 0, "items_inserted": 0, "status": "no_file",
-                    })
-                else:
-                    log.warning(f"  Store {sid}: not in stores table, omitting fetch_store_runs row.")
-                continue
-
-            files_attempted += 1
-            log.info(f"  Store {sid}: downloading {entry['filename']}...")
-            gz_path = RAW_DIR / (entry["filename"] + ".gz")
-
-            try:
-                self._download_gz(entry["url"], gz_path)
-                data = self._decompress(gz_path)
-                if not keep_raw:
-                    gz_path.unlink(missing_ok=True)
-
-                RAW_DIR.mkdir(parents=True, exist_ok=True)
-                tmp_xml = RAW_DIR / (entry["filename"] + ".xml")
-                tmp_xml.write_bytes(data)
-
-                header, items = parse_price_file(tmp_xml)
-                tmp_xml.unlink(missing_ok=True)
-
-                chain_id     = header.get("chain_id") or self.CHAIN_ID
-                sub_chain_id = header.get("sub_chain_id") or entry.get("sub_chain_id", "001")
-                store_id_xml = header.get("store_id") or sid
-
-                upsert_chain(conn, chain_id)
-                store_fk = upsert_store(conn, chain_id, sub_chain_id, store_id_xml)
-
-                if replace and not delta:
-                    # TODO: when price_history table is added, archive rows here before deleting
-                    conn.execute(
-                        text("DELETE FROM prices WHERE store_fk=:store_fk"),
-                        {"store_fk": store_fk},
-                    )
-
-                # Delta mode: split items by ItemStatus before filtering.
-                # removed_codes = items with status '0' (delisted); valid = active items.
-                if delta:
-                    removed_codes = list({
-                        str(item["item_code"]) for item in items
-                        if item.get("item_code") and str(item.get("item_status", "")) == "0"
-                    })
-                    valid = [
-                        item for item in items
-                        if item.get("item_code")
-                        and str(item.get("item_status", "")) != "0"
-                        and item.get("item_price") is not None
-                    ]
-                else:
-                    removed_codes = []
-                    valid = [
-                        item for item in items
-                        if item.get("item_code") and item.get("item_price") is not None
-                    ]
-
-                # Deduplicate by item_code — source XMLs occasionally emit the same
-                # barcode twice. Postgres raises "ON CONFLICT DO UPDATE cannot affect
-                # row a second time" when a single INSERT batch contains two rows that
-                # target the same conflict key. Last-wins matches ON CONFLICT DO UPDATE
-                # semantics; also prevents UNIQUE-constraint violations in replace mode.
-                raw_count = len(valid)
-                first_seen: dict = {}
-                diff_count = 0
-                for item in valid:
-                    code = item["item_code"]
-                    if code in first_seen:
-                        prev = first_seen[code]
-                        if (item.get("item_price")        != prev.get("item_price") or
-                                item.get("item_name")     != prev.get("item_name") or
-                                item.get("manufacturer_name") != prev.get("manufacturer_name")):
-                            diff_count += 1
-                    else:
-                        first_seen[code] = item
-                valid = list({item["item_code"]: item for item in valid}.values())
-                if raw_count != len(valid) and diff_count > 0:
-                    log.warning(
-                        "Store %s: %d duplicate item_codes (%d with differing values, last-wins)",
-                        sid, raw_count - len(valid), diff_count,
-                    )
-
-                # Bulk inserts — all three tables in one transaction per store.
-                # items/item_chain_names always use ON CONFLICT (never DELETEd).
-                # prices: in replace mode the store was just cleared (no ON CONFLICT needed);
-                #         in delta mode we need ON CONFLICT DO UPDATE (store NOT cleared).
-                bulk_upsert_items(conn, valid)
-                bulk_upsert_item_chain_names(conn, chain_id, valid)
-                count = bulk_insert_prices(conn, store_fk, valid, replace=(replace and not delta))
-
-                if delta and removed_codes:
-                    for i in range(0, len(removed_codes), 1000):
-                        batch = removed_codes[i:i + 1000]
-                        del_params = {f"d{j}": code for j, code in enumerate(batch)}
-                        del_params["store_fk"] = store_fk
-                        conn.execute(text(
-                            "DELETE FROM prices WHERE store_fk=:store_fk"
-                            f" AND item_code IN ({','.join(f':d{j}' for j in range(len(batch)))})"
-                        ), del_params)
-                    log.info(f"    -> {len(removed_codes)} prices removed for store {sid}.")
-
-                conn.commit()
-                items_inserted += count
-                files_loaded += 1
-                log.info(f"    -> {count} items loaded for store {sid}.")
-                store_results.append({
-                    "chain_id": self.CHAIN_ID, "store_fk": store_fk, "store_id": _pad_store_id(sid),
-                    "files_loaded": 1, "items_inserted": count, "status": "loaded",
-                })
-
-            except Exception as e:
-                log.warning(f"  Store {sid} failed: {e}")
-                gz_path.unlink(missing_ok=True)
-                fk = store_id_to_fk.get(_pad_store_id(sid))
-                if fk is not None:
-                    store_results.append({
-                        "chain_id": self.CHAIN_ID, "store_fk": fk, "store_id": _pad_store_id(sid),
-                        "files_loaded": 0, "items_inserted": 0, "status": "error",
-                    })
-                else:
-                    log.warning(f"  Store {sid}: not in stores table, omitting fetch_store_runs row.")
-
+        # Insert fetch_runs upfront so workers can reference it for fetch_store_runs FK.
         fetch_run_id = conn.execute(text("""
             INSERT INTO fetch_runs
                (chain_id, run_at, files_attempted, files_loaded, items_inserted, status)
-               VALUES (:chain_id, :run_at, :files_attempted, :files_loaded, :items_inserted, :status)
+               VALUES (:chain_id, :run_at, 0, 0, 0, 'running')
             RETURNING id
-        """), {
-            "chain_id":        self.CHAIN_ID,
-            "run_at":          run_at,
-            "files_attempted": files_attempted,
-            "files_loaded":    files_loaded,
-            "items_inserted":  items_inserted,
-            "status":          "ok" if files_loaded == files_attempted else "partial",
-        }).scalar()
+        """), {"chain_id": self.CHAIN_ID, "run_at": run_at}).scalar()
         conn.commit()
 
-        if store_results and fetch_run_id is not None:
-            placeholders, params = [], {}
-            for j, sr in enumerate(store_results):
-                placeholders.append(
-                    f"(:s{j}0,:s{j}1,:s{j}2,:s{j}3,:s{j}4,:s{j}5,:s{j}6,:s{j}7)"
+        with ThreadPoolExecutor(max_workers=self.STORE_WORKERS) as executor:
+            futures = [
+                executor.submit(
+                    self._process_store,
+                    sid, index.get(_pad_store_id(sid)), store_id_to_fk,
+                    keep_raw, replace, delta, run_at, fetch_run_id,
                 )
-                params.update({
-                    f"s{j}0": fetch_run_id,
-                    f"s{j}1": sr["chain_id"],
-                    f"s{j}2": sr["store_fk"],
-                    f"s{j}3": sr["store_id"],
-                    f"s{j}4": run_at,
-                    f"s{j}5": sr["files_loaded"],
-                    f"s{j}6": sr["items_inserted"],
-                    f"s{j}7": sr["status"],
-                })
-            conn.execute(text(
-                "INSERT INTO fetch_store_runs"
-                " (fetch_run_id, chain_id, store_fk, store_id, run_at,"
-                "  files_loaded, items_inserted, status)"
-                f" VALUES {','.join(placeholders)}"
-            ), params)
-            conn.commit()
+                for sid in store_ids
+            ]
+            results = [f.result() for f in futures]
+
+        files_attempted = sum(r["attempted"] for r in results)
+        files_loaded    = sum(r["files_loaded"] for r in results)
+        items_inserted  = sum(r["items_inserted"] for r in results)
+
+        conn.execute(text("""
+            UPDATE fetch_runs
+            SET files_attempted=:fa, files_loaded=:fl, items_inserted=:ii, status=:s
+            WHERE id=:id
+        """), {
+            "fa": files_attempted, "fl": files_loaded, "ii": items_inserted,
+            "s": "ok" if files_loaded == files_attempted else "partial",
+            "id": fetch_run_id,
+        })
+        conn.commit()
 
         return {
             "files_attempted": files_attempted,
