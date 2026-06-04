@@ -18,7 +18,7 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from db.db import connect, init_db
-from scraper.registry import get_scraper
+from scraper.registry import get_scraper, uses_delta
 
 SCRAPER_DIR = Path(__file__).resolve().parent.parent / "scraper"
 YAML_FILES = {
@@ -80,7 +80,7 @@ def main():
     scraper.load_stores(conn)
 
     log.info(f"[{args.chain_id}] Scraping {len(store_ids)} stores: {store_ids}")
-    summary = scraper.load_prices_for_stores(store_ids, conn, replace=True)
+    summary = scraper.load_prices_for_stores(store_ids, conn, replace=True, delta=uses_delta(args.chain_id))
 
     conn.close()
     elapsed = time.monotonic() - t_start
