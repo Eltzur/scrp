@@ -39,6 +39,10 @@ class ChainScraper(abc.ABC):
     def build_pricefull_index(self, target_store_ids: set) -> dict:
         """Return store_id -> entry dict with keys: filename (no .gz), url, sub_chain_id."""
 
+    def build_price_index(self, target_store_ids: set) -> dict:
+        """Return store_id -> entry dict for Price (delta) files. Override per chain."""
+        raise NotImplementedError
+
     def _download_gz(self, url: str, dest: Path) -> Path:
         dest.parent.mkdir(parents=True, exist_ok=True)
         with self._session.get(url, stream=True, timeout=60) as r:
@@ -55,10 +59,11 @@ class ChainScraper(abc.ABC):
             return f.read()
 
     def load_prices_for_stores(
-        self, store_ids: list, conn, keep_raw: bool = False, replace: bool = True
+        self, store_ids: list, conn, keep_raw: bool = False, replace: bool = True,
+        delta: bool = False,
     ) -> dict:
         target = set(store_ids)
-        index = self.build_pricefull_index(target)
+        index = self.build_price_index(target) if delta else self.build_pricefull_index(target)
 
         run_at = datetime.now(timezone.utc).isoformat()
         files_attempted = files_loaded = items_inserted = 0
@@ -76,7 +81,7 @@ class ChainScraper(abc.ABC):
         for sid in store_ids:
             entry = index.get(_pad_store_id(sid))
             if not entry:
-                log.warning(f"  No PriceFull found for store {sid} — skipping.")
+                log.warning(f"  No {'Price' if delta else 'PriceFull'} found for store {sid} — skipping.")
                 fk = store_id_to_fk.get(_pad_store_id(sid))
                 if fk is not None:
                     store_results.append({
@@ -111,18 +116,32 @@ class ChainScraper(abc.ABC):
                 upsert_chain(conn, chain_id)
                 store_fk = upsert_store(conn, chain_id, sub_chain_id, store_id_xml)
 
-                if replace:
+                if replace and not delta:
                     # TODO: when price_history table is added, archive rows here before deleting
                     conn.execute(
                         text("DELETE FROM prices WHERE store_fk=:store_fk"),
                         {"store_fk": store_fk},
                     )
 
-                # Filter once; valid items feed all three bulk inserts below.
-                valid = [
-                    item for item in items
-                    if item.get("item_code") and item.get("item_price") is not None
-                ]
+                # Delta mode: split items by ItemStatus before filtering.
+                # removed_codes = items with status '0' (delisted); valid = active items.
+                if delta:
+                    removed_codes = list({
+                        str(item["item_code"]) for item in items
+                        if item.get("item_code") and str(item.get("item_status", "")) == "0"
+                    })
+                    valid = [
+                        item for item in items
+                        if item.get("item_code")
+                        and str(item.get("item_status", "")) != "0"
+                        and item.get("item_price") is not None
+                    ]
+                else:
+                    removed_codes = []
+                    valid = [
+                        item for item in items
+                        if item.get("item_code") and item.get("item_price") is not None
+                    ]
 
                 # Deduplicate by item_code — source XMLs occasionally emit the same
                 # barcode twice. Postgres raises "ON CONFLICT DO UPDATE cannot affect
@@ -151,10 +170,22 @@ class ChainScraper(abc.ABC):
 
                 # Bulk inserts — all three tables in one transaction per store.
                 # items/item_chain_names always use ON CONFLICT (never DELETEd).
-                # prices skips ON CONFLICT in replace mode (store was just cleared).
+                # prices: in replace mode the store was just cleared (no ON CONFLICT needed);
+                #         in delta mode we need ON CONFLICT DO UPDATE (store NOT cleared).
                 bulk_upsert_items(conn, valid)
                 bulk_upsert_item_chain_names(conn, chain_id, valid)
-                count = bulk_insert_prices(conn, store_fk, valid, replace=replace)
+                count = bulk_insert_prices(conn, store_fk, valid, replace=(replace and not delta))
+
+                if delta and removed_codes:
+                    for i in range(0, len(removed_codes), 1000):
+                        batch = removed_codes[i:i + 1000]
+                        del_params = {f"d{j}": code for j, code in enumerate(batch)}
+                        del_params["store_fk"] = store_fk
+                        conn.execute(text(
+                            "DELETE FROM prices WHERE store_fk=:store_fk"
+                            f" AND item_code IN ({','.join(f':d{j}' for j in range(len(batch)))})"
+                        ), del_params)
+                    log.info(f"    -> {len(removed_codes)} prices removed for store {sid}.")
 
                 conn.commit()
                 items_inserted += count

@@ -189,6 +189,49 @@ class ShufersalScraper(ChainScraper):
             index[sid] = {**best, "filename": fname}
         return index
 
+    def build_price_index(self, target_store_ids: set) -> dict:
+        """Fetch Price (delta) file index for each target store (catID=1)."""
+        index: dict[str, dict] = {}
+        log.info(f"Shufersal: fetching Price (delta) for {len(target_store_ids)} stores…")
+        for store_id in sorted(target_store_ids):
+            url = (f"{LISTING_BASE}?catID=1&storeId={int(store_id)}"
+                   f"&sort=Time&sortdir=DESC")
+            try:
+                rows = self._fetch_url(url)
+            except Exception as e:
+                log.warning(f"Shufersal store {store_id}: fetch failed: {e}")
+                continue
+            p_rows = [r for r in rows if r["file_type"] == "Price"]
+            if not p_rows:
+                log.warning(f"Shufersal store {store_id}: no Price file found")
+                continue
+            best = max(p_rows, key=lambda r: r["filename"])
+            fname = best["filename"]
+            if fname.endswith(".gz"):
+                fname = fname[:-3]
+            sid = parse_filename(best["filename"]).get("store_id", store_id)
+            index[sid] = {**best, "filename": fname}
+        return index
+
+    def fetch_price_entry(self, store_id: str) -> dict | None:
+        """Fetch a fresh signed Azure URL for one store's Price (delta) file on demand."""
+        url = (f"{LISTING_BASE}?catID=1&storeId={int(store_id)}"
+               f"&sort=Time&sortdir=DESC")
+        try:
+            rows = self._fetch_url(url)
+        except Exception as e:
+            log.warning(f"Shufersal store {store_id}: fetch failed: {e}")
+            return None
+        p_rows = [r for r in rows if r["file_type"] == "Price"]
+        if not p_rows:
+            log.warning(f"Shufersal store {store_id}: no Price file found")
+            return None
+        best = max(p_rows, key=lambda r: r["filename"])
+        fname = best["filename"]
+        if fname.endswith(".gz"):
+            fname = fname[:-3]
+        return {**best, "filename": fname}
+
     def fetch_pricefull_entry(self, store_id: str) -> dict | None:
         """Fetch a fresh signed Azure URL for one store on demand.
 
@@ -214,7 +257,8 @@ class ShufersalScraper(ChainScraper):
         return {**best, "filename": fname}
 
     def load_prices_for_stores(
-        self, store_ids: list, conn, keep_raw: bool = False, replace: bool = True
+        self, store_ids: list, conn, keep_raw: bool = False, replace: bool = True,
+        delta: bool = False,
     ) -> dict:
         """Override: fetch each store's signed URL lazily, right before download."""
         run_at = datetime.now(timezone.utc).isoformat()
@@ -230,9 +274,10 @@ class ShufersalScraper(ChainScraper):
         store_results: list[dict] = []
 
         for sid in store_ids:
-            entry = self.fetch_pricefull_entry(_pad_store_id(sid))
+            entry = (self.fetch_price_entry(_pad_store_id(sid)) if delta
+                     else self.fetch_pricefull_entry(_pad_store_id(sid)))
             if not entry:
-                log.warning(f"  No PriceFull found for store {sid} — skipping.")
+                log.warning(f"  No {'Price' if delta else 'PriceFull'} found for store {sid} — skipping.")
                 fk = store_id_to_fk.get(_pad_store_id(sid))
                 if fk is not None:
                     store_results.append({
@@ -267,16 +312,29 @@ class ShufersalScraper(ChainScraper):
                 upsert_chain(conn, chain_id)
                 store_fk = upsert_store(conn, chain_id, sub_chain_id, store_id_xml)
 
-                if replace:
+                if replace and not delta:
                     conn.execute(
                         text("DELETE FROM prices WHERE store_fk=:store_fk"),
                         {"store_fk": store_fk},
                     )
 
-                valid = [
-                    item for item in items
-                    if item.get("item_code") and item.get("item_price") is not None
-                ]
+                if delta:
+                    removed_codes = list({
+                        str(item["item_code"]) for item in items
+                        if item.get("item_code") and str(item.get("item_status", "")) == "0"
+                    })
+                    valid = [
+                        item for item in items
+                        if item.get("item_code")
+                        and str(item.get("item_status", "")) != "0"
+                        and item.get("item_price") is not None
+                    ]
+                else:
+                    removed_codes = []
+                    valid = [
+                        item for item in items
+                        if item.get("item_code") and item.get("item_price") is not None
+                    ]
 
                 raw_count = len(valid)
                 first_seen: dict = {}
@@ -300,7 +358,18 @@ class ShufersalScraper(ChainScraper):
 
                 bulk_upsert_items(conn, valid)
                 bulk_upsert_item_chain_names(conn, chain_id, valid)
-                count = bulk_insert_prices(conn, store_fk, valid, replace=replace)
+                count = bulk_insert_prices(conn, store_fk, valid, replace=(replace and not delta))
+
+                if delta and removed_codes:
+                    for i in range(0, len(removed_codes), 1000):
+                        batch = removed_codes[i:i + 1000]
+                        del_params = {f"d{j}": code for j, code in enumerate(batch)}
+                        del_params["store_fk"] = store_fk
+                        conn.execute(text(
+                            "DELETE FROM prices WHERE store_fk=:store_fk"
+                            f" AND item_code IN ({','.join(f':d{j}' for j in range(len(batch)))})"
+                        ), del_params)
+                    log.info(f"    -> {len(removed_codes)} prices removed for store {sid}.")
 
                 conn.commit()
                 items_inserted += count

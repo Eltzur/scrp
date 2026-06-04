@@ -15,7 +15,7 @@ import yaml
 from sqlalchemy import text
 
 from db.db import connect, init_db
-from scraper.registry import get_scraper
+from scraper.registry import get_scraper, uses_delta
 from scraper.canonical import update_canonical_names
 
 log = logging.getLogger(__name__)
@@ -52,7 +52,8 @@ def pick_stores(conn, chain_id: str, n: int) -> list[str]:
     return [r[0] for r in rows]
 
 
-def run_chain(chain_id: str, n_stores: int, store_ids: list | None = None) -> dict:
+def run_chain(chain_id: str, n_stores: int, store_ids: list | None = None,
+              delta: bool = False) -> dict:
     conn = connect()
     try:
         scraper = get_scraper(chain_id)
@@ -67,8 +68,9 @@ def run_chain(chain_id: str, n_stores: int, store_ids: list | None = None) -> di
         if not store_ids:
             raise RuntimeError(f"No stores found in DB for chain {chain_id} after load_stores")
 
-        log.info(f"[{chain_id}] Scraping {len(store_ids)} stores: {store_ids}")
-        return scraper.load_prices_for_stores(store_ids, conn, replace=True)
+        mode = "delta" if delta else "full"
+        log.info(f"[{chain_id}] Scraping {len(store_ids)} stores ({mode}): {store_ids}")
+        return scraper.load_prices_for_stores(store_ids, conn, replace=True, delta=delta)
     finally:
         conn.close()
 
@@ -136,9 +138,10 @@ def main():
         chain_id  = entry["chain_id"]
         store_ids = entry.get("store_ids")
         n_stores  = entry.get("n_stores", 5)
+        delta     = uses_delta(chain_id)
         t0 = time.monotonic()
         try:
-            summary = run_chain(chain_id, n_stores, store_ids=store_ids)
+            summary = run_chain(chain_id, n_stores, store_ids=store_ids, delta=delta)
             elapsed = time.monotonic() - t0
             log.info(
                 f"[{chain_id}] OK — "

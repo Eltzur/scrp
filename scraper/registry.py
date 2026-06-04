@@ -30,7 +30,17 @@ SCRAPERS: dict[str, type] = {
 }
 
 
+DELTA_CHAINS: set[str] = {
+    "7290027600007",  # Shufersal — publishes daily Price (delta) files
+}
+
+
 def get_scraper(chain_id: str):
     """Return an instantiated scraper for the given chain_id, or None."""
     cls = SCRAPERS.get(chain_id)
     return cls() if cls else None
+
+
+def uses_delta(chain_id: str) -> bool:
+    """Return True if this chain should use Price (delta) files instead of PriceFull."""
+    return chain_id in DELTA_CHAINS
