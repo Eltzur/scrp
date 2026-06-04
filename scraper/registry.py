@@ -31,7 +31,19 @@ SCRAPERS: dict[str, type] = {
 
 
 DELTA_CHAINS: set[str] = {
-    "7290027600007",  # Shufersal — publishes daily Price (delta) files
+    "7290027600007",  # Shufersal
+    "7290058140886",  # Rami Levy
+    "7290103152017",  # Osher Ad
+    "7290696200003",  # Victory
+    "7290803800003",  # Yochananof
+    "7290785400000",  # Keshet
+    "7290058108879",  # King Store
+    "7290058134977",  # Shefa Birkat Hashem
+    "7290058148776",  # Shuk Hayir
+    "7290876100000",  # Fresh Market
+    "7290058177776",  # Super Yuda
+    # Tiv Taam (7290873255550) excluded — no daily Price delta files
+    # Carrefour (7290055700007) excluded — publishprice portal, no delta support yet
 }
 
 
