@@ -12,6 +12,7 @@ from scraper.shefabirkat import ShefaBirkatHashemScraper
 from scraper.shukhayir   import ShukHayirScraper
 from scraper.freshmarket import FreshMarketScraper
 from scraper.yuda        import YudaScraper
+from scraper.hazihinam   import HaziHinamScraper
 
 SCRAPERS: dict[str, type] = {
     "7290027600007": ShufersalScraper,
@@ -27,6 +28,7 @@ SCRAPERS: dict[str, type] = {
     "7290058148776": ShukHayirScraper,
     "7290876100000": FreshMarketScraper,
     "7290058177776": YudaScraper,
+    "7290700100008": HaziHinamScraper,
 }
 
 
@@ -38,6 +40,7 @@ DELTA_CHAINS: set[str] = {
     "7290785400000",  # Keshet          — Cerberus
     "7290876100000",  # Fresh Market    — Cerberus
     "7290058177776",  # Super Yuda      — Cerberus
+    "7290700100008",  # Hazi Hinam      — custom portal, own build_price_index
     # Excluded — build_price_index not implemented for their portal type:
     # Tiv Taam     (7290873255550) — Cerberus but no daily Price delta files
     # Carrefour    (7290055700007) — PublishPrice portal
