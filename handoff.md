@@ -104,6 +104,61 @@ Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קו
 
 ## ✅ Sessions Completed
 
+### Session 9d-9 (June 4-5, 2026) — Delta Price Files + Per-Store Parallelism + Hazi Hinam + Missing Stores
+
+#### Performance
+| Chain | Before | After | Speedup |
+|---|---|---|---|
+| Shufersal | 4436s (74 min) | 544s (9 min) | 8× |
+| Tiv Taam | 6913s (115 min) | 93s (1.5 min) | 74× |
+| Rami Levy | ~600s | ~132s | ~4.5× |
+
+#### Delta Price file architecture
+- Daily cron now uses Price (delta) files instead of PriceFull for 8 chains
+- DELTA_CHAINS: Shufersal, Rami Levy, Osher Ad, Yochananof, Keshet, Fresh Market, Super Yuda, Hazi Hinam
+- Excluded from delta: Tiv Taam (no delta files published), Carrefour (portal down), Victory/King Store/Shefa/Shuk Hayir (non-Cerberus, needs build_price_index)
+- PriceFull remains available via --full flag in run_one.py for seeding new stores
+- Generator exhaustion bug fixed in shufersal.py (items = list(items))
+
+#### Per-store parallelism
+- ThreadPoolExecutor(max_workers=STORE_WORKERS=4) added to base.py and shufersal.py
+- Each worker thread owns its own DB connection (connect()/close() inside worker)
+- fetch_runs row inserted upfront with status='running'; workers write fetch_store_runs per-store
+- OOM incident during testing — root cause was two parallel Shufersal runs (manual + cron), not a code bug
+
+#### חצי חינם scraper (new chain — priority 3)
+- Chain ID: 7290700100008, 11 physical stores (201-217, store 103=online excluded)
+- Portal: shop.hazi-hinam.co.il/Prices — public Azure Blob, no auth
+- PriceFull only published for store 103 (online) — physical stores get Price delta only
+- Seeding strategy: seed_hazihinam.py copies store 103 PriceFull to all 11 physical stores (92,103 prices)
+- Daily delta: 11/11 stores, 4 seconds, confirmed working
+- docs/portals.md created — portal credentials and delta status for all chains
+
+#### Missing stores expansion (priority 2)
+| Chain | Before | After | Added |
+|---|---|---|---|
+| Rami Levy | 26 | 98 | +72 |
+| Yochananof | 15 | 50 | +35 |
+| Keshet | 10 | 22 | +12 |
+| Osher Ad | 12 | 23 | +11 |
+| Hazi Hinam | 11 | 12 | +1 |
+
+- All new stores seeded with PriceFull via run_one --full before delta takeover
+- Yochananof: only 3/50 files loaded in seed run — needs investigation
+- Osher Ad: 0 files in seed run — likely delta-only portal, needs investigation
+
+#### Commits this session
+- 82c190b: delta Price file support for Shufersal
+- 3b19a25: fix generator exhaustion (items = list(items))
+- ab4de5c: per-store ThreadPoolExecutor parallelism
+- 277dc74: delta for all Cerberus chains + docs/portals.md
+- d8bb4aa: seed_hazihinam.py
+- 84abe57: run_one delta flag
+- 7aaa986: run_one --full flag
+- 533e9e4: missing stores for 5 chains
+
+---
+
 | Session | What | Status |
 |---|---|---|
 | 1–6 | Project skeleton, SQLite schema, XML parser, Shufersal scraper, search CLI, Rami Levy + Osher Ad scrapers, basic API + UI | ✅ |
