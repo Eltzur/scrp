@@ -7,17 +7,15 @@
 
 ## 🎯 Vision
 
-**Short-term:** Israeli supermarket price comparison app at `super.xxl.co.il`. ✅ Live.
+xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertical (super.xxl.co.il) is the anchor product — a clean, fast, accurate price comparison tool for Israeli grocery shoppers, powered by government-mandated transparency XML feeds.
 
-**Live now:** `xxl.co.il` portal — multi-vertical savings landing page with AI-powered universal search bar. Sub-header: "XXL — הפורטל שהופך כסף רגיל לכסף חכם". ✅ Live as of session 9f.
+**Near-term (6 months):** Match and exceed Cheapersal.co.il on data coverage, UX clarity, and location relevance. Every search result shows the branch name, address, and last update time. Promo prices highlighted where discount ≥10% or 2-for-1. Mobile-first responsive design.
 
-**Verticals (paths on xxl.co.il, NOT subdomains):**
-- `xxl.co.il/` → portal landing ✅ live
-- מצרכים (Groceries) → routes to `super.xxl.co.il` ✅ live
-- חופשות (Vacations — flights + hotels combined) → `/vacation` בקרוב page live, real comparison engine planned
-- אופנה (Fashion) → `/fashion` בקרוב page live, real comparison engine planned
+**Medium-term (6-12 months):** Native mobile experience with barcode scanner — user scans a product in-store and instantly sees prices at nearby supermarkets within 500m radius, powered by store GPS coordinates from StoresFull XMLs. GS1 Israel integration for canonical product names, images, and nutritional data.
 
-Brand tagline (codified in 8L, finalized in 9f): logo's own tagline arches "קונים חכם · חוסכים בענקקק" above the XXL wordmark.
+**Long-term:** AI-powered natural language search ("where's the cheapest cottage cheese near me?"), basket optimization across chains, and expansion to additional verticals (flights, hotels, fashion) under the xxl.co.il umbrella.
+
+**Core principles:** data accuracy over coverage, location relevance over volume, mobile experience over desktop, free tier as the honeypot.
 
 ---
 
