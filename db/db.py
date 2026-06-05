@@ -1,80 +1,62 @@
 import os
-from functools import lru_cache
-from pathlib import Path
 
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection, Engine
-
-SCHEMA = Path(__file__).parent / "schema.sql"
-DEFAULT_DB = Path(__file__).parent.parent / "prices.db"
 
 # Rows per INSERT statement for bulk operations.
 # 1000 reduces ~7000 per-row round-trips to ~7 statements per store.
-# Safe for both SQLite (no param limit) and PostgreSQL (65535 positional limit;
-# 1000 rows × 10 cols = 10000 named params — well within bounds).
+# PostgreSQL limit: 65535 positional params; 1000 rows × 10 cols = 10000 — well within bounds.
 PRICE_INSERT_BATCH_SIZE = 1000
 
-
-def _database_url() -> str:
-    url = os.environ.get("DATABASE_URL", "")
-    if not url:
-        raise RuntimeError(
-            "DATABASE_URL environment variable is not set! "
-            "Set it in Railway Variables tab."
-        )
-    if url.startswith("postgres://"):
-        url = "postgresql://" + url[len("postgres://"):]
-    return url
+_engine: Engine | None = None
 
 
-@lru_cache(maxsize=1)
 def get_engine() -> Engine:
+    global _engine
+    if _engine is not None:
+        return _engine
     url = os.environ.get("DATABASE_URL", "")
     if url.startswith("postgres://"):
         url = "postgresql://" + url[len("postgres://"):]
-    url = url or f"sqlite:///{DEFAULT_DB}"
-    if url.startswith("sqlite"):
-        engine = create_engine(url, connect_args={"check_same_thread": False})
-
-        @event.listens_for(engine, "connect")
-        def _set_sqlite_pragmas(dbapi_conn, _record):
-            dbapi_conn.execute("PRAGMA journal_mode=WAL")
-            dbapi_conn.execute("PRAGMA foreign_keys=ON")
-    else:
-        engine = create_engine(
-            url,
-            pool_pre_ping=True,
-            pool_size=20,
-            max_overflow=10,
-        )
-    return engine
-
-
-def connect(db_path: Path = DEFAULT_DB) -> Connection:
-    """Return a SQLAlchemy Connection. Uses DATABASE_URL when set, else SQLite at db_path."""
-    if os.environ.get("DATABASE_URL"):
-        return get_engine().connect()
-    engine = create_engine(
-        f"sqlite:///{db_path}",
-        connect_args={"check_same_thread": False},
+    if not url:
+        raise RuntimeError("DATABASE_URL environment variable is not set!")
+    _engine = create_engine(
+        url,
+        pool_pre_ping=True,
+        pool_size=20,
+        max_overflow=10,
     )
+    return _engine
 
-    @event.listens_for(engine, "connect")
-    def _pragmas(dbapi_conn, _):
-        dbapi_conn.execute("PRAGMA journal_mode=WAL")
-        dbapi_conn.execute("PRAGMA foreign_keys=ON")
 
-    return engine.connect()
+def connect() -> Connection:
+    return get_engine().connect()
 
 
 def init_db(conn: Connection) -> None:
-    """Apply schema.sql. SQLite only — PG schema is managed via schema_postgres.sql."""
-    if conn.engine.dialect.name != "sqlite":
-        return
-    for stmt in SCHEMA.read_text(encoding="utf-8").split(";"):
-        stmt = stmt.strip()
-        if stmt and not stmt.startswith("--"):
-            conn.execute(text(stmt))
+    """Create tables not covered by schema_postgres.sql (idempotent)."""
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS promos (
+            id            SERIAL PRIMARY KEY,
+            store_fk      INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+            item_code     TEXT NOT NULL,
+            promo_id      TEXT,
+            promo_description TEXT,
+            promo_type    INTEGER,
+            allow_multiple_discounts BOOLEAN,
+            min_qty       NUMERIC,
+            reward_type   INTEGER,
+            discount_rate NUMERIC,
+            discount_price NUMERIC,
+            min_purchase_amount NUMERIC,
+            promo_start   TIMESTAMP,
+            promo_end     TIMESTAMP,
+            created_at    TIMESTAMP DEFAULT NOW(),
+            UNIQUE (store_fk, item_code, promo_id)
+        )
+    """))
+    conn.execute(text("CREATE INDEX IF NOT EXISTS idx_promos_store_fk ON promos(store_fk)"))
+    conn.execute(text("CREATE INDEX IF NOT EXISTS idx_promos_item_code ON promos(item_code)"))
     conn.commit()
 
 
@@ -222,6 +204,65 @@ def bulk_upsert_item_chain_names(conn: Connection, chain_id: str, items: list[di
             " item_name=excluded.item_name,"
             " manufacturer_name=excluded.manufacturer_name"
         ), params)
+
+
+def bulk_insert_promos(conn: Connection, store_fk: int, promo_items: list[dict]) -> int:
+    """
+    Bulk-insert promo rows in batches.
+    ON CONFLICT (store_fk, item_code, promo_id) DO UPDATE refreshes all promo fields.
+    Returns count of rows inserted/updated.
+    """
+    if not promo_items:
+        return 0
+    cols = (
+        "store_fk", "item_code", "promo_id", "promo_description",
+        "promo_type", "allow_multiple_discounts", "min_qty", "reward_type",
+        "discount_rate", "discount_price", "min_purchase_amount",
+        "promo_start", "promo_end",
+    )
+    conflict_clause = (
+        " ON CONFLICT (store_fk, item_code, promo_id) DO UPDATE SET"
+        " promo_description=excluded.promo_description,"
+        " promo_type=excluded.promo_type,"
+        " allow_multiple_discounts=excluded.allow_multiple_discounts,"
+        " min_qty=excluded.min_qty,"
+        " reward_type=excluded.reward_type,"
+        " discount_rate=excluded.discount_rate,"
+        " discount_price=excluded.discount_price,"
+        " min_purchase_amount=excluded.min_purchase_amount,"
+        " promo_start=excluded.promo_start,"
+        " promo_end=excluded.promo_end"
+    )
+    total = 0
+    for i0 in range(0, len(promo_items), PRICE_INSERT_BATCH_SIZE):
+        batch = promo_items[i0: i0 + PRICE_INSERT_BATCH_SIZE]
+        placeholders, params = [], {}
+        for j, item in enumerate(batch):
+            placeholders.append(
+                f"(:p{j}0,:p{j}1,:p{j}2,:p{j}3,:p{j}4,"
+                f":p{j}5,:p{j}6,:p{j}7,:p{j}8,:p{j}9,:p{j}10,:p{j}11,:p{j}12)"
+            )
+            params.update({
+                f"p{j}0":  store_fk,
+                f"p{j}1":  item.get("item_code"),
+                f"p{j}2":  item.get("promo_id"),
+                f"p{j}3":  item.get("promo_description"),
+                f"p{j}4":  item.get("promo_type"),
+                f"p{j}5":  item.get("allow_multiple_discounts"),
+                f"p{j}6":  item.get("min_qty"),
+                f"p{j}7":  item.get("reward_type"),
+                f"p{j}8":  item.get("discount_rate"),
+                f"p{j}9":  item.get("discount_price"),
+                f"p{j}10": item.get("min_purchase_amount"),
+                f"p{j}11": item.get("promo_start"),
+                f"p{j}12": item.get("promo_end"),
+            })
+        conn.execute(text(
+            f"INSERT INTO promos ({','.join(cols)})"
+            f" VALUES {','.join(placeholders)}{conflict_clause}"
+        ), params)
+        total += len(batch)
+    return total
 
 
 def bulk_insert_prices(conn: Connection, store_fk: int, items: list[dict],

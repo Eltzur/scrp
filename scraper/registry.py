@@ -51,6 +51,21 @@ DELTA_CHAINS: set[str] = {
 }
 
 
+PROMO_CHAINS: set[str] = {
+    "7290027600007",  # Shufersal
+    "7290058140886",  # Rami Levy
+    "7290696200003",  # Osher Ad
+    "7290803800003",  # Yochananof
+    "7290785400000",  # Keshet
+    "7290058134977",  # Shefa
+    "7290058148776",  # Shuk Hayir
+    "7290058177776",  # Super Yuda
+    "7290700100008",  # Hazi Hinam
+    "7290058108879",  # King Store
+    "7290876100000",  # Fresh Market
+}
+
+
 def get_scraper(chain_id: str):
     """Return an instantiated scraper for the given chain_id, or None."""
     cls = SCRAPERS.get(chain_id)
@@ -60,3 +75,8 @@ def get_scraper(chain_id: str):
 def uses_delta(chain_id: str) -> bool:
     """Return True if this chain should use Price (delta) files instead of PriceFull."""
     return chain_id in DELTA_CHAINS
+
+
+def uses_promo(chain_id: str) -> bool:
+    """Return True if this chain publishes Promo files."""
+    return chain_id in PROMO_CHAINS

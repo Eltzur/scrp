@@ -135,6 +135,16 @@ _PRICE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Promo filename format — same structure; 'Promo' + digit excludes 'PromoFull'.
+_PROMO_RE = re.compile(
+    r"^Promo(\d{13})"       # chain_id; digit after 'Promo' excludes 'PromoFull'
+    r"-(\d{1,4})"           # seg2: sub_chain_id (new) or store_id (old)
+    r"(?:-(\d{1,4}))?"      # seg3: store_id (new format only, optional)
+    r"-(\d{8,12})"          # timestamp or date
+    r"(?:-\d{6})?\.gz$",    # optional time component (new format)
+    re.IGNORECASE,
+)
+
 
 def _parse_pricefull(fname: str) -> dict | None:
     """Parse a PriceFull filename into {sub_chain_id, store_id}. Returns None if no match."""
@@ -150,6 +160,17 @@ def _parse_pricefull(fname: str) -> dict | None:
 def _parse_price(fname: str) -> dict | None:
     """Parse a Price (delta) filename into {sub_chain_id, store_id}. Returns None if no match."""
     m = _PRICE_RE.match(fname)
+    if not m:
+        return None
+    _chain, seg2, seg3, _ts = m.groups()
+    if seg3:
+        return {"sub_chain_id": seg2, "store_id": seg3.zfill(3)}
+    return {"sub_chain_id": "001", "store_id": seg2.zfill(3)}
+
+
+def _parse_promo(fname: str) -> dict | None:
+    """Parse a Promo filename into {sub_chain_id, store_id}. Returns None if no match."""
+    m = _PROMO_RE.match(fname)
     if not m:
         return None
     _chain, seg2, seg3, _ts = m.groups()
@@ -337,6 +358,32 @@ class CerberusScraper(ChainScraper):
 
         log.info(
             f"{self.CHAIN_NAME}: Price (delta) index built — "
+            f"{len(index)} stores available, {len(target_store_ids)} targeted."
+        )
+        return index
+
+    def build_promo_index(self, target_store_ids: set) -> dict:
+        """Promo index — same as build_price_index but matches Promo* (not PromoFull) filenames."""
+        files = self._list_files()
+        index: dict[str, dict] = {}
+
+        for f in files:
+            fname = f["fname"]
+            parsed = _parse_promo(fname)
+            if not parsed:
+                continue
+            sid = parsed["store_id"]
+            if sid not in index or f["ftime"] > index[sid]["ftime"]:
+                index[sid] = {
+                    "filename":    fname[:-3],
+                    "url":         f"{BASE_URL}/file/d/{fname}",
+                    "sub_chain_id": parsed["sub_chain_id"],
+                    "store_id":    sid,
+                    "ftime":       f["ftime"],
+                }
+
+        log.info(
+            f"{self.CHAIN_NAME}: Promo index built — "
             f"{len(index)} stores available, {len(target_store_ids)} targeted."
         )
         return index

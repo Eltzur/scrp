@@ -121,3 +121,26 @@ class HaziHinamScraper(ChainScraper):
             f"{len(index)} stores available, {len(target_store_ids)} targeted."
         )
         return index
+
+    def build_promo_index(self, target_store_ids: set) -> dict:
+        entries = self._fetch_listing("Promo")
+        index: dict[str, dict] = {}
+        prefix      = f"Promo{self.CHAIN_ID}"
+        full_prefix = f"PromoFull{self.CHAIN_ID}"
+        for e in entries:
+            fname = e["filename"]
+            if not fname.startswith(prefix) or fname.startswith(full_prefix):
+                continue
+            parts = fname.split("-")
+            if len(parts) < 3:
+                continue
+            sid = _pad_store_id(parts[2])
+            if sid not in target_store_ids:
+                continue
+            if sid not in index or fname > index[sid]["filename"]:
+                index[sid] = {"filename": fname, "url": e["url"], "sub_chain_id": "000"}
+        log.info(
+            f"{CHAIN_NAME}: Promo index built — "
+            f"{len(index)} stores available, {len(target_store_ids)} targeted."
+        )
+        return index

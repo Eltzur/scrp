@@ -15,9 +15,10 @@ from db.db import (
     connect, init_db, upsert_chain, upsert_store,
     upsert_item, upsert_item_chain_name, upsert_price,
     bulk_upsert_items, bulk_upsert_item_chain_names, bulk_insert_prices,
-    DEFAULT_DB, _pad_store_id,
+    bulk_insert_promos,
+    _pad_store_id,
 )
-from parser.price_parser import parse_file as parse_price_file
+from parser.price_parser import parse_file as parse_price_file, parse_promo_file
 from scraper.city_names import normalize_city
 
 log = logging.getLogger(__name__)
@@ -43,6 +44,10 @@ class ChainScraper(abc.ABC):
 
     def build_price_index(self, target_store_ids: set) -> dict:
         """Return store_id -> entry dict for Price (delta) files. Override per chain."""
+        raise NotImplementedError
+
+    def build_promo_index(self, target_store_ids: set) -> dict:
+        """Return store_id -> entry dict for Promo files. Override per chain."""
         raise NotImplementedError
 
     def _download_gz(self, url: str, dest: Path) -> Path:
@@ -73,23 +78,31 @@ class ChainScraper(abc.ABC):
         fk = store_id_to_fk.get(padded)
 
         if entry is None:
-            log.warning(f"  No {'Price' if delta else 'PriceFull'} found for store {sid} — skipping.")
-            if fk is not None:
-                wconn = connect()
-                try:
-                    wconn.execute(text(
-                        "INSERT INTO fetch_store_runs"
-                        " (fetch_run_id, chain_id, store_fk, store_id, run_at,"
-                        "  files_loaded, items_inserted, status)"
-                        " VALUES (:frid, :cid, :sfk, :sid, :rat, 0, 0, 'no_file')"
-                    ), {"frid": fetch_run_id, "cid": self.CHAIN_ID,
-                        "sfk": fk, "sid": padded, "rat": run_at})
-                    wconn.commit()
-                finally:
-                    wconn.close()
-            else:
-                log.warning(f"  Store {sid}: not in stores table, omitting fetch_store_runs row.")
-            return {"attempted": 0, "files_loaded": 0, "items_inserted": 0}
+            if delta:
+                log.info(f"  No Price delta for store {sid} — falling back to PriceFull")
+                pf_index = self.build_pricefull_index({padded})
+                entry = pf_index.get(padded)
+                if entry:
+                    delta = False
+                    replace = True
+            if entry is None:
+                log.warning(f"  No {'Price' if delta else 'PriceFull'} found for store {sid} — skipping.")
+                if fk is not None:
+                    wconn = connect()
+                    try:
+                        wconn.execute(text(
+                            "INSERT INTO fetch_store_runs"
+                            " (fetch_run_id, chain_id, store_fk, store_id, run_at,"
+                            "  files_loaded, items_inserted, status)"
+                            " VALUES (:frid, :cid, :sfk, :sid, :rat, 0, 0, 'no_file')"
+                        ), {"frid": fetch_run_id, "cid": self.CHAIN_ID,
+                            "sfk": fk, "sid": padded, "rat": run_at})
+                        wconn.commit()
+                    finally:
+                        wconn.close()
+                else:
+                    log.warning(f"  Store {sid}: not in stores table, omitting fetch_store_runs row.")
+                return {"attempted": 0, "files_loaded": 0, "items_inserted": 0}
 
         log.info(f"  Store {sid}: downloading {entry['filename']}...")
         gz_path = RAW_DIR / (entry["filename"] + ".gz")
@@ -195,6 +208,35 @@ class ChainScraper(abc.ABC):
                 "sfk": store_fk, "sid": padded, "rat": run_at, "ii": count})
             wconn.commit()
             log.info(f"    -> {count} items loaded for store {sid}.")
+
+            # Promo ingestion — best-effort, does not affect price loading result
+            try:
+                promo_idx = self.build_promo_index({padded})
+                promo_entry = promo_idx.get(padded)
+                if promo_entry:
+                    gz_p = RAW_DIR / (promo_entry["filename"] + ".gz")
+                    self._download_gz(promo_entry["url"], gz_p)
+                    promo_data = self._decompress(gz_p)
+                    if not keep_raw:
+                        gz_p.unlink(missing_ok=True)
+                    tmp_p = RAW_DIR / (promo_entry["filename"] + ".xml")
+                    tmp_p.write_bytes(promo_data)
+                    _, promo_items = parse_promo_file(tmp_p)
+                    promo_items = list(promo_items)
+                    tmp_p.unlink(missing_ok=True)
+                    wconn.execute(text("DELETE FROM promos WHERE store_fk=:fk"), {"fk": store_fk})
+                    n_promos = bulk_insert_promos(wconn, store_fk, promo_items)
+                    wconn.commit()
+                    log.info(f"    -> {n_promos} promos loaded for store {sid}.")
+            except NotImplementedError:
+                pass
+            except Exception as e:
+                log.warning(f"  Store {sid}: promo ingestion failed: {e}")
+                try:
+                    wconn.rollback()
+                except Exception:
+                    pass
+
             return {"attempted": 1, "files_loaded": 1, "items_inserted": count}
 
         except Exception as e:
@@ -283,13 +325,11 @@ class ChainScraper(abc.ABC):
         self,
         city: str = "ירושלים",
         n_stores: int = 5,
-        db_path=None,
         keep_raw: bool = False,
         append: bool = False,
     ):
         logging.basicConfig(level=logging.INFO, format="%(message)s")
-        db_path = db_path or DEFAULT_DB
-        conn = connect(db_path)
+        conn = connect()
         init_db(conn)
 
         self.load_stores(conn)
