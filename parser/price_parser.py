@@ -84,13 +84,18 @@ def parse_promo_file(path: Path) -> tuple:
         "store_id":     (root.findtext("StoreID") or root.findtext("StoreId") or "").strip(),
     }
 
+    def _parse_dt(val):
+        if not val:
+            return None
+        return val.split('.')[0] if val else None
+
     def _items():
         for promo_el in root.iter("Promotion"):
             promo_id    = _text(promo_el, "PromotionID")
             description = _text(promo_el, "PromotionDescription")
             allow_multi = _int(promo_el,  "AllowMultipleDiscounts")
-            start_dt    = _text(promo_el, "PromotionStartDateTime") or None
-            end_dt      = _text(promo_el, "PromotionEndDateTime") or None
+            start_dt    = _parse_dt(_text(promo_el, "PromotionStartDateTime"))
+            end_dt      = _parse_dt(_text(promo_el, "PromotionEndDateTime"))
 
             for group_el in promo_el.iter("Group"):
                 min_purch = _real(group_el, "MinPurchaseAmount")
