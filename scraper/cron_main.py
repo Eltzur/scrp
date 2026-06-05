@@ -153,7 +153,7 @@ def main():
             with errors_lock:
                 errors.append(chain_id)
 
-    with ThreadPoolExecutor(max_workers=6) as executor:
+    with ThreadPoolExecutor(max_workers=4) as executor:
         list(executor.map(_run_entry, chains))
 
     log.info("Running canonical name update...")
