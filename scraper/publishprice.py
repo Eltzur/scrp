@@ -171,7 +171,7 @@ class PublishPriceScraper(ChainScraper):
         index: dict[str, dict] = {}
 
         pattern = re.compile(
-            rf'PriceFull{re.escape(self.CHAIN_ID)}-(\d+)-',
+            rf'PriceFull{re.escape(self.CHAIN_ID)}-\d+-(\d+)-',
             re.IGNORECASE,
         )
         for f in files:
