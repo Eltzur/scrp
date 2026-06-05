@@ -319,6 +319,7 @@ class ChainScraper(abc.ABC):
             "files_attempted": files_attempted,
             "files_loaded":    files_loaded,
             "items_inserted":  items_inserted,
+            "fetch_run_id":    fetch_run_id,
         }
 
     def run(

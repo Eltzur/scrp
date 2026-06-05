@@ -75,6 +75,57 @@ def run_chain(chain_id: str, n_stores: int, store_ids: list | None = None,
         conn.close()
 
 
+def report_coverage(conn, fetch_run_ids: list[int]) -> None:
+    if not fetch_run_ids:
+        log.warning("Coverage report skipped — no fetch_run_ids collected.")
+        return
+
+    ids_sql = ",".join(str(i) for i in fetch_run_ids)
+    rows = conn.execute(text(f"""
+        SELECT fsr.chain_id, c.name,
+               COUNT(*)                                          AS total,
+               COUNT(*) FILTER (WHERE fsr.status = 'loaded')    AS loaded,
+               COUNT(*) FILTER (WHERE fsr.status = 'no_file')   AS no_file,
+               COUNT(*) FILTER (WHERE fsr.status = 'error')     AS error
+        FROM fetch_store_runs fsr
+        LEFT JOIN chains c ON c.chain_id = fsr.chain_id
+        WHERE fsr.fetch_run_id IN ({ids_sql})
+        GROUP BY fsr.chain_id, c.name
+        ORDER BY fsr.chain_id
+    """)).fetchall()
+
+    if not rows:
+        log.warning("Coverage report: no fetch_store_runs rows found for this run.")
+        return
+
+    grand_total = grand_loaded = grand_no_file = grand_error = 0
+    low_coverage = []
+
+    for chain_id, name, total, loaded, no_file, error in rows:
+        pct = loaded / total * 100 if total else 0
+        label = name or chain_id
+        log.info(
+            f"  {chain_id} ({label}): {loaded}/{total} loaded ({pct:.1f}%), "
+            f"{no_file} no_file, {error} errors"
+        )
+        grand_total   += total
+        grand_loaded  += loaded
+        grand_no_file += no_file
+        grand_error   += error
+        if total > 5 and pct < 85.0:
+            low_coverage.append((chain_id, label, pct))
+
+    grand_pct = grand_loaded / grand_total * 100 if grand_total else 0
+    log.info(
+        f"  TOTAL: {grand_loaded}/{grand_total} stores loaded ({grand_pct:.1f}%), "
+        f"{grand_no_file} no_file, {grand_error} errors"
+    )
+    for chain_id, label, pct in low_coverage:
+        log.warning(
+            f"  LOW COVERAGE: {chain_id} ({label}) only {pct:.1f}% — investigate no_file stores"
+        )
+
+
 def ping_supabase() -> None:
     """Ping Supabase Data API (a real Postgres read) to reset its 7-day
     inactivity timer. The old /auth/v1/health endpoint returned 200 without
@@ -132,6 +183,8 @@ def main():
 
     errors: list[str] = []
     errors_lock = threading.Lock()
+    fetch_run_ids: list[int] = []
+    fetch_run_ids_lock = threading.Lock()
     t_start = time.monotonic()
 
     def _run_entry(entry):
@@ -148,6 +201,10 @@ def main():
                 f"{summary['files_loaded']}/{summary['files_attempted']} files, "
                 f"{summary['items_inserted']} items, {elapsed:.0f}s"
             )
+            frid = summary.get("fetch_run_id")
+            if frid is not None:
+                with fetch_run_ids_lock:
+                    fetch_run_ids.append(frid)
         except Exception as exc:
             log.error(f"[{chain_id}] FAILED: {exc}", exc_info=True)
             with errors_lock:
@@ -155,6 +212,15 @@ def main():
 
     with ThreadPoolExecutor(max_workers=4) as executor:
         list(executor.map(_run_entry, chains))
+
+    log.info("--- Coverage report ---")
+    report_conn = connect()
+    try:
+        report_coverage(report_conn, fetch_run_ids)
+    except Exception as exc:
+        log.warning(f"Coverage report failed: {exc}")
+    finally:
+        report_conn.close()
 
     log.info("Running canonical name update...")
     conn = connect()
