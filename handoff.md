@@ -102,6 +102,36 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 
 ## ✅ Sessions Completed
 
+### Session 9d-9 (June 5, 2026) — Delta Files + Promo Pipeline + HaziHinam + Missing Stores
+
+#### Final state
+- 14 chains, 812 stores, 4,925,598 prices
+- All 14 chains updated today (5.6.2026) — first full clean run
+- Cron runtime: 7615s today (seeding run) — expected ~15-20 min next week with delta
+- Errors: none on manual run
+
+#### What was completed
+- Delta Price files for 8 chains (Shufersal + 6 Cerberus + HaziHinam)
+- Per-store ThreadPoolExecutor parallelism (STORE_WORKERS=4)
+- PriceFull fallback when no delta found for a store
+- Promo pipeline: promos table, parse_promo_file, bulk_insert_promos, build_promo_index for Shufersal/Cerberus/HaziHinam
+- HaziHinam scraper (11 stores, seeded from store 103)
+- Missing stores: Rami Levy +72, Yochananof +35, Keshet +12, Osher Ad +11, Carrefour +133, HaziHinam +1
+- Connection pool: 20+10, chain workers: 4
+- SQLite fallback removed — fail fast on missing DATABASE_URL
+- docs/portals.md and docs/chain_registry.md created
+- chains table populated for all 14 chains
+
+#### Next session (9d-10) priorities
+1. API endpoint for promos + frontend highlighting (≥10% discount or 2-for-1)
+2. Store address/branch name in search results (from StoresFull XMLs)
+3. Measure Sunday cron runtime — if <20 min, consider STORE_WORKERS=8
+4. Fix DATABASE_URL export in systemd service (Environment= directive)
+5. Victory + BinaProjects delta (portals were down Friday)
+6. Supabase keep-alive: sudo systemctl enable supabase-keepalive.timer && sudo systemctl start supabase-keepalive.timer
+
+---
+
 ### Session 9d-9 (June 4-5, 2026) — Delta Price Files + Per-Store Parallelism + Hazi Hinam + Missing Stores
 
 #### Performance
