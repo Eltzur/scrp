@@ -248,7 +248,7 @@ def bulk_insert_promos(conn: Connection, store_fk: int, promo_items: list[dict])
                 f"p{j}2":  item.get("promo_id"),
                 f"p{j}3":  item.get("promo_description"),
                 f"p{j}4":  item.get("promo_type"),
-                f"p{j}5":  item.get("allow_multiple_discounts"),
+                f"p{j}5":  bool(item.get("allow_multiple_discounts")) if item.get("allow_multiple_discounts") is not None else None,
                 f"p{j}6":  item.get("min_qty"),
                 f"p{j}7":  item.get("reward_type"),
                 f"p{j}8":  item.get("discount_rate"),
