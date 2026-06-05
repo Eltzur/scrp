@@ -214,6 +214,7 @@ def bulk_insert_promos(conn: Connection, store_fk: int, promo_items: list[dict])
     """
     if not promo_items:
         return 0
+    # Column order must match param binding order exactly.
     cols = (
         "store_fk", "item_code", "promo_id", "promo_description",
         "promo_type", "allow_multiple_discounts", "min_qty", "reward_type",
@@ -238,24 +239,26 @@ def bulk_insert_promos(conn: Connection, store_fk: int, promo_items: list[dict])
         batch = promo_items[i0: i0 + PRICE_INSERT_BATCH_SIZE]
         placeholders, params = [], {}
         for j, item in enumerate(batch):
+            # Underscore separator prevents key collisions when j>=11 and n>=10
+            # e.g. j=1,n=10 → "p1_10"; j=11,n=0 → "p11_0" — unambiguous.
             placeholders.append(
-                f"(:p{j}0,:p{j}1,:p{j}2,:p{j}3,:p{j}4,"
-                f":p{j}5,:p{j}6,:p{j}7,:p{j}8,:p{j}9,:p{j}10,:p{j}11,:p{j}12)"
+                f"(:p{j}_0,:p{j}_1,:p{j}_2,:p{j}_3,:p{j}_4,"
+                f":p{j}_5,:p{j}_6,:p{j}_7,:p{j}_8,:p{j}_9,:p{j}_10,:p{j}_11,:p{j}_12)"
             )
             params.update({
-                f"p{j}0":  store_fk,
-                f"p{j}1":  item.get("item_code"),
-                f"p{j}2":  item.get("promo_id"),
-                f"p{j}3":  item.get("promo_description"),
-                f"p{j}4":  item.get("promo_type"),
-                f"p{j}5":  bool(item.get("allow_multiple_discounts")) if item.get("allow_multiple_discounts") is not None else None,
-                f"p{j}6":  item.get("min_qty"),
-                f"p{j}7":  item.get("reward_type"),
-                f"p{j}8":  item.get("discount_rate"),
-                f"p{j}9":  item.get("discount_price"),
-                f"p{j}10": item.get("min_purchase_amount"),
-                f"p{j}11": item.get("promo_start"),
-                f"p{j}12": item.get("promo_end"),
+                f"p{j}_0":  store_fk,
+                f"p{j}_1":  item.get("item_code"),
+                f"p{j}_2":  item.get("promo_id"),
+                f"p{j}_3":  item.get("promo_description"),
+                f"p{j}_4":  item.get("promo_type"),
+                f"p{j}_5":  bool(item.get("allow_multiple_discounts")) if item.get("allow_multiple_discounts") is not None else None,
+                f"p{j}_6":  item.get("min_qty"),
+                f"p{j}_7":  item.get("reward_type"),
+                f"p{j}_8":  item.get("discount_rate"),
+                f"p{j}_9":  item.get("discount_price"),
+                f"p{j}_10": item.get("min_purchase_amount"),
+                f"p{j}_11": item.get("promo_start"),
+                f"p{j}_12": item.get("promo_end"),
             })
         conn.execute(text(
             f"INSERT INTO promos ({','.join(cols)})"
