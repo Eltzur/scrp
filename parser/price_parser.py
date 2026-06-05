@@ -67,56 +67,50 @@ def parse_file(path: Path) -> tuple:
 
 def parse_promo_file(path: Path) -> tuple:
     """
-    Parse a Promo or PromoFull XML file.
+    Parse a Promo or PromoFull XML file (nested structure).
     Returns (header, items_generator).
-    Each yielded dict is one (promo × item_code) pair with all promo fields.
-    Handles both 'Sale' (Shufersal/Cerberus) and 'Promotion' element names.
+    Yields one dict per PromotionItem, with promo fields pulled from the
+    parent Promotion and Group elements.
+
+    Structure:
+      Root > Promotions > Promotion > Groups > Group > PromotionItems > PromotionItem
     """
     tree = etree.parse(str(path))
     root = tree.getroot()
 
     header = {
-        "chain_id":     (root.findtext("ChainId") or "").strip(),
-        "sub_chain_id": (root.findtext("SubChainId") or "").strip(),
-        "store_id":     (root.findtext("StoreId") or "").strip(),
+        "chain_id":     (root.findtext("ChainID") or root.findtext("ChainId") or "").strip(),
+        "sub_chain_id": (root.findtext("SubChainID") or root.findtext("SubChainId") or "").strip(),
+        "store_id":     (root.findtext("StoreID") or root.findtext("StoreId") or "").strip(),
     }
 
     def _items():
-        for promo_el in root.iter():
-            if promo_el.tag not in ("Sale", "Promotion"):
-                continue
-            promo_id    = _text(promo_el, "PromotionId")
+        for promo_el in root.iter("Promotion"):
+            promo_id    = _text(promo_el, "PromotionID")
             description = _text(promo_el, "PromotionDescription")
-            promo_type  = _int(promo_el,  "PromotionType")
             allow_multi = _int(promo_el,  "AllowMultipleDiscounts")
-            min_qty     = _real(promo_el, "MinQty")
-            reward_type = _int(promo_el,  "RewardType")
-            disc_rate   = _real(promo_el, "DiscountRate")
-            disc_price  = _real(promo_el, "DiscountedPrice")
-            min_purch   = _real(promo_el, "MinPurchaseAmnt")
-            start_date  = _text(promo_el, "PromotionStartDate")
-            end_date    = _text(promo_el, "PromotionEndDate")
+            start_dt    = _text(promo_el, "PromotionStartDateTime") or None
+            end_dt      = _text(promo_el, "PromotionEndDateTime") or None
 
-            items_el = promo_el.find("Items") or promo_el.find("PromotionItems")
-            if items_el is None:
-                continue
-            for item_el in items_el:
-                item_code = _text(item_el, "ItemCode") or _text(item_el, "Barcode")
-                if not item_code:
-                    continue
-                yield {
-                    "item_code":                item_code,
-                    "promo_id":                 promo_id,
-                    "promo_description":        description,
-                    "promo_type":               promo_type,
-                    "allow_multiple_discounts": bool(allow_multi) if allow_multi is not None else None,
-                    "min_qty":                  min_qty,
-                    "reward_type":              reward_type,
-                    "discount_rate":            disc_rate,
-                    "discount_price":           disc_price,
-                    "min_purchase_amount":      min_purch,
-                    "promo_start":              start_date,
-                    "promo_end":                end_date,
-                }
+            for group_el in promo_el.iter("Group"):
+                min_purch = _real(group_el, "MinPurchaseAmount")
+
+                for item_el in group_el.iter("PromotionItem"):
+                    item_code = _text(item_el, "ItemCode")
+                    if not item_code:
+                        continue
+                    yield {
+                        "item_code":                item_code,
+                        "promo_id":                 promo_id,
+                        "promo_description":        description,
+                        "allow_multiple_discounts": allow_multi,
+                        "promo_start":              start_dt,
+                        "promo_end":                end_dt,
+                        "min_purchase_amount":      min_purch,
+                        "reward_type":              _int(item_el,  "RewardType"),
+                        "min_qty":                  _real(item_el, "MinQty"),
+                        "discount_rate":            _real(item_el, "DiscountRate"),
+                        "discount_price":           _real(item_el, "DiscountedPrice"),
+                    }
 
     return header, _items()
