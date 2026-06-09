@@ -12,7 +12,7 @@ from scraper.city_matcher import resolve_city
 
 log = logging.getLogger(__name__)
 
-_API_BASE = "https://laibcatalog.co.il"
+_API_BASE = "https://laibcatalog.co.il/webapi"
 
 
 class VictoryScraper(ChainScraper):
@@ -25,7 +25,7 @@ class VictoryScraper(ChainScraper):
         for attempt in range(1, 4):
             try:
                 resp = self._session.get(
-                    f"{_API_BASE}/webapi/api/getbranches",
+                    f"{_API_BASE}/api/getbranches",
                     params={"edi": self.CHAIN_ID},
                     timeout=30,
                 )
@@ -66,11 +66,12 @@ class VictoryScraper(ChainScraper):
         log.info(f"{self.CHAIN_NAME}: {len(seen)} stores loaded.")
         return seen
 
-    def build_pricefull_index(self, target_store_ids: set) -> dict:
+    def _build_file_index(self, file_type: str, target_store_ids: set) -> dict:
+        """Fetch getfiles, filter by file_type, return latest-per-store index."""
         for attempt in range(1, 4):
             try:
                 resp = self._session.get(
-                    f"{_API_BASE}/webapi/api/getfiles",
+                    f"{_API_BASE}/api/getfiles",
                     params={"edi": self.CHAIN_ID},
                     timeout=30,
                 )
@@ -86,25 +87,33 @@ class VictoryScraper(ChainScraper):
 
         index: dict[str, dict] = {}
         for f in files:
-            if f.get("fileType", "").lower() != "pricefull":
+            if f.get("fileType", "").lower() != file_type:
                 continue
             sid = str(f["branchNumber"]).zfill(3)
-            # Keep newest file per store (fileDate: "YYYY-MM-DD HH:MM:SS")
             if sid not in index or f["fileDate"] > index[sid]["fileDate"]:
                 fname = f["fileName"]
                 index[sid] = {
-                    "filename":    fname[:-3] if fname.endswith(".gz") else fname,
-                    "url":         f"{_API_BASE}/webapi/{self.CHAIN_ID}/{fname}",
+                    "filename":     fname[:-3] if fname.endswith(".gz") else fname,
+                    "url":          f"{_API_BASE}/{self.CHAIN_ID}/{fname}",
                     "sub_chain_id": "001",
-                    "store_id":    sid,
-                    "fileDate":    f["fileDate"],
+                    "store_id":     sid,
+                    "fileDate":     f["fileDate"],
                 }
 
         log.info(
-            f"{self.CHAIN_NAME}: PriceFull index built — "
+            f"{self.CHAIN_NAME}: {file_type} index built — "
             f"{len(index)} stores available, {len(target_store_ids)} targeted."
         )
         return index
+
+    def build_pricefull_index(self, target_store_ids: set) -> dict:
+        return self._build_file_index("pricefull", target_store_ids)
+
+    def build_price_index(self, target_store_ids: set) -> dict:
+        return self._build_file_index("price", target_store_ids)
+
+    def build_promo_index(self, target_store_ids: set) -> dict:
+        return self._build_file_index("promo", target_store_ids)
 
 
 if __name__ == "__main__":
