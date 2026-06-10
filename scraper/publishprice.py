@@ -163,26 +163,44 @@ class PublishPriceScraper(ChainScraper):
         return seen
 
     # ------------------------------------------------------------------
-    # PriceFull index
+    # PriceFull / Price / Promo index helpers
     # ------------------------------------------------------------------
 
-    def build_pricefull_index(self, target_store_ids: set) -> dict:
+    def _parse_store_id(self, file_type: str, filename: str) -> str | None:
+        """Extract canonical (zero-padded 3-digit) store_id from a price filename.
+
+        Handles two filename formats emitted by the PublishPrice portal:
+          Format B (new): {type}{chain_id}-{subchain}-{store_id}-{YYYYMMDD}...
+          Format A (old): {type}{chain_id}-{store_id}-{YYYYMMDD}...
+
+        The date anchor (\d{8}) prevents the store segment from being confused
+        with the date when Format A files are matched against the 3-segment pattern.
+        """
+        chain = re.escape(self.CHAIN_ID)
+        prefix = re.escape(file_type)
+        # Format B: type-chain-subchain-store-date  (3 segments)
+        m = re.match(rf'^{prefix}{chain}-\d+-(\d+)-\d{{8}}', filename, re.IGNORECASE)
+        if m:
+            return str(int(m.group(1))).zfill(3)
+        # Format A: type-chain-store-date  (2 segments, no subchain)
+        m = re.match(rf'^{prefix}{chain}-(\d+)-\d{{8}}', filename, re.IGNORECASE)
+        if m:
+            return str(int(m.group(1))).zfill(3)
+        return None
+
+    def _build_file_index(self, file_type: str, target_store_ids: set) -> dict:
+        """Build a latest-per-store index for the given file_type prefix."""
         path, files = self._get_file_listing()
         index: dict[str, dict] = {}
 
-        pattern = re.compile(
-            rf'PriceFull{re.escape(self.CHAIN_ID)}-\d+-(\d+)-',
-            re.IGNORECASE,
-        )
         for f in files:
-            m = pattern.match(f['name'])
-            if not m:
+            fname = f['name']
+            sid = self._parse_store_id(file_type, fname)
+            if sid is None:
                 continue
-            sid = str(int(m.group(1))).zfill(3)  # canonical: zero-padded 3-digit
             # Keep the most recently published file per store.
             # modified format is "HH:MM DD-MM-YYYY" — sorts correctly for same-day.
             if sid not in index or f['modified'] > index[sid]['modified']:
-                fname = f['name']
                 fname_no_gz = fname[:-3] if fname.endswith('.gz') else fname
                 index[sid] = {
                     'filename':     fname_no_gz,
@@ -193,7 +211,20 @@ class PublishPriceScraper(ChainScraper):
                 }
 
         log.info(
-            f"{self.CHAIN_NAME}: PriceFull index built — "
+            f"{self.CHAIN_NAME}: {file_type} index built — "
             f"{len(index)} stores available, {len(target_store_ids)} targeted."
         )
         return index
+
+    # ------------------------------------------------------------------
+    # PriceFull index
+    # ------------------------------------------------------------------
+
+    def build_pricefull_index(self, target_store_ids: set) -> dict:
+        return self._build_file_index('PriceFull', target_store_ids)
+
+    def build_price_index(self, target_store_ids: set) -> dict:
+        return self._build_file_index('Price', target_store_ids)
+
+    def build_promo_index(self, target_store_ids: set) -> dict:
+        return self._build_file_index('Promo', target_store_ids)
