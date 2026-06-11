@@ -192,5 +192,10 @@ export interface PromoItem {
   promo_end: string | null;
 }
 
-export const getStorePromos = (chainId: string, storeId: string): Promise<PromoItem[]> =>
-  http.get<PromoItem[]>(`/promos/store/${chainId}/${storeId}`).then(r => r.data).catch(() => []);
+export const getPromosBulk = (
+  stores: { chain_id: string; store_id: string }[],
+): Promise<Record<string, PromoItem[]>> =>
+  http
+    .post<Record<string, PromoItem[]>>('/promos/bulk', { stores })
+    .then(r => r.data)
+    .catch(() => ({}));

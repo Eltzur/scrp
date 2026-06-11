@@ -459,3 +459,45 @@ def fetch_promos(conn: Connection, store_fk: int) -> list[dict]:
         ORDER BY item_code, promo_id
     """), {"store_fk": store_fk}).mappings().all()
     return [dict(r) for r in rows]
+
+
+def fetch_promos_bulk(
+    conn: Connection,
+    pairs: list[tuple[str, str]],
+) -> dict[str, list[dict]]:
+    """Return active promos for many stores in one query.
+
+    pairs: list of (chain_id, store_id).
+    Returns dict keyed by "chain_id/store_id" → list of promo dicts.
+    """
+    if not pairs:
+        return {}
+
+    placeholders = []
+    params: dict = {}
+    for i, (chain_id, store_id) in enumerate(pairs):
+        placeholders.append(f"(:c{i}, :s{i})")
+        params[f"c{i}"] = chain_id
+        params[f"s{i}"] = store_id
+
+    rows = conn.execute(text(f"""
+        SELECT
+            s.chain_id, s.store_id,
+            p.item_code, p.promo_id, p.promo_description, p.promo_type,
+            p.allow_multiple_discounts, p.min_qty, p.reward_type,
+            p.discount_rate, p.discount_price, p.min_purchase_amount,
+            to_char(p.promo_start, 'YYYY-MM-DD"T"HH24:MI:SS') AS promo_start,
+            to_char(p.promo_end,   'YYYY-MM-DD"T"HH24:MI:SS') AS promo_end
+        FROM promos p
+        JOIN stores s ON s.id = p.store_fk
+        WHERE (s.chain_id, s.store_id) IN ({', '.join(placeholders)})
+          AND (p.promo_end >= NOW() OR p.promo_end IS NULL)
+        ORDER BY s.chain_id, s.store_id, p.item_code
+    """), params).mappings().all()
+
+    result: dict[str, list[dict]] = {}
+    for row in rows:
+        key = f"{row['chain_id']}/{row['store_id']}"
+        promo = {k: v for k, v in row.items() if k not in ("chain_id", "store_id")}
+        result.setdefault(key, []).append(promo)
+    return result

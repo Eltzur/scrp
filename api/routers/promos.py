@@ -1,11 +1,34 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.engine import Connection
 
 from api.dependencies import get_db
 from api.models import PromoItem
-from db.query import fetch_promos, lookup_store_fk
+from db.query import fetch_promos, fetch_promos_bulk, lookup_store_fk
 
 router = APIRouter(tags=["Promos"])
+
+
+class _StoreRef(BaseModel):
+    chain_id: str
+    store_id: str
+
+
+class _PromoBulkRequest(BaseModel):
+    stores: list[_StoreRef]
+
+
+@router.post(
+    "/promos/bulk",
+    response_model=dict[str, list[PromoItem]],
+    summary="Active promos for many stores in one request",
+)
+def promos_bulk(
+    body: _PromoBulkRequest,
+    conn: Connection = Depends(get_db),
+):
+    pairs = [(s.chain_id, s.store_id) for s in body.stores]
+    return fetch_promos_bulk(conn, pairs)
 
 
 @router.get(

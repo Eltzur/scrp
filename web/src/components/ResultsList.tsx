@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SearchResult, PromoItem } from '../api/client';
-import { getStorePromos } from '../api/client';
+import { getPromosBulk } from '../api/client';
 import ProductCard from './ProductCard';
 import ProductCardSkeleton from './ProductCardSkeleton';
 import EmptyState from './EmptyState';
@@ -48,25 +48,18 @@ export default function ResultsList({
       return;
     }
     const seen = new Set<string>();
-    const pairs: [string, string][] = [];
+    const stores: { chain_id: string; store_id: string }[] = [];
     for (const item of result.items) {
       for (const q of item.quotes) {
         const key = `${q.chain_id}/${q.store_id}`;
         if (!seen.has(key)) {
           seen.add(key);
-          pairs.push([q.chain_id, q.store_id]);
+          stores.push({ chain_id: q.chain_id, store_id: q.store_id });
         }
       }
     }
-    Promise.all(
-      pairs.map(([chainId, storeId]) =>
-        getStorePromos(chainId, storeId).then(promos => ({ key: `${chainId}/${storeId}`, promos }))
-      )
-    ).then(results => {
-      const map: PromoMap = new Map();
-      for (const { key, promos } of results) {
-        if (promos.length) map.set(key, promos);
-      }
+    getPromosBulk(stores).then(record => {
+      const map: PromoMap = new Map(Object.entries(record));
       setPromosByStore(map);
     });
   }, [storeSetKey]); // eslint-disable-line react-hooks/exhaustive-deps
