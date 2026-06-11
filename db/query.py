@@ -428,3 +428,34 @@ def fetch_freshness(conn: Connection) -> dict:
     oldest = min((c["last_loaded_at"] for c in chains if c["last_loaded_at"]), default=None)
 
     return {"oldest_last_loaded_at": oldest, "chains": chains}
+
+
+# ---------------------------------------------------------------------------
+# Promos
+# ---------------------------------------------------------------------------
+
+def lookup_store_fk(conn: Connection, chain_id: str, store_id: str) -> int | None:
+    """Return stores.id for (chain_id, store_id), or None if not found."""
+    row = conn.execute(text("""
+        SELECT id FROM stores
+        WHERE chain_id = :chain_id AND store_id = :store_id
+        LIMIT 1
+    """), {"chain_id": chain_id, "store_id": store_id}).fetchone()
+    return row[0] if row else None
+
+
+def fetch_promos(conn: Connection, store_fk: int) -> list[dict]:
+    """Return active promos for a store (promo_end >= NOW() or no end date)."""
+    rows = conn.execute(text("""
+        SELECT
+            item_code, promo_id, promo_description, promo_type,
+            allow_multiple_discounts, min_qty, reward_type,
+            discount_rate, discount_price, min_purchase_amount,
+            to_char(promo_start, 'YYYY-MM-DD"T"HH24:MI:SS') AS promo_start,
+            to_char(promo_end,   'YYYY-MM-DD"T"HH24:MI:SS') AS promo_end
+        FROM promos
+        WHERE store_fk = :store_fk
+          AND (promo_end >= NOW() OR promo_end IS NULL)
+        ORDER BY item_code, promo_id
+    """), {"store_fk": store_fk}).mappings().all()
+    return [dict(r) for r in rows]

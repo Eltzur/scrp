@@ -116,3 +116,21 @@ class ChainCoverage(BaseModel):
 class CoverageResponse(BaseModel):
     """Per-store 72h coverage snapshot across all configured chains."""
     chains: list[ChainCoverage] = Field(description="One entry per chain, sorted by coverage_pct ascending (worst first)")
+
+
+class PromoItem(BaseModel):
+    """One active promo row for a store."""
+    model_config = ConfigDict(from_attributes=True)
+
+    item_code: str
+    promo_id: str | None
+    promo_description: str | None
+    promo_type: int | None
+    allow_multiple_discounts: bool | None
+    min_qty: float | None
+    reward_type: str | None
+    discount_rate: float | None
+    discount_price: float | None
+    min_purchase_amount: float | None
+    promo_start: str | None
+    promo_end: str | None
