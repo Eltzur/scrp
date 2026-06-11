@@ -214,6 +214,13 @@ def bulk_insert_promos(conn: Connection, store_fk: int, promo_items: list[dict])
     """
     if not promo_items:
         return 0
+    # Deduplicate by conflict key before upsert — some portals (e.g. Victory)
+    # emit the same (item_code, promo_id) pair twice in one file, which causes
+    # a CardinalityViolation when both rows land in the same INSERT batch.
+    # store_fk is constant per call so keying on (item_code, promo_id) suffices.
+    promo_items = list(
+        {(item.get("item_code"), item.get("promo_id")): item for item in promo_items}.values()
+    )
     # Column order must match param binding order exactly.
     cols = (
         "store_fk", "item_code", "promo_id", "promo_description",
