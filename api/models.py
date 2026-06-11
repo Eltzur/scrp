@@ -128,7 +128,7 @@ class PromoItem(BaseModel):
     promo_type: int | None
     allow_multiple_discounts: bool | None
     min_qty: float | None
-    reward_type: str | None
+    reward_type: int | None
     discount_rate: float | None
     discount_price: float | None
     min_purchase_amount: float | None
