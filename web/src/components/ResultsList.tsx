@@ -1,5 +1,7 @@
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { SearchResult } from '../api/client';
+import type { SearchResult, PromoItem } from '../api/client';
+import { getStorePromos } from '../api/client';
 import ProductCard from './ProductCard';
 import ProductCardSkeleton from './ProductCardSkeleton';
 import EmptyState from './EmptyState';
@@ -17,12 +19,57 @@ interface Props {
   isLoadingMore?: boolean;
 }
 
+export type PromoMap = Map<string, PromoItem[]>;
+
 const SKELETON_COUNT = 6;
 
 export default function ResultsList({
   result, isLoading, isFetching, isError, query, onRetry, onLoadMore, isLoadingMore,
 }: Props) {
   const { t } = useTranslation();
+  const [promosByStore, setPromosByStore] = useState<PromoMap>(new Map());
+
+  // Stable key representing the unique set of stores in the current result.
+  // Recomputes only when the set of (chain_id, store_id) pairs actually changes.
+  const storeSetKey = useMemo(() => {
+    if (!result?.items.length) return '';
+    const pairs = new Set<string>();
+    for (const item of result.items) {
+      for (const q of item.quotes) {
+        pairs.add(`${q.chain_id}/${q.store_id}`);
+      }
+    }
+    return Array.from(pairs).sort().join('|');
+  }, [result?.items]);
+
+  useEffect(() => {
+    if (!storeSetKey || !result?.items.length) {
+      setPromosByStore(new Map());
+      return;
+    }
+    const seen = new Set<string>();
+    const pairs: [string, string][] = [];
+    for (const item of result.items) {
+      for (const q of item.quotes) {
+        const key = `${q.chain_id}/${q.store_id}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          pairs.push([q.chain_id, q.store_id]);
+        }
+      }
+    }
+    Promise.all(
+      pairs.map(([chainId, storeId]) =>
+        getStorePromos(chainId, storeId).then(promos => ({ key: `${chainId}/${storeId}`, promos }))
+      )
+    ).then(results => {
+      const map: PromoMap = new Map();
+      for (const { key, promos } of results) {
+        if (promos.length) map.set(key, promos);
+      }
+      setPromosByStore(map);
+    });
+  }, [storeSetKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isError) return <ErrorState onRetry={onRetry} />;
 
@@ -51,7 +98,7 @@ export default function ResultsList({
         {result.items
           .filter((item, i, arr) => arr.findIndex(x => x.product.item_code === item.product.item_code) === i)
           .map(item => (
-            <ProductCard key={item.product.item_code} item={item} />
+            <ProductCard key={item.product.item_code} item={item} promosByStore={promosByStore} />
           ))}
       </div>
 

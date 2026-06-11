@@ -172,3 +172,25 @@ export const compareBasket = (body: {
   cities?: string[] | null;
 }): Promise<BasketCompareResponse> =>
   http.post<BasketCompareResponse>('/basket/compare', body).then(r => r.data);
+
+// ---------------------------------------------------------------------------
+// Promos
+// ---------------------------------------------------------------------------
+
+export interface PromoItem {
+  item_code: string;
+  promo_id: string | null;
+  promo_description: string | null;
+  promo_type: number | null;
+  allow_multiple_discounts: boolean | null;
+  min_qty: number | null;
+  reward_type: number | null;
+  discount_rate: number | null;
+  discount_price: number | null;
+  min_purchase_amount: number | null;
+  promo_start: string | null;
+  promo_end: string | null;
+}
+
+export const getStorePromos = (chainId: string, storeId: string): Promise<PromoItem[]> =>
+  http.get<PromoItem[]>(`/promos/store/${chainId}/${storeId}`).then(r => r.data).catch(() => []);

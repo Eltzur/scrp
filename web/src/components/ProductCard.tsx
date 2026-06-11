@@ -3,13 +3,15 @@ import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import type { ProductWithPrices, PriceQuote } from '../api/client';
+import type { ProductWithPrices, PriceQuote, PromoItem } from '../api/client';
+import type { PromoMap } from './ResultsList';
 import BasketButton from './BasketButton';
 import { useAuth } from './AuthContext';
 import { useFavorites } from './FavoritesContext';
 
 interface Props {
   item: ProductWithPrices;
+  promosByStore?: PromoMap;
 }
 
 function cheapestPerChain(quotes: PriceQuote[]): PriceQuote[] {
@@ -21,7 +23,36 @@ function cheapestPerChain(quotes: PriceQuote[]): PriceQuote[] {
   return Array.from(byChain.values()).sort((a, b) => a.price - b.price);
 }
 
-export default function ProductCard({ item }: Props) {
+function getPromoBadges(
+  q: PriceQuote,
+  itemCode: string,
+  promosByStore: PromoMap | undefined,
+): { discountPct: number | null; buyOneGetOne: boolean } {
+  const storePromos = promosByStore?.get(`${q.chain_id}/${q.store_id}`) ?? [];
+  const itemPromos = storePromos.filter((p: PromoItem) => p.item_code === itemCode);
+
+  const discountPromo = itemPromos.find((p: PromoItem) => {
+    if (p.discount_rate != null && p.discount_rate >= 10) return true;
+    if (p.discount_price != null && q.price > 0) {
+      return (q.price - p.discount_price) / q.price >= 0.10;
+    }
+    return false;
+  });
+
+  const discountPct = discountPromo
+    ? discountPromo.discount_rate != null
+      ? Math.round(discountPromo.discount_rate)
+      : Math.round((q.price - discountPromo.discount_price!) / q.price * 100)
+    : null;
+
+  const buyOneGetOne = itemPromos.some(
+    (p: PromoItem) => p.reward_type === 1 && p.min_qty != null && Math.round(p.min_qty) === 2,
+  );
+
+  return { discountPct, buyOneGetOne };
+}
+
+export default function ProductCard({ item, promosByStore }: Props) {
   const { t, i18n }   = useTranslation();
   const navigate      = useNavigate();
   const { user }      = useAuth();
@@ -110,6 +141,7 @@ export default function ProductCard({ item }: Props) {
       <div className="divide-y divide-gray-100 rounded-lg border border-gray-100 overflow-hidden">
         {quotes.map((q, i) => {
           const isCheapest = i === 0 && isComparable;
+          const { discountPct, buyOneGetOne } = getPromoBadges(q, product.item_code, promosByStore);
           return (
             <div
               key={`${q.chain_id}-${q.store_id}`}
@@ -131,8 +163,8 @@ export default function ProductCard({ item }: Props) {
                 )}
               </div>
 
-              {/* Price + delta — always LTR for numerals */}
-              <div className="flex items-center gap-2 shrink-0 ms-2" dir="ltr">
+              {/* Price + delta + promo badges — always LTR for numerals */}
+              <div className="flex items-center gap-1.5 shrink-0 ms-2" dir="ltr">
                 <span className={clsx('font-semibold', isCheapest ? 'text-emerald-700' : 'text-gray-800')}>
                   {fmtPrice(q.price)}
                 </span>
@@ -144,6 +176,16 @@ export default function ProductCard({ item }: Props) {
                 {isCheapest && (
                   <span className="text-xs font-semibold text-emerald-600 uppercase tracking-wide hidden sm:inline">
                     {t('product_card.cheapest')}
+                  </span>
+                )}
+                {discountPct != null && (
+                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
+                    -{discountPct}%
+                  </span>
+                )}
+                {buyOneGetOne && (
+                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
+                    1+1
                   </span>
                 )}
               </div>
