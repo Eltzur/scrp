@@ -90,6 +90,10 @@ def _run(conn, dry_run: bool) -> None:
                 ), {"fk": src_fk})
 
                 conn.execute(text(
+                    "DELETE FROM fetch_store_runs WHERE store_fk = :fk"
+                ), {"fk": src_fk})
+
+                conn.execute(text(
                     "DELETE FROM stores WHERE id = :fk"
                 ), {"fk": src_fk})
 
