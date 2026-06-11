@@ -102,6 +102,33 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 
 ## ✅ Sessions Completed
 
+### Session 9d-10 (June 9-11, 2026) — Carrefour Regex Fix + Victory Rewrite + Shufersal Stores
+
+#### Completed
+- publishprice.py regex bug fixed: was capturing subchain segment instead of store_id. Fixed with two-pattern approach handling both Format A (chain-store-date, no subchain) and Format B (chain-subchain-store-date). Carrefour seeded stores: 59→148, prices: 380K→827K.
+- Carrefour store_id padding normalized: duplicate rows (0002/002 etc) merged via scripts/fix_carrefour_padding.py. 91 rows merged, fetch_store_runs FK handled.
+- Victory scraper rewritten to new laibcatalog REST API (getbranches/getfiles endpoints — old /webapi/{chain_id}/pricefull was returning 404). Victory expanded 17→69 stores, 604K prices seeded.
+- Shefa: 8 physical stores confirmed promo-only (no PriceFull published, some since 2020). Leave in active_stores.yaml for now but mark as chronic no-file.
+- Shufersal stores 413 (ONLINE) and 844 (Express Ramat Gan) added to active_stores.yaml and seeded via new scripts/seed_one_store.py script.
+- scripts/seed_one_store.py added — targeted single-store seeding by chain_id + store_id.
+- Cron post-run coverage report added to cron_main.py (report_coverage function).
+- Known issue: Victory PromoFull files contain duplicate promo entries causing CardinalityViolation warnings on every store during promo ingestion. Prices load fine. Fix needed in bulk_insert_promos — deduplicate incoming rows before upsert.
+- Known issue: Cron runtime significantly longer now (~70+ min observed on June 10) due to expanded store count (Victory +52, Carrefour +89 effective stores). Monitor next run — may need STORE_WORKERS increase or chain parallelism tuning.
+
+#### Current State (end of 9d-10)
+- 14 chains, ~900+ effective stores with prices
+- Zero-prices stores breakdown: Shufersal 101 (BE/pharmacy, by design), Carrefour 2 (genuine no-file), Shuk Hayir 12 (virtual/online), Shefa 9 (8 promo-only + 1 virtual), Tiv Taam 7 (pickup), Keshet 5 (sub-format), King Store 5 (virtual+mini), Yochananof 4 (pickup), Victory 2 (internet store + 1 other), Rami Levy 2 (internet warehouse + store 712 no-file)
+
+#### Deferred
+- Priority 2: Fix DATABASE_URL in systemd Environment= directive (still manual export workaround)
+- Priority 3: Store address columns (ALTER TABLE + ingest_store_address.py) — not started
+- Priority 4: Promo API endpoint + frontend highlighting — not started
+- Victory promo CardinalityViolation fix (bulk_insert_promos deduplication)
+- Shefa 8 promo-only stores: decide whether to remove from active_stores.yaml
+- Carrefour active_stores.yaml cleanup: remove store 006 (confirmed non-existent in StoresFull XML)
+
+---
+
 ### Session 9d-9 (June 5, 2026) — Delta Files + Promo Pipeline + HaziHinam + Missing Stores
 
 #### Final state

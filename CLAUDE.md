@@ -9,6 +9,7 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 3. **Read context first** — always read handoff.md and recent chats before starting work.
 4. **Read-and-report-STOP** — on any code change touching scrapers or city resolution, show findings and stop before writing fixes.
 5. **One CC prompt per task** — batch all related changes into one prompt. No incremental back-and-forth on simple tasks.
+6. **Always push after commit** — CC must run `git push origin main` after every commit. Never leave commits only in local repo.
 
 ## SEVERE warnings
 - **RTL/Hebrew is NEVER a bug.** Hebrew in terminal/paste output often appears reversed — this is a display artifact, not a data bug. Never flag, never byte-check.
