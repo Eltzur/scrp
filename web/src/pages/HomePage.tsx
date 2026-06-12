@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import XxlLogo from '../components/XxlLogo';
@@ -17,6 +17,33 @@ const DEFAULT_FILTERS: FilterState = {
   compareMode: true,
   groupBy:     'chain',
 };
+
+const CITY_STORAGE_KEY = 'xxl_last_city';
+const FALLBACK_CITY    = 'תל אביב-יפו';
+
+/** Match an IP-returned city name against our canonical city list. */
+function matchIpCity(ipCity: string, cities: CityInfo[]): string | null {
+  const s = ipCity.trim();
+  if (!s) return null;
+  return (
+    cities.find(c => c.city === s)?.city ??
+    // e.g. IP returns "תל אביב", DB has "תל אביב-יפו"
+    cities.find(c => c.city.startsWith(s))?.city ??
+    // e.g. IP returns a long variant that starts with the DB canonical
+    cities.find(c => s.startsWith(c.city))?.city ??
+    null
+  );
+}
+
+/** Best available fallback city from the loaded list. */
+function defaultCity(cities: CityInfo[]): string {
+  return (
+    cities.find(c => c.city === FALLBACK_CITY)?.city ??
+    cities.find(c => c.city.includes('תל אביב'))?.city ??
+    cities[0]?.city ??
+    FALLBACK_CITY
+  );
+}
 
 const PAGE_SIZE = 30;
 
@@ -41,6 +68,39 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
   const [lastQuery,   setLastQuery]   = useState('');
   const [lastFilters, setLastFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [lastHasMore, setLastHasMore] = useState(false);
+
+  // Detect city once — fires when the cities list first populates.
+  // Guarded by ref so React strict-mode double-invocation doesn't double-detect.
+  const cityDetected = useRef(false);
+  useEffect(() => {
+    if (cityDetected.current || cities.length === 0) return;
+    cityDetected.current = true;
+
+    // 1. Prefer the city the user last used.
+    const saved = localStorage.getItem(CITY_STORAGE_KEY);
+    if (saved && cities.some(c => c.city === saved)) {
+      setFilters(f => ({ ...f, city: [saved] }));
+      return;
+    }
+
+    // 2. Try IP geolocation (free, no key, Hebrew city names).
+    fetch('http://ip-api.com/json/?fields=city&lang=he')
+      .then(r => r.json())
+      .then((json: { city?: string }) => {
+        const matched = matchIpCity(json.city ?? '', cities);
+        setFilters(f => ({ ...f, city: [matched ?? defaultCity(cities)] }));
+      })
+      .catch(() => {
+        setFilters(f => ({ ...f, city: [defaultCity(cities)] }));
+      });
+  }, [cities]);
+
+  // Persist single-city selections to localStorage so next visit skips geolocation.
+  useEffect(() => {
+    if (filters.city?.length === 1) {
+      localStorage.setItem(CITY_STORAGE_KEY, filters.city[0]);
+    }
+  }, [filters.city]);
 
   const { data, isLoading, isFetching, isError } = useActiveResults(query, filters);
 
