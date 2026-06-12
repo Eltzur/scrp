@@ -190,6 +190,7 @@ export interface PromoItem {
   min_purchase_amount: number | null;
   promo_start: string | null;
   promo_end: string | null;
+  discount_pct: number | null;
 }
 
 export const getPromosBulk = (

@@ -487,9 +487,15 @@ def fetch_promos_bulk(
             p.allow_multiple_discounts, p.min_qty, p.reward_type,
             p.discount_rate, p.discount_price, p.min_purchase_amount,
             to_char(p.promo_start, 'YYYY-MM-DD"T"HH24:MI:SS') AS promo_start,
-            to_char(p.promo_end,   'YYYY-MM-DD"T"HH24:MI:SS') AS promo_end
+            to_char(p.promo_end,   'YYYY-MM-DD"T"HH24:MI:SS') AS promo_end,
+            CASE
+                WHEN p.discount_price IS NOT NULL AND pr.item_price > 0
+                THEN ROUND(((pr.item_price - p.discount_price) / pr.item_price * 100)::numeric, 1)
+                ELSE NULL
+            END AS discount_pct
         FROM promos p
         JOIN stores s ON s.id = p.store_fk
+        LEFT JOIN prices pr ON pr.store_fk = p.store_fk AND pr.item_code = p.item_code
         WHERE (s.chain_id, s.store_id) IN ({', '.join(placeholders)})
           AND (p.promo_end >= NOW() OR p.promo_end IS NULL)
         ORDER BY s.chain_id, s.store_id, p.item_code

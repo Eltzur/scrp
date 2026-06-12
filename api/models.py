@@ -134,3 +134,4 @@ class PromoItem(BaseModel):
     min_purchase_amount: float | None
     promo_start: str | None
     promo_end: str | None
+    discount_pct: float | None

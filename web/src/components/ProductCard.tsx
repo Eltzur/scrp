@@ -31,18 +31,12 @@ function getPromoBadges(
   const storePromos = promosByStore?.get(`${q.chain_id}/${q.store_id}`) ?? [];
   const itemPromos = storePromos.filter((p: PromoItem) => p.item_code === itemCode);
 
-  const discountPromo = itemPromos.find((p: PromoItem) => {
-    if (p.discount_rate != null && p.discount_rate >= 10) return true;
-    if (p.discount_price != null && q.price > 0) {
-      return (q.price - p.discount_price) / q.price >= 0.10;
-    }
-    return false;
-  });
+  const discountPromo = itemPromos.find(
+    (p: PromoItem) => p.discount_pct != null && p.discount_pct >= 10,
+  );
 
-  const discountPct = discountPromo
-    ? discountPromo.discount_rate != null
-      ? Math.round(discountPromo.discount_rate)
-      : Math.round((q.price - discountPromo.discount_price!) / q.price * 100)
+  const discountPct = discountPromo?.discount_pct != null
+    ? Math.round(discountPromo.discount_pct)
     : null;
 
   const buyOneGetOne = itemPromos.some(
