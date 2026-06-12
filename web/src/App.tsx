@@ -28,6 +28,7 @@ function AppShell() {
 
   useEffect(() => {
     getCities().then(setCities);
+    fetch('https://api-super.xxl.co.il/health', { method: 'GET' }).catch(() => {});
   }, []);
 
   return (
