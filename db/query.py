@@ -94,6 +94,39 @@ JOIN chains  c ON c.chain_id   = icn.chain_id
 WHERE icn.item_code IN :codes
 """
 
+# City-filtered variant: starts from prices so Postgres can BitmapAnd on
+# idx_prices_store_fk + idx_prices_item_code instead of doing 6K nested-loop
+# index scans across all stores.  store_fks is a pre-fetched int[] array.
+_PRICE_SQL_CITY = """
+SELECT
+    icn.item_code,
+    icn.item_name,
+    icn.manufacturer_name,
+    i.unit_of_measure,
+    i.is_weighted,
+    i.item_type,
+    i.quantity,
+    i.unit_qty,
+    p.item_price,
+    p.unit_of_measure_price,
+    p.price_update_date,
+    c.chain_id,
+    c.name        AS chain_name,
+    s.store_id,
+    s.store_name,
+    s.city,
+    s.address
+FROM prices p
+JOIN stores  s   ON s.id           = p.store_fk
+JOIN item_chain_names icn
+                ON icn.item_code   = p.item_code
+               AND icn.chain_id    = s.chain_id
+JOIN items   i   ON i.item_code    = p.item_code
+JOIN chains  c   ON c.chain_id     = s.chain_id
+WHERE p.store_fk  = ANY(:store_fks)
+  AND p.item_code = ANY(:codes)
+"""
+
 
 def fetch_prices(
     conn: Connection,
@@ -104,13 +137,40 @@ def fetch_prices(
 ) -> list[dict]:
     if not barcodes:
         return []
-    sql = _PRICE_SQL
-    params: dict = {"codes": tuple(barcodes)}
-    expanding = [bindparam("codes", expanding=True)]
+
     if city:
-        sql += " AND s.city_canonical IN :city"
-        params["city"] = list(city)
-        expanding.append(bindparam("city", expanding=True))
+        # Pre-fetch the store PKs for the requested cities (fast bitmap scan on
+        # idx_stores_city_canonical).  Passing both arrays as bound parameters
+        # lets Postgres use BitmapAnd(idx_prices_store_fk, idx_prices_item_code),
+        # which is ~4x faster than the default nested-loop plan.
+        store_fks: list[int] = [
+            r[0] for r in conn.execute(
+                text("SELECT id FROM stores WHERE city_canonical = ANY(:city)"),
+                {"city": list(city)},
+            ).fetchall()
+        ]
+        if not store_fks:
+            return []
+
+        # Disable nested loops for this transaction so the planner uses
+        # BitmapAnd rather than repeating 6K index scans across all stores.
+        conn.execute(text("SET LOCAL enable_nestloop = off"))
+
+        sql: str = _PRICE_SQL_CITY
+        params: dict = {"store_fks": store_fks, "codes": list(barcodes)}
+        if chain_id:
+            sql += " AND s.chain_id = ANY(:chain_id)"
+            params["chain_id"] = list(chain_id)
+        if store_only:
+            sql += " AND s.store_id = :store_only"
+            params["store_only"] = store_only
+        sql += " ORDER BY p.item_price"
+        return [dict(r) for r in conn.execute(text(sql), params).mappings().all()]
+
+    # No city filter: original query with expandable IN clause.
+    sql = _PRICE_SQL
+    params = {"codes": tuple(barcodes)}
+    expanding = [bindparam("codes", expanding=True)]
     if chain_id:
         sql += " AND c.chain_id IN :chain_id"
         params["chain_id"] = chain_id
@@ -119,8 +179,7 @@ def fetch_prices(
         sql += " AND s.store_id = :store_only"
         params["store_only"] = store_only
     sql += " ORDER BY p.item_price"
-    stmt = text(sql).bindparams(*expanding)
-    return [dict(r) for r in conn.execute(stmt, params).mappings().all()]
+    return [dict(r) for r in conn.execute(text(sql).bindparams(*expanding), params).mappings().all()]
 
 
 # ---------------------------------------------------------------------------
