@@ -27,10 +27,13 @@ export default function ResultsList({
   result, isLoading, isFetching, isError, query, onRetry, onLoadMore, isLoadingMore,
 }: Props) {
   const { t } = useTranslation();
-  const [promosByStore, setPromosByStore] = useState<PromoMap>(new Map());
 
-  // Stable key representing the unique set of stores in the current result.
-  // Recomputes only when the set of (chain_id, store_id) pairs actually changes.
+  // promosByStore is populated lazily AFTER results render — never blocks first paint.
+  // Old promos stay visible during search transitions (stale-while-revalidate).
+  const [promosByStore, setPromosByStore] = useState<PromoMap>(new Map());
+  const [promosLoading, setPromosLoading] = useState(false);
+
+  // Stable key for the unique set of stores in the current result.
   const storeSetKey = useMemo(() => {
     if (!result?.items.length) return '';
     const pairs = new Set<string>();
@@ -43,10 +46,17 @@ export default function ResultsList({
   }, [result?.items]);
 
   useEffect(() => {
+    // No results — clear promos and bail.
     if (!storeSetKey || !result?.items.length) {
       setPromosByStore(new Map());
+      setPromosLoading(false);
       return;
     }
+
+    // Results are already rendered by the time this effect runs.
+    // Start the bulk promo fetch in the background.
+    setPromosLoading(true);
+
     const seen = new Set<string>();
     const stores: { chain_id: string; store_id: string }[] = [];
     for (const item of result.items) {
@@ -58,9 +68,10 @@ export default function ResultsList({
         }
       }
     }
+
     getPromosBulk(stores).then(record => {
-      const map: PromoMap = new Map(Object.entries(record));
-      setPromosByStore(map);
+      setPromosByStore(new Map(Object.entries(record)));
+      setPromosLoading(false);
     });
   }, [storeSetKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -83,10 +94,18 @@ export default function ResultsList({
 
   return (
     <div className={isFetching && !isLoadingMore ? 'opacity-70 transition-opacity' : ''}>
-      <p className="text-xs text-gray-400 mb-3">
-        {t('search.results_count', { count: result.total_matches })}
-        {result.comparable_count > 0 && ` · ${t('search.comparable_count', { count: result.comparable_count })}`}
-      </p>
+      <div className="flex items-center gap-2 mb-3">
+        <p className="text-xs text-gray-400">
+          {t('search.results_count', { count: result.total_matches })}
+          {result.comparable_count > 0 && ` · ${t('search.comparable_count', { count: result.comparable_count })}`}
+        </p>
+        {promosLoading && (
+          <span className="flex items-center gap-1 text-xs text-gray-300">
+            <Loader2 size={10} className="animate-spin" />
+            טוען מבצעים…
+          </span>
+        )}
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {result.items
           .filter((item, i, arr) => arr.findIndex(x => x.product.item_code === item.product.item_code) === i)
