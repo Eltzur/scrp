@@ -44,7 +44,7 @@ function getPromoBadges(
 
   // Percentage discount — only shown when there is no bundle label for this item.
   const discountPromo = bundleLabel == null
-    ? itemPromos.find((p: PromoItem) => p.discount_pct != null && p.discount_pct >= 10)
+    ? itemPromos.find((p: PromoItem) => p.discount_pct !== null && p.discount_pct >= 0)
     : null;
   const discountPct = discountPromo?.discount_pct != null
     ? Math.round(discountPromo.discount_pct)
