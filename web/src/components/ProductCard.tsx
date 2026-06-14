@@ -29,7 +29,9 @@ function getPromoBadges(
   promosByStore: PromoMap | undefined,
 ): { discountPct: number | null; bundleLabel: string | null; buyOneGetOne: boolean } {
   const storePromos = promosByStore?.get(`${q.chain_id}/${q.store_id}`) ?? [];
+  console.log(`Store ${q.chain_id}/${q.store_id}: ${storePromos.length} promos, looking for item ${itemCode}`);
   const itemPromos = storePromos.filter((p: PromoItem) => p.item_code === itemCode);
+  console.log(`Matching promos for ${itemCode}:`, itemPromos);
 
   // Bundle deal (reward_type=10): "2 ב-60₪" — discount_price is the total for min_qty items.
   const bundlePromo = itemPromos.find(
