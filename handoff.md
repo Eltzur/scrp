@@ -134,7 +134,7 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 #### Deferred
 - P3: Store address columns (ALTER TABLE + ingest_store_address.py) — not started
 - Shefa 8 promo-only stores: decide whether to remove from active_stores.yaml
-- Carrefour active_stores.yaml cleanup: remove store 006 (confirmed non-existent)
+- Carrefour store 006 cleanup: DONE (store was already absent from yaml — no action needed)
 - פומלית in פסטרמה results: token matching bug, documented, deferred
 - Victory promo deduplication (60K rows): needs full promo table audit and re-seed
 
@@ -142,6 +142,20 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 - Promo table data is corrupt/inflated — do not use promo data until audited
 - CC must always git push after every commit (added to CLAUDE.md)
 - Cron runtime now ~70+ min due to expanded store count
+
+---
+
+### Session 9d-11 (June 14, 2026) — Carrefour Cleanup + GS1 Scoping
+
+#### Completed
+- Carrefour store 006 removal: no-op — store was already absent from active_stores.yaml (cleaned in prior session)
+- docs/gs1_integration.md created: full GS1 integration scoping document (schema, API changes, scraper enrichment flow, rollout plan, risk register, open questions). SCOPING ONLY — no implementation.
+
+#### Pivoted
+- GS1 path deprioritized (slow response from GS1 IL). Investigating Cheapersal catalog scraper as alternative product data source.
+
+#### Deferred
+- GS1 integration implementation: blocked on GS1 IL reply + decision gates (see docs/gs1_integration.md Phase 0)
 
 ---
 
