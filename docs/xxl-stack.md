@@ -78,6 +78,7 @@ city_norm (text), canonical (text)
 - Never use city_norm for filtering — use city_canonical
 - active_stores.yaml store_ids must match DB store_id padding exactly
 - publishprice.py handles both Format A (chain-store-date) and Format B (chain-subchain-store-date) filenames
+- promos table data is currently corrupt (inflated row counts, wrong discount calculations). Do not query or build features on it until rebuilt.
 
 ## Permissions (pre-authorized, no need to ask)
 - Read any file in the repo

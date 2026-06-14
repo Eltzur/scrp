@@ -16,6 +16,7 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 - **Railway is DEAD.** Project runs on Kamatera. Never reference Railway.
 - **Never merge מודיעין עילית with מודיעין-מכבים-רעות** — separate municipalities.
 - **Never merge BE-branded Shufersal stores into the main chain** — pharmacy/beauty only.
+- **Promo data is CORRUPT** — Victory has 60K+ promo rows, data is unreliable. Do not build on promos table until a full audit and re-seed is done in a dedicated session.
 
 ## City data — IMPORTANT
 - **city_canonical is the source of truth** for all city data (rebuilt from CBS 2024 in 9d-8). Do NOT use city_norm.

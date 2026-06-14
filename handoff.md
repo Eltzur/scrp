@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: May 27, 2026 (end of session 9d-3)
+> Last updated: June 14, 2026 (end of session 9d-10)
 
 ---
 
@@ -83,7 +83,7 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 
 ## 📊 Current Production State
 
-**Last updated: June 5, 2026 (end of session 9d-9)**
+**Last updated: June 14, 2026 (end of session 9d-10)**
 
 - **14 chains** in registry: Shufersal, Rami Levy, Osher Ad, Victory, Yochananof, Keshet, Carrefour, Tiv Taam, King Store, Shefa Birkat Hashem, Shuk Hayir, Fresh Market, Super Yuda, חצי חינם / Hazi Hinam (added 9d-9)
 - **~1,200 stores** in active_stores.yaml (post 9d-9 additions: Rami Levy +72→98, Yochananof +35→50, Keshet +12→22, Osher Ad +11→23, Hazi Hinam +1→12; Paz + Dor Alon removed in 9d-8)
@@ -102,30 +102,46 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 
 ## ✅ Sessions Completed
 
-### Session 9d-10 (June 9-11, 2026) — Carrefour Regex Fix + Victory Rewrite + Shufersal Stores
+### Session 9d-10 (June 9-14, 2026) — Store Seeding Fixes + Search Performance + Geolocation + Promo Failure
 
 #### Completed
-- publishprice.py regex bug fixed: was capturing subchain segment instead of store_id. Fixed with two-pattern approach handling both Format A (chain-store-date, no subchain) and Format B (chain-subchain-store-date). Carrefour seeded stores: 59→148, prices: 380K→827K.
-- Carrefour store_id padding normalized: duplicate rows (0002/002 etc) merged via scripts/fix_carrefour_padding.py. 91 rows merged, fetch_store_runs FK handled.
-- Victory scraper rewritten to new laibcatalog REST API (getbranches/getfiles endpoints — old /webapi/{chain_id}/pricefull was returning 404). Victory expanded 17→69 stores, 604K prices seeded.
-- Shefa: 8 physical stores confirmed promo-only (no PriceFull published, some since 2020). Leave in active_stores.yaml for now but mark as chronic no-file.
-- Shufersal stores 413 (ONLINE) and 844 (Express Ramat Gan) added to active_stores.yaml and seeded via new scripts/seed_one_store.py script.
-- scripts/seed_one_store.py added — targeted single-store seeding by chain_id + store_id.
-- Cron post-run coverage report added to cron_main.py (report_coverage function).
-- Known issue: Victory PromoFull files contain duplicate promo entries causing CardinalityViolation warnings on every store during promo ingestion. Prices load fine. Fix needed in bulk_insert_promos — deduplicate incoming rows before upsert.
-- Known issue: Cron runtime significantly longer now (~70+ min observed on June 10) due to expanded store count (Victory +52, Carrefour +89 effective stores). Monitor next run — may need STORE_WORKERS increase or chain parallelism tuning.
+- publishprice.py regex bug fixed (subchain vs store_id capture). Carrefour: 59→148 seeded stores, 380K→827K prices.
+- Carrefour padding normalization: duplicate rows (0002/002) merged via scripts/fix_carrefour_padding.py. 91 rows merged.
+- Victory scraper rewritten to new laibcatalog REST API (old /webapi endpoint was 404). Victory: 17→69 stores, 604K prices.
+- Shefa 8 physical stores confirmed promo-only (no PriceFull). Leave in yaml, mark as chronic no-file.
+- Shufersal stores 413 (ONLINE) and 844 (Express Ramat Gan) added to active_stores.yaml and seeded.
+- scripts/seed_one_store.py added for targeted single-store seeding.
+- Cron post-run coverage report added to cron_main.py.
+- Search performance: 14s→0.28s cold, ~0.1s warm.
+  * Root cause: missing idx_prices_store_fk index + stale statistics + nested loop query plan
+  * Fix: ANALYZE prices, covering index idx_prices_item_store_cover, two-step store_fk pre-fetch in fetch_prices(), SET LOCAL enable_nestloop=off
+  * Migration: db/migrations/9d10_perf_indexes.sql
+- IP geolocation city auto-detect on page load (ip-api.com). localStorage persistence for returning users. Eliminates all-cities cold query.
+- API warmup ping on page load (/health) to eliminate gunicorn cold start.
+- docs/xxl-stack.md created — technical reference for CC (schema, conventions, common mistakes).
+- Victory promo CardinalityViolation fixed: bulk_insert_promos now deduplicates by (item_code, promo_id) before upsert.
 
-#### Current State (end of 9d-10)
-- 14 chains, ~900+ effective stores with prices
-- Zero-prices stores breakdown: Shufersal 101 (BE/pharmacy, by design), Carrefour 2 (genuine no-file), Shuk Hayir 12 (virtual/online), Shefa 9 (8 promo-only + 1 virtual), Tiv Taam 7 (pickup), Keshet 5 (sub-format), King Store 5 (virtual+mini), Yochananof 4 (pickup), Victory 2 (internet store + 1 other), Rami Levy 2 (internet warehouse + store 712 no-file)
+#### Failed / To Be Rebuilt from Scratch
+- **Promo pipeline: CRITICALLY BROKEN.** Victory DB has 60K+ active promo rows (impossible — real store has ~500-1000 promos). Shufersal promo data also suspect. Root causes unknown but likely:
+  1. Promo parser inserting duplicate rows across stores incorrectly
+  2. item_code matching between promos and prices tables is wrong
+  3. discount_pct calculation logic is fundamentally flawed for Israeli promo formats
+  * Frontend promo badges: technically implemented but non-functional due to data issues
+  * מבצעים חמים page: exists at /promos but shows garbage data
+  * ALL promo work needs investigation and rebuild in a dedicated session
+  * DO NOT attempt incremental fixes — start fresh with promo data audit
 
 #### Deferred
-- Priority 2: Fix DATABASE_URL in systemd Environment= directive (still manual export workaround)
-- Priority 3: Store address columns (ALTER TABLE + ingest_store_address.py) — not started
-- Priority 4: Promo API endpoint + frontend highlighting — not started
-- Victory promo CardinalityViolation fix (bulk_insert_promos deduplication)
+- P3: Store address columns (ALTER TABLE + ingest_store_address.py) — not started
 - Shefa 8 promo-only stores: decide whether to remove from active_stores.yaml
-- Carrefour active_stores.yaml cleanup: remove store 006 (confirmed non-existent in StoresFull XML)
+- Carrefour active_stores.yaml cleanup: remove store 006 (confirmed non-existent)
+- פומלית in פסטרמה results: token matching bug, documented, deferred
+- Victory promo deduplication (60K rows): needs full promo table audit and re-seed
+
+#### Known Issues Carried Forward
+- Promo table data is corrupt/inflated — do not use promo data until audited
+- CC must always git push after every commit (added to CLAUDE.md)
+- Cron runtime now ~70+ min due to expanded store count
 
 ---
 
@@ -240,6 +256,7 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 | **9d-7** | StoresFull XML ingestion + cron fixes | ✅ 244 city_norm rows updated from StoresFull XMLs. systemd timeout→infinity + 4G swap (OOM fix). Cron: 429 stores, 2.45M prices, 11 chains. Decision: switch to delta (Price) files for daily scraping. |
 | **9d-8** | city_canonical rebuild + parallel chains + Shufersal 403 fix | ✅ CBS 2024 city_canonical: 1057 stores, 0 NULLs. Paz/Dor Alon removed (422 stores, 887K prices deleted). City dropdown 0.13s (was 3.7s). Chain-level ThreadPoolExecutor(max_workers=6). Shufersal lazy per-store URL fetch (403 fix). |
 | **9d-9** | Delta Price files + per-store parallelism + Hazi Hinam + missing stores | ✅ Delta for 8 chains (Shufersal + 6 Cerberus + Hazi Hinam). STORE_WORKERS=4 — Shufersal 4436s→544s (8×), Tiv Taam 6913s→93s (74×). HaziHinam scraper + seed script. +131 missing stores (Rami Levy +72, Yochananof +35, Keshet +12, Osher Ad +11, Hazi Hinam +1). docs/portals.md. run_one.py --full flag. |
+| **9d-10** | Store seeding fixes + search performance + geolocation + promo failure | ✅ Carrefour 59→148 stores (regex+padding fix). Victory rewritten to laibcatalog REST API (17→69 stores). Shufersal stores 413+844 added. Search 14s→0.28s (covering index + nestloop off + store_fk pre-fetch). IP geolocation city auto-detect. API warmup /health ping. docs/xxl-stack.md created. ❌ Promo pipeline CRITICALLY BROKEN (60K+ corrupt rows) — marked failed, needs full audit and rebuild. |
 
 ---
 
