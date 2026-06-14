@@ -27,23 +27,39 @@ function getPromoBadges(
   q: PriceQuote,
   itemCode: string,
   promosByStore: PromoMap | undefined,
-): { discountPct: number | null; buyOneGetOne: boolean } {
+): { discountPct: number | null; bundleLabel: string | null; buyOneGetOne: boolean } {
   const storePromos = promosByStore?.get(`${q.chain_id}/${q.store_id}`) ?? [];
   const itemPromos = storePromos.filter((p: PromoItem) => p.item_code === itemCode);
 
-  const discountPromo = itemPromos.find(
-    (p: PromoItem) => p.discount_pct != null && p.discount_pct >= 10,
+  // Bundle deal (reward_type=10): "2 ב-60₪" — discount_price is the total for min_qty items.
+  const bundlePromo = itemPromos.find(
+    (p: PromoItem) =>
+      p.reward_type === 10 &&
+      p.min_qty != null && p.min_qty >= 2 &&
+      p.discount_price != null,
   );
+  const bundleLabel = bundlePromo
+    ? `${Math.round(bundlePromo.min_qty!)} ב-${fmtBundlePrice(bundlePromo.discount_price!)}₪`
+    : null;
 
+  // Percentage discount — only shown when there is no bundle label for this item.
+  const discountPromo = bundleLabel == null
+    ? itemPromos.find((p: PromoItem) => p.discount_pct != null && p.discount_pct >= 10)
+    : null;
   const discountPct = discountPromo?.discount_pct != null
     ? Math.round(discountPromo.discount_pct)
     : null;
 
+  // 1+1: buy-one-get-one (reward_type=1, min_qty=2).
   const buyOneGetOne = itemPromos.some(
     (p: PromoItem) => p.reward_type === 1 && p.min_qty != null && Math.round(p.min_qty) === 2,
   );
 
-  return { discountPct, buyOneGetOne };
+  return { discountPct, bundleLabel, buyOneGetOne };
+}
+
+function fmtBundlePrice(price: number): string {
+  return price % 1 === 0 ? price.toFixed(0) : price.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
 }
 
 export default function ProductCard({ item, promosByStore }: Props) {
@@ -135,7 +151,7 @@ export default function ProductCard({ item, promosByStore }: Props) {
       <div className="divide-y divide-gray-100 rounded-lg border border-gray-100 overflow-hidden">
         {quotes.map((q, i) => {
           const isCheapest = i === 0 && isComparable;
-          const { discountPct, buyOneGetOne } = getPromoBadges(q, product.item_code, promosByStore);
+          const { discountPct, bundleLabel, buyOneGetOne } = getPromoBadges(q, product.item_code, promosByStore);
           return (
             <div
               key={`${q.chain_id}-${q.store_id}`}
@@ -170,6 +186,11 @@ export default function ProductCard({ item, promosByStore }: Props) {
                 {isCheapest && (
                   <span className="text-xs font-semibold text-emerald-600 uppercase tracking-wide hidden sm:inline">
                     {t('product_card.cheapest')}
+                  </span>
+                )}
+                {bundleLabel != null && (
+                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
+                    {bundleLabel}
                   </span>
                 )}
                 {discountPct != null && (

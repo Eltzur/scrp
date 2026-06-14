@@ -548,8 +548,20 @@ def fetch_promos_bulk(
             to_char(p.promo_start, 'YYYY-MM-DD"T"HH24:MI:SS') AS promo_start,
             to_char(p.promo_end,   'YYYY-MM-DD"T"HH24:MI:SS') AS promo_end,
             CASE
-                WHEN p.discount_price IS NOT NULL AND pr.item_price > 0
-                THEN ROUND(((pr.item_price - p.discount_price) / pr.item_price * 100)::numeric, 1)
+                -- Single-item discount: discount_price is the per-item price
+                WHEN p.discount_price IS NOT NULL
+                 AND COALESCE(p.min_qty, 1) <= 1
+                 AND pr.item_price > 0
+                 AND p.discount_price < pr.item_price
+                THEN ROUND(((pr.item_price - p.discount_price)
+                             / pr.item_price * 100)::numeric, 1)
+                -- Bundle deal: discount_price is the total for min_qty items
+                WHEN p.discount_price IS NOT NULL
+                 AND p.min_qty > 1
+                 AND pr.item_price > 0
+                 AND (p.discount_price / p.min_qty) < pr.item_price
+                THEN ROUND(((pr.item_price - (p.discount_price / p.min_qty))
+                             / pr.item_price * 100)::numeric, 1)
                 ELSE NULL
             END AS discount_pct
         FROM promos p
