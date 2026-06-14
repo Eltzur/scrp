@@ -581,7 +581,11 @@ def fetch_promos_bulk(
 
 
 def fetch_today_promos(conn: Connection, limit: int = 200) -> list[dict]:
-    """Return today's hot deals — active promos with discount_pct >= 10 or 1+1."""
+    """Return today's hot deals — active promos with discount_pct >= 10 or 1+1.
+
+    Deduplicates by item_code (best discount per item), caps discount_pct at 99,
+    and excludes orphaned promo rows (no chain_name).
+    """
     rows = conn.execute(text("""
         WITH promo_data AS (
             SELECT
@@ -600,14 +604,14 @@ def fetch_today_promos(conn: Connection, limit: int = 200) -> list[dict]:
                      AND COALESCE(p.min_qty, 1) <= 1
                      AND pr.item_price > 0
                      AND p.discount_price < pr.item_price
-                    THEN ROUND(((pr.item_price - p.discount_price)
-                                 / pr.item_price * 100)::numeric, 1)
+                    THEN LEAST(ROUND(((pr.item_price - p.discount_price)
+                                      / pr.item_price * 100)::numeric, 1), 99.0)
                     WHEN p.discount_price IS NOT NULL
                      AND p.min_qty > 1
                      AND pr.item_price > 0
                      AND (p.discount_price / p.min_qty) < pr.item_price
-                    THEN ROUND(((pr.item_price - (p.discount_price / p.min_qty))
-                                 / pr.item_price * 100)::numeric, 1)
+                    THEN LEAST(ROUND(((pr.item_price - (p.discount_price / p.min_qty))
+                                      / pr.item_price * 100)::numeric, 1), 99.0)
                     ELSE NULL
                 END AS discount_pct
             FROM promos p
@@ -615,11 +619,17 @@ def fetch_today_promos(conn: Connection, limit: int = 200) -> list[dict]:
             JOIN chains c ON c.chain_id = s.chain_id
             LEFT JOIN prices pr ON pr.store_fk = p.store_fk AND pr.item_code = p.item_code
             WHERE (p.promo_end >= NOW() OR p.promo_end IS NULL)
+              AND c.name IS NOT NULL
+        ),
+        deduped AS (
+            SELECT DISTINCT ON (item_code) *
+            FROM promo_data
+            WHERE (discount_pct >= 10 AND discount_pct <= 99)
+               OR (reward_type = 1 AND ROUND(COALESCE(min_qty, 0)::numeric) = 2)
+            ORDER BY item_code, discount_pct DESC NULLS LAST
         )
         SELECT *
-        FROM promo_data
-        WHERE discount_pct >= 10
-           OR (reward_type = 1 AND ROUND(COALESCE(min_qty, 0)::numeric) = 2)
+        FROM deduped
         ORDER BY discount_pct DESC NULLS LAST
         LIMIT :limit
     """), {"limit": limit}).mappings().all()
