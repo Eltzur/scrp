@@ -193,6 +193,23 @@ export interface PromoItem {
   discount_pct: number | null;
 }
 
+export interface HotPromoItem {
+  item_code: string;
+  promo_description: string | null;
+  discount_pct: number | null;
+  item_price: number | null;
+  discount_price: number | null;
+  min_qty: number | null;
+  reward_type: number | null;
+  chain_name: string | null;
+  store_name: string | null;
+  city: string | null;
+  promo_end: string | null;
+}
+
+export const getTodayPromos = (): Promise<HotPromoItem[]> =>
+  http.get<HotPromoItem[]>('/promos/today').then(r => r.data).catch(() => []);
+
 export const getPromosBulk = (
   stores: { chain_id: string; store_id: string }[],
 ): Promise<Record<string, PromoItem[]>> =>

@@ -135,3 +135,20 @@ class PromoItem(BaseModel):
     promo_start: str | None
     promo_end: str | None
     discount_pct: float | None
+
+
+class HotPromoItem(BaseModel):
+    """One hot-deal promo row returned by GET /promos/today."""
+    model_config = ConfigDict(from_attributes=True)
+
+    item_code: str
+    promo_description: str | None
+    discount_pct: float | None
+    item_price: float | None
+    discount_price: float | None
+    min_qty: float | None
+    reward_type: int | None
+    chain_name: str | None
+    store_name: str | None
+    city: str | None
+    promo_end: str | None

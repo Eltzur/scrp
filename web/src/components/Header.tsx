@@ -50,6 +50,14 @@ export default function Header() {
         </Link>
 
         <div className="flex items-center gap-3">
+          {/* Hot deals link */}
+          <Link
+            to="/promos"
+            className="text-sm font-medium text-gray-600 hover:text-emerald-600 transition-colors hidden sm:inline"
+          >
+            🔥 מבצעים
+          </Link>
+
           {/* Basket icon with badge */}
           <button
             onClick={() => setIsOpen(true)}

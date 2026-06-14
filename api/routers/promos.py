@@ -3,8 +3,8 @@ from pydantic import BaseModel
 from sqlalchemy.engine import Connection
 
 from api.dependencies import get_db
-from api.models import PromoItem
-from db.query import fetch_promos, fetch_promos_bulk, lookup_store_fk
+from api.models import HotPromoItem, PromoItem
+from db.query import fetch_promos, fetch_promos_bulk, fetch_today_promos, lookup_store_fk
 
 router = APIRouter(tags=["Promos"])
 
@@ -29,6 +29,16 @@ def promos_bulk(
 ):
     pairs = [(s.chain_id, s.store_id) for s in body.stores]
     return fetch_promos_bulk(conn, pairs)
+
+
+@router.get(
+    "/promos/today",
+    response_model=list[HotPromoItem],
+    summary="Hot deals — active promos with ≥10% discount or 1+1",
+)
+def promos_today(conn: Connection = Depends(get_db)):
+    """All active promos with discount_pct >= 10 or reward_type=1+1, ordered by discount_pct desc."""
+    return fetch_today_promos(conn)
 
 
 @router.get(
