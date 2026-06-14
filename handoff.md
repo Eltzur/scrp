@@ -23,7 +23,7 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 
 | Layer | Tech | Where | Status |
 |---|---|---|---|
-| Frontend | React + Vite + TypeScript + Tailwind | Hostinger static (`public_html/`) — serves BOTH xxl.co.il and super.xxl.co.il | ✅ Live |
+| Frontend | React + Vite + TypeScript + Tailwind | Kamatera nginx (PRIMARY) — serves super.xxl.co.il and xxl.co.il. Hostinger static (BACKUP/legacy, `public_html/`) — no longer primary. | ✅ Live |
 | Backend | FastAPI + gunicorn + uvicorn | Kamatera `scrp-prod-il` via systemd `scrp-api.service`, behind nginx + Let's Encrypt | ✅ Live since May 18, 2026 |
 | Database | Postgres 18.4 | Kamatera `scrp-prod-il` (`185.229.226.190`), localhost-only (5432 closed at UFW) | ✅ Live |
 | Scraper cron | Python (`scraper.cron_main`) | Kamatera `scrp-prod-il` via systemd timer | ✅ Daily 10:00 IDT, DST-aware (changed from 03:00 in session 9n — portals publish 02:00–05:00 UTC; 10:00 IDT = 07:00 UTC clears the window) |
@@ -93,7 +93,7 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 - **Chain-level parallelism**: `cron_main.py` ThreadPoolExecutor(max_workers=6). Full cron target: <30 min (to be confirmed by next 10:00 IDT run).
 - **City dropdown**: 0.13s response (was 3.7s — prices JOIN removed in 9d-8).
 - **Verification gate**: `active_stores.yaml` (verified to publish PriceFull/Price) is what cron uses; `scheduled_stores.yaml` is the wish-list. See `db/verification_report_9d1.md` for excluded stores.
-- **Canonical names** computed via weighted token voting (session 8b)
+- **Canonical names**: OPEN ISSUE — weighted token voting (session 8b) produces chain-specific names but canonical product naming requires GS1 catalog data. Blocked on GS1 IL access. Scheduled for session 10.1.
 - **Search** uses canonical names only, numeric/percentage tokens filtered (session 8b)
 - **Known coverage gap**: Bnei Brak has no Carrefour/Yenot Bitan/Mega presence (verified via carrefour.co.il store locator) — accepted, not a bug.
 - **Live site status**: ✅ super.xxl.co.il + xxl.co.il fully operational, all API calls served from Kamatera over HTTPS.
@@ -126,7 +126,7 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
   1. Promo parser inserting duplicate rows across stores incorrectly
   2. item_code matching between promos and prices tables is wrong
   3. discount_pct calculation logic is fundamentally flawed for Israeli promo formats
-  * Frontend promo badges: technically implemented but non-functional due to data issues
+  * Promo display: NOT SOLVED. Promo table data is corrupt/inflated (Victory 60K+ rows, dedup bug). Frontend promo badges non-functional. Full audit and rebuild required — do not attempt incremental fixes. Deferred.
   * מבצעים חמים page: exists at /promos but shows garbage data
   * ALL promo work needs investigation and rebuild in a dedicated session
   * DO NOT attempt incremental fixes — start fresh with promo data audit
