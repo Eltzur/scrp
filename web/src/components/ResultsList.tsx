@@ -19,7 +19,7 @@ interface Props {
   isLoadingMore?: boolean;
 }
 
-export type PromoMap = Map<string, PromoItem[]>;
+export type PromoMap = Record<string, PromoItem[]>;
 
 const SKELETON_COUNT = 6;
 
@@ -30,7 +30,7 @@ export default function ResultsList({
 
   // promosByStore is populated lazily AFTER results render — never blocks first paint.
   // Old promos stay visible during search transitions (stale-while-revalidate).
-  const [promosByStore, setPromosByStore] = useState<PromoMap>(new Map());
+  const [promosByStore, setPromosByStore] = useState<PromoMap>({});
   const [promosLoading, setPromosLoading] = useState(false);
 
   // Stable key for the unique set of stores in the current result.
@@ -48,7 +48,7 @@ export default function ResultsList({
   useEffect(() => {
     // No results — clear promos and bail.
     if (!storeSetKey || !result?.items.length) {
-      setPromosByStore(new Map());
+      setPromosByStore({});
       setPromosLoading(false);
       return;
     }
@@ -70,7 +70,7 @@ export default function ResultsList({
     }
 
     getPromosBulk(stores).then(record => {
-      setPromosByStore(new Map(Object.entries(record)));
+      setPromosByStore({ ...record });
       setPromosLoading(false);
     });
   }, [storeSetKey]); // eslint-disable-line react-hooks/exhaustive-deps

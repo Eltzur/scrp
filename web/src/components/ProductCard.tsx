@@ -28,10 +28,8 @@ function getPromoBadges(
   itemCode: string,
   promosByStore: PromoMap | undefined,
 ): { discountPct: number | null; bundleLabel: string | null; buyOneGetOne: boolean; promoDesc: string | null } {
-  const storePromos = promosByStore?.get(`${q.chain_id}/${q.store_id}`) ?? [];
-  console.log(`Store ${q.chain_id}/${q.store_id}: ${storePromos.length} promos, looking for item ${itemCode}`);
+  const storePromos = promosByStore?.[`${q.chain_id}/${q.store_id}`] ?? [];
   const itemPromos = storePromos.filter((p: PromoItem) => p.item_code === itemCode);
-  console.log(`Matching promos for ${itemCode}:`, itemPromos);
 
   // Bundle deal (reward_type=10): "2 ב-60₪" — discount_price is the total for min_qty items.
   const bundlePromo = itemPromos.find(
@@ -97,8 +95,6 @@ export default function ProductCard({ item, promosByStore }: Props) {
     product.canonical_name ||
     Object.values(product.names_per_chain ?? {})[0] ||
     product.item_code;
-
-  console.log('ProductCard render', product.item_code, 'promoMap size', promosByStore?.size ?? 0);
 
   const handleFavClick = (e: React.MouseEvent) => {
     e.stopPropagation();
