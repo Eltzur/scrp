@@ -580,13 +580,34 @@ def fetch_promos_bulk(
     return result
 
 
-def fetch_today_promos(conn: Connection, limit: int = 200) -> list[dict]:
-    """Return today's hot deals — active promos with discount_pct >= 10 or 1+1.
+_ONLINE_STORE_FILTER = """
+    AND NOT (s.store_name ILIKE '%online%'
+          OR s.store_name ILIKE '%אונליין%'
+          OR s.store_name ILIKE '%אינטרנט%')
+""".strip()
 
-    Deduplicates by item_code (best discount per item), caps discount_pct at 99,
-    and excludes orphaned promo rows (no chain_name).
+
+def fetch_today_promos(
+    conn: Connection,
+    limit: int = 200,
+    city: str | None = None,
+    chain_id: str | None = None,
+) -> list[dict]:
+    """Return today's hot deals — deduplicated by (item_code, chain_id).
+
+    Caps discount_pct at 99, excludes orphaned rows and online/virtual stores.
     """
-    rows = conn.execute(text("""
+    params: dict = {"limit": limit}
+    city_clause = ""
+    chain_clause = ""
+    if city:
+        city_clause = "AND s.city_canonical = :city"
+        params["city"] = city
+    if chain_id:
+        chain_clause = "AND s.chain_id = :chain_id"
+        params["chain_id"] = chain_id
+
+    rows = conn.execute(text(f"""
         WITH promo_data AS (
             SELECT
                 p.item_code,
@@ -595,7 +616,8 @@ def fetch_today_promos(conn: Connection, limit: int = 200) -> list[dict]:
                 p.discount_price,
                 p.min_qty,
                 to_char(p.promo_end, 'YYYY-MM-DD"T"HH24:MI:SS') AS promo_end,
-                c.name          AS chain_name,
+                s.chain_id,
+                c.name           AS chain_name,
                 s.store_name,
                 s.city_canonical AS city,
                 pr.item_price,
@@ -620,17 +642,52 @@ def fetch_today_promos(conn: Connection, limit: int = 200) -> list[dict]:
             LEFT JOIN prices pr ON pr.store_fk = p.store_fk AND pr.item_code = p.item_code
             WHERE (p.promo_end >= NOW() OR p.promo_end IS NULL)
               AND c.name IS NOT NULL
+              {_ONLINE_STORE_FILTER}
+              {city_clause}
+              {chain_clause}
         ),
         deduped AS (
-            SELECT DISTINCT ON (item_code) *
+            SELECT DISTINCT ON (item_code, chain_id) *
             FROM promo_data
             WHERE (discount_pct >= 10 AND discount_pct <= 99)
                OR (reward_type = 1 AND ROUND(COALESCE(min_qty, 0)::numeric) = 2)
-            ORDER BY item_code, discount_pct DESC NULLS LAST
+            ORDER BY item_code, chain_id, discount_pct DESC NULLS LAST
         )
         SELECT *
         FROM deduped
         ORDER BY discount_pct DESC NULLS LAST
         LIMIT :limit
-    """), {"limit": limit}).mappings().all()
+    """), params).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def fetch_promo_cities(conn: Connection) -> list[str]:
+    """Distinct cities that have active qualifying promos."""
+    rows = conn.execute(text(f"""
+        SELECT DISTINCT s.city_canonical
+        FROM promos p
+        JOIN stores s ON s.id = p.store_fk
+        JOIN chains c ON c.chain_id = s.chain_id
+        LEFT JOIN prices pr ON pr.store_fk = p.store_fk AND pr.item_code = p.item_code
+        WHERE (p.promo_end >= NOW() OR p.promo_end IS NULL)
+          AND c.name IS NOT NULL
+          AND s.city_canonical IS NOT NULL
+          {_ONLINE_STORE_FILTER}
+        ORDER BY s.city_canonical
+    """)).fetchall()
+    return [r[0] for r in rows]
+
+
+def fetch_promo_chains(conn: Connection) -> list[dict]:
+    """Distinct chains that have active qualifying promos."""
+    rows = conn.execute(text(f"""
+        SELECT DISTINCT s.chain_id, c.name
+        FROM promos p
+        JOIN stores s ON s.id = p.store_fk
+        JOIN chains c ON c.chain_id = s.chain_id
+        WHERE (p.promo_end >= NOW() OR p.promo_end IS NULL)
+          AND c.name IS NOT NULL
+          {_ONLINE_STORE_FILTER}
+        ORDER BY c.name
+    """)).mappings().all()
     return [dict(r) for r in rows]

@@ -207,8 +207,18 @@ export interface HotPromoItem {
   promo_end: string | null;
 }
 
-export const getTodayPromos = (): Promise<HotPromoItem[]> =>
-  http.get<HotPromoItem[]>('/promos/today').then(r => r.data).catch(() => []);
+export const getTodayPromos = (city?: string, chainId?: string): Promise<HotPromoItem[]> =>
+  http.get<HotPromoItem[]>('/promos/today', {
+    params: { ...(city ? { city } : {}), ...(chainId ? { chain_id: chainId } : {}) },
+  }).then(r => r.data).catch(() => []);
+
+export interface PromoChain { chain_id: string; name: string; }
+
+export const getPromoCities = (): Promise<string[]> =>
+  http.get<string[]>('/promos/cities').then(r => r.data).catch(() => []);
+
+export const getPromoChains = (): Promise<PromoChain[]> =>
+  http.get<PromoChain[]>('/promos/chains').then(r => r.data).catch(() => []);
 
 export const getPromosBulk = (
   stores: { chain_id: string; store_id: string }[],

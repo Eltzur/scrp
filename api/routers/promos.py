@@ -1,10 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.engine import Connection
 
 from api.dependencies import get_db
 from api.models import HotPromoItem, PromoItem
-from db.query import fetch_promos, fetch_promos_bulk, fetch_today_promos, lookup_store_fk
+from db.query import (
+    fetch_promo_chains, fetch_promo_cities,
+    fetch_promos, fetch_promos_bulk, fetch_today_promos, lookup_store_fk,
+)
 
 router = APIRouter(tags=["Promos"])
 
@@ -36,9 +40,22 @@ def promos_bulk(
     response_model=list[HotPromoItem],
     summary="Hot deals — active promos with ≥10% discount or 1+1",
 )
-def promos_today(conn: Connection = Depends(get_db)):
-    """All active promos with discount_pct >= 10 or reward_type=1+1, ordered by discount_pct desc."""
-    return fetch_today_promos(conn)
+def promos_today(
+    city:     Optional[str] = Query(None, description="Filter by city_canonical"),
+    chain_id: Optional[str] = Query(None, description="Filter by chain_id"),
+    conn: Connection = Depends(get_db),
+):
+    return fetch_today_promos(conn, city=city, chain_id=chain_id)
+
+
+@router.get("/promos/cities", response_model=list[str], summary="Cities with active promos")
+def promo_cities(conn: Connection = Depends(get_db)):
+    return fetch_promo_cities(conn)
+
+
+@router.get("/promos/chains", summary="Chains with active promos")
+def promo_chains(conn: Connection = Depends(get_db)):
+    return fetch_promo_chains(conn)
 
 
 @router.get(
