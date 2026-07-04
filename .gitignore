@@ -221,3 +221,112 @@ web/*.zip
 
 Microsoft.PowerShell_profile.ps1
 .env.bak
+
+# Temp / dev scripts (root level)
+_temp_loader.py
+all.py
+app.py
+apply_matches.py
+fix_9j_residual.py
+fix_ramilevy.py
+init_db.py
+king.py
+king2.py
+kingbranchscrp.py
+load_csv_to_db.py
+merge_ramilevy_splits.py
+normalize_cities.py
+review_matches.py
+shdl.py
+shu.py
+shubranchscrp.py
+supersal.py
+tivbranchscrp.py
+tivdl.py
+victest.py
+victest2.py
+victest3.py
+victory.py
+victorybranchscrp.py
+vidis.py
+vrd.py
+
+# Temp data folders
+Store_XML/
+city matcher files/
+deploy/
+king_files/
+kingDL/
+screenshots/
+shufersal_files/
+sqlite/
+templates/
+tivtaam_test_files/
+victory_full_reports/
+victory_manual_files/
+victoryfiles/
+
+# Temp data files
+Matches_v2.csv
+*.csv
+*.html
+*.db-shm
+*.db-wal
+scraped_source.html
+probe_out.txt
+run_shefa.txt
+run_shuk.txt
+run_*.txt
+verify_p5_out.txt
+config.json
+king_branches.json
+shufersal_branches.json
+tivtaam_branches.json
+victory_branches.json
+king_price_comparison.csv
+null_stores.csv
+price_comparison.csv
+shufersal_price_comparison.csv
+victory_manual_prices.csv
+victory_price_comparison.csv
+victory_prices.csv
+victory_prices_full.csv
+schema.sql
+prices.db-shm
+*.xml.gz
+
+# Binaries
+*.exe
+
+# Probe scripts
+scripts/_compare_xml_yaml.py
+scripts/analyze_city_codes.py
+scripts/list_tables.py
+scripts/probe_bina_chains.py
+scripts/probe_cerberus_chains.py
+scripts/probe_cerberus_stores.py
+scripts/verify_p5_tivtaam.py
+scripts/verify_shufersal_pricefull.py
+
+# Data files
+data/9d-5_build_2_bina_chains.md
+data/kod_yeshuvim_02.xls
+data/locality.xls
+
+# Sensitive / legal / personal
+env.upload
+legal/
+GS1/
+
+# Misc
+web/public/og-super.png.png
+"shufersal branch list.csv"
+"shufersal branch list.yml"
+"Price Comparison Victory.csv"
+Shufersal_branches.html
+victory_branches.html
+
+*.pdf
+*.yml
+*.txt
+"shufersal branch list.yml"
