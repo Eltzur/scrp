@@ -223,7 +223,7 @@ multi-source deduplication, hotels bundling.
 - Wire up /search endpoint calling SerpApi
 - Test end-to-end: browser search → FastAPI → SerpApi → results displayed
 
-### Session 10A-2 (July 4, 2026) — Repo scaffold + live search endpoint
+### Session 10A-2 (July 4, 2026) — Repo scaffold + live search endpoint — ✅ COMPLETE
 
 **Completed:**
 - Repo created: github.com/Eltzur/xxl-flights (private)
@@ -239,18 +239,29 @@ multi-source deduplication, hotels bundling.
 - scrp_app password auth failing interactively on Kamatera — migration ran via sudo -u postgres instead. Investigate scrp_app password for flights DB writes in next session.
 - Tailwind v3 used (not v4)
 
+**Additional completed in 10A-2 (extended session):**
+- .gitignore cleaned up: 93 untracked files → 0 (binaries, CSVs, temp scripts, PDFs, YMLs all covered)
+- env.upload deleted (contained credentials, was untracked — security risk eliminated)
+- handoff files reorganized into docs/super/ and docs/flights/ subfolders
+- scrp_app DB password reset to clean value (no special characters) — verified working via PGPASSWORD test
+- scrp-api restarted and confirmed active (running) with new password
+- CLAUDE.md updated with permissions prompt policy
+
 **Next session (10A-3):**
-- Start frontend dev server and test the search form in browser
-- Wire up currency toggle (guests: ILS only, subscribers: ILS/USD/EUR)
-- Wire up tier-gating logic (Supabase auth integration)
-- Save search to DB after successful result
-- Begin price_history storage on each search
+- Deploy flights FastAPI backend as systemd service on Kamatera (port 8001)
+- Add nginx server block for fly.xxl.co.il
+- Add DNS A record at box.co.il pointing to 185.229.226.190
+- SSL via certbot for fly.xxl.co.il
+- Build frontend (npm run build) and deploy dist/ to nginx
+- Verify full stack end-to-end on live URL: browser → nginx → FastAPI → SerpApi → results
+- Begin UI polish after live deployment confirmed
 
 ---
 
 ## Open decisions
 
-- Subdomain vs path: flights.xxl.co.il vs xxl.co.il/flights (recommend flights.xxl.co.il for Phase 1)
+- Subdomain vs path: fly.xxl.co.il vs xxl.co.il/flights (recommend fly.xxl.co.il for Phase 1)
 - Exact Travelpayouts program to join (Kiwi vs Aviasales — test both)
 - Email provider for alerts: SendGrid free tier (100 emails/day) — confirm before 10A-2
 - Paid subscription price point (TBD)
+- scrp_app password: RESOLVED (new clean password, no special chars; stored in server .env + password manager, NOT committed to repo)
