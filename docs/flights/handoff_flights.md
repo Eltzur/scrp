@@ -256,6 +256,14 @@ multi-source deduplication, hotels bundling.
 - Verify full stack end-to-end on live URL: browser → nginx → FastAPI → SerpApi → results
 - Begin UI polish after live deployment confirmed
 
+**Deferred to 10A-4 (post-deployment):**
+- Currency toggle: guests get NIS only, free/paid subscribers get NIS/USD/EUR selector
+- Tier-gating logic: Supabase auth integration, user tier detection
+- Save search to DB after successful result (free: 3 saved, paid: 5 saved)
+- price_history storage: store SerpApi price_insights.price_history on each search call
+- Multi-destination search (guests: 1, free: 3, paid: 5)
+- Price alert signup UI (paid subscribers only)
+
 ---
 
 ## Open decisions
