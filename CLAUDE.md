@@ -11,6 +11,18 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 5. **One CC prompt per task** — batch all related changes into one prompt. No incremental back-and-forth on simple tasks.
 6. **Always push after commit** — CC must run `git push origin main` after every commit. Never leave commits only in local repo.
 
+## Permissions prompts
+When a permission prompt appears for any of the commands below, always select "Yes, and don't ask again" (the option that permanently trusts the command):
+- Any ssh command to dude@185.229.226.190
+- Any scp command to dude@185.229.226.190
+- Any git command (add, commit, push, pull, fetch)
+- Any pip install command
+- Any npm or npx command
+- Any uvicorn command
+- Any curl command
+
+For all other commands, select "Yes" (one-time approval) unless the command looks destructive or unexpected.
+
 ## SEVERE warnings
 - **RTL/Hebrew is NEVER a bug.** Hebrew in terminal/paste output often appears reversed — this is a display artifact, not a data bug. Never flag, never byte-check.
 - **Railway is DEAD.** Project runs on Kamatera. Never reference Railway.
