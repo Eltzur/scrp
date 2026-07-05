@@ -50,8 +50,19 @@ For all other commands, select "Yes" (one-time approval) unless the command look
   git commit -F .git\COMMIT_MSG_TMP
 - Never amend + force-push to fix a BOM after the fact
 
+## Hosting topology
+- **Kamatera (185.229.226.190) is PRIMARY for ALL xxl.co.il surfaces**, all served by nginx on Kamatera:
+  - Portal: xxl.co.il + www.xxl.co.il
+  - Supermarket app: super.xxl.co.il
+  - Flights: fly.xxl.co.il
+  - API: api-super.xxl.co.il
+- **Hostinger (82.198.227.247) is COLD FALLBACK / DR ONLY** — it holds an older static copy and receives no live traffic. Revert path: repoint the xxl.co.il + www A records at box.co.il back to 82.198.227.247.
+- **Portal and supermarket app SHARE ONE React build (web/dist).** isPortalHostname() in web/src/utils/hostname.ts switches PortalPage vs AppShell at runtime by hostname. The xxl.co.il nginx block shares root /var/www/super.xxl.co.il, so deploying web/ updates BOTH super.xxl.co.il and xxl.co.il in a single deploy.
+
 ## Deploy frontend
 .\scripts\deploy_frontend.ps1
+- Builds web/ and scp's the output to /var/www/super.xxl.co.il on Kamatera. Because the xxl.co.il nginx block shares that same root, this updates BOTH super.xxl.co.il AND the portal (xxl.co.il / www.xxl.co.il) at once.
+- The portal is NOT deployed via a Hostinger hPanel zip upload — that path is dead.
 
 ## Key file locations
 - Scraper registry: scraper/registry.py
@@ -65,6 +76,6 @@ For all other commands, select "Yes" (one-time approval) unless the command look
 - 15 chains in registry
 - ~700+ stores in active_stores.yaml
 - Postgres on Kamatera, backed up to Backblaze B2 via rclone
-- Frontend: React/Vite → nginx on Kamatera (185.229.226.190)
+- Frontend: React/Vite → nginx on Kamatera (185.229.226.190), serving portal (xxl.co.il), super (super.xxl.co.il), and flights (fly.xxl.co.il). See Hosting topology above.
 - SSL: Let's Encrypt via certbot (auto-renews)
 - Cron: systemd scrp-cron, runs 03:00 IDT

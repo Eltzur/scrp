@@ -23,7 +23,7 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 
 | Layer | Tech | Where | Status |
 |---|---|---|---|
-| Frontend | React + Vite + TypeScript + Tailwind | Kamatera nginx (PRIMARY) — serves super.xxl.co.il and xxl.co.il. Hostinger static (BACKUP/legacy, `public_html/`) — no longer primary. | ✅ Live |
+| Frontend | React + Vite + TypeScript + Tailwind | Kamatera nginx (PRIMARY for ALL xxl.co.il surfaces) — serves portal (xxl.co.il + www), super.xxl.co.il, and flights (fly.xxl.co.il). Portal & super share ONE build (web/dist). Hostinger (`82.198.227.247`) is COLD FALLBACK / DR only — older static copy, no live traffic. | ✅ Live |
 | Backend | FastAPI + gunicorn + uvicorn | Kamatera `scrp-prod-il` via systemd `scrp-api.service`, behind nginx + Let's Encrypt | ✅ Live since May 18, 2026 |
 | Database | Postgres 18.4 | Kamatera `scrp-prod-il` (`185.229.226.190`), localhost-only (5432 closed at UFW) | ✅ Live |
 | Scraper cron | Python (`scraper.cron_main`) | Kamatera `scrp-prod-il` via systemd timer | ✅ Daily 10:00 IDT, DST-aware (changed from 03:00 in session 9n — portals publish 02:00–05:00 UTC; 10:00 IDT = 07:00 UTC clears the window) |
@@ -41,12 +41,13 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 - Backend: https://api-super.xxl.co.il
 - Scraper/DB server (SSH only): `ssh dude@185.229.226.190` (Kamatera Tel Aviv, scrp-prod-il)
 
-**Hostinger setup (added 9f):**
-- One website (`super.xxl.co.il`) serves both domains
-- `xxl.co.il` is **parked** on top of `super.xxl.co.il` via hPanel → Domains → Parked Domains
-- DNS: A records at box.co.il for `xxl.co.il` and `www.xxl.co.il` → `82.198.227.247`
-- SSL: Lifetime SSL auto-provisioned by Hostinger for both
-- **Routing logic lives in React, NOT .htaccess.** `App.tsx` has `isPortalHostname()` that checks `window.location.hostname` and renders `PortalPage` at `/` when on xxl.co.il, else renders `AppShell` (supermarket app).
+**Portal + domain hosting (Kamatera cutover, July 5 2026):**
+- **Kamatera (`185.229.226.190`) is PRIMARY for ALL xxl.co.il surfaces**, including the portal. Hostinger (`82.198.227.247`) is COLD FALLBACK / DR only — it holds an older static copy and receives no live traffic.
+- `xxl.co.il` + `www.xxl.co.il` are served by a Kamatera nginx block: `/etc/nginx/sites-available/xxl.co.il`, root `/var/www/super.xxl.co.il` (shared with super.xxl.co.il), SSL via certbot (cert expires 2026-10-03).
+- DNS: A records at box.co.il for `xxl.co.il` and `www.xxl.co.il` → `185.229.226.190` (Kamatera). Cut over from Hostinger (`82.198.227.247`) on July 5, 2026.
+- **Portal and super SHARE ONE React build (web/dist).** Because the xxl.co.il nginx block shares root `/var/www/super.xxl.co.il`, deploying web/ updates BOTH super.xxl.co.il and the portal (xxl.co.il / www) in one deploy.
+- **Routing logic lives in React, NOT nginx/.htaccess.** `isPortalHostname()` in `web/src/utils/hostname.ts` checks `window.location.hostname` and renders `PortalPage` at `/` when on xxl.co.il, else renders `AppShell` (supermarket app).
+- **DR revert path:** repoint the `xxl.co.il` + `www` A records at box.co.il back to `82.198.227.247` (Hostinger cold copy).
 
 **Key infrastructure commands:**
 
@@ -74,10 +75,10 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 - `db/` — schema, migrations, helper scripts
 - `frontend/` — empty stub, leftover from skeleton commit, ignore
 
-**Hostinger deployment:**
-- Document root is `public_html/` at the account root (NOT `super.xxl.co.il/` folder)
-- Deploy = build `web/` → zip `dist/*` contents → upload+extract in `public_html/`
-- .htaccess for SPA routing lives in web/public/ (auto-copied to dist/ on build). Current production .htaccess is minimal React Router SPA fallback only — no hostname rewrites (handled in React)
+**Frontend deployment (Kamatera):**
+- Deploy via `scripts/deploy_frontend.ps1`: build `web/` → scp `dist/` to `/var/www/super.xxl.co.il` on Kamatera. This updates BOTH super.xxl.co.il AND the portal (xxl.co.il / www) because the xxl.co.il nginx block shares that root.
+- SPA routing (React Router fallback) is handled by the nginx `try_files` fallback in each server block; hostname routing is handled in React (`isPortalHostname()`).
+- **Legacy (dead):** the old Hostinger path (build → zip `dist/*` → upload+extract in `public_html/`) is retired. Hostinger holds only a cold DR copy and receives no live traffic.
 
 ---
 
