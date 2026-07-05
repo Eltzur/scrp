@@ -330,3 +330,6 @@ victory_branches.html
 *.yml
 *.txt
 "shufersal branch list.yml"
+
+# Nested working tree
+/xxl-flights/
