@@ -114,13 +114,13 @@ export default function PortalPage() {
             <p className="text-sm text-gray-600 mt-1">השוואת מחירי סופר</p>
           </button>
 
-          {/* חופשות — בקרוב */}
+          {/* חופשות — LIVE */}
           <button
-            onClick={() => navigate('/vacation')}
-            className="bg-white border border-gray-200 rounded-2xl p-6 text-center hover:shadow-lg hover:-translate-y-1 transition-all relative cursor-pointer opacity-90"
+            onClick={() => { window.location.href = 'https://fly.xxl.co.il'; }}
+            className="bg-white border-2 border-emerald-600 rounded-2xl p-6 text-center hover:shadow-lg hover:-translate-y-1 transition-all relative cursor-pointer"
           >
-            <span className="absolute top-3 left-3 bg-orange-600 text-white text-xs font-medium px-2 py-1 rounded">
-              בקרוב
+            <span className="absolute top-3 left-3 bg-emerald-600 text-white text-xs font-medium px-2 py-1 rounded">
+              LIVE
             </span>
             <Sun size={40} className="text-orange-600 mx-auto" />
             <p className="text-lg font-semibold text-[#022C22] mt-3">חופשות</p>
