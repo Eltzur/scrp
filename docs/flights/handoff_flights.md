@@ -266,9 +266,42 @@ multi-source deduplication, hotels bundling.
 
 ---
 
+### Session 10A-3 (July 5, 2026) — Deployment to fly.xxl.co.il
+
+**Completed — flights vertical is LIVE at https://fly.xxl.co.il:**
+- Discovered server was bare (10A-2 "live search" was the Windows dev box, not Kamatera). This was a from-zero provision, not a redeploy.
+- Server had NO git SSH identity; scrp pulls via HTTPS. Created a dedicated read-only deploy key for xxl-flights, cloned to /home/dude/xxl-flights.
+- Built venv at /home/dude/xxl-flights/venv, installed backend/requirements.txt.
+- Server .env created manually (SERPAPI_KEY, DATABASE_URL, plus Supabase/CORS vars for shared stack). DATABASE_URL uses postgresql+asyncpg:// scheme (asyncpg driver) with the known-good scrp_app DSN. NOTE: DB is not yet wired into the search path — db/connection.py defines an engine but nothing imports it. No DB writes happen yet.
+- systemd service flights-api.service: uvicorn main:app on 127.0.0.1:8001, EnvironmentFile from backend/.env, enabled + auto-restart.
+- nginx server block /etc/nginx/sites-available/fly.xxl.co.il: proxies /api/ -> 127.0.0.1:8001/ (trailing slash strips /api prefix; browser calls /api/search -> backend /search). SPA fallback for frontend.
+- DNS A record fly.xxl.co.il -> 185.229.226.190 added at box.co.il (TTL 300), propagated.
+- SSL via certbot --nginx, cert expires 2026-10-03, auto-renew active.
+- Frontend served from /var/www/fly.xxl.co.il (moved OUT of /home/dude because home dir is 700 and www-data cannot traverse it -> was causing nginx 500). Future frontend deploys must target /var/www/fly.xxl.co.il with sudo, NOT the home-dir dist path.
+- End-to-end verified in browser: TLV->BCN 2026-08-10/2026-08-17 ILS returns real results (Bluebird 1947 ILS, Aegean 2119, El Al 2466) with logos. /api/search returns 200.
+
+**Deviations from the original 10A-3 plan:**
+- Two code fixes required and pushed to xxl-flights: CORS origin flights.xxl.co.il -> fly.xxl.co.il (commit 56394f9); API_BASE localhost:8000 -> /api (commit 9ab3f71).
+- Local flights repo relocated from C:\xxl-flights to C:\scrp\xxl-flights (under master folder). scrp .gitignore now excludes /xxl-flights/. Repos remain independent (separate remotes).
+- Frontend root is /var/www/fly.xxl.co.il, not the home-dir path in the original plan.
+
+**Repo/infra facts for next session:**
+- Server deploy key: read-only, xxl-flights only. Server pulls via git@github.com:Eltzur/xxl-flights.git.
+- Local repo: C:\scrp\xxl-flights. Frontend build: C:\scrp\xxl-flights\frontend, npm run build.
+- Frontend deploy: scp dist/* to a staging path, then sudo cp to /var/www/fly.xxl.co.il (root-owned). Reload not needed for static files.
+- Backend restart: sudo systemctl restart flights-api. Logs: sudo journalctl -u flights-api.
+
+**Next session (10A-4) — UI polish + tier-gating:**
+- Date format: force dd/mm/yyyy (Israeli locale). Native <input type=date> follows browser locale; needs a custom date component or locale handling.
+- Currency toggle (guests ILS only; subscribers ILS/USD/EUR).
+- Supabase auth integration + tier-gating (destinations per search, saved searches).
+- Save search to DB after successful result; begin price_history storage (wire db/connection.py into the search path — currently unused).
+
+---
+
 ## Open decisions
 
-- Subdomain vs path: fly.xxl.co.il vs xxl.co.il/flights (recommend fly.xxl.co.il for Phase 1)
+- Subdomain vs path: RESOLVED — fly.xxl.co.il (not flights.xxl.co.il); live in Phase 1
 - Exact Travelpayouts program to join (Kiwi vs Aviasales — test both)
 - Email provider for alerts: SendGrid free tier (100 emails/day) — confirm before 10A-2
 - Paid subscription price point (TBD)
