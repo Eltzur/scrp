@@ -123,8 +123,8 @@ export default function PortalPage() {
               LIVE
             </span>
             <Sun size={40} className="text-orange-600 mx-auto" />
-            <p className="text-lg font-semibold text-[#022C22] mt-3">חופשות</p>
-            <p className="text-sm text-gray-600 mt-1">טיסות ומלונות</p>
+            <p className="text-lg font-semibold text-[#022C22] mt-3">טיסות</p>
+            <p className="text-sm text-gray-600 mt-1">טיסות</p>
           </button>
 
           {/* אופנה — בקרוב */}

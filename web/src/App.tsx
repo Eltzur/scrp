@@ -13,7 +13,6 @@ import FavoritesPage from './pages/FavoritesPage';
 import PromosPage from './pages/PromosPage';
 // Portal routes — rendered without the supermarket app shell
 import PortalPage from './pages/PortalPage';
-import VacationPage from './pages/VacationPage';
 import FashionPage from './pages/FashionPage';
 // Utilities
 import { getCities } from './api/client';
@@ -71,7 +70,6 @@ export default function App() {
       <Routes>
         {/* Portal routes — standalone, no supermarket header/basket/auth providers */}
         <Route path="/portal-preview" element={<PortalPage />} />
-        <Route path="/vacation"       element={<VacationPage />} />
         <Route path="/fashion"        element={<FashionPage />} />
         {/* On portal hostnames (xxl.co.il, www.xxl.co.il, localhost?portal=1),
             "/" renders PortalPage. On super.xxl.co.il this Route is absent,
