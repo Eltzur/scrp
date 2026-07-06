@@ -299,6 +299,28 @@ multi-source deduplication, hotels bundling.
 
 ---
 
+### Session 10A-4 (July 6, 2026) — Frontend rebuild — Hebrew/RTL + XXL branding + calendar picker
+
+**Completed:**
+- Rebuilt frontend/src/App.tsx onto the super app's architecture: react-i18next (he default, en toggle, applyDir RTL/LTR), component split (Header + shared XxlLogo copied verbatim from web), emerald/XXL branding replacing the old blue theme.
+- Added i18n scaffold: src/i18n/config.ts + he.json/en.json (search/results/header keys). main.tsx imports config before index.css.
+- Replaced native date inputs with a react-day-picker v10 popover: Hebrew locale (date-fns he), Sunday-first, past-disabled, 12-months-forward, stores YYYY-MM-DD for the API (permanently fixes mm/dd vs dd/mm locale ambiguity), displays dd/MM/yyyy.
+- Custom RTL-aware NavChevron (v10 components.Chevron) so calendar arrows face the correct direction in Hebrew.
+- Origin/destination kept as self-contained IataField slot; Supabase client copied to src/lib/supabase.ts and @supabase/supabase-js installed, but NOT imported/used yet — both pre-stage 10A-5.
+- Built, committed (446c3f4 + chevron fix), pushed, deployed to /var/www/fly.xxl.co.il. Verified live in-browser: RTL, branding, calendar, TLV->BCN and TLV->CDG(JFK) searches all return results.
+
+**Gotchas / infra notes (discovered 10A-4):**
+- DEPLOY: fly.xxl.co.il web root is www-data-owned. Plain `scp dude@...:/var/www/...` and `ssh dude ... rm` FAIL with permission denied. Deploy path that works: scp to ~/fly_deploy staging dir, then `ssh -t dude@185.229.226.190 "sudo rm -rf /var/www/fly.xxl.co.il/* && sudo cp -r ~/fly_deploy/* /var/www/fly.xxl.co.il/ && rm -rf ~/fly_deploy"`. The `ssh -t` is required for the sudo password prompt.
+- react-day-picker is v10 (major rewrite). v8/v9 examples break. Use startMonth/endMonth + disabled matchers (not fromDate/toDate); import "react-day-picker/style.css"; RTL needs a custom components.Chevron.
+- ORIGIN VALIDATION: free-text city codes like "NYC" return empty results from SerpApi (needs a specific airport, e.g. JFK). This is the core reason 10A-5a autocomplete (validated AirLabs codes) is next.
+
+**Next session:**
+- **10A-5a** — origin/destination AirLabs autocomplete (Hebrew/EN/code alias dropdown), swapped into the existing IataField slot.
+- **10A-5b** — Supabase auth + tier-gating (destinations per search, saved searches; wire in the pre-staged src/lib/supabase.ts + Header auth slot).
+- **10A-6** — price heatmap on the calendar: PARKED. Seam reserved in the DateField day cells (use react-day-picker modifiers/modifiersClassNames; do not hard-style day cells).
+
+---
+
 ## Open decisions
 
 - Subdomain vs path: RESOLVED — fly.xxl.co.il (not flights.xxl.co.il); live in Phase 1
