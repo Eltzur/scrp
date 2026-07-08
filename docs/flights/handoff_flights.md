@@ -321,6 +321,36 @@ multi-source deduplication, hotels bundling.
 
 ---
 
+### Session 10A-5a (July 8, 2026) — Origin/destination airport autocomplete
+
+**Completed — full-stack autocomplete for origin/destination:**
+- DB migration (flights.airports on xxl_super): added name_he TEXT, aliases TEXT[], popularity NUMERIC; two pg_trgm GIN indexes (idx_airports_name_trgm on name, idx_airports_name_he_trgm on name_he). Migration file backend/db/10A-5a_airports_autocomplete.sql (run as postgres); folded into schema.sql for from-scratch rebuilds. pg_trgm extension enabled.
+- AirLabs bulk seed (backend/db/seed_airports.py, run once as scrp_app): 9,808 airports loaded — English name + city + country + lat/lng + popularity. 3 AirLabs calls/run (airports, cities, countries). Idempotent upsert (ON CONFLICT DO UPDATE, COALESCE on name_he/popularity so re-seed never wipes manual/curated backfill).
+- Endpoint GET /api/airports?q=&limit= (backend/api/routers/airports.py): single-pass ranked SQL — priority 1 exact IATA, 2 Hebrew prefix, 3 English prefix, 4 alias prefix, 5 substring; ordered so a typed IATA wins, then curated cities (name_he IS NOT NULL) float above name-prefix matches, then match quality, then name. Params bound; ILIKE wildcards escaped. First router to use db.connection/AsyncSession (async SQLAlchemy 2.0.31).
+- Frontend AirportAutocomplete (src/components/AirportAutocomplete.tsx) replaces the old IataField for both fields: 250ms debounce, stale-response guard (reqId + AbortController), RTL layout, Hebrew name primary + muted LTR IATA-code badge (disambiguates the 3 "ניו יורק" rows), city/country subtext, ↑/↓/Enter/Esc keyboard nav, outside-click close, TLV prefill on mount. Forgiving commit: blur / Enter auto-selects the top result; empty-on-blur reports "".
+- Fixed results.stops i18n plural: Hebrew (i18next v26, Intl.PluralRules) needs stops_two (and stops_many) categories — only stops_one/stops_other existed, so a 2-stop flight rendered the literal "results.stops". Added stops_two/stops_many; 2 stops now shows "2 עצירות".
+
+**Gotchas discovered (critical for future sessions):**
+- AirLabs v9 FREE tier does NOT return Hebrew: lang=he is silently ignored, no names.he object. Hebrew airport names come from a CURATED map — backend/db/airports_he.py (163 top cities, one Hebrew city name per airport, shared across a city's airports) + backend/db/airports_city_en.py (matching English cities, used for the city column AND English aliases). AirLabs is the English-name / popularity / country source ONLY.
+- db.connection creates the async engine at import and REQUIRES DATABASE_URL with the +asyncpg driver scheme (postgresql+asyncpg://...). The seed uses psycopg2 and strips "+asyncpg" from the same DATABASE_URL. Both read the same backend/.env.
+- .env corruption fixed: a stray UUID had merged onto the SERPAPI_KEY line (no newline between values), so systemd's EnvironmentFile parse gave SerpApi the wrong value and search failed. Every key MUST be on its own line in backend/.env.
+- Backend service is flights-api (uvicorn on 127.0.0.1:8001). Restart: sudo systemctl restart flights-api.
+- Frontend deploy to fly.xxl.co.il still needs the staging + sudo path (www-data-owned web root): scp dist/* to ~/fly_deploy, then ssh -t "sudo rm -rf /var/www/fly.xxl.co.il/* && sudo cp -r ~/fly_deploy/* /var/www/fly.xxl.co.il/ && rm -rf ~/fly_deploy".
+
+**SECURITY — key rotation:**
+- AirLabs key was ROTATED (it had leaked via an API echo in logs).
+- SerpApi key ALSO leaked (appeared in journalctl output during the .env debug) and — OUTSTANDING — must be rotated if not already done. Update backend/.env (own line) and restart flights-api after rotating.
+
+**SerpApi cost constraint (for Phase-2 feature costing):**
+- Flexible-date and budget/"anywhere" searches multiply API calls: ±5 days ≈ 11x calls per search. Factor this into the paid tier / rate-limit design before building flexible-date or budget search.
+
+**Next session:**
+- **Quick-wins** — one-way/round-trip toggle, city "all airports" grouping in results, results sort/filter.
+- **10A-5b** — Supabase auth + tier-gating (destinations per search, saved searches; wire in the pre-staged src/lib/supabase.ts + Header auth slot).
+- **10A-6** — price heatmap on the calendar: PARKED. Seam reserved in the DateField day cells (react-day-picker modifiers/modifiersClassNames; do not hard-style day cells).
+
+---
+
 ## Open decisions
 
 - Subdomain vs path: RESOLVED — fly.xxl.co.il (not flights.xxl.co.il); live in Phase 1
