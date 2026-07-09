@@ -1,9 +1,13 @@
-# XXL Flights — Feature Roadmap (post-10A-5a)
+# XXL Flights — Feature Roadmap
 
 > Scope: the search/UX features discussed after autocomplete shipped. Ordered by the
 > **auth-dependency spine** — some features can't be *gated* until 10A-5b (Supabase
 > auth + tiers) exists. This doc covers only these features, not the full Phase 1/2/3
 > product vision (see handoff_flights.md for that).
+>
+> **Status (last updated after 10A-Q):** Tier 1 quick wins SHIPPED (trip-type/one-way,
+> passengers, cabin class, results sort/filter). Next up: city "all airports" grouping,
+> then 10A-5b auth. See the "Session sequencing" section at the bottom for the live plan.
 
 ---
 
@@ -27,9 +31,20 @@ So the order isn't "hardest to easiest" — it's "what unlocks what":
 
 ---
 
-## Tier 1 — Quick wins (NEXT SESSION, no auth dependency)
+## Tier 1 — Quick wins ✅ SHIPPED in 10A-Q
 
-These need no auth and mostly reuse data/UI already in place.
+These needed no auth and mostly reused data/UI already in place. All four shipped
+(1.1, 1.3, 1.4) plus a major bonus fix. City "all airports" (1.2) was deferred to its
+own session — it's the immediate next item (see Session sequencing below).
+
+> **Bonus fix discovered during 10A-Q:** /search was only rendering `best_flights`
+> (SerpApi's ~3-flight recommended subset) and discarding `other_flights`. Now merges
+> both — ~4x the flights per search, and it's what makes the stop/airline filters
+> meaningful. **Always merge both arrays.**
+>
+> **Declined (do not resurface):** "search both cabin classes in one query" — SerpApi
+> `travel_class` is single-value, needs 2 API calls merged. Not worth the dev-tier cost.
+> Cheap alternative if ever wanted: a "כל המחלקות" option that omits `travel_class`.
 
 ### 1.1 — Trip-type control (one-way / round-trip)
 - **What:** a segmented toggle framing the search. One-way makes the return date field
@@ -120,12 +135,52 @@ Buildable only after the tier check exists. Listed in suggested build order.
 
 ---
 
-## Suggested next-session scope (quick wins)
+## Session sequencing (short & mid term)
 
-Recommend bundling into one "10A-Q" quick-wins session:
-1. Trip-type toggle + one-way (1.1)
-2. Results sort/filter (1.3)
-3. Passengers + cabin class (1.4)
+> Live plan as of post-10A-Q. Order chosen for dependency, not difficulty.
 
-Defer city "all airports" (1.2) to its own session — the multi-code `/search` change is
-enough surface area to warrant STOP checkpoints and API-cost testing on its own.
+### Short term — the next 1–3 sessions
+
+**NEXT: City "all airports" grouping (item 1.2).** Self-contained, no auth.
+- Goal: a synthetic "כל שדות התעופה" option so searching "ניו יורק — all airports"
+  returns JFK+EWR+LGA in one go. Grouping data already exists in airports_city_en.py /
+  airports_he.py.
+- **The design fork to decide in recon:** frontend fan-out (fire N searches, merge) vs
+  backend multi-code param (one request, server fans out). Backend is cleaner — one
+  request, server controls the SerpApi budget, easier to cache — but more work.
+- **Constraint:** SerpApi cost multiplier. NYC = 3 airports = 3× calls. Decide caching
+  strategy *with* this feature, not after. Also de-dup merged results.
+
+**THEN: 10A-5b — Supabase auth + tier-gating. The keystone.**
+- Highest-leverage session on the board: it *unblocks everything tier-gated*. Nothing
+  below can be built until it lands.
+- Groundwork already done: Supabase client pre-staged (src/lib/supabase.ts),
+  @supabase/supabase-js installed (both since 10A-4), header auth slot reserved.
+- **Phase 0 recon = the one real unknown:** how the super app models tiers in Supabase
+  (profiles table? subscription field? Stripe metadata?). Everything downstream depends
+  on this answer — read the super app first.
+- Shape: auth context + login/logout in the header slot → `useTier()` hook
+  (guest|free|paid) → gates wired into existing UI → backend verifies Supabase JWT and
+  enforces tiers server-side (never trust the client).
+
+### Mid term — unlocked once 10A-5b lands, in priority order
+
+1. **Saved searches** — smallest tier-gated feature; `flights.saved_searches` table
+   already exists. Good low-risk first build once auth works. (Guest 0 / free 3 / paid 5.)
+2. **Flexible dates (±3 free / ±5 paid)** — high value, but the expensive one:
+   ±5 days ≈ up to 11× SerpApi calls/search. **Needs price_history caching working
+   first**, or it blows the budget. Cost-model before building.
+3. **Budget search ("TLV up to $300")** — the flagship differentiator, but heaviest:
+   one origin → many destinations. Realistically wants Kiwi Tequila (gated at 50K MAU)
+   or heavy precomputation. Mid-to-long term.
+4. **10A-6 price heatmap** — calendar day-cell seam already reserved (10A-4). Needs
+   price_history populating + a /price-calendar endpoint. Pairs naturally with flexible
+   dates (same price-history data source).
+
+### The through-line: SerpApi quota governs the mid term
+
+Four coming features multiply API calls (all-airports, flexible dates, budget, heatmap)
+against a 250/mo dev tier ($50/mo at launch). **The unlock that changes the economics is
+`price_history` caching** — treat it as a prerequisite investment before the multiplier
+features, not an afterthought. It's currently only "slated to populate" per the handoff;
+confirm it actually writes on each search early in one of these sessions.
