@@ -351,6 +351,25 @@ multi-source deduplication, hotels bundling.
 
 ---
 
+### Session 10A-Q (July 9, 2026) — Search quick wins (trip-type, passengers, cabin, sort/filter) + all-flights fix
+
+**Completed:**
+- Trip-type segmented control (round-trip default / one-way); one-way hides + clears the return-date field. Backend already forwarded SerpApi `type` — frontend-only.
+- Passenger stepper (adults, 1-9) and cabin-class select (Economy=1 / Business=3). Required a backend change: search.py now accepts + forwards `adults` and `travel_class` to SerpApi (backward-compatible defaults adults=1, travel_class=1; clamped: adults>=1, travel_class in {1,3} else 1).
+- Results sort (price low->high default / duration / stops) + filter (max stops: any/non-stop/1-stop; airline from distinct results). Pure frontend via useMemo, results state never mutated, filters reset on each new search.
+- Airport autocomplete dropdown subtitle now includes the airport NAME (e.g. "Luton Airport · London, United Kingdom") so multiple airports in one city are distinguishable (was showing identical "London, United Kingdom" for all).
+
+**KEY FIX (most impactful):** handleSearch was only rendering data.best_flights (SerpApi's ~3-flight recommended subset) and DISCARDING data.other_flights (~10 more, incl. most non-stops). Now merges both: setResults([...best_flights, ...other_flights]). This ~4x'd the flights shown per search and made the stop/airline filters meaningful. Every prior search across the whole vertical had been showing ~25% of available results. ALWAYS merge both arrays.
+
+**DECLINED (do not resurface as a TODO):** "search both cabin classes in one query" — SerpApi travel_class is single-value, so it needs 2 API calls merged per search. Judged not worth the dev-tier API cost for low user value. Cheap alternative if ever wanted: a "כל המחלקות" option that omits travel_class entirely (SerpApi returns its default mix).
+
+**Next session (options):**
+- **10A-5b** — Supabase auth + tier-gating (unlocks flexible dates, budget search, saved searches per roadmap_flights_features.md).
+- **City "all airports" grouping** (1.2 in roadmap_flights_features.md) — synthetic "כל שדות התעופה" row + multi-code /search merge.
+- Both still pending.
+
+---
+
 ## Open decisions
 
 - Subdomain vs path: RESOLVED — fly.xxl.co.il (not flights.xxl.co.il); live in Phase 1
