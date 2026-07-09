@@ -11,6 +11,12 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 5. **One CC prompt per task** — batch all related changes into one prompt. No incremental back-and-forth on simple tasks.
 6. **Always push after commit** — CC must run `git push origin main` after every commit. Never leave commits only in local repo.
 
+## Rules of engagement (chat architect -> operator -> CC)
+The chat assistant is lead architect and plans; the operator executes verbatim; CC edits/commits. These govern how every instruction is delivered:
+1. **Monoblock prompts.** One unified, copy-paste code block per CC task — never split a task across multiple snippets. The architect designs; the operator is the executioner.
+2. **Environment tag on every block.** Prefix each code block with its environment: [CC], [PowerShell - VS Code], [Bash - server], [Bash - VS Code], or [Notepad].
+3. **Strict first-come-first-served ordering.** The operator runs the first command in reading order, then keeps reading. Never issue a command and then retract or reorder it ("Wait - but first..."). Deliver every step in correct execution order the first time, even if composing it takes longer. Read-only/inspection commands always precede action commands.
+
 ## Permissions prompts
 When a permission prompt appears for any of the commands below, always select "Yes, and don't ask again" (the option that permanently trusts the command):
 - Any ssh command to dude@185.229.226.190
