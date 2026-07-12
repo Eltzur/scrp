@@ -399,3 +399,27 @@ multi-source deduplication, hotels bundling.
 - Bare `->` is invalid as JSX text (TS1382); use `{"->"}`.
 
 **Roadmap status:** item 1.2 (city all-airports grouping) DONE. Next per roadmap: 10A-5b was reserved for auth in the roadmap doc — auth/tier-gating is now the next keystone session (suggest numbering 10A-5c). Tier note for auth: an all-airports city counts as ONE destination against tier caps; the rail is ungated for now.
+
+## Session FL10A-5c — Amenities, child/infant passengers
+
+**Goal:** enrich results with premium-service indicators and support family searches.
+
+**Shipped (live on fly.xxl.co.il, committed):**
+- `search.py` — new params `children`, `infants_in_seat`, `infants_on_lap` (clamped >=0, forwarded to SerpApi). New amenity derivation in `parse_flights` via `_amenities()`: `has_wifi`, `has_power`, `has_video`, `extra_legroom`, `min_legroom_in`. Also added `price_level` to price_insights (NOTE: SerpApi returned None for it on our routes — may need deep_search; do not rely on it).
+- `App.tsx` — `AmenityIcons` component: Wi-Fi / power / video SVG icons + legroom indicator with minimum inches. Icons render ONLY when present (no greyed placeholders), so the strip reads as a genuine premium signal. Combined passengers dropdown replacing the single adults stepper (adults / children / infant-in-seat / infant-on-lap).
+- i18n: `search.pax_*` (8 keys) + `results.amenity_*` (4 keys) in he.json + en.json.
+
+**KEY DESIGN RULES (do not regress these):**
+- **ALL-LEGS RULE:** an amenity is claimed only if EVERY leg has it. A 12h leg without Wi-Fi plus a 1h hop with it must NOT show a Wi-Fi icon. Verified live: only El Al returned has_wifi=True on TLV-JFK; flydubai/Etihad returned power+video; TAROM/Condor/LOT returned none. The spread proves the AND logic discriminates correctly.
+- **LEGROOM IS THE MINIMUM ACROSS LEGS**, shown as inches, NOT a binary "extra legroom" badge. Rationale: Google's legroom figure is the aircraft's standard economy pitch, not a per-seat guarantee, and it varies per leg. Showing the best leg's number would mislead. The strict all-legs "above average" badge was built but proved unreachable on real multi-leg routes (always False) - so the numeric minimum is displayed instead. `extra_legroom` still returns from the backend but is NOT rendered.
+- **INFANT-IN-SEAT AND INFANT-ON-LAP MUST STAY SEPARATE.** They are different products at very different prices (lap ~10% of adult fare; seat ~75%). SerpApi takes them as separate params because Google prices them differently. Merging them would quote the wrong price for half of family searches. Labels clarify: "עם מושב" vs "ללא מושב".
+
+**Amenity source data (from a live SerpApi probe, TLV-JFK):**
+`extensions` is an array of human-readable English strings, matched by keyword (hl=en, so matching is stable). Real observed values: "Free Wi-Fi", "Wi-Fi for a fee", "In-seat USB outlet", "In-seat power & USB outlets", "On-demand video", "Stream media to your device", "Above/Average/Below average legroom (NN in)", "Lie flat seat", "Carbon emissions estimate: NNN kg". NO MEAL DATA EXISTS - a meal icon was requested and dropped after the probe confirmed the field is never returned. `legroom` is its own top-level field ("31 in"), separate from extensions.
+- Wi-Fi: free and paid share ONE icon (deliberate product call - users assume paid; free is a pleasant surprise).
+- Not yet used but available: `Lie flat seat` (business-class signal), `carbon_vs_typical_pct` (already parsed, unrendered).
+
+**Gotchas:**
+- Bash history expansion mangles `!s:<5` style Python format specs inside double-quoted shell strings (`-bash: <: unrecognized history modifier`). Write the Python to a file via a quoted heredoc (`<< 'PYEOF'`) instead of inlining it in curl pipelines.
+
+**Next:** XXL-1.0.1 (portal legal/privacy: liability disclaimer, privacy policy, Amendment 13 compliance), then FL10A-6a (price heatmap).
