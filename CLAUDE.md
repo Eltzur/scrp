@@ -17,6 +17,21 @@ The chat assistant is lead architect and plans; the operator executes verbatim; 
 2. **Environment tag on every block.** Prefix each code block with its environment: [CC], [PowerShell - VS Code], [Bash - server], [Bash - VS Code], or [Notepad].
 3. **Strict first-come-first-served ordering.** The operator runs the first command in reading order, then keeps reading. Never issue a command and then retract or reorder it ("Wait - but first..."). Deliver every step in correct execution order the first time, even if composing it takes longer. Read-only/inspection commands always precede action commands.
 
+## Session naming convention
+Every working session gets an ID, scoped by vertical. Use it in commit messages, handoff entries, and chat titles.
+
+| Vertical | Format | Example | Handoff file |
+|---|---|---|---|
+| Supermarket | `SUXX-a/b/c` | `SU01-a` | `docs/super/handoff_super.md` |
+| Flights | `FLXX-a/b/c` | `FL10A-6a` | `docs/flights/handoff_flights.md` |
+| Consumer goods | `GEXX-a/b/c` | `GE01-a` | (TBD) |
+| Portal / cross-cutting | `XXL-x.y.z` (semver) | `XXL-1.0.1` | `docs/handoff_portal.md` |
+
+- `XX` = a two-digit session number; the trailing lowercase letter = sub-session (a/b/c...).
+- **Flights continues the legacy `10A` lineage** — sessions before this convention were named `10A-*` (e.g. `10A-5b`, `10A-Q`). They are the SAME series; the `FL` prefix was added later. Do not renumber history. Next flights session: `FL10A-6a`.
+- The portal uses semver rather than the `XX-a` form because it is the high-level surface spanning all verticals, not a single vertical's workstream.
+- One chat = one session. Start a fresh chat at each session boundary and paste the relevant handoff as the first message.
+
 ## Permissions prompts
 When a permission prompt appears for any of the commands below, always select "Yes, and don't ask again" (the option that permanently trusts the command):
 - Any ssh command to dude@185.229.226.190

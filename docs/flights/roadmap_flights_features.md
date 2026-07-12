@@ -5,9 +5,13 @@
 > auth + tiers) exists. This doc covers only these features, not the full Phase 1/2/3
 > product vision (see handoff_flights.md for that).
 >
-> **Status (last updated after 10A-Q):** Tier 1 quick wins SHIPPED (trip-type/one-way,
-> passengers, cabin class, results sort/filter). Next up: city "all airports" grouping,
-> then 10A-5b auth. See the "Session sequencing" section at the bottom for the live plan.
+> **Status (last updated after FL10A-5c):** Tier 1 quick wins SHIPPED (trip-type/one-way,
+> passengers, cabin class, results sort/filter). Item **1.2 city "all airports" grouping
+> SHIPPED** in FL10A-5b, together with a Kayak-style right-side results filter rail
+> (stops / airline / per-arrival-airport checkboxes). **FL10A-5c** then shipped amenity
+> icons (Wi-Fi / power / video / legroom) and child+infant passenger types.
+> **Next: XXL-1.0.1 (portal legal/privacy), then FL10A-6a (price heatmap), then auth+tier-gating.**
+> See "Session sequencing" at the bottom.
 
 ---
 
@@ -53,7 +57,9 @@ own session — it's the immediate next item (see Session sequencing below).
 - **API:** SerpApi supports one-way via its `type` param. Backend `/search` passes it through.
 - **Dependency:** none. Also the natural container for multi-city later.
 
-### 1.2 — City "all airports" grouping (Kayak's NYC metacode)
+### 1.2 — City "all airports" grouping ✅ SHIPPED in FL10A-5b
+- **SHIPPED.** Implemented as a BACKEND multi-code param, not a frontend fan-out. Key finding: SerpApi's `departure_id`/`arrival_id` natively accept COMMA-SEPARATED codes (`JFK,EWR,LGA`) in ONE call — Google merges and de-dups server-side. **The "NYC = 3x SerpApi calls" cost multiplier assumed below was WRONG. There is no multiplier.**
+- **Grouping source:** `backend/db/airport_groups.py` inverts `AIRPORTS_CITY_EN` (deliberately the ENGLISH map — it is a strict superset of `AIRPORTS_HE`). 14 multi-airport groups. `/api/airports` prepends a synthetic `kind:"city_group"` row whose `iata_code` is the comma-joined list.
 - **What:** a synthetic "ניו יורק — כל שדות התעופה" row that searches JFK+EWR+LGA in one go.
 - **Effort:** Medium. Data mostly exists (`airports_city_en.py` groupings + aliases).
   Needs: a city→airports map surfaced as a selectable row, and a `/search` that accepts
@@ -179,7 +185,7 @@ Buildable only after the tier check exists. Listed in suggested build order.
 
 ### The through-line: SerpApi quota governs the mid term
 
-Four coming features multiply API calls (all-airports, flexible dates, budget, heatmap)
+Three coming features multiply API calls (flexible dates, budget, heatmap — all-airports turned out to be ONE call, no multiplier)
 against a 250/mo dev tier ($50/mo at launch). **The unlock that changes the economics is
 `price_history` caching** — treat it as a prerequisite investment before the multiplier
 features, not an afterthought. It's currently only "slated to populate" per the handoff;
