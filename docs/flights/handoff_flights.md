@@ -377,3 +377,25 @@ multi-source deduplication, hotels bundling.
 - Email provider for alerts: SendGrid free tier (100 emails/day) — confirm before 10A-2
 - Paid subscription price point (TBD)
 - scrp_app password: RESOLVED (new clean password, no special chars; stored in server .env + password manager, NOT committed to repo)
+
+## Session 10A-5b — City "all airports" grouping + results filter rail
+
+**Goal:** synthetic "כל שדות התעופה" option so a city group (e.g. New York) searches all its airports (JFK+EWR+LGA) in one go; plus a Kayak-style results filter rail. No auth.
+
+**Shipped (all live on fly.xxl.co.il, all committed):**
+- `backend/db/airport_groups.py` (NEW) — inverts AIRPORTS_CITY_EN into city→[codes] groups. Inverts the ENGLISH map deliberately: it is a strict superset of AIRPORTS_HE (which lacks CIA, MXP, BRU, CRL, EIN, OSL, BKK, DMK, HKT, KUL). AIRPORTS_HE supplies only the Hebrew label per group; None → English fallback. Yields 14 groups (Eilat, London, Paris, Rome, Milan, Istanbul, Brussels, Warsaw, New York, Chicago, Washington, Dubai, Bangkok, Tokyo). Computed once at import; CITY_GROUPS + CODE_TO_GROUP exported.
+- `/api/airports` (airports.py) — prepends a synthetic `kind:"city_group"` row for matching multi-airport cities (Hebrew-label prefix / English-city prefix / member-code match). Group row's `iata_code` is the comma-joined list (e.g. "JFK,EWR,LGA"); member airports still listed below. Existing airport rows now carry `kind:"airport"`.
+- `/search` (search.py) — origin/destination now accept a comma-joined code list (max_length 31). `_normalize_codes()` upper-cases, validates 3-alpha tokens, de-dups, clamps to MAX_CODES=4; passes the list straight to SerpApi as ONE call (SerpApi merges + de-dups server-side — no fan-out, no cost multiplier). Also added per-flight `departure_id`/`arrival_id` to parse_flights (additive) for the per-airport filter.
+- `AirportAutocomplete.tsx` — renders `city_group` rows: `displayLabel` shows the group label without the code suffix; `rowBadge` shows member count "N ✈" instead of the overflowing code list. `Airport` interface gained optional `kind`.
+- `App.tsx` — results filter bar refactored into a right-side rail (RTL-natural). Set-based multi-select filters: עצירות (0/1/2+ buckets via Math.min(stops,2)), חברת תעופה (per-airline checkboxes), שדות תעופה (per-arrival-airport checkboxes; only shown when >1 arrival airport present — pairs with all-airports search). Empty Set = show all. `sortBy` stays a dropdown atop the rail. `toggleSetFilter<T>` generic helper. New i18n keys: results.stops_one, results.stops_two_plus, results.filter_airports (he + en).
+
+**Verified live:** autocomplete "ניו יורק"/"לונדון" surface group rows with correct badges; TLV→JFK,EWR,LGA one-way returned flights across all three airports (11 JFK / 5 EWR / 1 LGA in one call); rail filters (per-airport EWR, stops, airline) all narrow results correctly on the live site.
+
+**Gotchas confirmed this session:**
+- Frontend deploy MUST run from Windows PowerShell/VS Code (`C:\scrp\xxl-flights\frontend`), NOT from the server SSH session — running the `[Bash - VS Code]` deploy block inside the server shell silently pushes a STALE dist (the `cd C:\...` fails on Linux and scp runs from the wrong cwd). Verified by bundle-hash mismatch (got old index-hgiTPkFh 190KB instead of new build). Always confirm the served JS hash after deploy.
+- SerpApi departure_id/arrival_id natively accept comma-separated codes → all-airports is ONE call, not N. The roadmap's "NYC = 3× calls" assumption was wrong for the backend-multi-code approach.
+- curl to /search must URL-encode commas as %2C and use -m 40 (multi-airport merge is slower); bare commas + short timeout gave HTTP 000.
+- Real i18n locale path is `frontend/src/i18n/locales/`, NOT `frontend/src/locales/`.
+- Bare `->` is invalid as JSX text (TS1382); use `{"->"}`.
+
+**Roadmap status:** item 1.2 (city all-airports grouping) DONE. Next per roadmap: 10A-5b was reserved for auth in the roadmap doc — auth/tier-gating is now the next keystone session (suggest numbering 10A-5c). Tier note for auth: an all-airports city counts as ONE destination against tier caps; the rail is ungated for now.
