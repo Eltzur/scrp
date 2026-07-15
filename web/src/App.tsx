@@ -14,6 +14,9 @@ import PromosPage from './pages/PromosPage';
 // Portal routes — rendered without the supermarket app shell
 import PortalPage from './pages/PortalPage';
 import FashionPage from './pages/FashionPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import DisclaimerPage from './pages/DisclaimerPage';
+import Footer from './components/Footer';
 // Utilities
 import { getCities } from './api/client';
 import type { CityInfo } from './api/client';
@@ -45,6 +48,7 @@ function AppShell() {
           <Route path="/favorites" element={<FavoritesPage />} />
           <Route path="/promos"    element={<PromosPage />} />
         </Routes>
+        <Footer />
       </FavoritesProvider>
     </BasketProvider>
   );
@@ -71,6 +75,12 @@ export default function App() {
         {/* Portal routes — standalone, no supermarket header/basket/auth providers */}
         <Route path="/portal-preview" element={<PortalPage />} />
         <Route path="/fashion"        element={<FashionPage />} />
+        {/* Legal pages — standalone portal-style pages (own header strip + Footer),
+            registered here rather than inside AppShell so they don't inherit the
+            supermarket Header/BasketDrawer chrome. Absolute paths rank above the
+            "/*" catch-all, so they resolve on both super.xxl.co.il and the portal. */}
+        <Route path="/privacy"        element={<PrivacyPolicyPage />} />
+        <Route path="/disclaimer"     element={<DisclaimerPage />} />
         {/* On portal hostnames (xxl.co.il, www.xxl.co.il, localhost?portal=1),
             "/" renders PortalPage. On super.xxl.co.il this Route is absent,
             so "/" falls through to the "/*" catch-all → AppShell. */}

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, ShoppingCart, Sun, Shirt, Gift, Clock, Sparkles } from 'lucide-react';
 import XxlLogo from '../components/XxlLogo';
 import XxlLogoPortal from '../components/XxlLogoPortal';
+import Footer from '../components/Footer';
 import { classifyAndRoute } from '../utils/portalSearchRouter';
 
 const PLACEHOLDERS = [
@@ -163,16 +164,7 @@ export default function PortalPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="mt-12 pt-6 border-t border-gray-200 text-center text-sm text-gray-500 pb-6">
-        <p>© XXL 2026 · כל הזכויות שמורות</p>
-        <p className="mt-1">
-          צור קשר:{' '}
-          <a href="mailto:info@xxl.co.il" className="hover:text-emerald-600 transition-colors">
-            info@xxl.co.il
-          </a>
-        </p>
-      </footer>
+      <Footer />
     </div>
   );
 }

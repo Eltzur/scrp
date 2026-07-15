@@ -1,6 +1,7 @@
 import { useState, type ReactNode, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import XxlLogo from '../components/XxlLogo';
+import Footer from '../components/Footer';
 import { supabase } from '../lib/supabase';
 
 interface ComingSoonProps {
@@ -112,10 +113,7 @@ export default function ComingSoonPage({ vertical, icon, headline, subline }: Co
         </Link>
       </div>
 
-      {/* Footer */}
-      <footer className="mt-12 pt-6 border-t border-gray-200 text-center text-sm text-gray-500 pb-6">
-        © XXL 2026 · כל הזכויות שמורות
-      </footer>
+      <Footer />
     </div>
   );
 }

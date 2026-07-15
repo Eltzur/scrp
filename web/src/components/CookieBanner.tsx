@@ -1,9 +1,7 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
 import { setCookieConsent } from '../utils/analytics';
 
 export default function CookieBanner() {
-  // Initialise from localStorage so banner never flickers back after dismissal
   const [visible, setVisible] = useState<boolean>(() => {
     try { return localStorage.getItem('xxl_cookie_consent') === null; }
     catch { return false; }
@@ -11,8 +9,13 @@ export default function CookieBanner() {
 
   if (!visible) return null;
 
-  const handleDismiss = () => {
-    setCookieConsent(true);  // X-dismiss counts as implicit consent
+  const handleAccept = () => {
+    setCookieConsent(true);
+    setVisible(false);
+  };
+
+  const handleReject = () => {
+    setCookieConsent(false);
     setVisible(false);
   };
 
@@ -23,17 +26,25 @@ export default function CookieBanner() {
       aria-label="הסכמה לעוגיות"
       dir="rtl"
     >
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+      <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
         <p className="text-sm text-gray-700">
-          נמשיך, אנו משתמשים בעוגיות לשיפור החוויה
+          אנו משתמשים בעוגיות ניתוח (Google Analytics) כדי לשפר את השירות. עוגיות אלו יופעלו רק באישורכם.{' '}
+          <a href="/privacy#cookies" className="text-emerald-600 hover:underline">מידע נוסף</a>
         </p>
-        <button
-          onClick={handleDismiss}
-          aria-label="סגור"
-          className="shrink-0 p-1 text-gray-400 hover:text-emerald-600 transition-colors rounded"
-        >
-          <X size={18} />
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleReject}
+            className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors"
+          >
+            דחייה
+          </button>
+          <button
+            onClick={handleAccept}
+            className="px-4 py-1.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
+          >
+            אישור
+          </button>
+        </div>
       </div>
     </div>
   );
