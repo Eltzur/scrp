@@ -14,8 +14,13 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 ## Rules of engagement (chat architect -> operator -> CC)
 The chat assistant is lead architect and plans; the operator executes verbatim; CC edits/commits. These govern how every instruction is delivered:
 1. **Monoblock prompts.** One unified, copy-paste code block per CC task — never split a task across multiple snippets. The architect designs; the operator is the executioner.
-2. **Environment tag on every block.** Prefix each code block with its environment: [CC], [PowerShell - VS Code], [Bash - server], [Bash - VS Code], or [Notepad].
-3. **Strict first-come-first-served ordering.** The operator runs the first command in reading order, then keeps reading. Never issue a command and then retract or reorder it ("Wait - but first..."). Deliver every step in correct execution order the first time, even if composing it takes longer. Read-only/inspection commands always precede action commands.
+2. **Environment tag on every block.** Prefix each code block with its environment:
+   - `[CC]` — Claude Code, always running inside VS Code's integrated interface, working directory `C:\scrp`. There is no standalone/CLI-only CC in this workflow — every `[CC]` block is pasted into the VS Code Claude Code panel.
+   - `[PowerShell - VS Code]` — a plain PowerShell terminal pane inside VS Code (not CC), same `C:\scrp` working directory, for manual commands the operator runs directly.
+   - `[Bash - server]` — an SSH session directly on the Kamatera VPS (`dude@185.229.226.190`).
+   - `[Bash - VS Code]` — a Git Bash/WSL terminal pane inside VS Code on the Windows machine, for commands that need bash syntax locally.
+   - `[Notepad]` — a manual text edit the operator performs by hand, outside any code editor or CC.
+3. **Strict first-come-first-served ordering.** The operator runs the first command in reading order, then keeps reading. Never issue a command and then retract or reorder it ("Wait - but first..."). Deliver every step in correct execution order the first time, even if composing it takes longer. Read-only/inspection commands always precede action commands. **All context, caveats, and flags belong BEFORE the code block, in the same message — never after.** Do not append "before you send this," "a few things worth flagging," or similar postambles once a task block has been delivered. If something needs flagging, flag it first, then give the block.
 
 ## Session naming convention
 Every working session gets an ID, scoped by vertical. Use it in commit messages, handoff entries, and chat titles.
