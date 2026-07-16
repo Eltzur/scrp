@@ -37,3 +37,16 @@ Session naming: `XXL-x.y.z` (semver), per CLAUDE.md.
 - No real signup/user counts exist yet (DB is empty) — Amendment 13 threshold questions (registration, notification, DPO trigger timing) stay open until there's real volume to assess against.
 
 **Next session:** attorney review of drafted text; once a payment gateway vendor is selected, revisit the DPO/security-tier assessment in docs/compliance_amendment13.md with confirmed specifics.
+
+### Session XXL-1.0.2 (July 16, 2026) — fly.xxl.co.il footer
+
+**Goal:** close the fly.xxl.co.il footer gap flagged as follow-up in XXL-1.0.1. Separate repo (xxl-flights, github.com/Eltzur/xxl-flights) — not the shared scrp web/ build — so it needed its own session and commit.
+
+**Shipped (in the xxl-flights repo):**
+- `frontend/src/components/Footer.tsx` — Hebrew footer mounted in `App.tsx` (after the search-form content, inside the root shell, so it renders on the single-page flights app). Matches the repo's emerald/gray/border-t visual language; plain `<a>` anchors (no router in this app).
+- Footer links OUT to the canonical legal pages — `https://xxl.co.il/privacy` and `https://xxl.co.il/disclaimer` (built in XXL-1.0.1), opening in a new tab (`target="_blank" rel="noopener noreferrer"`) to preserve flight-search state. Deliberately did NOT duplicate the policy/disclaimer text into the flights repo — those xxl.co.il pages are the single source of truth and already cover fly.xxl.co.il explicitly, so linking out avoids two copies drifting apart. Contact: `mailto:info@xxl.co.il`.
+- **No cookie banner added.** Confirmed live that the flights bundle loads zero analytics/tracking cookies (no gtag/GA4 — only Google Fonts). A consent banner is only mandatory once a non-essential cookie is introduced; not before. If GA4 or similar is ever added to flights, a banner becomes required at that point.
+
+**Deploy:** xxl-flights uses its own path (NOT scrp's deploy_frontend.ps1). Frontend build scp'd `dist/*` to the `~/fly_deploy` staging dir, then `sudo cp` into the www-data-owned `/var/www/fly.xxl.co.il` web root (per FL10A-3 deploy notes in docs/flights/handoff_flights.md).
+
+**Next:** English footer labels still deferred (destination legal pages are Hebrew-only). Revisit if/when the portal legal pages get an English version.
