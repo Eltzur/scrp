@@ -5,13 +5,16 @@
 > auth + tiers) exists. This doc covers only these features, not the full Phase 1/2/3
 > product vision (see handoff_flights.md for that).
 >
-> **Status (last updated after FL10A-5c):** Tier 1 quick wins SHIPPED (trip-type/one-way,
+> **Status (last updated after FL10A-6a):** Tier 1 quick wins SHIPPED (trip-type/one-way,
 > passengers, cabin class, results sort/filter). Item **1.2 city "all airports" grouping
 > SHIPPED** in FL10A-5b, together with a Kayak-style right-side results filter rail
 > (stops / airline / per-arrival-airport checkboxes). **FL10A-5c** then shipped amenity
 > icons (Wi-Fi / power / video / legroom) and child+infant passenger types.
-> **Next: XXL-1.0.1 (portal legal/privacy), then FL10A-6a (price heatmap), then auth+tier-gating.**
-> See "Session sequencing" at the bottom.
+> **FL10A-6a SHIPPED Supabase auth + cross-vertical tier-gating** (users.tier free-default,
+> no billing; guest/free/paid destination caps + guest currency lock) — the tier-gating
+> keystone is now DONE, so tier-gated features (flexible dates, budget search, saved
+> searches) are unblocked.
+> **Next: FL10A-6b (price heatmap).** See "Session sequencing" at the bottom.
 
 ---
 

@@ -423,3 +423,39 @@ multi-source deduplication, hotels bundling.
 - Bash history expansion mangles `!s:<5` style Python format specs inside double-quoted shell strings (`-bash: <: unrecognized history modifier`). Write the Python to a file via a quoted heredoc (`<< 'PYEOF'`) instead of inlining it in curl pipelines.
 
 **Next:** XXL-1.0.1 (portal legal/privacy: liability disclaimer, privacy policy, Amendment 13 compliance), then FL10A-6a (price heatmap).
+
+## Session FL10A-6a — Supabase auth + cross-vertical tier-gating
+
+**Naming note:** this FL10A-6a shipped AUTH + tier-gating (it jumped ahead of the price heatmap, which is now **FL10A-6b**). Earlier docs list "FL10A-6a (price heatmap)" — that heatmap is FL10A-6b going forward.
+
+**Goal:** add Supabase auth to the flights vertical and a cross-vertical subscription tier that gates search behavior, without any billing.
+
+**Tier model decision (cross-vertical):**
+- `tier` is a column on the SHARED `users` table (`db/migrations/add_user_tier.sql` in the scrp master repo), NOT a new profiles table — every vertical (super, flights, future fashion/electronics) reads ONE value with no extra join. `TEXT NOT NULL DEFAULT 'free'` + CHECK constraint `tier IN ('free','paid')`. Migration is idempotent (applied to prod xxl_super as scrp_app).
+- **No billing this session.** Every authenticated user is `'free'`; `'paid'` is set manually via SQL until a dedicated billing session exists. No Stripe/checkout/upgrade flow was built.
+- The ladder lives in `backend/api/auth.py` as `TIER_MAX_DESTINATIONS = {"guest": 1, "free": 3, "paid": 5}` (max distinct destination airports per search). An "all airports" city group counts against this cap by its member count.
+
+**Shipped (backend, xxl-flights repo):**
+- `backend/api/auth.py` (NEW) — async port of scrp's sync `api/auth.py`: Supabase ES256 + JWKS verification (asyncio.Lock, httpx.AsyncClient), against the SAME shared Supabase project (dwohlwmiejgjlsbuegeu). `get_current_user` / `get_current_user_optional` (optional returns None so guests keep using `/search`), both upsert the `users` row on every authenticated request. `get_current_tier` → `'guest'` when unauthenticated else `users.tier`.
+- `backend/api/routers/me.py` (NEW) — `GET /me` → `{authenticated, email, tier}`. Wired in `main.py`.
+- `backend/api/routers/search.py` — `_normalize_codes(raw, max_codes=MAX_CODES)`; destination now `_normalize_codes(destination, max_codes=TIER_MAX_DESTINATIONS[tier])` (origin stays ungated at MAX_CODES=4). Guests forced to `currency="ILS"` after the existing currency validation — never trust a client-supplied currency for guests.
+- `requirements.txt` — added `python-jose[cryptography]>=3.3.0`. `SUPABASE_URL` already present in prod `backend/.env` (confirmed, unchanged).
+
+**Shipped (frontend, xxl-flights repo):**
+- `AuthContext.tsx` (trimmed port of web's), `hooks/useTier.ts` (fetches `/api/me` with the bearer token), `AuthModal.tsx` (self-contained login/signup modal — no router in this app), `Header.tsx` (login button ↔ email + sign-out popover), `main.tsx` wrapped in `<AuthProvider>`, `App.tsx` currency selector gated (guest = ILS-only + signup hint; resets to ILS on sign-out). i18n keys added to he.json + en.json. `.env.development`/`.env.production`/`.env.example` created (shared public anon key, same as web).
+
+**Ops (passwordless deploy — xxl-flights `scripts/kamatera/`):**
+- `xxl-restart.sh <flights-api|scrp-api>` and `xxl-deploy-webroot.sh <flights>` — root-owned `/usr/local/bin/` scripts, case-matched on a fixed whitelist (no wildcards). `/etc/sudoers.d/xxl-ops` grants dude NOPASSWD for exactly those three invocations. Extend by adding one case branch + one sudoers line, reviewed each time — never a wildcard. This removes the interactive sudo prompt for flights backend restarts and web-root deploys. `.gitattributes` forces these `*.sh`/sudoers files to LF (CRLF breaks bash/sudoers).
+
+**Deploy commands now (no -t, no password):**
+- `ssh dude@185.229.226.190 "sudo /usr/local/bin/xxl-restart.sh flights-api"`
+- `ssh dude@185.229.226.190 "sudo /usr/local/bin/xxl-deploy-webroot.sh flights"` (after scp of new dist → ~/fly_deploy)
+
+**Verified live:**
+- All 3 passwordless sudo ops run with no prompt (flights-api restart, webroot deploy, scrp-api restart).
+- New bundle `index-DtBZmSxP.js` live on fly.xxl.co.il; flights-api restarted clean (no import error from api/auth.py — `/api/me` responds).
+- `GET /api/me` no auth → `{"authenticated":false,"email":null,"tier":"guest"}`.
+- **Guest server-side enforcement** (no token): a `/api/search` with 5 destination codes + `currency=USD` was clamped by the server to a single destination (JFK) and forced to ILS — proving the cap/lock are enforced regardless of client input.
+- **NOT verified — free/paid authenticated caps:** the Supabase project **requires email confirmation**, so a REST signup returns no session token (no service-role key available to bypass). The `users.tier=free` row + the manual `paid` → cap-5 test need a confirmed login. To close this: sign up via the live UI with a real inbox, confirm the email, then `UPDATE users SET tier='paid' WHERE email='…'` and re-run a 5-code destination search with that user's bearer token.
+
+**Next:** FL10A-6b (price heatmap) — the calendar heatmap seam is already staged in `App.tsx`'s `DateField` (see the HEATMAP SEAM comment).

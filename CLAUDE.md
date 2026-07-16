@@ -90,6 +90,14 @@ For all other commands, select "Yes" (one-time approval) unless the command look
 - Builds web/ and scp's the output to /var/www/super.xxl.co.il on Kamatera. Because the xxl.co.il nginx block shares that same root, this updates BOTH super.xxl.co.il AND the portal (xxl.co.il / www.xxl.co.il) at once.
 - The portal is NOT deployed via a Hostinger hPanel zip upload — that path is dead.
 
+## Deploy flights backend + frontend
+The flights vertical (xxl-flights repo) restarts and web-root deploys are passwordless via root-owned whitelist scripts (`/etc/sudoers.d/xxl-ops`, set up in FL10A-6a). No `-t` / no sudo prompt:
+- Backend (after `git pull` + `pip install` in ~/xxl-flights): restart the service and print its logs —
+  `ssh dude@185.229.226.190 "sudo /usr/local/bin/xxl-restart.sh flights-api"`
+- Frontend: build from `C:\scrp\xxl-flights\frontend` (`npm run build`), scp `dist/*` to `~/fly_deploy`, then wipe+redeploy the www-data-owned web root —
+  `ssh dude@185.229.226.190 "sudo /usr/local/bin/xxl-deploy-webroot.sh flights"`
+- `xxl-restart.sh` also accepts `scrp-api`. The scripts case-match a fixed whitelist (no wildcards); extend by adding one case branch + one sudoers line, reviewed each time. Source lives in xxl-flights `scripts/kamatera/`.
+
 ## Key file locations
 - Scraper registry: scraper/registry.py
 - City normalization: scraper/city_names.py (CITY_VARIANTS, STORE_CITY_OVERRIDES)
