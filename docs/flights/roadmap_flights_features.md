@@ -14,7 +14,12 @@
 > no billing; guest/free/paid destination caps + guest currency lock) — the tier-gating
 > keystone is now DONE, so tier-gated features (flexible dates, budget search, saved
 > searches) are unblocked.
-> **Next: FL10A-6b (price heatmap).** See "Session sequencing" at the bottom.
+> **FL10A-6b SHIPPED the price calendar heatmap** — price_history caching wired as a
+> byproduct of search traffic (single-code routes, zero extra SerpApi cost) + a
+> `/price-calendar` endpoint painting cheap/mid/pricey buckets on the outbound date picker
+> (free for all, guests included).
+> **Next: tier-gated feature build-out** (flexible dates / budget / saved searches) — both
+> prerequisites (auth+tier, price cache) now exist. See "Session sequencing" at the bottom.
 
 ---
 

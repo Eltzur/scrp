@@ -459,3 +459,27 @@ multi-source deduplication, hotels bundling.
 - **NOT verified — free/paid authenticated caps:** the Supabase project **requires email confirmation**, so a REST signup returns no session token (no service-role key available to bypass). The `users.tier=free` row + the manual `paid` → cap-5 test need a confirmed login. To close this: sign up via the live UI with a real inbox, confirm the email, then `UPDATE users SET tier='paid' WHERE email='…'` and re-run a 5-code destination search with that user's bearer token.
 
 **Next:** FL10A-6b (price heatmap) — the calendar heatmap seam is already staged in `App.tsx`'s `DateField` (see the HEATMAP SEAM comment).
+
+## Session FL10A-6b — price calendar heatmap (free for all, incl. guests)
+
+**Goal:** paint a per-day price heatmap on the outbound date picker. price_history was never being written — wire caching first (as a byproduct of normal search traffic, zero extra SerpApi cost), then read it back for the calendar. No tier gating — free for everyone, guests included.
+
+**Shipped (xxl-flights repo):**
+- `search.py` — best-effort price_history cache write after each search, wrapped in try/except (MUST NOT break a live search). Only **single-code** routes are cached (`"," not in origin/destination`) — `flights.routes.origin/destination` are VARCHAR(3); a comma-joined multi-code string isn't a well-defined route. Caches `min(all prices)` (or `price_insights.lowest_price` fallback) in whatever currency was searched. Route upserted via `INSERT … ON CONFLICT (origin,destination) DO UPDATE … RETURNING id`; history via `INSERT … ON CONFLICT (route_id,outbound_date,recorded_at) DO NOTHING`.
+- `api/routers/price_calendar.py` (NEW) — `GET /price-calendar?origin&destination&currency`. Single 3-letter codes only (422 otherwise). Reads the latest price per outbound_date (`DISTINCT ON (outbound_date) … ORDER BY recorded_at DESC`) for the currency, over a 365-day horizon; buckets into cheap/mid/pricey by terciles (`prices[n//3]`, `prices[2n//3]`; all "mid" when n<3). Returns `{days:[{date,price,bucket}]}`, `[]` when the route/data is absent. Wired in `main.py`.
+- `App.tsx` — `calendarDays` state; effect keyed on [origin,destination,currency] fetches `/api/price-calendar` (skips silently for empty/comma destinations). Derives cheap/mid/pricey `Date[]` (parses `YYYY-MM-DD` as LOCAL dates to avoid a UTC off-by-one) → `modifiers`/`modifiersClassNames` on the OUTBOUND `DateField` only (props threaded through; return picker untouched). Legend (3 dots + i18n) shown only when data exists.
+- `index.css` — additive `.rdp-price-cheap/mid/pricey:not(.rdp-selected)` classes (never hard-styling day cells, per the reserved-seam rule). i18n: `search.price_legend_*` (he+en).
+
+**BUG found + fixed during STEP 8 verification (important asyncpg gotcha):**
+- Symptom: searches ran fine but the calendar stayed empty — every cache write was silently swallowed by the try/except.
+- Root cause: **asyncpg requires a real `datetime.date` for a DATE column and will NOT cast a `'YYYY-MM-DD'` string** (`'str' object has no attribute 'toordinal'`). psycopg2 (scrp's sync driver) auto-casts strings, which is why the pattern "just works" in the super repo but not here. The provided snippet bound the raw string.
+- Fix (commit `1dde74a`): bind `date.fromisoformat(outbound_date)`. **Rule for this async backend: always bind `date`/`datetime` objects, never strings, for DATE/TIMESTAMP params.** (The `/price-calendar` read side was already correct — it binds `date.today()`/horizon as date objects.)
+- Debugging note: the swallowed exception wasn't visible because `journalctl` is NOT in the FL10A-6a passwordless sudoers whitelist (only the two restart/deploy scripts are). Had to reproduce the exact write via the app's venv (`~/xxl-flights/venv/bin/python`) to surface the traceback. Consider adding a read-only `journalctl -u flights-api` entry to `/etc/sudoers.d/xxl-ops` in a future ops session.
+
+**Verified live (fly.xxl.co.il, bundle `index-C41wzUXq.js`):**
+- Seeded 4 real TLV→BCN searches → `/api/price-calendar?origin=TLV&destination=BCN&currency=ILS` returns 4 days with plausible buckets (546/666 cheap, 721/817 pricey).
+- Currency isolation: USD calendar empty (only ILS seeded).
+- City-group all-NYC search → HTTP 200, no error; `0` comma-containing routes ever cached (a guest all-airports search clamps to a single code and caches that, correctly). Calendar endpoint rejects multi-code input (422); the frontend skips comma destinations anyway.
+- Visual layer confirmed deployed by bundle inspection (CSS heatmap classes + JS price-calendar fetch + modifier classes + legend labels all present live). Rendered colored cells not eyeballed in a browser (no browser here) — verified via deployed-code + live API buckets instead.
+
+**Next:** tier-gated feature build-out now that auth+tier (FL10A-6a) and the price cache (this session) both exist — flexible-date / budget / saved-search features per roadmap.
