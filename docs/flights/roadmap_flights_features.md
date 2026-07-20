@@ -5,7 +5,7 @@
 > auth + tiers) exists. This doc covers only these features, not the full Phase 1/2/3
 > product vision (see handoff_flights.md for that).
 >
-> **Status (last updated after FL10A-6a):** Tier 1 quick wins SHIPPED (trip-type/one-way,
+> **Status (last updated after FL10A-7a):** Tier 1 quick wins SHIPPED (trip-type/one-way,
 > passengers, cabin class, results sort/filter). Item **1.2 city "all airports" grouping
 > SHIPPED** in FL10A-5b, together with a Kayak-style right-side results filter rail
 > (stops / airline / per-arrival-airport checkboxes). **FL10A-5c** then shipped amenity
@@ -18,8 +18,11 @@
 > byproduct of search traffic (single-code routes, zero extra SerpApi cost) + a
 > `/price-calendar` endpoint painting cheap/mid/pricey buckets on the outbound date picker
 > (free for all, guests included).
-> **Next: tier-gated feature build-out** (flexible dates / budget / saved searches) — both
-> prerequisites (auth+tier, price cache) now exist. See "Session sequencing" at the bottom.
+> **FL10A-7a SHIPPED flexible date search** (item 2.1) — `/flexible-dates`, tier-gated
+> (guest exact / free ±3 / paid ±5), cache-first with a `MAX_FRESH_CALLS=5` cap.
+> **Next: FL10A-7b — budget/anywhere search** (item 2.2), using SerpApi's
+> `google_travel_explore` engine (no Kiwi / no 50K-MAU gate — that prior assumption was
+> wrong). See "Session sequencing" at the bottom.
 
 ---
 
@@ -94,23 +97,27 @@ own session — it's the immediate next item (see Session sequencing below).
 
 Buildable only after the tier check exists. Listed in suggested build order.
 
-### 2.1 — Flexible dates (±3 free / ±5 paid)
+### 2.1 — Flexible dates (±3 free / ±5 paid) — ✅ DONE (FL10A-7a)
 - **What:** search a date *window*, show the cheapest day. Guest = exact date only;
-  free = ±3; paid = ±5. **Explicitly tier-gated → hard-blocked on 10A-5b.**
-- **Effort:** Medium (logic) + the tier gate.
-- **API cost:** ⚠️⚠️ **the expensive one.** ±5 days ≈ up to **11× SerpApi calls per
-  search**. On the $50/mo dev tier this is a real constraint — needs caching
-  (price_history table helps) or a cheaper source (Kiwi, but that needs 50K MAU per
-  handoff). **Cost-model this before building.**
-- **Dependency:** 10A-5b.
+  free = ±3; paid = ±5. Tier-gated via `TIER_FLEX_DAYS` in auth.py.
+- **Shipped:** `GET /api/flexible-dates` (cache-first read of `price_history`, live SerpApi
+  only for misses, write-back on fill) + a date-pill strip on the outbound picker.
+- **API cost:** solved via the cache + a hard `MAX_FRESH_CALLS = 5` per search — the feared
+  "11× SerpApi calls" worst case is capped to ≤5 live calls (nearest the requested date);
+  the rest return `unavailable` and fill in over time from subsequent searches. The Kiwi/50K-MAU
+  worry did not apply here.
+- **Dependency:** 10A-6a (auth+tier) + FL10A-6b (price_history cache) — both met.
 
-### 2.2 — Budget search ("TLV up to $300, sorted low→high")
+### 2.2 — Budget search ("TLV up to $300, sorted low→high") — NEXT (FL10A-7b)
 - **What:** set origin + max price, see all reachable destinations under budget. This is
   the handoff's **"Budget-first search"** Phase-2 differentiator. Likely a paid feature.
 - **Effort:** Large. Fundamentally different search shape (one origin → many destinations).
-- **API cost:** ⚠️⚠️ very high — scanning many destinations per search. Realistically wants
-  Kiwi Tequila (handoff: needs 50K MAU) or a heavily cached/precomputed approach.
-- **Dependency:** 10A-5b (for the paid gate) + a data-source decision.
+- **Data source — CORRECTION:** the prior assumption that this needs **Kiwi Tequila or 50K MAU
+  is wrong.** FL10A-7b will use SerpApi's **`google_travel_explore`** engine (anywhere/explore
+  search: one origin → many destinations with prices in a single call), which we already have
+  access to on the current SerpApi plan — no new vendor, no MAU gate. Cache results into
+  `price_history` the same way the other endpoints do.
+- **Dependency:** 10A-6a (paid gate) — met. Data-source decision resolved (google_travel_explore).
 
 ### 2.3 — Multi-city / multi-leg
 - **What:** TLV→BCN, BCN→FCO, FCO→TLV in one itinerary.
