@@ -77,6 +77,7 @@ For all other commands, select "Yes" (one-time approval) unless the command look
   [System.IO.File]::WriteAllText("$pwd\.git\COMMIT_MSG_TMP", $msg, [System.Text.UTF8Encoding]::new($false))
   git commit -F .git\COMMIT_MSG_TMP
 - Never amend + force-push to fix a BOM after the fact
+- Editing a *.sh file directly (nano, VS Code) on a fresh clone can leave the WORKING TREE copy CRLF even though .gitattributes normalizes the committed blob — verify with `od -c file | head` before chmod +x if a script was hand-edited rather than written fresh; force-checkout to fix if it's wrong.
 
 ## Hosting topology
 - **Kamatera (185.229.226.190) is PRIMARY for ALL xxl.co.il surfaces**, all served by nginx on Kamatera:
