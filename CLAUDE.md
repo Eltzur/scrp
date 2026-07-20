@@ -68,6 +68,8 @@ For all other commands, select "Yes" (one-time approval) unless the command look
 - Start scraper manually: python3 -m scripts.run_one <chain_id>
 - Check API service: sudo systemctl status scrp-api
 - Check cron: sudo journalctl -u scrp-cron -n 20 --no-pager
+- Get flights test-user token: `ssh dude@185.229.226.190 "~/xxl-flights/scripts/kamatera/get_test_token.sh"` — prints only the access_token to stdout; raw Supabase response to stderr + exit 1 on failure. See docs/flights/handoff_flights.md § Test user.
+- Set flights test-user tier: `ssh dude@185.229.226.190 "~/xxl-flights/scripts/kamatera/set_test_tier.sh <free|paid>"` — interactive sudo password (not in the passwordless xxl-ops whitelist)
 
 ## Commit conventions
 - Always use utf8NoBOM for commit messages:

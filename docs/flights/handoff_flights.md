@@ -378,6 +378,17 @@ multi-source deduplication, hotels bundling.
 - Paid subscription price point (TBD)
 - scrp_app password: RESOLVED (new clean password, no special chars; stored in server .env + password manager, NOT committed to repo)
 
+## Test user
+
+Confirmed Supabase test account for exercising the authenticated free/paid path headlessly — closes the "authenticated path unexercised" blocker hit in every session since auth shipped (FL10A-6a, FL10A-7a, and FL10A-7b all had to skip live free/paid verification because Supabase requires email confirmation and there was no way to mint a token without a real inbox).
+
+Credentials (`TEST_USER_EMAIL` / `TEST_USER_PASSWORD`) live only in `backend/.env` on Kamatera — never in this repo. Scripts: `xxl-flights/scripts/kamatera/get_test_token.sh` and `set_test_tier.sh`.
+
+- **Get a bearer token:** `ssh dude@185.229.226.190 "~/xxl-flights/scripts/kamatera/get_test_token.sh"` — prints only the `access_token` to stdout (capture with `TOKEN=$(...)`); on failure it prints Supabase's raw response to stderr instead of dying with an opaque JSONDecodeError.
+- **Set the test user's tier:** `ssh dude@185.229.226.190 "~/xxl-flights/scripts/kamatera/set_test_tier.sh <free|paid>"` — runs the `UPDATE users SET tier=…` as the postgres superuser. Interactive sudo password each time — deliberately NOT in the passwordless xxl-ops whitelist, since it's rare (once per verification session, not every deploy) and touches raw SQL as superuser.
+
+Typical flow: set tier → get token → `curl -H "Authorization: Bearer $TOKEN" https://fly.xxl.co.il/api/me` to confirm the tier took effect, then hit whichever endpoint is actually under test the same way.
+
 ## Session 10A-5b — City "all airports" grouping + results filter rail
 
 **Goal:** synthetic "כל שדות התעופה" option so a city group (e.g. New York) searches all its airports (JFK+EWR+LGA) in one go; plus a Kayak-style results filter rail. No auth.
