@@ -5,7 +5,7 @@
 > auth + tiers) exists. This doc covers only these features, not the full Phase 1/2/3
 > product vision (see handoff_flights.md for that).
 >
-> **Status (last updated after FL10A-7a):** Tier 1 quick wins SHIPPED (trip-type/one-way,
+> **Status (last updated after FL10A-7b):** Tier 1 quick wins SHIPPED (trip-type/one-way,
 > passengers, cabin class, results sort/filter). Item **1.2 city "all airports" grouping
 > SHIPPED** in FL10A-5b, together with a Kayak-style right-side results filter rail
 > (stops / airline / per-arrival-airport checkboxes). **FL10A-5c** then shipped amenity
@@ -20,9 +20,10 @@
 > (free for all, guests included).
 > **FL10A-7a SHIPPED flexible date search** (item 2.1) — `/flexible-dates`, tier-gated
 > (guest exact / free ±3 / paid ±5), cache-first with a `MAX_FRESH_CALLS=5` cap.
-> **Next: FL10A-7b — budget/anywhere search** (item 2.2), using SerpApi's
-> `google_travel_explore` engine (no Kiwi / no 50K-MAU gate — that prior assumption was
-> wrong). See "Session sequencing" at the bottom.
+> **FL10A-7b SHIPPED explore/budget search** (item 2.2) — `/explore` via SerpApi
+> `google_travel_explore`, tier-gated result count (5/10/50), byproduct-cached into
+> `price_history`. Confirmed: no Kiwi / no 50K-MAU gate needed.
+> **Next: item 2.3+ (saved searches / price alerts).** See "Session sequencing" at the bottom.
 
 ---
 
@@ -108,16 +109,17 @@ Buildable only after the tier check exists. Listed in suggested build order.
   worry did not apply here.
 - **Dependency:** 10A-6a (auth+tier) + FL10A-6b (price_history cache) — both met.
 
-### 2.2 — Budget search ("TLV up to $300, sorted low→high") — NEXT (FL10A-7b)
-- **What:** set origin + max price, see all reachable destinations under budget. This is
-  the handoff's **"Budget-first search"** Phase-2 differentiator. Likely a paid feature.
-- **Effort:** Large. Fundamentally different search shape (one origin → many destinations).
-- **Data source — CORRECTION:** the prior assumption that this needs **Kiwi Tequila or 50K MAU
-  is wrong.** FL10A-7b will use SerpApi's **`google_travel_explore`** engine (anywhere/explore
-  search: one origin → many destinations with prices in a single call), which we already have
-  access to on the current SerpApi plan — no new vendor, no MAU gate. Cache results into
-  `price_history` the same way the other endpoints do.
-- **Dependency:** 10A-6a (paid gate) — met. Data-source decision resolved (google_travel_explore).
+### 2.2 — Budget search ("TLV up to $300, sorted low→high") — ✅ DONE (FL10A-7b)
+- **What:** set origin + optional max price, see reachable destinations under budget,
+  cheapest-first. Shipped as the broader **explore/"anywhere"** mode (budget = optional filter).
+- **Shipped:** `GET /api/explore` via SerpApi **`google_travel_explore`** (one origin → many
+  destinations, one call) + a destination-card-grid UI mode. Tier-gated result count
+  (`TIER_EXPLORE_RESULTS` guest 5 / free 10 / paid 50), byproduct-cached into `price_history`.
+- **Data source — confirmed:** the old "needs Kiwi Tequila / 50K MAU" assumption was **wrong**;
+  `google_travel_explore` is on the current SerpApi plan, same credit pool as google_flights.
+  Reality check: an unfiltered "anywhere" returns ~56–78 destinations (variable), so the paid
+  cap of 50 is a ceiling, not a guarantee — the API returns `total_available` for honest "X of Y".
+- **Dependency:** 10A-6a (paid gate) + FL10A-6b price cache — both met.
 
 ### 2.3 — Multi-city / multi-leg
 - **What:** TLV→BCN, BCN→FCO, FCO→TLV in one itinerary.

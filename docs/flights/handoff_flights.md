@@ -504,3 +504,27 @@ multi-source deduplication, hotels bundling.
 - **STILL OPEN (same blocker as FL10A-6a):** the full authenticated free/paid HTTP response (11 dates with a live cache+fresh mix, MAX_FRESH_CALLS cap in action) was NOT exercised — the Supabase project requires email confirmation and there's no confirmed test user / service-role key to mint a token headlessly. The cap is code-bounded (loop stops fresh fills at 5, rest `unavailable`) but not exercised live. To close: confirm a test account, then `GET /api/flexible-dates` with its bearer token on a cold route and check 11 dates = up to 5 fresh + remainder unavailable.
 
 **Next:** FL10A-7b — anywhere/budget search (roadmap 2.2).
+
+## Session FL10A-7b — Explore search (anywhere + budget, tier-gated)
+
+**Goal:** one `/api/explore` endpoint powered by SerpApi `engine=google_travel_explore` (NOT google_flights — different engine/shape) returning a tiered-length destination list sorted cheapest-first, feeding results into `price_history` as a free byproduct. Roadmap **item 2.2 — DONE**.
+
+**Step 0 recon reality (recorded so nobody assumes 50 is always reachable):**
+- `google_travel_explore` works on the **same** SerpApi key/plan and bills from the **same credit pool** as google_flights — one call = 1 credit (verified via `serpapi.com/account` usage delta 51→52).
+- Destination count is **variable and not guaranteed ≥ 50**: an unfiltered TLV "anywhere" returned **78** in recon and **56** during verification (Explore's count shifts with date window/availability). Budget filtering shrinks it further (`max_price=800` → total_available 15). So the paid cap of 50 is a *ceiling*, often not reached — `total_available` is the honest denominator, always return it.
+- Per-destination shape (actual field names): airport code is **nested** `destination_airport.code`; `name`=city, `country`, `flight_price`, `hotel_price`, `flight_duration` (**minutes**), `number_of_stops`, `airline`, `start_date`/`end_date`, `thumbnail`. Also a `destination_id` (Google entity id like `/m/0947l`) which is **not** an airport code — don't use it as one. Some destinations have null `flight_price` (car-only) — dropped.
+
+**Shipped (xxl-flights, commit `6c63ab9`):**
+- `auth.py` — `TIER_EXPLORE_RESULTS = {"guest": 5, "free": 10, "paid": 50}`.
+- `api/routers/explore.py` (NEW) — `GET /explore?origin&max_price?&month?&travel_duration?&currency`. Single 3-letter origin (`Query(max_length=3)` → 422 on multi-code, same style as price_calendar/flexible_dates — NOT `_normalize_codes`, which *accepts* comma lists). Guests forced ILS. Calls `google_travel_explore` (departure_id, currency, `gl=il`, `hl=en` mirroring search.py's hardcoded hl, `travel_duration`, plus `max_price`/`month` when set). Drops null-price / codeless destinations, sorts by `flight_price`, returns `total_available` (pre-truncation) then truncates to the tier cap. Imports `SERPAPI_KEY`/`SERPAPI_URL` from search.py (single source).
+- **Byproduct caching:** every parsed destination (pre-truncation — free, no extra calls) upserts `flights.routes` + writes `flights.price_history` (outbound_date = `start_date` bound as a **`date` object**, the FL10A-6b asyncpg rule), same ON CONFLICT shapes as search.py/flexible_dates.py, one commit at the end, best-effort (rollback + log on failure, never breaks the response).
+- Frontend `App.tsx` — "לאן שתרצו"/"Explore anywhere" mode toggle by the trip-type control. In explore mode the destination field, date pickers, passengers, and cabin are hidden; a budget input, a month dropdown (current month + next 5), and a weekend/1wk/2wk trip-length radio appear. Results render as a **destination card grid** (thumbnail, city/country, flight price, hotel-from teaser, code · duration · stops, date range), cheapest-first. When `total_available > returned`, shows a "showing X of Y" line + (for non-paid) the reused signup-hint. i18n: new `explore.*` namespace (he+en).
+
+**Verified live (bundle `index-5Jcg_9Vi.js`):**
+- Guest TLV explore, no budget → exactly **5** destinations, `total_available: 56`, cheapest-first (ATH 384 → …).
+- Budget `max_price=800` → all returned ≤ 800, `total_available` 56 → **15** (engine-level budget filter works).
+- `currency=USD` (guest) → forced ILS.
+- **Byproduct write-back proven downstream:** after the explore call, `TLV→ATH` shows in `/price-calendar` (2026-11-16 = 384) and `TLV→MXP` shows in `/flexible-dates` as `source:cache` (390). DB grew to 53 routes / 185 price_history rows.
+- Note: tier truncation for free(10)/paid(50) is code-identical to the verified guest(5) path (same `TIER_EXPLORE_RESULTS[tier]` slice) but the authenticated HTTP path is not exercised headlessly — same email-confirmation blocker as FL10A-6a/7a.
+
+**Next:** roadmap 2.3+ (saved searches / alerts) — auth, tier, price cache, and now a destination-discovery surface all exist.
