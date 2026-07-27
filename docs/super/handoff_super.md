@@ -160,6 +160,30 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 
 ---
 
+### Session SU10A-1 (July 26-27, 2026) — GS1 API access unblocked (auth confirmed working, root cause was local)
+
+**Status change from 9d-11:** GS1 IL access is no longer blocked. Registration completed and paid (₪2,950, invoiced 07/07/2026, signed 23/06/2026 under Elad Tzur, GLN 7292117800007). External-user + access-delegation forms on file in `GS1/` (gitignored, not in repo history). GS1 gave API credentials (account `xxlmain`) this session.
+
+**Confirmed working, end to end:**
+- Domain: `https://hq.gs1ildigital.org` — real, live, Cloudflare-fronted, Symfony backend. This is the ONLY confirmed-working domain for the search endpoint.
+- **Not our domain:** `fe.gs1-retailer.mk101.signature-it.com` (the doc's example for GET PRODUCT/media/fieldInfo endpoints) does not resolve at all — dead or was never real; "mk101" is another client's account code left in a templated doc. `retailer.gs1ildigital.org` (the web UI you log into manually) is a completely different app — hitting the API path there returns a Symfony 404, not our endpoint.
+- Auth mechanism: HTTP Basic Auth, confirmed via `WWW-Authenticate: Basic realm="Secured"` on the 401 challenge.
+- Endpoint verified live: `POST https://hq.gs1ildigital.org/external/app_query/select_query.json` with a `modification_timestamp` query returns real cross-supplier product data (verified against GLN 7290000200002, brand טיב טירת צבי).
+- Credentials stored server-side in `~/scrp/.env` as `GS1_USERNAME` / `GS1_PASSWORD` (uppercase — pre-existing before the new lowercase-default convention below; left as-is since it's now verified working, not touched to avoid re-breaking it).
+
+**Root cause of the entire day's "401 / IP not allowlisted / wrong auth" investigation:** a casing mismatch. `.env` had `GS1_Username`/`GS1_Password` (mixed case); every test script referenced `$GS1_USERNAME`/`$GS1_PASSWORD` (uppercase). Bash variable names are case-sensitive, so `source` set the mixed-case variables with zero error while the uppercase ones stayed empty — every "failure" for most of the session was actually an empty/wrong-case credential locally, not a GS1-side block. Cost a full session of misdirected diagnostics (IP-allowlist theories, domain-guessing, PowerShell/curl quoting deep-dives) before being caught by explicitly dumping the raw `.env` bytes and comparing sourced-vs-typed-inline credentials side by side.
+
+**New policy (added to CLAUDE.md):** default new env var names to lowercase going forward; always verify exact casing in the file before referencing a variable in a script, never assume.
+
+**Also fixed along the way (real bugs, not red herrings):**
+- `.env` line 1 (`DATABASE_URL`) had a stray leading `=` from a bad manual edit — fixed (typo, per Dude).
+- `.env` used `:` instead of `=` for the GS1 lines on first attempt — fixed.
+- Unquoted `$` in `GS1_PASSWORD` was getting partially expanded by `source` — fixed by single-quoting the value.
+
+**Not yet done — next session:** build the actual fetch/storage pipeline for the 72 approved vendor catalogs (original ask this session) — sweep by `modification_timestamp` across all connected suppliers, paginate via `get_chunks`, store raw + parsed records keyed by GTIN in a new schema (mirrors the `flights` schema-on-same-Postgres pattern), join path back to existing `items`/`item_code` tables per the GS1 scoping doc from 9d-11 (`docs/gs1_integration.md`). Also: let GS1's support contact know the issue resolved on our end, no IP allowlist or password reset needed after all.
+
+---
+
 ### Session 9d-9 (June 5, 2026) — Delta Files + Promo Pipeline + HaziHinam + Missing Stores
 
 #### Final state

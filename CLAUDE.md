@@ -14,7 +14,8 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 ## Rules of engagement (chat architect -> operator -> CC)
 The chat assistant is lead architect and plans; the operator executes verbatim; CC edits/commits. These govern how every instruction is delivered:
 1. **Monoblock prompts.** One unified, copy-paste code block per CC task — never split a task across multiple snippets. The architect designs; the operator is the executioner.
-2. **Environment tag on every block.** Prefix each code block with its environment:
+2. **Environment tag on every block.** Prefix each code block with its environment — the tag is plain text ABOVE the fenced code block, never a line inside the fence itself. If the tag ends up inside the fence, the operator's copy-paste includes it and the shell tries to execute `[Bash - server]` as a literal command (confirmed failure mode, GS1 session SU10A-1: caused repeated `[Bash: command not found` errors before every real command).
+   Tags in use:
    - `[CC]` — Claude Code, always running inside VS Code's integrated interface, working directory `C:\scrp`. There is no standalone/CLI-only CC in this workflow — every `[CC]` block is pasted into the VS Code Claude Code panel.
    - `[PowerShell - VS Code]` — a plain PowerShell terminal pane inside VS Code (not CC), same `C:\scrp` working directory, for manual commands the operator runs directly.
    - `[Bash - server]` — an SSH session directly on the Kamatera VPS (`dude@185.229.226.190`).
@@ -70,6 +71,14 @@ For all other commands, select "Yes" (one-time approval) unless the command look
 - Check cron: sudo journalctl -u scrp-cron -n 20 --no-pager
 - Get flights test-user token: `ssh dude@185.229.226.190 "~/xxl-flights/scripts/kamatera/get_test_token.sh"` — prints only the access_token to stdout; raw Supabase response to stderr + exit 1 on failure. See docs/flights/handoff_flights.md § Test user.
 - Set flights test-user tier: `ssh dude@185.229.226.190 "~/xxl-flights/scripts/kamatera/set_test_tier.sh <free|paid>"` — interactive sudo password (not in the passwordless xxl-ops whitelist)
+
+## Network reference
+- Kamatera production server static IP: 185.229.226.190 (same as above — this is what needs allowlisting for any server-side outbound integration, e.g. scraper/cron/API calls to third-party services like GS1).
+- Dude's office/dev machine static IP: 149.106.243.120 — useful for local testing/allowlisting against third-party APIs before a server-side integration is wired up (noted during GS1 API onboarding, session SU10A-1).
+
+## Environment variable conventions
+- **Default new env var names to lowercase** (e.g. `gs1_username`, not `GS1_USERNAME`), unless matching an existing convention already in the same file. Established in session SU10A-1 after a casing mismatch (`GS1_Username` set in `.env` vs `$GS1_USERNAME` read by scripts) produced identical, misleading 401s from a third-party API for an entire session — bash variable names are case-sensitive and `source` sets a mismatched-case variable with no error, so the bug looked like a server-side auth/IP problem when it was purely local.
+- **Never assume casing — verify it.** Before writing a script that reads any `.env` value, confirm the exact variable name (`cat -A` or `grep` the file) rather than assuming it matches what a previous instruction specified.
 
 ## Commit conventions
 - Always use utf8NoBOM for commit messages:
