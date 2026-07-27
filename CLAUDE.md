@@ -78,6 +78,7 @@ For all other commands, select "Yes" (one-time approval) unless the command look
   git commit -F .git\COMMIT_MSG_TMP
 - Never amend + force-push to fix a BOM after the fact
 - Editing a *.sh file directly (nano, VS Code) on a fresh clone can leave the WORKING TREE copy CRLF even though .gitattributes normalizes the committed blob — verify with `od -c file | head` before chmod +x if a script was hand-edited rather than written fresh; force-checkout to fix if it's wrong.
+- **core.fileMode=false on the Windows dev machine means exec bits never commit from there.** A `chmod +x` in a Windows working tree is invisible to git under this setting — the file commits as 100644 regardless. Any new .sh script must have its exec bit set and committed from a machine/session where core.fileMode is true (e.g. via `git update-index --chmod=+x <file>` explicitly, which forces the bit through regardless of the setting), or verify with `git ls-files -s <file>` after commit — do not trust a local chmod to have "taken."
 
 ## Hosting topology
 - **Kamatera (185.229.226.190) is PRIMARY for ALL xxl.co.il surfaces**, all served by nginx on Kamatera:
