@@ -23,7 +23,17 @@
 > **FL10A-7b SHIPPED explore/budget search** (item 2.2) — `/explore` via SerpApi
 > `google_travel_explore`, tier-gated result count (5/10/50), byproduct-cached into
 > `price_history`. Confirmed: no Kiwi / no 50K-MAU gate needed.
-> **Next: item 2.3+ (saved searches / price alerts).** See "Session sequencing" at the bottom.
+> **FL10A-7c SHIPPED + FULLY VERIFIED the flexible-date window picker** (extends item 2.1) —
+> optional `flex_days` (narrow-only, server-clamped to the tier cap), a flexibility dropdown
+> generated from `TIER_FLEX_DAYS`, and the 7a pill strip replaced by cheap/mid/pricey day-cell
+> colouring on the outbound calendar. **First session to verify the tier ladder live across
+> all three tiers** (guest/free/paid) — the "authenticated path unexercised" caveat carried
+> since FL10A-6a is now closed.
+> **Next: item 2.4 — saved searches.** (Note: the previous "Next: 2.3+ (saved searches)"
+> line mis-numbered this — **2.3 is multi-city/multi-leg** (Large, not tier-gated); saved
+> searches is **2.4** and is the smallest remaining tier-gated build, with
+> `flights.saved_searches` already in the DB.) See "Session sequencing" at the bottom —
+> note that section is stale, still listing shipped work (1.2, 10A-5b) as upcoming.
 
 ---
 
@@ -107,6 +117,10 @@ Buildable only after the tier check exists. Listed in suggested build order.
   tier max (clamped server-side — it can never widen), surfaced as a flexibility dropdown
   generated from `TIER_FLEX_DAYS`. The pill strip is gone; prices now colour the outbound
   calendar's day cells with the same cheap/mid/pricey terciles as the 6b heatmap.
+- **Verified live across all three tiers** (FL10A-7c): guest 1 date at every `flex_days`
+  value; free 7 (±3) with 5/10/99 all clamping to 7; paid 11 (±5) with 10/99 clamping to 11.
+  `flex_days` narrows exactly as asked and cannot widen past the cap at any tier. Full
+  matrix in handoff_flights.md § FL10A-7c.
 - **API cost:** solved via the cache + a hard `MAX_FRESH_CALLS = 5` per search — the feared
   "11× SerpApi calls" worst case is capped to ≤5 live calls (nearest the requested date);
   the rest return `unavailable` and fill in over time from subsequent searches. The Kiwi/50K-MAU

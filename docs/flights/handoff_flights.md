@@ -385,7 +385,7 @@ Confirmed Supabase test account for exercising the authenticated free/paid path 
 Credentials (`TEST_USER_EMAIL` / `TEST_USER_PASSWORD`) live only in `backend/.env` on Kamatera — never in this repo. Scripts: `xxl-flights/scripts/kamatera/get_test_token.sh` and `set_test_tier.sh`.
 
 - **Get a bearer token:** `ssh dude@185.229.226.190 "~/xxl-flights/scripts/kamatera/get_test_token.sh"` — prints only the `access_token` to stdout (capture with `TOKEN=$(...)`); on failure it prints Supabase's raw response to stderr instead of dying with an opaque JSONDecodeError.
-  - ⚠️ **BROKEN as of FL10A-7c** until `backend/.env` line 5 is repaired — the corrupted `SUPABASE_ANON_KEY` makes `source .env` fail with `No such file or directory`. See the FL10A-7c section for the diagnosis and fix. Workaround used in 7c: read `VITE_SUPABASE_ANON_KEY` from `frontend/.env.production` (the intact key) and do the password grant directly.
+  - ✅ **Working as of FL10A-7c** (2026-07-27). It was broken on first use — a corrupted `SUPABASE_ANON_KEY` in `backend/.env` made `source .env` fail — plus the file arrived non-executable. Both fixed; see the FL10A-7c section. If it ever fails on `source` again, line 5 of `backend/.env` is the first thing to check.
 - **Set the test user's tier:** `ssh dude@185.229.226.190 "~/xxl-flights/scripts/kamatera/set_test_tier.sh <free|paid>"` — runs the `UPDATE users SET tier=…` as the postgres superuser. Interactive sudo password each time — deliberately NOT in the passwordless xxl-ops whitelist, since it's rare (once per verification session, not every deploy) and touches raw SQL as superuser.
 
 Typical flow: set tier → get token → `curl -H "Authorization: Bearer $TOKEN" https://fly.xxl.co.il/api/me` to confirm the tier took effect, then hit whichever endpoint is actually under test the same way.
@@ -469,6 +469,7 @@ Typical flow: set tier → get token → `curl -H "Authorization: Bearer $TOKEN"
 - `GET /api/me` no auth → `{"authenticated":false,"email":null,"tier":"guest"}`.
 - **Guest server-side enforcement** (no token): a `/api/search` with 5 destination codes + `currency=USD` was clamped by the server to a single destination (JFK) and forced to ILS — proving the cap/lock are enforced regardless of client input.
 - **NOT verified — free/paid authenticated caps:** the Supabase project **requires email confirmation**, so a REST signup returns no session token (no service-role key available to bypass). The `users.tier=free` row + the manual `paid` → cap-5 test need a confirmed login. To close this: sign up via the live UI with a real inbox, confirm the email, then `UPDATE users SET tier='paid' WHERE email='…'` and re-run a 5-code destination search with that user's bearer token.
+  - **UPDATE (FL10A-7c): blocker removed, but this specific test still unrun.** A confirmed test user + a working `get_test_token.sh` now mint tokens headlessly at any tier, so there is no longer anything *stopping* this check. However 7c exercised `flexible-dates` and `explore`, **not** the `TIER_MAX_DESTINATIONS` cap-5 destination search — that one assertion remains genuinely unverified. It is now a 5-minute job rather than a blocked one.
 
 **Next:** FL10A-6b (price heatmap) — the calendar heatmap seam is already staged in `App.tsx`'s `DateField` (see the HEATMAP SEAM comment).
 
@@ -513,7 +514,9 @@ Typical flow: set tier → get token → `curl -H "Authorization: Bearer $TOKEN"
 **Verified live (bundle `index-BXbvYISF.js`):**
 - Guest (N=0) path exercised end-to-end through the real endpoint: TLV→BCN 2026-08-17 → 1 date, `source:cache`, 666 (the FL10A-6b seed); a non-seeded date (2026-10-15) → `source:fresh` (635, real call) and a re-query flips it to `source:cache` (**write-back confirmed**); `currency=USD` forced to ILS (guest lock); multi-code destination → 422. Clean startup confirmed (endpoint responds → `flexible_dates.py` + the `search.py` helper imported without error).
 - Multi-date read path (paid ±5 → 11 candidates, batched `ANY(:dates)` cache read) confirmed at the query level (matched the seeded 08-17 within the ±5 window during a read-only repro); `TIER_FLEX_DAYS[paid]=5` → 11 candidates.
-- **STILL OPEN (same blocker as FL10A-6a):** the full authenticated free/paid HTTP response (11 dates with a live cache+fresh mix, MAX_FRESH_CALLS cap in action) was NOT exercised — the Supabase project requires email confirmation and there's no confirmed test user / service-role key to mint a token headlessly. The cap is code-bounded (loop stops fresh fills at 5, rest `unavailable`) but not exercised live. To close: confirm a test account, then `GET /api/flexible-dates` with its bearer token on a cold route and check 11 dates = up to 5 fresh + remainder unavailable.
+- ~~**STILL OPEN (same blocker as FL10A-6a):**~~ **PARTIALLY CLOSED in FL10A-7c.** Original note: the full authenticated free/paid HTTP response (11 dates with a live cache+fresh mix, MAX_FRESH_CALLS cap in action) was NOT exercised — no way to mint a token headlessly.
+  - **Now verified:** the authenticated free *and* paid responses are exercised live — free returns 7 dates (±3), paid returns 11 (±5), across the full `flex_days` matrix. See § FL10A-7c.
+  - **Still unverified:** the `MAX_FRESH_CALLS = 5` cap *in action* — 7c counted dates and spans but did not inspect per-date `source` values, so "11 dates = ≤5 `fresh` + remainder `cache`/`unavailable`" is still only code-bounded. To close: hit a genuinely cold route with a paid token and tally the `source` field.
 
 **Next:** FL10A-7b — anywhere/budget search (roadmap 2.2).
 
@@ -538,7 +541,7 @@ Typical flow: set tier → get token → `curl -H "Authorization: Bearer $TOKEN"
 - `currency=USD` (guest) → forced ILS.
 - **Byproduct write-back proven downstream:** after the explore call, `TLV→ATH` shows in `/price-calendar` (2026-11-16 = 384) and `TLV→MXP` shows in `/flexible-dates` as `source:cache` (390). DB grew to 53 routes / 185 price_history rows.
 - Note: tier truncation for free(10)/paid(50) is code-identical to the verified guest(5) path (same `TIER_EXPLORE_RESULTS[tier]` slice) but the authenticated HTTP path is not exercised headlessly — same email-confirmation blocker as FL10A-6a/7a.
-- **CLOSED in FL10A-7c:** the authenticated path is now exercised live — paid explore returns **50**, paid flexible-dates returns the full ±5 window. The 6a/7a/7b "authenticated path unexercised" caveat is resolved for guest+paid; only the `free` row remains unverified (needs the interactive-sudo tier flip).
+- **CLOSED in FL10A-7c:** the authenticated path is now exercised live at **all three tiers** — explore returns 5 / 10 / 50 for guest / free / paid exactly as `TIER_EXPLORE_RESULTS` specifies. The 6a/7a/7b "authenticated path unexercised" caveat is fully resolved; no rows outstanding.
 
 **Next:** roadmap 2.3+ (saved searches / alerts) — auth, tier, price cache, and now a destination-discovery surface all exist.
 
@@ -557,17 +560,37 @@ Typical flow: set tier → get token → `curl -H "Authorization: Bearer $TOKEN"
 
 **Verified live (bundle `index-DUlGgrQd.js`, hash-matched against local `dist/`):**
 - Backend restarted clean (`Application startup complete`, no import error — server is Python 3.12.3, so the `int | None` annotation is fine).
-- **Guest (no token):** every `flex_days` value 0/1/2/3/5/10/99 → **1 date**. A guest cannot widen the window. Explore → 5.
-- **Paid (test user):** omitted → **11** (±5, tier default); `flex_days` 0/1/2/3/5 → **1/3/5/7/11** dates (exact narrowing); `flex_days` 10 and 99 → **clamped to 11**. Explore → 50.
-- **Gap:** the `free` row (±3 → 7 dates, explore 10) is *not* live-verified — flipping the test user's tier needs `set_test_tier.sh`, which requires an interactive sudo password by design. Same `min(flex_days, TIER_FLEX_DAYS[tier])` code path proven at both ends of the ladder.
+**FULL THREE-TIER MATRIX — all rows live-verified against `https://fly.xxl.co.il/api`.** Route `TLV→LHR`, date ~45 days out. Each row confirmed with `/me` first, so the tier under test is the tier the server actually saw. Tier flips via `set_test_tier.sh` (operator-run — interactive sudo).
 
-**SERVER CONFIG BUG found (not introduced here, still open):** `~/xxl-flights/backend/.env` line 5 is corrupted —
+| `flex_days` sent | guest | free | paid |
+|---|---|---|---|
+| omitted (tier default) | 1 | **7** (±3) | **11** (±5) |
+| 0 | 1 | 1 | 1 |
+| 1 | 1 | 3 | 3 |
+| 2 | 1 | 5 | 5 |
+| 3 | 1 | 7 | 7 |
+| 5 | 1 | 7 ← clamped | 11 |
+| 10 | 1 | 7 ← clamped | 11 ← clamped |
+| 99 | 1 | 7 ← clamped | 11 ← clamped |
+| `/explore` count | 5 | 10 (of 54 avail.) | 50 |
+
+Reading: `flex_days` narrows exactly as requested and **cannot widen past the tier cap at any tier** — the `min(flex_days, TIER_FLEX_DAYS[tier])` clamp is proven at 0, 3 and 5. A guest stays pinned to a single date no matter what they send.
+
+**This closes the "authenticated path unexercised" caveat carried since FL10A-6a** — 6a, 7a and 7b all had to skip live free/paid verification. Explore counts (5/10/50) also retro-verify the FL10A-7b tier truncation, which 7b could only assert by code inspection.
+
+**SERVER CONFIG BUG — found and RESOLVED this session (2026-07-27).** Kept here as the historical record because the failure mode is non-obvious and could recur. **No commit reference exists: `backend/.env` is server-only and gitignored, so the repair is untracked server state, not a code change.** Diagnosis as found: `~/xxl-flights/backend/.env` line 5 was corrupted —
 `SUPABASE_ANON_KEY=<jwt>>SUPABASE_URL=https://…`. A stray `>` truncated the anon key to **101 chars / 2 JWT segments** (needs 3) and glued a duplicate `SUPABASE_URL=` onto the same line. Consequences:
 - `source .env` treats it as a redirect → `get_test_token.sh` dies with `No such file or directory` on line 5. **The script has never actually run on the live box** — it only landed there with this deploy, which is why 7b never caught it.
 - The truncated key returns `{"message": "Invalid API key"}` from Supabase.
 - The API itself is unaffected (`auth.py` verifies via JWKS, not the anon key), which is why `/me` still works.
-- **Fix:** split line 5 back into `SUPABASE_ANON_KEY=<full 3-segment jwt>` on its own line and drop the duplicate `SUPABASE_URL` (line 4 already has it). The intact key is in `xxl-flights/frontend/.env.production` as `VITE_SUPABASE_ANON_KEY` (208 chars — the anon key is a public client key, shipped in the browser bundle). This session's tier verification used that intact key directly rather than mutating production config.
+- **Applied fix:** rewrote line 5 only, as `SUPABASE_ANON_KEY=<full 208-char / 3-segment key>`, deleting the stray `>` and the duplicate `SUPABASE_URL=` tail (line 4 already held a byte-identical URL). Lines 1–4 and 6–8 untouched; file still 8 lines; mode preserved at `600 dude:dude` (`cat > .env` keeps the original inode). Source of truth was `frontend/.env.production` → `VITE_SUPABASE_ANON_KEY`; the corrupted server value was proven to be a **strict prefix** of it (101 of 208 bytes), which is what confirmed it was the same key truncated rather than a different key. Backed up to `.env.bak` (mode 600) during the edit, deleted after verification.
+- **Verified:** `get_test_token.sh` now exits 0, prints a 920-char 3-segment JWT with empty stderr, and `/api/me` accepts it. Re-confirmed on a later session run, so the fix persists.
+- **Blast radius was nil for the API:** nothing in `backend/` reads `SUPABASE_ANON_KEY` (only `.env.example` mentions it) — `auth.py` verifies via JWKS. That's why live auth never broke and the bug stayed hidden.
 
-**Also fixed:** `get_test_token.sh` / `set_test_tier.sh` arrived from git `-rw-rw-r--` (not executable) — `chmod +x` applied on the server. LF endings verified with `od -c` first, per the CLAUDE.md hand-edited-`.sh` rule.
+**EXEC-BIT BUG — root cause found and fixed (two commits).** `get_test_token.sh` / `set_test_tier.sh` arrived from git `-rw-rw-r--`. A `chmod +x` on the server is *working-tree only* and does not survive, because the committed mode was `100644`.
+- **Root cause: `core.fileMode=false` on the Windows dev machine.** A `chmod +x` in a Windows working tree is invisible to git under that setting, so any `.sh` authored there commits as `100644` no matter what the local filesystem says.
+- **Fix:** `git update-index --chmod=+x` (forces the bit through regardless of the setting) — commit **`e01c6ac`** (the two test scripts) and **`8a16567`** (the three ops scripts: `xxl-deploy-webroot.sh`, `xxl-logs.sh`, `xxl-restart.sh`). `sudoers-xxl-ops` deliberately left `100644` — it's a config file. Verify with `git ls-files -s`, never a local `chmod`.
+- Committed from the **Windows machine**, not the server; the server only pulls. `/usr/local/bin/` copies were untouched (still `-rwxr-xr-x root:root`) — this only fixes the repo source so a future manual re-install can't silently land non-executable files.
+- **Cross-ref:** written up as a permanent gotcha in `C:\scrp\CLAUDE.md` § Commit conventions, commit **`e68783e`** (scrp), next to the existing CRLF/`.sh` bullet.
 
-**Next:** repair `backend/.env` line 5, then re-run `get_test_token.sh` to confirm it works unaided; free-tier row of the matrix still open.
+**Next:** roadmap **item 2.4 — saved searches** (smallest remaining tier-gated build; `flights.saved_searches` already exists; guest 0 / free 3 / paid 5). Note the roadmap's older "Next: 2.3+ (saved searches)" line mis-numbered it — **2.3 is multi-city/multi-leg** (Large, not tier-gated). The tier-verification harness is now trustworthy end-to-end, so 2.4 can be verified per-tier from the start rather than shipped on code inspection.
