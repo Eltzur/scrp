@@ -11,13 +11,15 @@ are never written here — phase 2 owns them, and the upsert leaves them alone s
 a re-sweep cannot wipe detail already fetched.
 
 Credentials come from the environment as GS1_USERNAME / GS1_PASSWORD (uppercase
-— that is what is already set in ~/scrp/.env on Kamatera; do not rename).
+— that is what is already set in ~/scrp/.env on Kamatera; do not rename). The
+repo-root .env is loaded automatically via python-dotenv, so the script does not
+depend on the caller having sourced it first.
 
 Run locally (dry run, nothing written):
     python -m scraper.gs1_fetch --dry-run --max-pages 1
 
 Run against production:
-    DATABASE_URL=postgresql://... python -m scraper.gs1_fetch
+    cd ~/scrp && source venv/bin/activate && python3 -m scraper.gs1_fetch
 
 Force a full re-sweep instead of an incremental one:
     python -m scraper.gs1_fetch --full
@@ -27,13 +29,25 @@ import logging
 import os
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 import requests
+from dotenv import load_dotenv
 from sqlalchemy import text
 
 from db.db import connect
 
 log = logging.getLogger(__name__)
+
+# Load the repo-root .env ourselves rather than trusting the caller to have done
+# it. A plain `source .env` sets shell variables but does NOT export them to a
+# python3 child (proven in SU10A-1: DATABASE_URL was set in the shell and unset
+# in the subprocess), so depending on it silently yields "missing credentials".
+#
+# override=False so anything already exported wins — a manual
+# `export GS1_USERNAME=...` or `set -a; source .env` still takes precedence.
+_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(_ENV_PATH, override=False)
 
 _ENDPOINT = "https://hq.gs1ildigital.org/external/app_query/select_query.json"
 
@@ -57,24 +71,33 @@ _FULL_SWEEP_FILTER = "modification_timestamp > DATE_SUB(NOW(), INTERVAL 3650 DAY
 
 _HTTP_TIMEOUT = 60
 
-# GS1 field name -> our column. Values are the candidate keys we will accept, in
-# priority order: the API's exact casing is not yet confirmed, so each column
-# tolerates snake_case and camelCase rather than silently landing NULL.
+# Our column -> candidate GS1 keys, matched AFTER every incoming key has been
+# lowercased (see _lower_keys). Keep every candidate here lowercase: the live
+# endpoint mixes conventions within one row (`Product_Status` capitalised,
+# everything else not), so normalising once beats chasing each surprise.
 _FIELD_MAP = {
-    "id":                     ("id", "Id", "ID"),
-    "product_code":           ("product_code", "productCode"),
-    "gtin":                   ("gtin", "GTIN", "Gtin"),
-    "supplier_gln":           ("supplier_gln", "supplierGln", "supplierGLN"),
-    "retailer_gln":           ("retailer_gln", "retailerGln", "retailerGLN"),
-    "group_id":               ("group_id", "groupId"),
-    "group_name":             ("group_name", "groupName"),
-    "brandname":              ("brandname", "brandName", "brand_name"),
-    "trade_item_description": ("trade_item_description", "tradeItemDescription"),
-    "product_status":         ("product_status", "productStatus"),
-    "effective_date_time":    ("effective_date_time", "effectiveDateTime"),
-    "discontinued_date_time": ("discontinued_date_time", "discontinuedDateTime"),
-    "modification_timestamp": ("modification_timestamp", "modificationTimestamp"),
+    "id":                     ("id",),
+    "product_code":           ("product_code", "productcode"),
+    "gtin":                   ("gtin",),
+    # The endpoint returns a SINGLE `gln` — there is no supplier/retailer split
+    # (confirmed by the SU10A-1 dry run; su10a1b collapsed the two columns).
+    # supplier_gln is still accepted as a fallback in case the API ever splits.
+    "gln":                    ("gln", "supplier_gln", "suppliergln"),
+    "group_id":               ("group_id", "groupid"),
+    "group_name":             ("group_name", "groupname"),
+    "brandname":              ("brandname", "brand_name"),
+    "trade_item_description": ("trade_item_description", "tradeitemdescription"),
+    "product_status":         ("product_status", "productstatus"),
+    "effective_date_time":    ("effective_date_time", "effectivedatetime"),
+    "discontinued_date_time": ("discontinued_date_time", "discontinueddatetime"),
+    "modification_timestamp": ("modification_timestamp", "modificationtimestamp"),
 }
+
+# Timestamp formats tried in order, after ISO. The live endpoint mixes formats
+# within a single row: modification_timestamp is 'YYYY-MM-DD HH:MM:SS' while
+# effective_date_time is DD/MM/YYYY. Day-first is the Israeli convention, so
+# '01/02/2018' is read as 1 February — not 2 January.
+_TS_FORMATS = ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y", "%Y-%m-%d")
 
 _TIMESTAMP_COLUMNS = (
     "effective_date_time",
@@ -97,8 +120,13 @@ def _credentials() -> tuple[str, str]:
     return user, password
 
 
+def _lower_keys(row: dict) -> dict:
+    """Lowercase every incoming key once, so a casing surprise can't cause a miss."""
+    return {str(k).lower(): v for k, v in row.items()}
+
+
 def _pick(row: dict, column: str):
-    """Pull `column` out of a GS1 row, tolerating the API's unconfirmed casing."""
+    """Pull `column` out of a key-lowercased GS1 row."""
     for key in _FIELD_MAP[column]:
         if key in row:
             return row[key]
@@ -112,20 +140,28 @@ def _parse_ts(value):
     if isinstance(value, datetime):
         return value
     text_value = str(value).strip().replace("Z", "+00:00")
-    for fmt in (None, "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+    try:
+        return datetime.fromisoformat(text_value)
+    except ValueError:
+        pass
+    for fmt in _TS_FORMATS:
         try:
-            return datetime.fromisoformat(text_value) if fmt is None else datetime.strptime(text_value, fmt)
+            return datetime.strptime(text_value, fmt)
         except ValueError:
             continue
     log.warning("Unparseable timestamp %r — storing NULL", value)
     return None
 
 
-def _normalise(row: dict) -> dict | None:
+def _normalise(row) -> dict | None:
     """Map one GS1 row onto our column set. Returns None if it can't be keyed."""
-    out = {col: _pick(row, col) for col in _FIELD_MAP}
+    if not isinstance(row, dict):
+        log.warning("Skipping non-dict row (%s)", type(row).__name__)
+        return None
+    low = _lower_keys(row)
+    out = {col: _pick(low, col) for col in _FIELD_MAP}
     if out["id"] is None or out["product_code"] is None:
-        log.warning("Skipping row with no id/product_code (keys: %s)", sorted(row)[:12])
+        log.warning("Skipping row with no id/product_code (keys: %s)", sorted(low)[:12])
         return None
     out["id"] = str(out["id"])
     out["product_code"] = str(out["product_code"])
@@ -134,19 +170,39 @@ def _normalise(row: dict) -> dict | None:
     return out
 
 
-def _extract_rows(payload) -> list[dict]:
-    """Pull the row list out of the response, whatever the envelope turns out to be."""
-    if isinstance(payload, list):
-        return payload
-    if not isinstance(payload, dict):
-        log.error("Unexpected response type %s", type(payload).__name__)
+def _extract_rows(payload) -> list:
+    """Pull the row list out of the response envelope.
+
+    The live endpoint returns a DOUBLY nested bare list — [[{...}, {...}]] — so
+    payload[0] is the row list, not payload itself. Assuming otherwise is what
+    made the first SU10A-1 dry run crash. The dict branch is kept in case the
+    envelope ever changes.
+    """
+    candidate = payload
+
+    if isinstance(candidate, dict):
+        for key in ("results", "result", "rows", "data", "records", "items"):
+            value = candidate.get(key)
+            if isinstance(value, list):
+                candidate = value
+                break
+        else:
+            log.error("Could not find a row list in response. Top-level keys: %s",
+                      sorted(map(str, candidate)))
+            return []
+
+    if not isinstance(candidate, list):
+        log.error("Unexpected response type %s", type(candidate).__name__)
         return []
-    for key in ("results", "result", "rows", "data", "records", "items"):
-        value = payload.get(key)
-        if isinstance(value, list):
-            return value
-    log.error("Could not find a row list in response. Top-level keys: %s", sorted(payload))
-    return []
+
+    # Unwrap list-of-list nesting (one level in practice). Bounded so a
+    # pathological shape can't spin here.
+    depth = 0
+    while candidate and isinstance(candidate[0], list) and depth < 3:
+        candidate = candidate[0]
+        depth += 1
+
+    return candidate
 
 
 def _fetch_page(session: requests.Session, query: str, start: int, rows: int) -> list[dict]:
@@ -159,12 +215,12 @@ def _fetch_page(session: requests.Session, query: str, start: int, rows: int) ->
 
 _UPSERT_SQL = text("""
     INSERT INTO gs1.products (
-        id, product_code, gtin, supplier_gln, retailer_gln,
+        id, product_code, gtin, gln,
         group_id, group_name, brandname, trade_item_description,
         product_status, effective_date_time, discontinued_date_time,
         modification_timestamp, fetched_at
     ) VALUES (
-        :id, :product_code, :gtin, :supplier_gln, :retailer_gln,
+        :id, :product_code, :gtin, :gln,
         :group_id, :group_name, :brandname, :trade_item_description,
         :product_status, :effective_date_time, :discontinued_date_time,
         :modification_timestamp, now()
@@ -172,8 +228,7 @@ _UPSERT_SQL = text("""
     ON CONFLICT (id) DO UPDATE SET
         product_code           = excluded.product_code,
         gtin                   = excluded.gtin,
-        supplier_gln           = excluded.supplier_gln,
-        retailer_gln           = excluded.retailer_gln,
+        gln                    = excluded.gln,
         group_id               = excluded.group_id,
         group_name             = excluded.group_name,
         brandname              = excluded.brandname,
@@ -242,7 +297,15 @@ def run(full: bool = False, dry_run: bool = False, page_size: int = _PAGE_SIZE,
                 break
 
             if pages == 1:
-                log.info("First row keys: %s", sorted(batch[0]) if batch else "(none)")
+                # Diagnostic only — must never be able to kill the sweep. The
+                # first SU10A-1 dry run died here when the row turned out to be
+                # a nested list rather than a dict.
+                first = batch[0]
+                if isinstance(first, dict):
+                    log.info("First row keys: %s", sorted(map(str, first)))
+                else:
+                    log.warning("Unexpected first-row shape: %s -> %.200s",
+                                type(first).__name__, first)
 
             rows = [r for r in (_normalise(row) for row in batch) if r is not None]
             for r in rows:

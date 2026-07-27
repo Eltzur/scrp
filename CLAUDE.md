@@ -65,7 +65,7 @@ For all other commands, select "Yes" (one-time approval) unless the command look
 - Production VPS: ssh dude@185.229.226.190
 - Repo root: ~/scrp
 - Activate venv: source venv/bin/activate
-- Load env: source .env
+- Load env: `source .env` — **but note this does NOT reach python3 subprocesses.** The file is plain `KEY=value` with no `export`, so sourcing sets shell variables only; a child `python3` sees none of them (proven in SU10A-1: `DATABASE_URL` set in the shell, unset in the subprocess). For a Python script either use `set -a; source .env; set +a` (auto-export), or have the script load it itself. `scraper/gs1_fetch.py` does the latter via python-dotenv and needs no sourcing at all.
 - Start scraper manually: python3 -m scripts.run_one <chain_id>
 - Check API service: sudo systemctl status scrp-api
 - Check cron: sudo journalctl -u scrp-cron -n 20 --no-pager
