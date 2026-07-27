@@ -98,11 +98,15 @@ own session — it's the immediate next item (see Session sequencing below).
 
 Buildable only after the tier check exists. Listed in suggested build order.
 
-### 2.1 — Flexible dates (±3 free / ±5 paid) — ✅ DONE (FL10A-7a)
+### 2.1 — Flexible dates (±3 free / ±5 paid) — ✅ DONE (FL10A-7a, extended FL10A-7c)
 - **What:** search a date *window*, show the cheapest day. Guest = exact date only;
   free = ±3; paid = ±5. Tier-gated via `TIER_FLEX_DAYS` in auth.py.
 - **Shipped:** `GET /api/flexible-dates` (cache-first read of `price_history`, live SerpApi
   only for misses, write-back on fill) + a date-pill strip on the outbound picker.
+- **FL10A-7c:** optional `flex_days` param lets the user pick a *narrower* window than the
+  tier max (clamped server-side — it can never widen), surfaced as a flexibility dropdown
+  generated from `TIER_FLEX_DAYS`. The pill strip is gone; prices now colour the outbound
+  calendar's day cells with the same cheap/mid/pricey terciles as the 6b heatmap.
 - **API cost:** solved via the cache + a hard `MAX_FRESH_CALLS = 5` per search — the feared
   "11× SerpApi calls" worst case is capped to ≤5 live calls (nearest the requested date);
   the rest return `unavailable` and fill in over time from subsequent searches. The Kiwi/50K-MAU

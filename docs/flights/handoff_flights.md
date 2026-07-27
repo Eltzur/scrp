@@ -385,6 +385,7 @@ Confirmed Supabase test account for exercising the authenticated free/paid path 
 Credentials (`TEST_USER_EMAIL` / `TEST_USER_PASSWORD`) live only in `backend/.env` on Kamatera — never in this repo. Scripts: `xxl-flights/scripts/kamatera/get_test_token.sh` and `set_test_tier.sh`.
 
 - **Get a bearer token:** `ssh dude@185.229.226.190 "~/xxl-flights/scripts/kamatera/get_test_token.sh"` — prints only the `access_token` to stdout (capture with `TOKEN=$(...)`); on failure it prints Supabase's raw response to stderr instead of dying with an opaque JSONDecodeError.
+  - ⚠️ **BROKEN as of FL10A-7c** until `backend/.env` line 5 is repaired — the corrupted `SUPABASE_ANON_KEY` makes `source .env` fail with `No such file or directory`. See the FL10A-7c section for the diagnosis and fix. Workaround used in 7c: read `VITE_SUPABASE_ANON_KEY` from `frontend/.env.production` (the intact key) and do the password grant directly.
 - **Set the test user's tier:** `ssh dude@185.229.226.190 "~/xxl-flights/scripts/kamatera/set_test_tier.sh <free|paid>"` — runs the `UPDATE users SET tier=…` as the postgres superuser. Interactive sudo password each time — deliberately NOT in the passwordless xxl-ops whitelist, since it's rare (once per verification session, not every deploy) and touches raw SQL as superuser.
 
 Typical flow: set tier → get token → `curl -H "Authorization: Bearer $TOKEN" https://fly.xxl.co.il/api/me` to confirm the tier took effect, then hit whichever endpoint is actually under test the same way.
@@ -537,5 +538,36 @@ Typical flow: set tier → get token → `curl -H "Authorization: Bearer $TOKEN"
 - `currency=USD` (guest) → forced ILS.
 - **Byproduct write-back proven downstream:** after the explore call, `TLV→ATH` shows in `/price-calendar` (2026-11-16 = 384) and `TLV→MXP` shows in `/flexible-dates` as `source:cache` (390). DB grew to 53 routes / 185 price_history rows.
 - Note: tier truncation for free(10)/paid(50) is code-identical to the verified guest(5) path (same `TIER_EXPLORE_RESULTS[tier]` slice) but the authenticated HTTP path is not exercised headlessly — same email-confirmation blocker as FL10A-6a/7a.
+- **CLOSED in FL10A-7c:** the authenticated path is now exercised live — paid explore returns **50**, paid flexible-dates returns the full ±5 window. The 6a/7a/7b "authenticated path unexercised" caveat is resolved for guest+paid; only the `free` row remains unverified (needs the interactive-sudo tier flip).
 
 **Next:** roadmap 2.3+ (saved searches / alerts) — auth, tier, price cache, and now a destination-discovery surface all exist.
+
+## Session FL10A-7c — Flexible-date window picker + calendar heatmap
+
+**Goal:** let the user choose *how* flexible they are (instead of always getting the tier maximum), and retire the 7a pill strip in favour of colouring the outbound calendar itself. Extends roadmap item 2.1.
+
+**Shipped (xxl-flights, commit `f5afdeb`):**
+- `flexible_dates.py` — optional `flex_days` query param (`ge=0`). `n = tier_max if flex_days is None else min(flex_days, tier_max)`. The tier cap is a **ceiling, never a floor**: a client can only *narrow* the window (fewer live SerpApi calls), never widen it. Omitting the param preserves the exact pre-7c behaviour.
+- `hooks/useTier.ts` — `TIER_FLEX_DAYS = {guest: 0, free: 3, paid: 5}` exported client-side, mirroring `auth.py`. Server clamps regardless, so this map only decides what the **UI offers** — keep the two in sync.
+- `App.tsx` — flexibility dropdown next to the flex-dates toggle, options **generated** from `TIER_FLEX_DAYS[tier]` (`Array.from({length: …})`), never a hardcoded per-tier array; raising the backend ladder widens the dropdown with no UI edit. Selection state is `null` = "tier default", which **omits** `flex_days` from the request entirely rather than sending the max.
+- **Pill strip removed.** Flexible-date prices now colour the outbound day cells via the existing `rdp-price-cheap/mid/pricey` modifiers, bucketed client-side by a deliberate mirror of `price_calendar.py::_bucket()` (sorted prices, split at `n/3` and `2n/3`, `n < 3` → everything "mid"). Unavailable dates are dropped before bucketing so they get **no modifier and stay uncoloured**. Flex buckets are merged *over* the long-range calendar buckets (`{...calendarDays, ...flexBuckets}`) since they're priced live for that exact route/window.
+- Click-to-select preserved: with the flex heatmap on screen, picking a day in the picker re-runs the search on it (the strip's old behaviour), via the outbound `DateField` `onChange`.
+- Cheapest-date caption retained below the legend — tercile colouring alone can't single out one day, which the strip used to do explicitly.
+- Dropdown changes only refetch a strip that's **already on screen**; otherwise the new window waits for the next search rather than spending SerpApi quota on a dropdown click.
+
+**Verified live (bundle `index-DUlGgrQd.js`, hash-matched against local `dist/`):**
+- Backend restarted clean (`Application startup complete`, no import error — server is Python 3.12.3, so the `int | None` annotation is fine).
+- **Guest (no token):** every `flex_days` value 0/1/2/3/5/10/99 → **1 date**. A guest cannot widen the window. Explore → 5.
+- **Paid (test user):** omitted → **11** (±5, tier default); `flex_days` 0/1/2/3/5 → **1/3/5/7/11** dates (exact narrowing); `flex_days` 10 and 99 → **clamped to 11**. Explore → 50.
+- **Gap:** the `free` row (±3 → 7 dates, explore 10) is *not* live-verified — flipping the test user's tier needs `set_test_tier.sh`, which requires an interactive sudo password by design. Same `min(flex_days, TIER_FLEX_DAYS[tier])` code path proven at both ends of the ladder.
+
+**SERVER CONFIG BUG found (not introduced here, still open):** `~/xxl-flights/backend/.env` line 5 is corrupted —
+`SUPABASE_ANON_KEY=<jwt>>SUPABASE_URL=https://…`. A stray `>` truncated the anon key to **101 chars / 2 JWT segments** (needs 3) and glued a duplicate `SUPABASE_URL=` onto the same line. Consequences:
+- `source .env` treats it as a redirect → `get_test_token.sh` dies with `No such file or directory` on line 5. **The script has never actually run on the live box** — it only landed there with this deploy, which is why 7b never caught it.
+- The truncated key returns `{"message": "Invalid API key"}` from Supabase.
+- The API itself is unaffected (`auth.py` verifies via JWKS, not the anon key), which is why `/me` still works.
+- **Fix:** split line 5 back into `SUPABASE_ANON_KEY=<full 3-segment jwt>` on its own line and drop the duplicate `SUPABASE_URL` (line 4 already has it). The intact key is in `xxl-flights/frontend/.env.production` as `VITE_SUPABASE_ANON_KEY` (208 chars — the anon key is a public client key, shipped in the browser bundle). This session's tier verification used that intact key directly rather than mutating production config.
+
+**Also fixed:** `get_test_token.sh` / `set_test_tier.sh` arrived from git `-rw-rw-r--` (not executable) — `chmod +x` applied on the server. LF endings verified with `od -c` first, per the CLAUDE.md hand-edited-`.sh` rule.
+
+**Next:** repair `backend/.env` line 5, then re-run `get_test_token.sh` to confirm it works unaided; free-tier row of the matrix still open.
