@@ -152,13 +152,15 @@ def _clean_text(value):
     Unescape first (so '&amp;nbsp;' style double-escaping resolves), then
     collapse every run of whitespace to a single space and trim.
 
-    Whitespace-only input becomes an empty string, NOT NULL — turning '' into
-    NULL is a semantic change rather than a formatting one, so it is left for a
-    separate decision.
+    A value that reduces to nothing becomes NULL, not ''. Supplier
+    7290159100000 ships ~1,223 whitespace-only brandnames; storing those as ''
+    makes "no brand" indistinguishable from "brand is the empty string" and
+    forces every downstream check to test both. NULL says absent, once.
     """
     if value is None:
         return None
-    return re.sub(r"\s+", " ", html.unescape(str(value))).strip()
+    cleaned = re.sub(r"\s+", " ", html.unescape(str(value))).strip()
+    return cleaned or None
 
 
 def _as_naive_local(dt):

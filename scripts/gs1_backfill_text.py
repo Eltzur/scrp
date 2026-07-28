@@ -52,13 +52,20 @@ def main():
         log.info("scanned %d rows", len(rows))
 
         changed = []
+        null_conversions = 0
         for r in rows:
             cleaned = {c: _clean_text(r[c]) for c in _TEXT_COLUMNS}
             if any(cleaned[c] != r[c] for c in _TEXT_COLUMNS):
                 changed.append({"id": r["id"], **cleaned})
+                # Blank-to-absent is worth calling out separately: it changes
+                # what the column *means*, not just how it is formatted.
+                if any(cleaned[c] is None and r[c] is not None for c in _TEXT_COLUMNS):
+                    null_conversions += 1
 
         log.info("%d rows need normalisation (%d already clean)",
                  len(changed), len(rows) - len(changed))
+        log.info("  of those, %d convert a blank/whitespace-only value to NULL",
+                 null_conversions)
 
         for sample in changed[:5]:
             before = next(r for r in rows if r["id"] == sample["id"])
