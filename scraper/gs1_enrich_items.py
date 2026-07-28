@@ -43,7 +43,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
 # Only active products may name a customer-facing item.
 _ACTIVE_STATUS = "פעיל"  # 'פעיל'
 
-_SAMPLE_SIZE = 10
+_SAMPLE_SIZE = 20
 
 # One active GS1 row per GTIN: newest modification_timestamp wins, id breaks
 # ties so repeated runs pick the same row. Rows with no description are excluded
@@ -51,6 +51,7 @@ _SAMPLE_SIZE = 10
 _RANKED_CTE = """
     WITH ranked AS (
         SELECT p.gtin,
+               p.gln,
                p.trade_item_description,
                p.modification_timestamp,
                ROW_NUMBER() OVER (
@@ -113,21 +114,25 @@ def main():
         log.info("  of which the name would change           : %s", f"{stats['name_would_change']:,}")
         log.info("  already name_source='gs1'                : %s", f"{stats['already_gs1']:,}")
 
+        # RANDOM() rather than ORDER BY item_code: sorting by code groups the
+        # sample under one GTIN prefix, i.e. one manufacturer, which makes the
+        # sample look far more uniform than the catalogue actually is.
         samples = conn.execute(text(_RANKED_CTE + f"""
-            SELECT i.item_code, i.name_source,
+            SELECT i.item_code, i.name_source, r.gln,
                    i.item_name              AS old_name,
                    r.trade_item_description AS new_name
             FROM items i
             JOIN ranked r ON r.gtin = i.item_code AND r.rn = 1
             WHERE i.item_name IS DISTINCT FROM r.trade_item_description
-            ORDER BY i.item_code
+            ORDER BY RANDOM()
             LIMIT {_SAMPLE_SIZE}
         """), params).mappings().all()
 
         log.info("")
-        log.info("--- sample before/after (%d) ---", len(samples))
+        log.info("--- random sample before/after (%d rows, %d distinct suppliers) ---",
+                 len(samples), len({s["gln"] for s in samples}))
         for s in samples:
-            log.info("  %s [%s]", s["item_code"], s["name_source"])
+            log.info("  %s [src=%s gln=%s]", s["item_code"], s["name_source"], s["gln"])
             log.info("      old: %s", s["old_name"])
             log.info("      new: %s", s["new_name"])
 
