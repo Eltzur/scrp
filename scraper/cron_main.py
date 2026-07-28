@@ -176,6 +176,30 @@ def run_gs1_catalog() -> None:
         log.error(f"GS1 catalog sync FAILED: {exc}", exc_info=True)
 
 
+def run_gs1_enrichment() -> None:
+    """Apply GS1 catalog names onto items.item_name (SU10A-2).
+
+    Runs in --apply mode. Must come AFTER run_gs1_catalog() so the enrichment
+    only ever reads catalog data already synced for tonight, never yesterday's.
+
+    Skips rows where the chain name carries a size/pack token the GS1
+    description drops, and stamps name_source='gs1' on what it writes so
+    canonical.py's guard leaves those rows alone.
+
+    Same failure policy as run_gs1_catalog: lazily imported, logged, never
+    raises — a GS1 problem must not fail the supermarket cron.
+    """
+    try:
+        from scraper.gs1_enrich_items import run as gs1_enrich_run
+        stats = gs1_enrich_run(apply=True, sample_size=0)
+        log.info(
+            f"GS1 item enrichment OK — {stats['updated']} items updated, "
+            f"{stats['skipped_size_loss']} skipped (size token would be lost)."
+        )
+    except Exception as exc:
+        log.error(f"GS1 item enrichment FAILED: {exc}", exc_info=True)
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -257,6 +281,9 @@ def main():
 
     log.info("Running GS1 catalog sync...")
     run_gs1_catalog()
+
+    log.info("Running GS1 item enrichment...")
+    run_gs1_enrichment()
 
     total = time.monotonic() - t_start
     log.info(f"Cron finished in {total:.0f}s. Errors: {errors or 'none'}")

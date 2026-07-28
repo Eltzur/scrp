@@ -88,18 +88,13 @@ _RANKED_CTE = """
 """
 
 
-def main():
-    import argparse
+def run(apply: bool = False, sample_size: int = _SAMPLE_SIZE) -> dict:
+    """Compute the enrichment set, and write it when `apply` is set.
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-    parser = argparse.ArgumentParser(description="Enrich items.item_name from the GS1 catalog")
-    parser.add_argument("--apply", action="store_true",
-                        help="write the changes (default: dry run, writes nothing)")
-    args = parser.parse_args()
-
+    Returns the stats mapping plus 'updated' — rows actually written (0 on a dry
+    run). `sample_size=0` suppresses the before/after dump, which is just noise
+    in a cron log.
+    """
     conn = connect()
     try:
         params = {"active": _ACTIVE_STATUS, "size_re": _SIZE_TOKEN_RE}
@@ -146,30 +141,31 @@ def main():
         # RANDOM() rather than ORDER BY item_code: sorting by code groups the
         # sample under one GTIN prefix, i.e. one manufacturer, which makes the
         # sample look far more uniform than the catalogue actually is.
-        samples = conn.execute(text(_RANKED_CTE + f"""
-            SELECT i.item_code, i.name_source, r.gln,
-                   i.item_name              AS old_name,
-                   r.trade_item_description AS new_name
-            FROM items i
-            JOIN ranked r ON r.gtin = i.item_code AND r.rn = 1
-            WHERE i.item_name IS DISTINCT FROM r.trade_item_description
-              AND {_SIZE_SAFE}
-            ORDER BY RANDOM()
-            LIMIT {_SAMPLE_SIZE}
-        """), params).mappings().all()
+        if sample_size:
+            samples = conn.execute(text(_RANKED_CTE + f"""
+                SELECT i.item_code, i.name_source, r.gln,
+                       i.item_name              AS old_name,
+                       r.trade_item_description AS new_name
+                FROM items i
+                JOIN ranked r ON r.gtin = i.item_code AND r.rn = 1
+                WHERE i.item_name IS DISTINCT FROM r.trade_item_description
+                  AND {_SIZE_SAFE}
+                ORDER BY RANDOM()
+                LIMIT {sample_size}
+            """), params).mappings().all()
 
-        log.info("")
-        log.info("--- random sample before/after (%d rows, %d distinct suppliers) ---",
-                 len(samples), len({s["gln"] for s in samples}))
-        for s in samples:
-            log.info("  %s [src=%s gln=%s]", s["item_code"], s["name_source"], s["gln"])
-            log.info("      old: %s", s["old_name"])
-            log.info("      new: %s", s["new_name"])
+            log.info("")
+            log.info("--- random sample before/after (%d rows, %d distinct suppliers) ---",
+                     len(samples), len({s["gln"] for s in samples}))
+            for s in samples:
+                log.info("  %s [src=%s gln=%s]", s["item_code"], s["name_source"], s["gln"])
+                log.info("      old: %s", s["old_name"])
+                log.info("      new: %s", s["new_name"])
 
-        if not args.apply:
+        if not apply:
             log.info("")
             log.info("DRY RUN — nothing written. Re-run with --apply to commit.")
-            return
+            return {**stats, "updated": 0}
 
         result = conn.execute(text(_RANKED_CTE + f"""
             UPDATE items i
@@ -185,8 +181,23 @@ def main():
         conn.commit()
         log.info("")
         log.info("APPLIED — %s items updated.", f"{result.rowcount:,}")
+        return {**stats, "updated": result.rowcount}
     finally:
         conn.close()
+
+
+def main():
+    import argparse
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    parser = argparse.ArgumentParser(description="Enrich items.item_name from the GS1 catalog")
+    parser.add_argument("--apply", action="store_true",
+                        help="write the changes (default: dry run, writes nothing)")
+    args = parser.parse_args()
+    run(apply=args.apply)
 
 
 if __name__ == "__main__":
