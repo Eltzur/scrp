@@ -112,6 +112,16 @@ _TIMESTAMP_COLUMNS = (
 # and should be stored exactly as the API sends them.
 _TEXT_COLUMNS = ("brandname", "trade_item_description", "group_name")
 
+# Trailing logistics junk GS1 leaks into consumer-facing descriptions.
+# A bare '(N)' at the very END is a case/carton pack count — the observed values
+# are 4, 6, 8, 12, 20, 24, 48 (135 rows at time of writing), not consumer info.
+# Anchored to end-of-string only, and digits-only inside the parens, so a
+# legitimate mid-string parenthetical like 'Biscuits (Perishable)' is untouched.
+_TRAILING_PACK_COUNT = re.compile(r"\s*\(\d+\)\s*$")
+# A stray ' .' left dangling at the end. Requires whitespace before the dot, so
+# a normal sentence-final period attached to a word ('100 מל.') is left alone.
+_TRAILING_DOT = re.compile(r"\s+\.\s*$")
+
 
 def _credentials() -> tuple[str, str]:
     """Read GS1_USERNAME / GS1_PASSWORD, failing loudly rather than 401-ing later."""
@@ -160,7 +170,11 @@ def _clean_text(value):
     if value is None:
         return None
     cleaned = re.sub(r"\s+", " ", html.unescape(str(value))).strip()
-    return cleaned or None
+    # Two passes so 'foo (4) .' and 'foo . (4)' both resolve fully.
+    for _ in range(2):
+        cleaned = _TRAILING_PACK_COUNT.sub("", cleaned)
+        cleaned = _TRAILING_DOT.sub("", cleaned)
+    return cleaned.strip() or None
 
 
 def _as_naive_local(dt):

@@ -45,6 +45,28 @@ _ACTIVE_STATUS = "פעיל"  # 'פעיל'
 
 _SAMPLE_SIZE = 20
 
+# Numeric size / weight / pack-count token: digits followed by a Hebrew unit.
+# Longest alternatives first so 'גרם' wins over 'גר' over 'ג'. Trailing group
+# forces a boundary so the unit is not matched inside a longer word.
+# Passed to Postgres as a bind parameter, not inlined, so it needs no SQL
+# quote-doubling.
+_SIZE_TOKEN_RE = r"""(\d+(?:[.,]\d+)?)\s*(גרם|גר|ק"ג|קג|קילו|מ"ל|מ״ל|מל|ליטר|ליט|יחידות|יח|ס"מ|סמ|מ"ג|מג|ג)(\s|$|[.,)`'"])"""
+
+# Skip any row whose CHAIN name carries a size token the GS1 description drops
+# (e.g. 'אגוזי קשיו טבעיים 220 גר' -> 'קשיו טבעי'). ~1,238 rows.
+#
+# Note this is a conservative choice about the *display string* only: the number
+# still lives in items.quantity, which is populated on 99.9% of these rows, so
+# the size is not actually lost to the app. Retained anyway because the name is
+# what a user reads.
+_SIZE_SAFE = """
+    NOT EXISTS (
+        SELECT 1
+        FROM regexp_matches(i.item_name, :size_re, 'g') AS m
+        WHERE position(m[1] IN r.trade_item_description) = 0
+    )
+"""
+
 # One active GS1 row per GTIN: newest modification_timestamp wins, id breaks
 # ties so repeated runs pick the same row. Rows with no description are excluded
 # outright — writing a NULL over a real chain name would be a regression.
@@ -80,7 +102,7 @@ def main():
 
     conn = connect()
     try:
-        params = {"active": _ACTIVE_STATUS}
+        params = {"active": _ACTIVE_STATUS, "size_re": _SIZE_TOKEN_RE}
 
         total_items = conn.execute(text("SELECT count(*) FROM items")).scalar()
         gs1_total = conn.execute(text("SELECT count(*) FROM gs1.products")).scalar()
@@ -98,9 +120,13 @@ def main():
         log.info("  active (%s)                  : %s", _ACTIVE_STATUS, f"{gs1_active:,}")
         log.info("  distinct usable GTINs          : %s", f"{gs1_usable:,}")
 
-        stats = conn.execute(text(_RANKED_CTE + """
+        stats = conn.execute(text(_RANKED_CTE + f"""
             SELECT count(*)                                                          AS matched,
                    count(*) FILTER (WHERE i.item_name IS DISTINCT FROM r.trade_item_description) AS name_would_change,
+                   count(*) FILTER (WHERE i.item_name IS DISTINCT FROM r.trade_item_description
+                                      AND {_SIZE_SAFE})                              AS will_update,
+                   count(*) FILTER (WHERE i.item_name IS DISTINCT FROM r.trade_item_description
+                                      AND NOT ({_SIZE_SAFE}))                        AS skipped_size_loss,
                    count(*) FILTER (WHERE i.name_source = 'gs1')                     AS already_gs1
             FROM items i
             JOIN ranked r ON r.gtin = i.item_code AND r.rn = 1
@@ -112,6 +138,9 @@ def main():
         log.info("MATCHED items (item_code = active GS1 gtin) : %s  (%.2f%% of items)",
                  f"{matched:,}", pct)
         log.info("  of which the name would change           : %s", f"{stats['name_would_change']:,}")
+        log.info("  SKIPPED — chain name has a size the GS1   : %s", f"{stats['skipped_size_loss']:,}")
+        log.info("            name drops (guarded)")
+        log.info("  WILL UPDATE                              : %s", f"{stats['will_update']:,}")
         log.info("  already name_source='gs1'                : %s", f"{stats['already_gs1']:,}")
 
         # RANDOM() rather than ORDER BY item_code: sorting by code groups the
@@ -124,6 +153,7 @@ def main():
             FROM items i
             JOIN ranked r ON r.gtin = i.item_code AND r.rn = 1
             WHERE i.item_name IS DISTINCT FROM r.trade_item_description
+              AND {_SIZE_SAFE}
             ORDER BY RANDOM()
             LIMIT {_SAMPLE_SIZE}
         """), params).mappings().all()
@@ -141,7 +171,7 @@ def main():
             log.info("DRY RUN — nothing written. Re-run with --apply to commit.")
             return
 
-        result = conn.execute(text(_RANKED_CTE + """
+        result = conn.execute(text(_RANKED_CTE + f"""
             UPDATE items i
             SET item_name = r.trade_item_description,
                 name_source = 'gs1'
@@ -150,6 +180,7 @@ def main():
               AND r.rn = 1
               AND (i.item_name  IS DISTINCT FROM r.trade_item_description
                    OR i.name_source IS DISTINCT FROM 'gs1')
+              AND {_SIZE_SAFE}
         """), params)
         conn.commit()
         log.info("")
