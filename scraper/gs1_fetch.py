@@ -133,20 +133,37 @@ def _pick(row: dict, column: str):
     return None
 
 
+def _as_naive_local(dt):
+    """Drop tzinfo, converting to local wall-clock first.
+
+    The API speaks naive local timestamps ('2026-07-28 05:54:42'), but the
+    watermark round-trips through a TIMESTAMPTZ column and comes back
+    offset-aware (+03:00). Comparing the two raises
+    "can't compare offset-naive and offset-aware datetimes" — which is exactly
+    what broke the first incremental run, and could not have surfaced on a full
+    sweep because there is no stored watermark to seed the comparison with.
+    Normalising to naive local keeps the comparison, the stored watermark and
+    the query literal all in the same frame.
+    """
+    if dt is None or dt.tzinfo is None:
+        return dt
+    return dt.astimezone().replace(tzinfo=None)
+
+
 def _parse_ts(value):
     """Best-effort timestamp parse. Returns None rather than aborting the sweep."""
     if value in (None, "", "null"):
         return None
     if isinstance(value, datetime):
-        return value
+        return _as_naive_local(value)
     text_value = str(value).strip().replace("Z", "+00:00")
     try:
-        return datetime.fromisoformat(text_value)
+        return _as_naive_local(datetime.fromisoformat(text_value))
     except ValueError:
         pass
     for fmt in _TS_FORMATS:
         try:
-            return datetime.strptime(text_value, fmt)
+            return _as_naive_local(datetime.strptime(text_value, fmt))
         except ValueError:
             continue
     log.warning("Unparseable timestamp %r — storing NULL", value)
@@ -250,7 +267,9 @@ def _read_watermark(conn) -> datetime | None:
         ORDER BY started_at DESC
         LIMIT 1
     """)).fetchone()
-    return row[0] if row else None
+    # TIMESTAMPTZ comes back offset-aware; normalise so it can be compared
+    # against the naive timestamps parsed out of the API. See _as_naive_local.
+    return _as_naive_local(row[0]) if row else None
 
 
 def _build_query(watermark: datetime | None) -> str:
