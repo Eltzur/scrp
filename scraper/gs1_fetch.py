@@ -24,9 +24,11 @@ Run against production:
 Force a full re-sweep instead of an incremental one:
     python -m scraper.gs1_fetch --full
 """
+import html
 import json
 import logging
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -105,6 +107,11 @@ _TIMESTAMP_COLUMNS = (
     "modification_timestamp",
 )
 
+# Free-text columns run through _clean_text before upsert. Deliberately excludes
+# the identifier columns (id, product_code, gtin, gln, group_id) — those are keys
+# and should be stored exactly as the API sends them.
+_TEXT_COLUMNS = ("brandname", "trade_item_description", "group_name")
+
 
 def _credentials() -> tuple[str, str]:
     """Read GS1_USERNAME / GS1_PASSWORD, failing loudly rather than 401-ing later."""
@@ -131,6 +138,27 @@ def _pick(row: dict, column: str):
         if key in row:
             return row[key]
     return None
+
+
+def _clean_text(value):
+    """Un-escape HTML entities and normalise whitespace in a free-text field.
+
+    The endpoint returns HTML-escaped text ('Lord &amp; King',
+    'vegan&#039;s choice') and pads values with stray spaces and embedded
+    newlines, which produced phantom distinct brands in the first sweep —
+    'מיה', 'מיה ' and 'מיה\\n' all counted separately, and 'ahmad tea' appeared
+    in three casings/spacings.
+
+    Unescape first (so '&amp;nbsp;' style double-escaping resolves), then
+    collapse every run of whitespace to a single space and trim.
+
+    Whitespace-only input becomes an empty string, NOT NULL — turning '' into
+    NULL is a semantic change rather than a formatting one, so it is left for a
+    separate decision.
+    """
+    if value is None:
+        return None
+    return re.sub(r"\s+", " ", html.unescape(str(value))).strip()
 
 
 def _as_naive_local(dt):
@@ -184,6 +212,8 @@ def _normalise(row) -> dict | None:
     out["product_code"] = str(out["product_code"])
     for col in _TIMESTAMP_COLUMNS:
         out[col] = _parse_ts(out[col])
+    for col in _TEXT_COLUMNS:
+        out[col] = _clean_text(out[col])
     return out
 
 

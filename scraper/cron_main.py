@@ -155,6 +155,27 @@ def ping_supabase() -> None:
         log.warning(f"Supabase keep-alive ping failed: {exc}")
 
 
+def run_gs1_catalog() -> None:
+    """Incremental GS1 Israel catalog sync (SU10A-1).
+
+    Runs in incremental mode: no --full, so it picks up the watermark from the
+    last successful run in gs1.sync_runs and only pulls what changed. Page cap
+    stays at the module default (2000 pages) purely as a runaway backstop — the
+    entire catalogue was 46 pages, so it is not a practical limit.
+
+    A different vertical from the supermarket scrapers, so a GS1 failure is
+    logged but never fails the cron — same treatment as the canonical-name step.
+    Imported lazily (like ping_supabase's requests import) so a problem inside
+    the GS1 module can never stop the price scrape from running.
+    """
+    try:
+        from scraper.gs1_fetch import run as gs1_run
+        rows = gs1_run()
+        log.info(f"GS1 catalog sync OK — {rows} rows upserted.")
+    except Exception as exc:
+        log.error(f"GS1 catalog sync FAILED: {exc}", exc_info=True)
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -233,6 +254,9 @@ def main():
     except Exception as exc:
         log.error(f"Canonical name update failed: {exc}", exc_info=True)
     conn.close()
+
+    log.info("Running GS1 catalog sync...")
+    run_gs1_catalog()
 
     total = time.monotonic() - t_start
     log.info(f"Cron finished in {total:.0f}s. Errors: {errors or 'none'}")
