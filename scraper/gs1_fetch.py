@@ -242,8 +242,14 @@ _UPSERT_SQL = text("""
         :product_status, :effective_date_time, :discontinued_date_time,
         :modification_timestamp, now()
     )
-    ON CONFLICT (id) DO UPDATE SET
-        product_code           = excluded.product_code,
+    -- Conflict on product_code, NOT id. GS1 reissues a changed product under a
+    -- brand-new `id` while keeping the same product_code, so `id` is not a
+    -- stable identity across updates — product_code is. Conflicting on id let
+    -- the reissued row through as a fresh INSERT, which then tripped the
+    -- product_code UNIQUE constraint (SU10A-1, first incremental run). The new
+    -- id is simply adopted onto the existing row.
+    ON CONFLICT (product_code) DO UPDATE SET
+        id                     = excluded.id,
         gtin                   = excluded.gtin,
         gln                    = excluded.gln,
         group_id               = excluded.group_id,
@@ -356,15 +362,29 @@ def run(full: bool = False, dry_run: bool = False, page_size: int = _PAGE_SIZE,
         return total
 
     except Exception:
-        # Leave the watermark alone on failure so the next run re-covers the gap.
-        if not dry_run and run_id is not None:
-            conn.execute(text("""
-                UPDATE gs1.sync_runs
-                SET completed_at = now(), rows_fetched = :n, status = 'error'
-                WHERE id = :id
-            """), {"n": total, "id": run_id})
-            conn.commit()
+        # Log the ORIGINAL failure FIRST. Anything below can raise in its own
+        # right and would otherwise replace it in the traceback — an
+        # InFailedSqlTransaction from the UPDATE masked a real IntegrityError
+        # exactly this way in SU10A-1, destroying the only useful diagnostic.
         log.exception("GS1 sweep failed after %d rows", total)
+
+        # A failed statement poisons the whole transaction: every subsequent
+        # command errors with InFailedSqlTransaction until it is rolled back.
+        # So roll back before trying to record the failure.
+        if not dry_run and run_id is not None:
+            try:
+                conn.rollback()
+                conn.execute(text("""
+                    UPDATE gs1.sync_runs
+                    SET completed_at = now(), rows_fetched = :n, status = 'error'
+                    WHERE id = :id
+                """), {"n": total, "id": run_id})
+                conn.commit()
+            except Exception:
+                # Bookkeeping must never be able to replace the real error.
+                log.exception("Also failed to mark sync_runs id=%s as error", run_id)
+
+        # Watermark deliberately left alone so the next run re-covers the gap.
         raise
     finally:
         conn.close()

@@ -50,6 +50,19 @@ run) and `149.106.243.120` (dev machine, for local testing).
 A single query covers **all suppliers connected to our account** — there is no
 per-supplier loop.
 
+**Authorized scope: 77 suppliers** — 72 originally approved, plus 5 smaller ones
+added directly by GS1. Confirmed against GS1's own supplier list, and matching
+the 77 distinct `gln` values the first full sweep returned.
+
+**No supplier filtering is applied.** The fetch deliberately pulls everything the
+account can see, so a supplier added or removed on GS1's side is picked up with
+no code change. If the distinct-`gln` count drifts from 77, that reflects a
+change in account authorization, not a bug in the sweep — check it with:
+
+```sql
+SELECT count(DISTINCT gln) FROM gs1.products;
+```
+
 ### Response shape
 
 Confirmed against the live endpoint in SU10A-1. Two things to know:
