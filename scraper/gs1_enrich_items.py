@@ -23,12 +23,20 @@ Apply:
     python3 -m scraper.gs1_enrich_items --apply
 """
 import logging
+from pathlib import Path
 
+from dotenv import load_dotenv
 from sqlalchemy import text
 
 from db.db import connect
 
 log = logging.getLogger(__name__)
+
+# Load the repo-root .env ourselves — `source .env` sets shell variables but does
+# NOT export them to a python3 child, so relying on the caller yields a bare
+# "DATABASE_URL environment variable is not set!". Same reasoning as gs1_fetch.py.
+# override=False so an already-exported value still wins.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
 
 # GS1 product_status is a closed set of three Hebrew values:
 #   פעיל (active) / מבוטל (cancelled) / נבדק (under review).
