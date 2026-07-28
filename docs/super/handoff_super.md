@@ -184,6 +184,46 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 
 ---
 
+### Session SU10A-2 (July 27-28, 2026) — GS1 phase-1 catalog pipeline shipped end to end
+
+Delivers the pipeline SU10A-1 scoped as "next session". Fully isolated: no scraper or city-resolution code was touched.
+
+**Shipped:**
+- **Schema** (`db/migrations/su10a1_gs1_catalog.sql`, + `su10a1b_gs1_gln_consolidate.sql`) — new `gs1` schema on the same Postgres, mirroring the `flights` schema-on-same-DB pattern. `gs1.products` (catalog rows, `product_code` UNIQUE, indexed on `gtin`/`gln`/`modification_timestamp`) and `gs1.sync_runs` (watermark + run status). Both migrations carry explicit `GRANT ... TO scrp_app` per the 9d-2 lesson — migrations run as postgres superuser, the app connects as `scrp_app`.
+- **`scraper/gs1_fetch.py`** — sweeps `modification_timestamp` across all connected suppliers, paginates `get_chunks` until an empty page, upserts into `gs1.products`, records a watermark in `gs1.sync_runs` so the next run is incremental. `--full`, `--dry-run`, `--page-size`, `--max-pages` flags. Loads `.env` itself via python-dotenv.
+- **Live data: 22,549 products across 77 suppliers.** Full sweep ran in 27s (46 pages × 500). Incremental runs since returned 3 and 1 rows respectively — the timestamp filter is honoured server-side.
+- **Wired into the 03:00 cron** (`scraper/cron_main.py::run_gs1_catalog`), incremental mode, after the canonical-name step. Lazily imported and exception-wrapped so a GS1 failure logs but **never fails the supermarket scrape** — same treatment as the canonical step and `ping_supabase`.
+- **`scripts/gs1_backfill_text.py`** — one-off backfill, imports `_clean_text` from `gs1_fetch` rather than reimplementing it so the two cannot drift. Dry-run by default.
+
+Commits: `5a46ddf`, `ac2a778`, `7bc5729`, `3afed40`, `5d5369c`, `993bb52`.
+
+**Three real bugs, all found by live testing rather than review — each invisible to the one before:**
+1. **Nested response envelope.** The endpoint returns a *doubly* nested bare list `[[{row},...]]` — `payload[0]` is the row list, not `payload`. Killed the first dry run. Caught only because a diagnostic `sorted()` call raised on it; that line is now type-guarded so a shape surprise logs instead of aborting.
+2. **Timezone-naive vs aware comparison.** The watermark round-trips through a `TIMESTAMPTZ` column and returns offset-aware; the API's timestamps parse naive. Comparing them raises `TypeError`. **Structurally impossible to hit on a first run** — with no stored watermark everything is naive — so it was guaranteed to appear only on run 2. Fixed with `_as_naive_local()`.
+3. **`id` is not the stable key — `product_code` is.** GS1 reissues a changed product under a **brand-new `id`** while keeping its `product_code`. `ON CONFLICT (id)` therefore let the reissue through as a fresh INSERT, which then tripped the `product_code` UNIQUE constraint. Now `ON CONFLICT (product_code) DO UPDATE SET id = excluded.id, ...` — the row updates in place and adopts the new id. Verified: 3 reissued products adopted new ids, 0 rows left on the old ids, total unchanged.
+
+**Also fixed:** the failure handler was running `UPDATE gs1.sync_runs` on an already-aborted transaction, so `InFailedSqlTransaction` **masked the real `IntegrityError`** and left a run stuck in `running`. It now logs the original exception *first*, then rolls back before recording the failure.
+
+**Text normalization** — a supplier survey found the API returns HTML-escaped text (`Lord &amp; King`, `vegan&#039;s choice`) and pads values with stray spaces/newlines, so `מיה`, `מיה ` and `מיה\n` counted as three separate brands. `_clean_text()` now unescapes, collapses whitespace, trims, and maps blank → NULL, applied to `brandname` / `trade_item_description` / `group_name` (identifier columns deliberately excluded). Backfilled 5,498 historical rows: **distinct brands 1,582 → 1,351, i.e. 231 phantom duplicates collapsed**; entity/whitespace counts all to zero; totals unchanged at 22,549 / 77.
+
+**Data inventory — what we actually hold.** Catalog *metadata only*: brand, trade item description, GTIN, GLN, category (`group_id`/`group_name`), status, and effective/discontinued/modification dates. **No images, no nutrition, no kosher certification.** The list response carries a `content` field but it is **empty in 100% of 200 sampled rows** — the richer per-product data presumably requires the per-product detail endpoint, which is **untested and unverified**. That is phase 2, and `full_content` JSONB + `full_content_fetched_at` + the partial index `idx_gs1_products_needs_full_content` already exist unused for it. Phase 1 never writes them, so a re-sweep cannot clobber phase-2 data.
+
+**Operational gotchas worth keeping:**
+- **The database is `xxl_super`, not `scrp`.** The repo, the server directory and the DB role are all `scrp`; the database is not. `psql -d scrp` fails.
+- **`source .env` does not reach python3 subprocesses** — plain `KEY=value`, no `export`. Proven: `DATABASE_URL` set in the shell, unset in the child. Use `set -a; source .env; set +a`, or have the script load it (gs1_fetch does). Noted in CLAUDE.md § Server access.
+- `sudo -u postgres` is **not** in the passwordless whitelist — migrations need an interactive `ssh -t`.
+- **77 suppliers = 72 originally approved + 5 added directly by GS1**, confirmed against GS1's list. No supplier filtering is applied; the fetch pulls everything the account can see, so a drift in `count(DISTINCT gln)` means an authorization change, not a bug.
+- `modification_timestamp` clusters hard: **17,391 of 22,549 rows (77%) fall in a 4-day window in Dec 2025**, and nothing predates 2025-12-28 — a bulk re-stamp/migration on GS1's side, not organic edits. July 2026 shows ~4.5× the Jan–Jun baseline.
+- `product_status` is a closed set of three Hebrew values: `פעיל` (active, 15,226), `מבוטל` (cancelled, 7,320), `נבדק` (under review, 3). A third of the catalogue is cancelled — filter on `פעיל` for sellable products.
+
+**Not yet done — next session:**
+- **GTIN-matching against the `items` table** — the join path back to `items`/`item_code` per the 9d-11 scoping doc. Nothing has been matched yet; `gs1.products` currently sits entirely on its own.
+- **Nothing is customer-facing.** No API endpoint, no UI, no enrichment of existing product data.
+- **Phase 2:** per-product detail endpoint (images/nutrition/kosher) — untested, unverified, may not be entitled under our account.
+- The error-handler rollback path and the cron step inside a *real* 03:00 run are both still unexercised — the GS1 half is proven in isolation only.
+
+---
+
 ### Session 9d-9 (June 5, 2026) — Delta Files + Promo Pipeline + HaziHinam + Missing Stores
 
 #### Final state
