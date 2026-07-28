@@ -166,7 +166,11 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 
 **Confirmed working, end to end:**
 - Domain: `https://hq.gs1ildigital.org` — real, live, Cloudflare-fronted, Symfony backend. This is the ONLY confirmed-working domain for the search endpoint.
-- **Not our domain:** `fe.gs1-retailer.mk101.signature-it.com` (the doc's example for GET PRODUCT/media/fieldInfo endpoints) does not resolve at all — dead or was never real; "mk101" is another client's account code left in a templated doc. `retailer.gs1ildigital.org` (the web UI you log into manually) is a completely different app — hitting the API path there returns a Symfony 404, not our endpoint.
+- **Not our domain:** `fe.gs1-retailer.mk101.signature-it.com` (the doc's example for GET PRODUCT/media/fieldInfo endpoints) does not resolve at all — dead or was never real; "mk101" is another client's account code left in a templated doc. ~~`retailer.gs1ildigital.org` (the web UI you log into manually) is a completely different app — hitting the API path there returns a Symfony 404, not our endpoint.~~
+  - ⚠️ **CORRECTED 2026-07-28 (SU10A-2): the strikethrough above is WRONG and cost the next session a wrong turn.** `retailer.gs1ildigital.org` **does** serve the external API, on the same HTTP Basic Auth credentials as `hq.gs1ildigital.org`. Both of these returned **200 with real data** when probed directly:
+    - `GET https://retailer.gs1ildigital.org/external/product/{product_code}.json?hq=1` — the full product detail record (17 sections incl. Kashrut, ingredients, allergens, nutritional values table, dimensions).
+    - `GET https://retailer.gs1ildigital.org/external/product/{gtin}/files?media=all&default_image=1&hq=1` — product imagery.
+    The original 404 was presumably from a different path, or from before the credential casing bug was fixed. **Do not treat this domain as dead.** See § SU10A-2 for the field shape.
 - Auth mechanism: HTTP Basic Auth, confirmed via `WWW-Authenticate: Basic realm="Secured"` on the 401 challenge.
 - Endpoint verified live: `POST https://hq.gs1ildigital.org/external/app_query/select_query.json` with a `modification_timestamp` query returns real cross-supplier product data (verified against GLN 7290000200002, brand טיב טירת צבי).
 - Credentials stored server-side in `~/scrp/.env` as `GS1_USERNAME` / `GS1_PASSWORD` (uppercase — pre-existing before the new lowercase-default convention below; left as-is since it's now verified working, not touched to avoid re-breaking it).
@@ -206,7 +210,19 @@ Commits: `5a46ddf`, `ac2a778`, `7bc5729`, `3afed40`, `5d5369c`, `993bb52`.
 
 **Text normalization** — a supplier survey found the API returns HTML-escaped text (`Lord &amp; King`, `vegan&#039;s choice`) and pads values with stray spaces/newlines, so `מיה`, `מיה ` and `מיה\n` counted as three separate brands. `_clean_text()` now unescapes, collapses whitespace, trims, and maps blank → NULL, applied to `brandname` / `trade_item_description` / `group_name` (identifier columns deliberately excluded). Backfilled 5,498 historical rows: **distinct brands 1,582 → 1,351, i.e. 231 phantom duplicates collapsed**; entity/whitespace counts all to zero; totals unchanged at 22,549 / 77.
 
-**Data inventory — what we actually hold.** Catalog *metadata only*: brand, trade item description, GTIN, GLN, category (`group_id`/`group_name`), status, and effective/discontinued/modification dates. **No images, no nutrition, no kosher certification.** The list response carries a `content` field but it is **empty in 100% of 200 sampled rows** — the richer per-product data presumably requires the per-product detail endpoint, which is **untested and unverified**. That is phase 2, and `full_content` JSONB + `full_content_fetched_at` + the partial index `idx_gs1_products_needs_full_content` already exist unused for it. Phase 1 never writes them, so a re-sweep cannot clobber phase-2 data.
+**Data inventory — what we actually hold.** Catalog *metadata only*: brand, trade item description, GTIN, GLN, category (`group_id`/`group_name`), status, and effective/discontinued/modification dates. **No images, no nutrition, no kosher certification.** The list response carries a `content` field but it is **empty in 100% of 200 sampled rows** — the richer per-product data lives behind the per-product detail endpoint. That is phase 2, and `full_content` JSONB + `full_content_fetched_at` + the partial index `idx_gs1_products_needs_full_content` already exist unused for it. Phase 1 never writes them, so a re-sweep cannot clobber phase-2 data.
+
+**Phase-2 endpoints PROBED AND CONFIRMED WORKING (2026-07-28)** — both on `retailer.gs1ildigital.org`, same HTTP Basic Auth credentials, both returned **200 with real data**. (This corrects the SU10A-1 claim that the domain 404s — see the correction there.)
+
+- **Detail:** `GET /external/product/{product_code}.json?hq=1` → 12.8 KB, JSON served as `text/html`, a **list of one** with keys `product_info` / `private_data` / `media_assets` / `multi_pack`. `product_info` holds **17 sections**, and everything phase 2 wanted is present:
+  - `Kashrut` (9 fields) — Kosher_for_Passover, Kosher_Supervision_Type (בשרי/חלבי), Rabbinate, Board_of_Supervision, Sabbath_Observing_Plant, Sheviit_Orlah_Tevel. A full certification block with code pairs, not a flag.
+  - `Product_Components_and_Instructions_General` — `Ingredient_Sequence_and_Name` (full ingredient string with percentages), `Allergen_Type_Code_and_Containment` + `..._May_Contain` (coded), `Diet_Information`.
+  - `Nutritional_Values.table` — a structured panel (`numberOfRows: 9`), not free text.
+  - Also useful: `Product_Dimensions.Price_Comparison_Content` (unit-price basis, e.g. `100 גרם`), `Case_or_Carton_Dimensions.Amount_of_Products_in_Package_or_Carton` (**the true source of the trailing `(N)` artifacts phase 1 strips**), storage/transport temperatures, `Produced_in_Israel`, `Parallel_Import`, `Private_Brand`.
+  - `Internal_System_Fields.Product_Status` is a **code pair** (`מבוטל`/6306). The list endpoint exposes only the Hebrew string, so a stable status *code* exists only here.
+- **Media:** `GET /external/product/{gtin}/files?media=all&default_image=1&hq=1` → **`{"file": "<base64>"}`**. **Not a URL — raw base64 JPEG**, 2.7 MB for a single image (EXIF: Canon 5D Mk III, "Yossi Mor Photography").
+  - **Storage is the blocker, not access.** 2.7 MB × 22,549 ≈ **60 GB** if fetched wholesale. `product_image_url` cannot be filled from this without decoding, resizing and self-hosting the bytes.
+  - `media=all` still returned a single `file` key while the detail response reports `media_assets: [3]`. Inspect `media_assets` first — it likely enumerates the assets and may allow requesting a specific or lower-resolution one.
 
 **Operational gotchas worth keeping:**
 - **The database is `xxl_super`, not `scrp`.** The repo, the server directory and the DB role are all `scrp`; the database is not. `psql -d scrp` fails.
@@ -219,7 +235,7 @@ Commits: `5a46ddf`, `ac2a778`, `7bc5729`, `3afed40`, `5d5369c`, `993bb52`.
 **Not yet done — next session:**
 - **GTIN-matching against the `items` table** — the join path back to `items`/`item_code` per the 9d-11 scoping doc. Nothing has been matched yet; `gs1.products` currently sits entirely on its own.
 - **Nothing is customer-facing.** No API endpoint, no UI, no enrichment of existing product data.
-- **Phase 2:** per-product detail endpoint (images/nutrition/kosher) — untested, unverified, may not be entitled under our account.
+- **Phase 2:** per-product detail + media endpoints — **now probed and confirmed working** (see below); building the pipeline is what remains.
 - The error-handler rollback path and the cron step inside a *real* 03:00 run are both still unexercised — the GS1 half is proven in isolation only.
 
 ---
