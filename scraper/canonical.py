@@ -50,6 +50,13 @@ def update_canonical_names(conn) -> dict:
     """
     Recompute canonical item names for all barcodes with 2+ chain entries.
     Updates items.item_name with the majority-voted result.
+
+    Only writes rows whose name_source is 'chain' (or NULL, the pre-column
+    default). Canonical voting derives its answer from chain names, so it is the
+    lowest-priority source; without this guard the nightly cron would silently
+    overwrite every higher-priority name on each run. This matters now that GS1
+    is a second writer to the same column (name_source='gs1').
+
     Commits every 1000 rows.
     Returns {"total_processed": N, "total_updated": N}.
     """
@@ -83,6 +90,9 @@ def update_canonical_names(conn) -> dict:
             UPDATE items SET item_name = :name
             WHERE item_code = :code
               AND (item_name IS NULL OR item_name != :name)
+              -- Lowest-priority writer: never clobber a name owned by a
+              -- higher-priority source (e.g. name_source='gs1').
+              AND (name_source IS NULL OR name_source = 'chain')
         """), {"name": canonical, "code": code})
 
         total_processed += 1

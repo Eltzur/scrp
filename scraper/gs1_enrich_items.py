@@ -1,0 +1,149 @@
+"""Enrich items.item_name from the GS1 catalog, matched on GTIN.
+
+Joins `items.item_code` to `gs1.products.gtin`, restricted to ACTIVE GS1
+products, and writes the GS1 trade_item_description over the chain-derived name,
+stamping name_source='gs1'.
+
+GS1 is the highest-priority name source: it is the manufacturer's own
+description, whereas the canonical name is a majority vote over retailer
+strings. scraper/canonical.py is guarded to never overwrite a row this script
+owns.
+
+Where one GTIN matches several active GS1 rows, the most recently modified wins
+(ties broken by id, so the choice is deterministic).
+
+Deliberately does NOT touch product_image_url: the GS1 list response carries no
+image data at all — `content` is empty in every row sampled — and the
+per-product detail/image endpoints are untested. That is a separate, later task.
+
+Dry run (default — reports, writes nothing):
+    python3 -m scraper.gs1_enrich_items
+
+Apply:
+    python3 -m scraper.gs1_enrich_items --apply
+"""
+import logging
+
+from sqlalchemy import text
+
+from db.db import connect
+
+log = logging.getLogger(__name__)
+
+# GS1 product_status is a closed set of three Hebrew values:
+#   פעיל (active) / מבוטל (cancelled) / נבדק (under review).
+# Only active products may name a customer-facing item.
+_ACTIVE_STATUS = "פעיל"  # 'פעיל'
+
+_SAMPLE_SIZE = 10
+
+# One active GS1 row per GTIN: newest modification_timestamp wins, id breaks
+# ties so repeated runs pick the same row. Rows with no description are excluded
+# outright — writing a NULL over a real chain name would be a regression.
+_RANKED_CTE = """
+    WITH ranked AS (
+        SELECT p.gtin,
+               p.trade_item_description,
+               p.modification_timestamp,
+               ROW_NUMBER() OVER (
+                   PARTITION BY p.gtin
+                   ORDER BY p.modification_timestamp DESC NULLS LAST, p.id DESC
+               ) AS rn
+        FROM gs1.products p
+        WHERE p.product_status = :active
+          AND p.gtin IS NOT NULL
+          AND p.trade_item_description IS NOT NULL
+    )
+"""
+
+
+def main():
+    import argparse
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    parser = argparse.ArgumentParser(description="Enrich items.item_name from the GS1 catalog")
+    parser.add_argument("--apply", action="store_true",
+                        help="write the changes (default: dry run, writes nothing)")
+    args = parser.parse_args()
+
+    conn = connect()
+    try:
+        params = {"active": _ACTIVE_STATUS}
+
+        total_items = conn.execute(text("SELECT count(*) FROM items")).scalar()
+        gs1_total = conn.execute(text("SELECT count(*) FROM gs1.products")).scalar()
+        gs1_active = conn.execute(text(
+            "SELECT count(*) FROM gs1.products WHERE product_status = :active"
+        ), params).scalar()
+        gs1_usable = conn.execute(text("""
+            SELECT count(DISTINCT gtin) FROM gs1.products
+            WHERE product_status = :active AND gtin IS NOT NULL
+              AND trade_item_description IS NOT NULL
+        """), params).scalar()
+
+        log.info("items total                      : %s", f"{total_items:,}")
+        log.info("gs1.products total               : %s", f"{gs1_total:,}")
+        log.info("  active (%s)                  : %s", _ACTIVE_STATUS, f"{gs1_active:,}")
+        log.info("  distinct usable GTINs          : %s", f"{gs1_usable:,}")
+
+        stats = conn.execute(text(_RANKED_CTE + """
+            SELECT count(*)                                                          AS matched,
+                   count(*) FILTER (WHERE i.item_name IS DISTINCT FROM r.trade_item_description) AS name_would_change,
+                   count(*) FILTER (WHERE i.name_source = 'gs1')                     AS already_gs1
+            FROM items i
+            JOIN ranked r ON r.gtin = i.item_code AND r.rn = 1
+        """), params).mappings().one()
+
+        matched = stats["matched"]
+        pct = matched / total_items * 100 if total_items else 0
+        log.info("")
+        log.info("MATCHED items (item_code = active GS1 gtin) : %s  (%.2f%% of items)",
+                 f"{matched:,}", pct)
+        log.info("  of which the name would change           : %s", f"{stats['name_would_change']:,}")
+        log.info("  already name_source='gs1'                : %s", f"{stats['already_gs1']:,}")
+
+        samples = conn.execute(text(_RANKED_CTE + f"""
+            SELECT i.item_code, i.name_source,
+                   i.item_name              AS old_name,
+                   r.trade_item_description AS new_name
+            FROM items i
+            JOIN ranked r ON r.gtin = i.item_code AND r.rn = 1
+            WHERE i.item_name IS DISTINCT FROM r.trade_item_description
+            ORDER BY i.item_code
+            LIMIT {_SAMPLE_SIZE}
+        """), params).mappings().all()
+
+        log.info("")
+        log.info("--- sample before/after (%d) ---", len(samples))
+        for s in samples:
+            log.info("  %s [%s]", s["item_code"], s["name_source"])
+            log.info("      old: %s", s["old_name"])
+            log.info("      new: %s", s["new_name"])
+
+        if not args.apply:
+            log.info("")
+            log.info("DRY RUN — nothing written. Re-run with --apply to commit.")
+            return
+
+        result = conn.execute(text(_RANKED_CTE + """
+            UPDATE items i
+            SET item_name = r.trade_item_description,
+                name_source = 'gs1'
+            FROM ranked r
+            WHERE r.gtin = i.item_code
+              AND r.rn = 1
+              AND (i.item_name  IS DISTINCT FROM r.trade_item_description
+                   OR i.name_source IS DISTINCT FROM 'gs1')
+        """), params)
+        conn.commit()
+        log.info("")
+        log.info("APPLIED — %s items updated.", f"{result.rowcount:,}")
+    finally:
+        conn.close()
+
+
+if __name__ == "__main__":
+    main()
