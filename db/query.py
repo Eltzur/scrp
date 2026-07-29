@@ -135,6 +135,10 @@ _PRICE_SQL = """
 SELECT
     icn.item_code,
     icn.item_name,
+    -- The computed canonical name (canonical.py's chain vote, or GS1
+    -- enrichment). icn.item_name above is one chain's raw scrape and stays
+    -- for names_per_chain; it must NOT be used as the display name.
+    i.item_name   AS canonical_item_name,
     icn.manufacturer_name,
     i.unit_of_measure,
     i.is_weighted,
@@ -165,6 +169,10 @@ _PRICE_SQL_CITY = """
 SELECT
     icn.item_code,
     icn.item_name,
+    -- The computed canonical name (canonical.py's chain vote, or GS1
+    -- enrichment). icn.item_name above is one chain's raw scrape and stays
+    -- for names_per_chain; it must NOT be used as the display name.
+    i.item_name   AS canonical_item_name,
     icn.manufacturer_name,
     i.unit_of_measure,
     i.is_weighted,
@@ -280,7 +288,10 @@ def group_by_product(rows: list[dict]) -> dict[str, dict]:
         if code not in by_item:
             by_item[code] = {
                 "item_code":        code,
-                "canonical_name":   r["item_name"],
+                # items.item_name is the computed canonical name; fall back to
+                # this chain's scraped name only when it is NULL, preserving
+                # the old behaviour for that edge case rather than showing blank.
+                "canonical_name":   r.get("canonical_item_name") or r["item_name"],
                 "manufacturer":     r["manufacturer_name"],
                 "unit_of_measure":  r["unit_of_measure"],
                 "is_weighted":      bool(r["is_weighted"]),
@@ -344,7 +355,9 @@ def group_by_store(rows: list[dict]) -> list[dict]:
         }
         products.append({
             "item_code":            r["item_code"],
-            "canonical_name":       r["item_name"],
+            # Same rule as group_by_product: computed canonical name, with the
+            # per-chain scrape as a NULL fallback only.
+            "canonical_name":       r.get("canonical_item_name") or r["item_name"],
             "manufacturer":         r["manufacturer_name"],
             "unit_of_measure":      r["unit_of_measure"],
             "is_weighted":          bool(r["is_weighted"]),
