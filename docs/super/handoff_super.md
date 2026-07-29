@@ -218,7 +218,11 @@ Commits: `5a46ddf`, `ac2a778`, `7bc5729`, `3afed40`, `5d5369c`, `993bb52`.
 - **GS1 fixed the quota.** Rami (teum.co.il) confirmed the block was account-side and raised our pull allowance. Note the first retest ~1h after his email still returned identical 403s — **the change took some hours to propagate**, so a single failed retest after a support fix does not mean it didn't land.
 - **Detail backfill: COMPLETE.** `scraper/gs1_fetch_detail.py` ran **11,492/11,492, 0 failures, ~2h06m** (7,595s, sustained 1.5–2.3 req/s). `gs1.products.full_content` is now populated on **11,496 / 11,496 targets — 100%**, ~59 MB of JSONB.
 - **Field coverage:** Kashrut block **100%**, `media_assets` **100%**, ingredients **97%**, nutrition table **67%** (a third of products simply publish no panel — treat every field as optional).
-- **Image pull: IN PROGRESS.** `scraper/gs1_fetch_images.py`, resize to 800px / JPEG-80, **raw bytes never written to disk**. ~0.83 GB projected against 14 GB free (raw would be ~32 GB, more than the whole 30 GB volume). 0 failures so far; ~3h at the measured solo rate.
+- **Image pull: ✅ COMPLETE (2026-07-29 18:13).** `scraper/gs1_fetch_images.py`, resize to 800px / JPEG-80, **raw bytes never written to disk**. Final log line: `DONE — fetched=11,450 failed=46 skipped=0 in 11705s` (3h15m). 11,450 files on disk, **0.62 GB / 662 MB, avg 57.1 KB per image**; **24.92 GB of raw bytes were downloaded and never written**. Disk after: 13 GB free (55% used).
+  - **The storage projection held — and beat itself.** Predicted ~0.83 GB, actual **0.62 GB (25% under)**. The resize-in-memory design is what made this feasible at all: raw would have been ~32 GB against a 30 GB volume, i.e. the naive approach could not have completed regardless of time.
+  - **46 failures (0.4%), all benign and fully accounted for:** 39 × `UnidentifiedImageError` (bytes returned are not a decodable image) + 7 × `HTTP 404` ("file is missing on the server"). Both are upstream data defects, not our bugs — no retry is worthwhile.
+  - **Zero 403s across the entire 3h15m run**, confirming Rami's quota fix is durable under sustained load, not just on spot checks.
+  - Rate held at 1.0–1.1/s throughout, matching the "latency-bound, `--rps` never engages" note below.
 - **Rate reality:** image calls are **latency-bound at ~1.1s each solo**, so `--rps` never engages and raising it does nothing. Under concurrent load with another job it degrades to ~3.7s — **don't run two long GS1 jobs at once.**
 - **Gotcha:** the nightly GS1 sync fired *mid-backfill* and reissued row `id`s underneath it (our upsert keys on `product_code` and adopts new ids), leaving a 6-row gap. Harmless — the script skips already-populated rows, so a re-run closed it in 4s. Any long job keyed on `gs1.products.id` is exposed to this.
 
@@ -270,6 +274,7 @@ The field shapes below came from genuine 200 responses and remain accurate. (Thi
 - **Nothing is customer-facing.** No API endpoint, no UI, no enrichment of existing product data.
 - **Phase 2:** per-product detail + media endpoints — the data is confirmed present and rich, but **bulk access is BLOCKED by an account-side limit** (23 product_codes attempted, 1 success). Pending with GS1 support. See the corrected block below before doing any further testing.
 - The error-handler rollback path and the cron step inside a *real* 03:00 run are both still unexercised — the GS1 half is proven in isolation only.
+- **⚠️ The images are fetched, not served — and nothing about that is automatic.** The 11,450 files sit in `~/gs1_images` on the VPS as loose files owned by `dude`. There is **no nginx location block, no static route, no CDN, no `product_image_url` column populated, and no API field exposing them**. Acquisition and serving are two separate pieces of work, and only the first is done. Serving them is its own task: decide a URL scheme, give nginx a web-root it can actually read (the files are outside every current root and `www-data` cannot read `~dude`), map GTIN → filename, and only then surface a field the frontend can consume.
 
 > **Superseded by SU10A-3:** the first two "not yet done" bullets above are now done — GTIN matching shipped (`scraper/gs1_enrich_items.py`, 10,235 items stamped `name_source='gs1'`), and the enriched names are now genuinely customer-facing following the canonical_name fix.
 
@@ -316,7 +321,37 @@ Side effect worth knowing: **this also resolved the ranking-vs-display mismatch 
 
 **Frontend impact checked, nothing changed.** Only `ProductCard.tsx:95` consumes `canonical_name`; its `<h3>` has no truncate class so longer names wrap. **`BasketResults.tsx`'s `truncate max-w-[130px]` is NOT affected** — it renders `item.item_name` from the basket model, a different field. Names grew from avg 20.7 → 25.1 chars (2,772 over 40 chars, 399 over 60, max 191). Nothing overflows; `line-clamp-2` on that `<h3>` is the minimal option if a ceiling is ever wanted.
 
-**Deploy pattern for backend changes:** `git pull` on the server + `sudo /usr/local/bin/xxl-restart.sh scrp-api` (passwordless whitelist). **No frontend deploy** — `deploy_frontend.ps1` only ships `web/dist`. Items 2 and 3 were backend-only; only item 1 needed the frontend deploy.
+**4. Bare numeric tokens were dropped from search (`8af63c4`, backend + API restart).** Direct follow-on from fix 2: removing the percentage filter exposed that `_is_meaningful()` still discarded every all-digit token, so a size in a query was silently thrown away and the search widened to *all* sizes. `במבה 80` returned all 72 Bamba products regardless of gram weight. `_is_meaningful()` is now just `len(token) >= 2` — length is the only remaining noise guard.
+
+**Un-filtering alone was not enough, and this is the part worth remembering.** A bare number went through the same `LIKE '%n%'` as a word, which substring-matches *inside longer numbers*. On live data that made results wrong, not merely wide:
+
+| query | word alone | + numeric via LIKE | false matches |
+|---|---|---|---|
+| `במבה 80` | 72 | 7 | 1 (`…פסח806`) |
+| `חלב 80` | 2,267 | 60 | **35 — 58%**, all 180/280/380 g |
+
+Bare numbers now match on a **digit-run boundary**, `(^|[^0-9])80([^0-9]|$)`, via new `_digit_run_pattern()`; non-numeric tokens keep the existing `LIKE`/`ESCAPE` path untouched. **Anchoring on non-digits rather than Postgres `\y` is deliberate** — `\y` treats `80גרם` as one word and would silently drop real matches, and the catalog genuinely writes quantities glued to the unit (`סוכריות ריבת חלב ללא סוכר 80גרם`). This is the same lesson as fix 2's `LIKE 'חלב%'` gotcha in a new guise: **the obvious boundary primitive is wrong for this data both times.**
+
+Verified live: `במבה 80` → **6 rows, all 80 g** (from 69); `חלב 80` → 25 with all 35 false entries gone; `חלב 3%` still 43 rows, tier-0 ordering intact. **15 passed.** Performance-neutral — no trigram index exists, so the `LIKE` was already a full seq scan over 139K items.
+
+**Known limitation, deliberately not fixed:** relevance *tiering* still uses `\y` when the first token is numeric (e.g. `q="80 גרם"`), so `80גרם` lands in a lower tier. Affects ordering only, never which rows match.
+
+**Deploy pattern for backend changes:** `git pull` on the server + `sudo /usr/local/bin/xxl-restart.sh scrp-api` (passwordless whitelist). **No frontend deploy** — `deploy_frontend.ps1` only ships `web/dist`. Items 2, 3 and 4 were backend-only; only item 1 needed the frontend deploy.
+
+---
+
+### Session close — 2026-07-29
+
+**GS1 image pull finished at 18:13:** `fetched=11,450 failed=46 skipped=0 in 11705s`. 0.62 GB written against an ~0.83 GB projection — **the storage projection held.** Full detail in the SU10A-2 entry above.
+
+**What today actually delivered:** GS1 phase-2 detail backfill at 100% (11,496/11,496), the image pull complete, and four search/display fixes shipped to production.
+
+**⚠️ What is NOT done — these are real future tasks, and none of them happen on their own:**
+
+1. **Images are not served anywhere.** 11,450 JPEGs sit in `~/gs1_images` on the VPS as loose files owned by `dude`. No nginx location, no web-root, no URL scheme, no `product_image_url` populated, no API field. `www-data` cannot even read `~dude`, so this is not a config tweak away from working — it needs a deliberate serving design.
+2. **None of the phase-2 product data is in the UI.** The nutrition tables, kosher/Kashrut certification blocks, ingredient strings and allergen codes pulled today all live in `gs1.products.full_content` as JSONB and **stop there**. No API endpoint reads them, no model exposes them, no component renders them. Fetching the data and surfacing it are separate pieces of work and only the fetch is done.
+
+Both items are frequently assumed to follow automatically from the backfill. **They do not.** The only GS1 data currently reaching a user is the enriched *product name*, via the `canonical_name` fix in item 3 above — nothing else.
 
 ---
 
