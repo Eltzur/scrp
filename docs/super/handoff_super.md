@@ -212,7 +212,28 @@ Commits: `5a46ddf`, `ac2a778`, `7bc5729`, `3afed40`, `5d5369c`, `993bb52`.
 
 **Data inventory — what we actually hold.** Catalog *metadata only*: brand, trade item description, GTIN, GLN, category (`group_id`/`group_name`), status, and effective/discontinued/modification dates. **No images, no nutrition, no kosher certification.** The list response carries a `content` field but it is **empty in 100% of 200 sampled rows** — the richer per-product data lives behind the per-product detail endpoint. That is phase 2, and `full_content` JSONB + `full_content_fetched_at` + the partial index `idx_gs1_products_needs_full_content` already exist unused for it. Phase 1 never writes them, so a re-sweep cannot clobber phase-2 data.
 
-**Phase-2 endpoints PROBED AND CONFIRMED WORKING (2026-07-28)** — both on `retailer.gs1ildigital.org`, same HTTP Basic Auth credentials, both returned **200 with real data**. (This corrects the SU10A-1 claim that the domain 404s — see the correction there.)
+**Phase-2 endpoints — DATA CONFIRMED, BULK ACCESS BLOCKED.**
+
+> ⚠️ **CORRECTED 2026-07-29.** This block originally read "PROBED AND CONFIRMED WORKING (2026-07-28)". That was true of **one product** and wrongly generalised. The field shapes below are accurate — they came from real 200 responses — but **the endpoint cannot currently be used in bulk.**
+>
+> **Tally: 23 distinct product_codes attempted, 1 success.** The single success is the original probe product `IL_7290000200002_7290013906892_1519196448768`, which still returns 200 on every repeat, indefinitely. **Every other product returns `403 ["you have reached to your limit"]`** — a 34-byte body, byte-identical every time, regardless of supplier, product status, or parameters.
+>
+> **Six hypotheses ELIMINATED — do not re-test these:**
+>
+> | hypothesis | how it was ruled out |
+> |---|---|
+> | Credential / casing bug (the SU10A-1 class) | `gs1_fetch_detail.py` imports the *same* `_credentials()` as the working list script; `Authorization` headers are **byte-identical** (same SHA-256), both `Basic`, no whitespace, no casing variants present in env |
+> | `hq` parameter value or presence | tested **all three** states — `?hq=1`, omitted, and `?hq=0` — identical 403 each time |
+> | Per-supplier handshake / release | **17 failures vs 1 success within the same supplier** (`7290000200002`). If access were supplier-scoped they would behave alike |
+> | Missing retailer GLN parameter | tried `&retailer_gln=`, `&gln=`, `&rgln=` with GLN `7292117800007` — all three ignored, identical 403 |
+> | Rate limiting / daily quota | fails on the **first request of a fresh process**; no `X-RateLimit-*` or `Retry-After` headers exist at all; the 403 is origin-generated, not Cloudflare edge; **and it did not reset after 24h** (identical codes retested a day later → same 403, control still 200) |
+> | Wrong `$Domain` / routing | **settled by DNS.** GS1's docs template these endpoints as `https://$Domain/…`; neither our GLN nor our account slug resolves in that pattern — **and the doc's own example host `fe.gs1-retailer.mk101.signature-it.com` does not resolve either**, so that naming scheme is retired, not parameterised. Our two working hosts (`retailer.` and `hq.gs1ildigital.org`) resolve to an **identical Cloudflare IP set**, so we are already reaching GS1's real infrastructure |
+>
+> **GS1 support (Rami, teum.co.il):** confirmed the cause is **account-side** and said they were *"increasing your pull allowance"*. Retested ~1 hour later against 3 fresh product_codes across 3 different suppliers — **still identical 403, no change whatsoever**. As of end of session this is **pending on GS1's end, with no ETA given.**
+>
+> **Next step is a reply to Rami, not more testing.** Everything testable from our side is exhausted. Worth asking specifically: was the increase applied to the **Retailer/detail** scope on `retailer.gs1ildigital.org` for account `xxlmain`? Our **list** endpoint has always worked and returns all 22,549 products, so only `/external/product/{code}.json` is affected. `scraper/gs1_fetch_detail.py` is committed (`b201804`), correct as written, and will work unchanged once entitlement lands — it already supports on-demand fetch-and-cache (`--limit`, skips rows that already have `full_content`) if bulk access is never granted.
+
+The field shapes below came from genuine 200 responses and remain accurate. (This also corrects the SU10A-1 claim that the domain 404s — see the correction there.)
 
 - **Detail:** `GET /external/product/{product_code}.json?hq=1` → 12.8 KB, JSON served as `text/html`, a **list of one** with keys `product_info` / `private_data` / `media_assets` / `multi_pack`. `product_info` holds **17 sections**, and everything phase 2 wanted is present:
   - `Kashrut` (9 fields) — Kosher_for_Passover, Kosher_Supervision_Type (בשרי/חלבי), Rabbinate, Board_of_Supervision, Sabbath_Observing_Plant, Sheviit_Orlah_Tevel. A full certification block with code pairs, not a flag.
@@ -235,7 +256,7 @@ Commits: `5a46ddf`, `ac2a778`, `7bc5729`, `3afed40`, `5d5369c`, `993bb52`.
 **Not yet done — next session:**
 - **GTIN-matching against the `items` table** — the join path back to `items`/`item_code` per the 9d-11 scoping doc. Nothing has been matched yet; `gs1.products` currently sits entirely on its own.
 - **Nothing is customer-facing.** No API endpoint, no UI, no enrichment of existing product data.
-- **Phase 2:** per-product detail + media endpoints — **now probed and confirmed working** (see below); building the pipeline is what remains.
+- **Phase 2:** per-product detail + media endpoints — the data is confirmed present and rich, but **bulk access is BLOCKED by an account-side limit** (23 product_codes attempted, 1 success). Pending with GS1 support. See the corrected block below before doing any further testing.
 - The error-handler rollback path and the cron step inside a *real* 03:00 run are both still unexercised — the GS1 half is proven in isolation only.
 
 > **Superseded by SU10A-3:** the first two "not yet done" bullets above are now done — GTIN matching shipped (`scraper/gs1_enrich_items.py`, 10,235 items stamped `name_source='gs1'`), and the enriched names are now genuinely customer-facing following the canonical_name fix.
