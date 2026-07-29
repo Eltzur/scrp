@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: June 14, 2026 (end of session 9d-10)
+> Last updated: July 29, 2026 (end of session SU10A-3)
 
 ---
 
@@ -84,7 +84,7 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 
 ## 📊 Current Production State
 
-**Last updated: June 14, 2026 (end of session 9d-10)**
+**Last updated: July 29, 2026 (end of session SU10A-3)**
 
 - **14 chains** in registry: Shufersal, Rami Levy, Osher Ad, Victory, Yochananof, Keshet, Carrefour, Tiv Taam, King Store, Shefa Birkat Hashem, Shuk Hayir, Fresh Market, Super Yuda, חצי חינם / Hazi Hinam (added 9d-9)
 - **~1,200 stores** in active_stores.yaml (post 9d-9 additions: Rami Levy +72→98, Yochananof +35→50, Keshet +12→22, Osher Ad +11→23, Hazi Hinam +1→12; Paz + Dor Alon removed in 9d-8)
@@ -94,8 +94,10 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 - **Chain-level parallelism**: `cron_main.py` ThreadPoolExecutor(max_workers=6). Full cron target: <30 min (to be confirmed by next 10:00 IDT run).
 - **City dropdown**: 0.13s response (was 3.7s — prices JOIN removed in 9d-8).
 - **Verification gate**: `active_stores.yaml` (verified to publish PriceFull/Price) is what cron uses; `scheduled_stores.yaml` is the wish-list. See `db/verification_report_9d1.md` for excluded stores.
-- **Canonical names**: OPEN ISSUE — weighted token voting (session 8b) produces chain-specific names but canonical product naming requires GS1 catalog data. Blocked on GS1 IL access. Scheduled for session 10.1.
-- **Search** uses canonical names only, numeric/percentage tokens filtered (session 8b)
+- **GS1 Israel catalog**: ✅ LIVE (SU10A-1/2, July 2026). Own `gs1` schema on the same Postgres. **22,559 products across 77 suppliers**; **11,496 carry full per-product detail** (`gs1.products.full_content` JSONB — kosher/Kashrut certification 100%, media assets 100%, ingredients 97%, nutrition panel 67%); **11,450 product images** fetched and resized (800px/JPEG-80, 0.62 GB). Incremental sweep is wired into the nightly cron, exception-wrapped so a GS1 failure never fails the supermarket scrape. Counts drift upward nightly — re-query rather than trusting this line.
+- **⚠️ Only ONE piece of GS1 data is customer-facing: the product name.** Everything else is fetched and stored but **not surfaced anywhere**. The images sit in `~/gs1_images` on the VPS as loose `dude`-owned files with no nginx route, no web root, no URL scheme and no `product_image_url` populated (`www-data` cannot even read `~dude`). The nutrition, kosher, ingredient and allergen data stops at `full_content` — no endpoint, model or component reads it. **Serving images and surfacing phase-2 data are two real, unstarted tasks; neither follows automatically from the backfill.**
+- **Canonical names**: ✅ RESOLVED (was "blocked on GS1 IL access" — that access is live and the pipeline has run). Weighted token voting (session 8b) plus GS1 enrichment both write `items.item_name`; **10,585 items are stamped `name_source='gs1'`**. SU10A-3 also fixed the display bug that made this invisible: the API was showing one chain's arbitrary raw scrape instead of the computed canonical name, so **87% of the GS1 enrichment was landing in the DB and never reaching a user**. Both ranking and display now read `items.item_name`.
+- **Search** ranks by relevance tier (item_name prefix → whole word → substring → manufacturer-only), then multi-chain, then cheapest, then `item_code` as a deterministic tie-break. **Numeric and percentage tokens are NOT filtered** — they are product attributes and were previously discarded, silently widening every sized query (SU10A-3 reversed this; the old "tokens filtered" behaviour from session 8b is gone). `חלב 3%` narrows to 3% milk; `במבה 80` narrows to 80 g. Bare numbers match on a digit-run boundary so `80` does not match inside `180`. **Length < 2 is the only remaining token filter.**
 - **Known coverage gap**: Bnei Brak has no Carrefour/Yenot Bitan/Mega presence (verified via carrefour.co.il store locator) — accepted, not a bug.
 - **Live site status**: ✅ super.xxl.co.il + xxl.co.il fully operational, all API calls served from Kamatera over HTTPS.
 
