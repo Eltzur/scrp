@@ -16,3 +16,7 @@ python-dotenv==1.2.2
 sqlalchemy==2.0.49
 psycopg2-binary==2.9.12
 gunicorn==25.3.0
+# GS1 product imagery: the API returns base64 originals at up to 4800x4800
+# (~2.8 MB avg). Pillow resizes them to 800px/JPEG-80 before they touch disk —
+# storing raw would need ~32 GB, more than the whole 30 GB volume.
+Pillow==12.3.0
