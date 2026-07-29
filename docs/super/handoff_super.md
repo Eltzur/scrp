@@ -212,11 +212,21 @@ Commits: `5a46ddf`, `ac2a778`, `7bc5729`, `3afed40`, `5d5369c`, `993bb52`.
 
 **Data inventory — what we actually hold.** Catalog *metadata only*: brand, trade item description, GTIN, GLN, category (`group_id`/`group_name`), status, and effective/discontinued/modification dates. **No images, no nutrition, no kosher certification.** The list response carries a `content` field but it is **empty in 100% of 200 sampled rows** — the richer per-product data lives behind the per-product detail endpoint. That is phase 2, and `full_content` JSONB + `full_content_fetched_at` + the partial index `idx_gs1_products_needs_full_content` already exist unused for it. Phase 1 never writes them, so a re-sweep cannot clobber phase-2 data.
 
-**Phase-2 endpoints — DATA CONFIRMED, BULK ACCESS BLOCKED.**
+**Phase-2 endpoints — ✅ RESOLVED AND DELIVERING DATA (2026-07-29).**
 
-> ⚠️ **CORRECTED 2026-07-29.** This block originally read "PROBED AND CONFIRMED WORKING (2026-07-28)". That was true of **one product** and wrongly generalised. The field shapes below are accurate — they came from real 200 responses — but **the endpoint cannot currently be used in bulk.**
+**CURRENT STATE — read this first:**
+- **GS1 fixed the quota.** Rami (teum.co.il) confirmed the block was account-side and raised our pull allowance. Note the first retest ~1h after his email still returned identical 403s — **the change took some hours to propagate**, so a single failed retest after a support fix does not mean it didn't land.
+- **Detail backfill: COMPLETE.** `scraper/gs1_fetch_detail.py` ran **11,492/11,492, 0 failures, ~2h06m** (7,595s, sustained 1.5–2.3 req/s). `gs1.products.full_content` is now populated on **11,496 / 11,496 targets — 100%**, ~59 MB of JSONB.
+- **Field coverage:** Kashrut block **100%**, `media_assets` **100%**, ingredients **97%**, nutrition table **67%** (a third of products simply publish no panel — treat every field as optional).
+- **Image pull: IN PROGRESS.** `scraper/gs1_fetch_images.py`, resize to 800px / JPEG-80, **raw bytes never written to disk**. ~0.83 GB projected against 14 GB free (raw would be ~32 GB, more than the whole 30 GB volume). 0 failures so far; ~3h at the measured solo rate.
+- **Rate reality:** image calls are **latency-bound at ~1.1s each solo**, so `--rps` never engages and raising it does nothing. Under concurrent load with another job it degrades to ~3.7s — **don't run two long GS1 jobs at once.**
+- **Gotcha:** the nightly GS1 sync fired *mid-backfill* and reissued row `id`s underneath it (our upsert keys on `product_code` and adopts new ids), leaving a 6-row gap. Harmless — the script skips already-populated rows, so a re-run closed it in 4s. Any long job keyed on `gs1.products.id` is exposed to this.
+
+<details><summary><b>Historical: the 23-attempt investigation that preceded the fix (kept — still useful if this recurs)</b></summary>
+
+> ⚠️ This block originally read "PROBED AND CONFIRMED WORKING (2026-07-28)". That was true of **one product** and wrongly generalised. The state below is what we saw *before* GS1 lifted the quota.
 >
-> **Tally: 23 distinct product_codes attempted, 1 success.** The single success is the original probe product `IL_7290000200002_7290013906892_1519196448768`, which still returns 200 on every repeat, indefinitely. **Every other product returns `403 ["you have reached to your limit"]`** — a 34-byte body, byte-identical every time, regardless of supplier, product status, or parameters.
+> **Tally: 23 distinct product_codes attempted, 1 success.** The single success was the original probe product `IL_7290000200002_7290013906892_1519196448768`, which returned 200 on every repeat, indefinitely. **Every other product returned `403 ["you have reached to your limit"]`** — a 34-byte body, byte-identical every time, regardless of supplier, product status, or parameters.
 >
 > **Six hypotheses ELIMINATED — do not re-test these:**
 >
@@ -231,7 +241,9 @@ Commits: `5a46ddf`, `ac2a778`, `7bc5729`, `3afed40`, `5d5369c`, `993bb52`.
 >
 > **GS1 support (Rami, teum.co.il):** confirmed the cause is **account-side** and said they were *"increasing your pull allowance"*. Retested ~1 hour later against 3 fresh product_codes across 3 different suppliers — **still identical 403, no change whatsoever**. As of end of session this is **pending on GS1's end, with no ETA given.**
 >
-> **Next step is a reply to Rami, not more testing.** Everything testable from our side is exhausted. Worth asking specifically: was the increase applied to the **Retailer/detail** scope on `retailer.gs1ildigital.org` for account `xxlmain`? Our **list** endpoint has always worked and returns all 22,549 products, so only `/external/product/{code}.json` is affected. `scraper/gs1_fetch_detail.py` is committed (`b201804`), correct as written, and will work unchanged once entitlement lands — it already supports on-demand fetch-and-cache (`--limit`, skips rows that already have `full_content`) if bulk access is never granted.
+> **Outcome:** everything testable from our side was exhausted; the cause was account-side, exactly as the eliminations implied, and GS1 resolved it. `scraper/gs1_fetch_detail.py` (`b201804`) needed **no change at all** once entitlement landed — the code was correct throughout, the blocker was purely permissions. **If a `403 ["you have reached to your limit"]` ever returns, skip straight to GS1 support: all six hypotheses above were tested and eliminated, and the answer was on their side both times.**
+
+</details>
 
 The field shapes below came from genuine 200 responses and remain accurate. (This also corrects the SU10A-1 claim that the domain 404s — see the correction there.)
 
