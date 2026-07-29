@@ -5,7 +5,7 @@ from sqlalchemy.engine import Connection
 
 from api.models import SearchResult, ProductWithPrices, Product, PriceQuote
 from api.dependencies import get_db
-from db.query import find_barcodes, fetch_prices, group_by_product, group_by_store
+from db.query import find_barcodes_with_relevance, fetch_prices, group_by_product, group_by_store
 
 router = APIRouter(tags=["Search"])
 
@@ -21,7 +21,7 @@ def _build_result(
     group_by: Literal["chain", "store"] = "chain",
 ) -> SearchResult:
     words    = query.split()
-    barcodes = find_barcodes(conn, words)
+    barcodes, tiers = find_barcodes_with_relevance(conn, words)
     if not barcodes:
         return SearchResult(query=query, total_matches=0, comparable_count=0, has_more=False, items=[])
 
@@ -44,10 +44,24 @@ def _build_result(
     multi    = {c: p for c, p in by_item.items() if p["chains_count"] >= 2}
     single   = {c: p for c, p in by_item.items() if p["chains_count"] == 1}
 
-    ordered = (
-        sorted(multi.values(),  key=lambda p: p["cheapest_price"] or 0) +
-        ([] if compare_only else sorted(single.values(), key=lambda p: p["cheapest_price"] or 0))
-    )
+    # Relevance is the PRIMARY key; the previous ordering is nested underneath
+    # it rather than replaced — multi-chain still outranks single-chain, and
+    # cheapest still wins, but only among items of equal relevance.
+    # item_code is a final deterministic tie-break: without it, equal-priced
+    # items ordered arbitrarily and offset pages could overlap between requests
+    # (test_search_has_more_and_pagination was already failing on main).
+    pool = [(c, p) for c, p in multi.items()]
+    if not compare_only:
+        pool += [(c, p) for c, p in single.items()]
+
+    ordered = [
+        p for _, p in sorted(pool, key=lambda cp: (
+            tiers.get(cp[0], 3),                        # 1. relevance tier
+            0 if cp[1]["chains_count"] >= 2 else 1,     # 2. multi-chain first
+            cp[1]["cheapest_price"] or 0,               # 3. cheapest first
+            cp[0],                                      # 4. deterministic
+        ))
+    ]
 
     total = len(ordered)
     page  = ordered[offset : offset + limit]

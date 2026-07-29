@@ -5,6 +5,7 @@ No display logic, no HTTP concerns.
 """
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -24,9 +25,23 @@ def _is_meaningful(token: str) -> bool:
     """Return False for tokens that add noise rather than signal to a search."""
     if len(token) < 2:
         return False
-    if token.rstrip("%").isdigit():  # pure numbers and percentage values like "3%"
+    # A percentage is a product attribute (fat content, alcohol, cocoa), not
+    # noise: "חלב 3%" must narrow to 3% milk. Only bare integers are noise.
+    if token.endswith("%"):
+        return True
+    if token.isdigit():
         return False
     return True
+
+
+def _like_escape(s: str) -> str:
+    r"""Escape LIKE wildcards so a literal % or _ in a search word matches itself.
+
+    Without this, now that "3%" survives _is_meaningful, the pattern "%3%%"
+    would make the trailing % a wildcard — matching "300 גרם" and defeating the
+    whole point of keeping the token. Paired with ESCAPE '\' on every LIKE.
+    """
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def build_word_clause(words: list[str], offset: int = 0, prefix: str = "") -> tuple[str, dict]:
@@ -42,25 +57,74 @@ def build_word_clause(words: list[str], offset: int = 0, prefix: str = "") -> tu
     for i, w in enumerate(words, start=offset):
         if not _is_meaningful(w):
             continue
-        pat = f"%{w}%"
-        clauses.append(f"({p}item_name LIKE :w{i}n OR {p}manufacturer_name LIKE :w{i}m)")
+        pat = f"%{_like_escape(w)}%"
+        clauses.append(
+            f"({p}item_name LIKE :w{i}n ESCAPE '\\' "
+            f"OR {p}manufacturer_name LIKE :w{i}m ESCAPE '\\')"
+        )
         params[f"w{i}n"] = pat
         params[f"w{i}m"] = pat
     return " AND ".join(clauses), params
 
 
-def find_barcodes(conn: Connection, words: list[str]) -> list[str]:
-    """Return item_codes matching ALL meaningful words in items.item_name / manufacturer_name."""
+def find_barcodes_with_relevance(
+    conn: Connection, words: list[str]
+) -> tuple[list[str], dict[str, int]]:
+    """Match item_codes AND score each one's relevance to the search.
+
+    Returns (item_codes, {item_code: tier}). Tier is judged on the FIRST
+    meaningful word only — that is the word the user led with, so it carries the
+    intent; later words act as filters, which the WHERE clause already applies.
+
+        0  item_name starts with the word      ("חלב 3%"        for "חלב")
+        1  whole word elsewhere in item_name   ("משקה חלב סויה")
+        2  substring anywhere in item_name     ("שוקולד במילוי חלבה" — mid-word)
+        3  matched on manufacturer_name only; item_name lacks the word entirely
+
+    Tier 1 uses a \\y regex word boundary rather than space-splitting, so a word
+    followed by a comma or parenthesis still counts as a whole word.
+    """
     if not words:
-        return []
+        return [], {}
     clause, params = build_word_clause(words)
     if not clause:
-        return []  # all tokens were filtered out (numbers/percentages/single chars)
-    rows = conn.execute(
-        text(f"SELECT item_code FROM items WHERE {clause}"),
-        params,
-    ).mappings().all()
-    return [r["item_code"] for r in rows]
+        return [], {}  # all tokens were filtered out (bare numbers / single chars)
+
+    first = next((w for w in words if _is_meaningful(w)), None)
+    if first is None:
+        return [], {}
+
+    esc = _like_escape(first)
+    rx = re.escape(first)  # keeps a user-typed regex metacharacter literal
+    params = {
+        **params,
+        # Tier 0 needs a trailing word boundary, NOT a bare LIKE 'word%':
+        # 'חלב%' also matches חלבה (halva), so a halva snack outranked actual
+        # milk for the query חלב. Caught in manual verification.
+        "rel_start": rf"^{rx}\y",
+        "rel_word": rf"\y{rx}\y",
+        "rel_any": f"%{esc}%",
+    }
+
+    rows = conn.execute(text(f"""
+        SELECT item_code,
+               CASE
+                   WHEN item_name ~ :rel_start              THEN 0
+                   WHEN item_name ~ :rel_word               THEN 1
+                   WHEN item_name LIKE :rel_any ESCAPE '\\' THEN 2
+                   ELSE 3
+               END AS tier
+        FROM items
+        WHERE {clause}
+    """), params).mappings().all()
+
+    return [r["item_code"] for r in rows], {r["item_code"]: r["tier"] for r in rows}
+
+
+def find_barcodes(conn: Connection, words: list[str]) -> list[str]:
+    """Return item_codes matching ALL meaningful words in items.item_name / manufacturer_name."""
+    codes, _ = find_barcodes_with_relevance(conn, words)
+    return codes
 
 
 # ---------------------------------------------------------------------------
