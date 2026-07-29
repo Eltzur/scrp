@@ -238,6 +238,53 @@ Commits: `5a46ddf`, `ac2a778`, `7bc5729`, `3afed40`, `5d5369c`, `993bb52`.
 - **Phase 2:** per-product detail + media endpoints — **now probed and confirmed working** (see below); building the pipeline is what remains.
 - The error-handler rollback path and the cron step inside a *real* 03:00 run are both still unexercised — the GS1 half is proven in isolation only.
 
+> **Superseded by SU10A-3:** the first two "not yet done" bullets above are now done — GTIN matching shipped (`scraper/gs1_enrich_items.py`, 10,235 items stamped `name_source='gs1'`), and the enriched names are now genuinely customer-facing following the canonical_name fix.
+
+---
+
+### Session SU10A-3 (July 29, 2026) — Search relevance, canonical-name display bug, header logo
+
+Non-GS1 work. All three items are backend or frontend fixes found while validating the GS1 enrichment.
+
+**1. Header logo → portal (`d177f2a`, frontend deploy).**
+`web/src/components/Header.tsx` wrapped the logo in a React Router `<Link to="/">`, which inside `AppShell` on super.xxl.co.il just re-rendered the current page. Replaced with a plain `<a href="https://xxl.co.il">`. Verified by bundle hash (`index-CWn-zrYr.js`, sha256 matched live vs local) rather than trusting the deploy script's "Done!" line.
+- Note `AppShell` is *not* strictly super-only: App.tsx registers `<Route path="/*" element={<AppShell />} />` unconditionally and only `/` is hostname-switched, so `Header` also renders on e.g. `xxl.co.il/promos`. The link is sensible there too, but it isn't exclusively a super→portal jump.
+- `scripts/deploy_frontend.ps1` now has an scp exit-code check — the old "prints Done! even when scp failed" gotcha is fixed. Still worth verifying by bundle hash.
+
+**2. Search relevance overhaul (`65b700c`, backend + API restart).** Four distinct fixes in `db/query.py` / `api/routers/search.py`:
+- **Tiered relevance ranking.** New `find_barcodes_with_relevance()` scores every match on the FIRST meaningful word: `0` item_name starts with it, `1` whole word elsewhere (`\y` regex boundary), `2` substring anywhere, `3` manufacturer_name only. Tier is now the PRIMARY sort key in `_build_result`, with the old ordering nested under it (multi-chain before single-chain, then cheapest).
+- **Percentage tokens were silently dropped.** `_is_meaningful()` filtered `token.rstrip("%").isdigit()`, so "3%" was discarded and `חלב 3%` returned the same 2,247 results as `חלב`. Now only bare integers are filtered.
+- **LIKE-escaping bug (why fix 2 alone wasn't enough).** `build_word_clause` built `%3%%` with no escaping, so the literal `%` acted as a wildcard and matched "300 גרם". Added `_like_escape()` + `ESCAPE '\'`. Result: `חלב 3%` now returns **41 codes, down from 2,247**.
+- **Non-deterministic pagination.** `test_search_has_more_and_pagination` was **already failing on main** — `_PRICE_SQL` has no `ORDER BY` and the sort had no tie-break, so equal-priced items ordered arbitrarily and offset pages overlapped between requests. Added `item_code` as a final sort key. **Tests went 14 passed/1 failed → 15 passed.**
+- **Gotcha found in manual verification:** tier 0 was first written as `item_name LIKE 'חלב%'`, and `%` matched the ה in **חלבה** — a halva snack ranked #1 for חלב. Fixed to `item_name ~ '^חלב\y'`; moved 89 items from tier 0 to tier 2. **A bare `LIKE 'word%'` is not "starts with that word" in Hebrew** — it's "starts with those letters".
+
+**3. canonical_name display bug (`2fc012d`, backend + API restart) — the significant one.**
+`_PRICE_SQL` selected `icn.item_name` (item_chain_names — one chain's raw scrape), and `group_by_product` assigned it straight to `canonical_name`. The chain chosen was **whichever key came first in the `best` dict** — arbitrary. So `items.item_name`, the column `canonical.py`'s nightly vote *and* the GS1 enrichment both write to, **was never displayed at all**.
+
+Measured across **39,527 multi-chain items**:
+
+| measure | count | share |
+|---|---|---|
+| canonical name matches NO chain name → never visible | 7,487 | 18.9% |
+| >1 distinct chain name → displayed name is an arbitrary pick | 38,077 | 96.3% |
+
+Split by source — this is why it went unnoticed for so long:
+
+| `name_source` | multi-chain items | canonical never displayed |
+|---|---|---|
+| `chain` | 34,929 | 468 (**1.3%**) |
+| `gs1` | 8,838 | 7,703 (**87.2%**) |
+
+Majority-voted names usually *equal* one of the chain names by construction (the vote returns an existing string, it doesn't synthesise one), so the bug was nearly invisible until GS1 introduced names matching no chain string. **87% of the GS1 enrichment was landing correctly in the DB and never reaching a user.**
+
+Fix: both `_PRICE_SQL` and `_PRICE_SQL_CITY` now also select `i.item_name AS canonical_item_name` (no new join — `items i` was already joined), and `group_by_product` + `group_by_store` read `r.get("canonical_item_name") or r["item_name"]` — chain-name fallback only when NULL. `names_per_chain` still reads `icn.item_name`, which is correct per-chain data.
+
+Side effect worth knowing: **this also resolved the ranking-vs-display mismatch structurally.** Relevance tiering reads `items.item_name`; display now reads the same column, so no brand-stripping heuristic is needed. The goat-yogurt case (`7290012645297`) ranks tier 0 for "חלב" because its `items.item_name` is `"חלב הארץ, יוגורט עיזים…"` — the dairy *brand* — and now visibly displays that, so the placement reads as correct rather than arbitrary.
+
+**Frontend impact checked, nothing changed.** Only `ProductCard.tsx:95` consumes `canonical_name`; its `<h3>` has no truncate class so longer names wrap. **`BasketResults.tsx`'s `truncate max-w-[130px]` is NOT affected** — it renders `item.item_name` from the basket model, a different field. Names grew from avg 20.7 → 25.1 chars (2,772 over 40 chars, 399 over 60, max 191). Nothing overflows; `line-clamp-2` on that `<h3>` is the minimal option if a ceiling is ever wanted.
+
+**Deploy pattern for backend changes:** `git pull` on the server + `sudo /usr/local/bin/xxl-restart.sh scrp-api` (passwordless whitelist). **No frontend deploy** — `deploy_frontend.ps1` only ships `web/dist`. Items 2 and 3 were backend-only; only item 1 needed the frontend deploy.
+
 ---
 
 ### Session 9d-9 (June 5, 2026) — Delta Files + Promo Pipeline + HaziHinam + Missing Stores
