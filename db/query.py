@@ -22,16 +22,18 @@ _ACTIVE_STORES_YAML = Path(__file__).parent.parent / "scraper" / "active_stores.
 # ---------------------------------------------------------------------------
 
 def _is_meaningful(token: str) -> bool:
-    """Return False for tokens that add noise rather than signal to a search."""
-    if len(token) < 2:
-        return False
-    # A percentage is a product attribute (fat content, alcohol, cocoa), not
-    # noise: "חלב 3%" must narrow to 3% milk. Only bare integers are noise.
-    if token.endswith("%"):
-        return True
-    if token.isdigit():
-        return False
-    return True
+    """Return False for tokens that add noise rather than signal to a search.
+
+    Numbers in a grocery query are product attributes, not noise, whether or
+    not they carry a unit: "חלב 3%" is fat content and "במבה 80" is grams.
+    Dropping either one silently widens the search to every size of the
+    product — the percentage half of this was fixed first, and uncovered that
+    bare integers were failing exactly the same way.
+
+    Length is the only remaining noise guard: a 1-character token substring-
+    matches most of the catalog and cannot narrow anything.
+    """
+    return len(token) >= 2
 
 
 def _like_escape(s: str) -> str:
@@ -44,10 +46,24 @@ def _like_escape(s: str) -> str:
     return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+def _digit_run_pattern(token: str) -> str:
+    r"""Regex matching a bare number as a whole number, not inside a longer one.
+
+    A plain LIKE '%80%' also matches 180, 280, 380 and "פסח806". Measured on the
+    live catalog before this: "חלב 80" returned 60 rows of which 35 (58%) were
+    180/280/380 g products — the numeric token made the search *wrong*, not just
+    wide. Anchoring on non-digits rather than a \y word boundary is deliberate:
+    \y treats "80גרם" as one word and would drop it, and the catalog really does
+    write quantities glued to the unit that way ("סוכריות ... 80גרם").
+    """
+    return f"(^|[^0-9]){re.escape(token)}([^0-9]|$)"
+
+
 def build_word_clause(words: list[str], offset: int = 0, prefix: str = "") -> tuple[str, dict]:
     """
     SQL WHERE fragment requiring ALL meaningful words in item_name OR manufacturer_name.
-    Skips tokens that are pure numbers, percentages, or shorter than 2 characters.
+    Skips only tokens shorter than 2 characters.
+    Bare numbers match on a digit-run boundary; every other token is a substring.
     Returns (sql_fragment, params_dict) using SQLAlchemy :named params.
     offset avoids param name collisions when the clause is used twice in a UNION.
     """
@@ -57,11 +73,17 @@ def build_word_clause(words: list[str], offset: int = 0, prefix: str = "") -> tu
     for i, w in enumerate(words, start=offset):
         if not _is_meaningful(w):
             continue
-        pat = f"%{_like_escape(w)}%"
-        clauses.append(
-            f"({p}item_name LIKE :w{i}n ESCAPE '\\' "
-            f"OR {p}manufacturer_name LIKE :w{i}m ESCAPE '\\')"
-        )
+        if w.isdigit():
+            pat = _digit_run_pattern(w)
+            clauses.append(
+                f"({p}item_name ~ :w{i}n OR {p}manufacturer_name ~ :w{i}m)"
+            )
+        else:
+            pat = f"%{_like_escape(w)}%"
+            clauses.append(
+                f"({p}item_name LIKE :w{i}n ESCAPE '\\' "
+                f"OR {p}manufacturer_name LIKE :w{i}m ESCAPE '\\')"
+            )
         params[f"w{i}n"] = pat
         params[f"w{i}m"] = pat
     return " AND ".join(clauses), params
@@ -88,7 +110,7 @@ def find_barcodes_with_relevance(
         return [], {}
     clause, params = build_word_clause(words)
     if not clause:
-        return [], {}  # all tokens were filtered out (bare numbers / single chars)
+        return [], {}  # all tokens were filtered out (single chars)
 
     first = next((w for w in words if _is_meaningful(w)), None)
     if first is None:
