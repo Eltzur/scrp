@@ -31,7 +31,20 @@
     "save": "חיסכון של {{amount}} ({{pct}}%) לעומת היקר ביותר",
     "only_at": "בלעדי ב{{chain}}",
     "chains_count": "{{count}} רשתות",
-    "barcode": "{{code}}"
+    "barcode": "{{code}}",
+    "more_info": "מידע נוסף"
+  },
+  "product_modal": {
+    "close": "סגירה",
+    "prices": "מחירים",
+    "kashrut": "כשרות",
+    "nutrition": "ערכים תזונתיים",
+    "ingredients": "רכיבים",
+    "allergens": "אלרגנים",
+    "allergens_contains": "מכיל",
+    "allergens_may_contain": "עלול להכיל",
+    "no_image": "אין תמונה",
+    "no_extra_info": "אין מידע נוסף על מוצר זה"
   },
   "empty": {
     "title": "התחילו להקליד להשוואת מחירים",
@@ -39,7 +52,13 @@
     "no_results_hint": "נסו מונח קצר יותר או בדקו את האיות",
     "try": "נסו:"
   },
-  "suggestions": ["במבה", "חלב תנובה", "קוטג'", "ביצים", "לחם"],
+  "suggestions": [
+    "במבה",
+    "חלב תנובה",
+    "קוטג'",
+    "ביצים",
+    "לחם"
+  ],
   "load_more": {
     "button": "טעינת עוד",
     "loading": "טוען…"

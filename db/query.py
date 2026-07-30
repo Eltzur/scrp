@@ -505,6 +505,194 @@ def fetch_product(conn: Connection, barcode: str) -> list[dict]:
     return fetch_prices(conn, [barcode])
 
 
+# ---------------------------------------------------------------------------
+# GS1 enrichment detail (product modal)
+# ---------------------------------------------------------------------------
+
+_GS1_ACTIVE_STATUS = "פעיל"  # gs1.products.product_status for a sellable product
+
+# One GS1 row per GTIN. Mirrors scraper/gs1_enrich_items.py's ranking so the
+# modal describes the SAME row the enriched name came from — a different tie
+# break would let the name and the nutrition panel disagree. The extra
+# full_content-first term is specific to this view: a row carrying detail always
+# beats a newer row without it, since detail is the entire point of the modal.
+_GS1_RANKED_CTE = """
+    WITH ranked AS (
+        SELECT p.gtin,
+               p.gln,
+               p.brandname,
+               p.trade_item_description,
+               p.group_name,
+               p.full_content,
+               ROW_NUMBER() OVER (
+                   PARTITION BY p.gtin
+                   ORDER BY (p.full_content IS NOT NULL) DESC,
+                            p.modification_timestamp DESC NULLS LAST,
+                            p.id DESC
+               ) AS rn
+        FROM gs1.products p
+        WHERE p.product_status = :active
+          AND p.gtin IS NOT NULL
+    )
+"""
+
+
+def _coded_values(node) -> list[str]:
+    """Flatten GS1's [{"code": ..., "value": ...}] shape to non-empty values.
+
+    Every optional GS1 field is present as a one-element list holding
+    ``{"code": "", "value": ""}`` rather than being absent, so a truthiness test
+    on the field itself is always True and would render a row of blank labels.
+    Emptiness has to be judged on the inner value.
+    """
+    if isinstance(node, str):
+        return [node.strip()] if node.strip() else []
+    if not isinstance(node, list):
+        return []
+    out = []
+    for entry in node:
+        if isinstance(entry, dict):
+            val = (entry.get("value") or "").strip()
+        else:
+            val = str(entry).strip()
+        if val:
+            out.append(val)
+    return out
+
+
+def _first_value(node) -> str | None:
+    vals = _coded_values(node)
+    return vals[0] if vals else None
+
+
+def _parse_nutrition(section: dict) -> dict | None:
+    """Flatten Nutritional_Values.table into label/value/uom rows.
+
+    Returns None when the product publishes no panel — true for roughly a third
+    of the catalogue, so callers must treat absence as normal, not as an error.
+    """
+    table = (section or {}).get("table") or {}
+    rows = table.get("rows")
+    if not isinstance(rows, list) or not rows:
+        return None
+
+    basis = None
+    out = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        fields = row.get("fields")
+        field = fields[0] if isinstance(fields, list) and fields else {}
+        if not isinstance(field, dict):
+            field = {}
+        value = (field.get("value") or "").strip()
+        text_val = (field.get("text") or "").strip()
+        if not value and not text_val:
+            continue  # a declared row the supplier left blank
+        basis = basis or (field.get("col_label") or "").strip() or None
+        out.append({
+            "label": (row.get("label") or "").strip() or None,
+            "value": value or None,
+            "uom":   (field.get("UOM") or "").strip() or None,
+            # `text` is the supplier's own rendering and is the only place
+            # non-numeric declarations survive intact (e.g. "פחות מ-0.5 גרם",
+            # whose value field is the unrenderable "L 0.5").
+            "text":  text_val or None,
+        })
+
+    if not out:
+        return None
+    return {"basis": basis, "rows": out}
+
+
+def _empty_gs1_details(item_code: str) -> dict:
+    """The no-GS1-match shape. Same keys as a hit, so the client branches once."""
+    return {
+        "item_code":    item_code,
+        "has_gs1_data": False,
+        "has_image":    False,
+        "gtin":         None,
+        "brand":        None,
+        "gs1_name":     None,
+        "category":     None,
+        "kashrut":      None,
+        "nutrition":    None,
+        "ingredients":  None,
+        "allergens":    None,
+    }
+
+
+def fetch_gs1_details(conn: Connection, item_code: str, has_image: bool = False) -> dict:
+    """GS1 enrichment detail for one item_code, or a populated 'no data' shape.
+
+    Only ~8% of items carry GS1 detail (11,496 of 138,977), so the miss path is
+    the common case by an order of magnitude and is deliberately NOT an error.
+    `has_image` is passed in rather than probed here to keep this function pure
+    — filesystem access belongs to the caller.
+    """
+    row = conn.execute(text(f"""
+        {_GS1_RANKED_CTE}
+        SELECT r.gtin, r.brandname, r.trade_item_description, r.group_name, r.full_content
+        FROM ranked r
+        WHERE r.gtin = :item_code AND r.rn = 1
+    """), {"active": _GS1_ACTIVE_STATUS, "item_code": item_code}).mappings().first()
+
+    if row is None or not row["full_content"]:
+        base = _empty_gs1_details(item_code)
+        # A GTIN match with no detail still yields an image sometimes; report it.
+        base["has_image"] = has_image
+        if row is not None:
+            base["gtin"]     = row["gtin"]
+            base["brand"]    = row["brandname"]
+            base["gs1_name"] = row["trade_item_description"]
+            base["category"] = row["group_name"]
+        return base
+
+    content = row["full_content"]
+    # The detail endpoint returns a list of one; the fetcher stores it as-is.
+    if isinstance(content, list):
+        content = content[0] if content else {}
+    info = (content or {}).get("product_info") or {}
+
+    kashrut_raw = info.get("Kashrut") or {}
+    kashrut = {
+        "supervision_type":  _first_value(kashrut_raw.get("Kosher_Supervision_Type")),
+        "rabbinate":         _coded_values(kashrut_raw.get("Rabbinate")),
+        "board":             _coded_values(kashrut_raw.get("Board_of_Supervision")),
+        "kosher_for_passover": _first_value(kashrut_raw.get("Kosher_for_Passover")),
+        "passover_remark":   _first_value(kashrut_raw.get("Kosher_for_Passover_Remark")),
+        "israel_milk":       _first_value(kashrut_raw.get("Israel_Milk")),
+        "cooking_israel":    _first_value(kashrut_raw.get("Cooking_Israel")),
+        "sabbath_observing": _first_value(kashrut_raw.get("Sabbath_Observing_Plant")),
+        "sheviit_orlah_tevel": _first_value(kashrut_raw.get("Sheviit_Orlah_Tevel")),
+    }
+    if not any(v for v in kashrut.values()):
+        kashrut = None  # block present but entirely blank — show nothing
+
+    comp = info.get("Product_Components_and_Instructions_General") or {}
+    ingredients = (comp.get("Ingredient_Sequence_and_Name") or "").strip() or None
+    contains    = _coded_values(comp.get("Allergen_Type_Code_and_Containment"))
+    may_contain = _coded_values(comp.get("Allergen_Type_Code_and_Containment_May_Contain"))
+    allergens = (
+        {"contains": contains, "may_contain": may_contain}
+        if (contains or may_contain) else None
+    )
+
+    return {
+        "item_code":    item_code,
+        "has_gs1_data": True,
+        "has_image":    has_image,
+        "gtin":         row["gtin"],
+        "brand":        row["brandname"],
+        "gs1_name":     row["trade_item_description"],
+        "category":     row["group_name"],
+        "kashrut":      kashrut,
+        "nutrition":    _parse_nutrition(info.get("Nutritional_Values")),
+        "ingredients":  ingredients,
+        "allergens":    allergens,
+    }
+
+
 def fetch_coverage(conn: Connection) -> dict:
     """
     Per-chain 72h coverage using fetch_store_runs.

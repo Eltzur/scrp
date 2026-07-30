@@ -31,7 +31,20 @@
     "save": "Save {{amount}} ({{pct}}%) vs most expensive",
     "only_at": "Only at {{chain}}",
     "chains_count": "{{count}} chains",
-    "barcode": "{{code}}"
+    "barcode": "{{code}}",
+    "more_info": "More info"
+  },
+  "product_modal": {
+    "close": "Close",
+    "prices": "Prices",
+    "kashrut": "Kosher certification",
+    "nutrition": "Nutrition facts",
+    "ingredients": "Ingredients",
+    "allergens": "Allergens",
+    "allergens_contains": "Contains",
+    "allergens_may_contain": "May contain",
+    "no_image": "No image",
+    "no_extra_info": "No additional information for this product"
   },
   "empty": {
     "title": "Start typing to compare prices",
@@ -39,7 +52,13 @@
     "no_results_hint": "Try a shorter term or check the spelling",
     "try": "Try:"
   },
-  "suggestions": ["במבה", "חלב תנובה", "cottage", "ביצים", "לחם"],
+  "suggestions": [
+    "במבה",
+    "חלב תנובה",
+    "cottage",
+    "ביצים",
+    "לחם"
+  ],
   "load_more": {
     "button": "Load more",
     "loading": "Loading…"

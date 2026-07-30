@@ -152,3 +152,67 @@ class HotPromoItem(BaseModel):
     store_name: str | None
     city: str | None
     promo_end: str | None
+
+
+class KashrutInfo(BaseModel):
+    """Kosher certification block from GS1. Every field is optional — suppliers
+    fill this in very unevenly, and a blank field means 'not declared', not 'no'."""
+    model_config = ConfigDict(from_attributes=True)
+
+    supervision_type: str | None    = Field(None, description="e.g. בשרי / חלבי / פרווה")
+    rabbinate: list[str]            = Field(default_factory=list, description="Certifying rabbinate(s)")
+    board: list[str]                = Field(default_factory=list, description="Board of supervision (בד\"ץ etc.)")
+    kosher_for_passover: str | None = None
+    passover_remark: str | None     = None
+    israel_milk: str | None         = Field(None, description="חלב ישראל")
+    cooking_israel: str | None      = Field(None, description="בישול ישראל")
+    sabbath_observing: str | None   = Field(None, description="מפעל שומר שבת")
+    sheviit_orlah_tevel: str | None = None
+
+
+class NutritionRow(BaseModel):
+    """One line of the nutrition panel."""
+    model_config = ConfigDict(from_attributes=True)
+
+    label: str | None = Field(None, description="e.g. אנרגיה (קלוריות)")
+    value: str | None = Field(None, description="Raw numeric string; may be a GS1 code like 'L 0.5'")
+    uom: str | None   = Field(None, description="Unit of measure")
+    text: str | None  = Field(None, description="Supplier's own rendering — prefer this for display; it is the only form that survives non-numeric declarations such as 'פחות מ-0.5 גרם'")
+
+
+class NutritionTable(BaseModel):
+    """Nutrition panel. Absent for ~1/3 of products that publish none."""
+    model_config = ConfigDict(from_attributes=True)
+
+    basis: str | None       = Field(None, description="Measurement basis, e.g. ל-100 גרם")
+    rows: list[NutritionRow] = Field(default_factory=list)
+
+
+class AllergenInfo(BaseModel):
+    """Coded allergen declarations."""
+    model_config = ConfigDict(from_attributes=True)
+
+    contains: list[str]    = Field(default_factory=list, description="Declared allergens")
+    may_contain: list[str] = Field(default_factory=list, description="Trace / shared-line warnings")
+
+
+class ProductDetails(BaseModel):
+    """GS1 enrichment detail for one item_code.
+
+    ALWAYS returns 200 with this shape for a known item_code. Only ~8% of items
+    have a GS1 match, so `has_gs1_data: false` is the ordinary case and carries
+    no error — the client should render name + prices and omit the rest.
+    """
+    model_config = ConfigDict(from_attributes=True)
+
+    item_code: str
+    has_gs1_data: bool             = Field(description="False for the ~92% of items with no active GS1 match")
+    has_image: bool                = Field(description="True if GET /product/{item_code}/image will return a JPEG")
+    gtin: str | None               = None
+    brand: str | None              = None
+    gs1_name: str | None           = Field(None, description="GS1 trade_item_description")
+    category: str | None           = None
+    kashrut: KashrutInfo | None    = None
+    nutrition: NutritionTable | None = None
+    ingredients: str | None        = Field(None, description="Full ingredient string, incl. percentages")
+    allergens: AllergenInfo | None = None

@@ -227,3 +227,61 @@ export const getPromosBulk = (
     .post<Record<string, PromoItem[]>>('/promos/bulk', { stores })
     .then(r => r.data)
     .catch(() => ({}));
+
+// --- Product detail (GS1 enrichment) ---------------------------------------
+
+export interface KashrutInfo {
+  supervision_type: string | null;
+  rabbinate: string[];
+  board: string[];
+  kosher_for_passover: string | null;
+  passover_remark: string | null;
+  israel_milk: string | null;
+  cooking_israel: string | null;
+  sabbath_observing: string | null;
+  sheviit_orlah_tevel: string | null;
+}
+
+export interface NutritionRow {
+  label: string | null;
+  value: string | null;
+  uom: string | null;
+  /** Supplier's own rendering — prefer this over value+uom. It is the only form
+   *  that survives non-numeric declarations such as "פחות מ-0.5 גרם", whose
+   *  raw value is the unrenderable GS1 code "L 0.5". */
+  text: string | null;
+}
+
+export interface NutritionTable {
+  basis: string | null;
+  rows: NutritionRow[];
+}
+
+export interface AllergenInfo {
+  contains: string[];
+  may_contain: string[];
+}
+
+export interface ProductDetails {
+  item_code: string;
+  /** False for the ~92% of items with no GS1 match. NOT an error state. */
+  has_gs1_data: boolean;
+  has_image: boolean;
+  gtin: string | null;
+  brand: string | null;
+  gs1_name: string | null;
+  category: string | null;
+  kashrut: KashrutInfo | null;
+  nutrition: NutritionTable | null;
+  ingredients: string | null;
+  allergens: AllergenInfo | null;
+}
+
+export const getProductDetails = (itemCode: string): Promise<ProductDetails> =>
+  http.get<ProductDetails>(`/product/${itemCode}/details`).then(r => r.data);
+
+/** Direct <img src> URL. Returns 404 when we hold no image, so the consuming
+ *  <img> must have an onError placeholder rather than relying on has_image
+ *  alone. */
+export const productImageUrl = (itemCode: string): string =>
+  `${http.defaults.baseURL ?? ''}/product/${itemCode}/image`;

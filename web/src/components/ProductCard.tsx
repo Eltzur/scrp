@@ -1,4 +1,5 @@
-import { Heart, CheckCircle2 } from 'lucide-react';
+import { useState } from 'react';
+import { Heart, CheckCircle2, Plus } from 'lucide-react';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -6,6 +7,7 @@ import { toast } from 'sonner';
 import type { ProductWithPrices, PriceQuote, PromoItem } from '../api/client';
 import type { PromoMap } from './ResultsList';
 import BasketButton from './BasketButton';
+import ProductDetailModal from './ProductDetailModal';
 import { useAuth } from './AuthContext';
 import { useFavorites } from './FavoritesContext';
 
@@ -73,6 +75,7 @@ export default function ProductCard({ item, promosByStore }: Props) {
   const navigate      = useNavigate();
   const { user }      = useAuth();
   const { isFavorited, toggleFavorite } = useFavorites();
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const { product, cheapest_price, most_expensive_price, chains_count } = item;
   const quotes       = cheapestPerChain(item.quotes);
@@ -152,6 +155,18 @@ export default function ProductCard({ item, promosByStore }: Props) {
           <p className="text-gray-400 text-xs mt-0.5" dir="auto">{product.manufacturer}</p>
         )}
       </div>
+
+      {/* More-info trigger. Two visual affordances, ONE control: the label and
+          the + share a single <button>, so there is one tab stop and one
+          accessible name rather than two buttons doing the same thing. */}
+      <button
+        onClick={() => setDetailsOpen(true)}
+        className="self-start inline-flex items-center gap-1.5 text-xs font-medium text-orange-600
+                   hover:text-orange-700 hover:bg-orange-50 rounded-lg px-2 py-1 -ms-2 transition-colors"
+      >
+        <span>{t('product_card.more_info')}</span>
+        <Plus size={13} strokeWidth={2.5} className="rounded-full bg-orange-100 text-orange-600 p-[1px]" />
+      </button>
 
       {/* Price rows */}
       <div className="divide-y divide-gray-100 rounded-lg border border-gray-100 overflow-hidden">
@@ -241,6 +256,10 @@ export default function ProductCard({ item, promosByStore }: Props) {
           is_weighted={product.is_weighted}
         />
       </div>
+
+      {detailsOpen && (
+        <ProductDetailModal item={item} onClose={() => setDetailsOpen(false)} />
+      )}
     </div>
   );
 }
