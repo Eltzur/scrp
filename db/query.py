@@ -1063,6 +1063,10 @@ def fetch_grouped_promos(
                                AND pr.item_code = p.item_code
             WHERE (p.promo_end >= NOW() OR p.promo_end IS NULL)
               AND c.name IS NOT NULL
+              -- A chain -> city -> branch view is about physical branches, so
+              -- online/virtual stores are excluded here exactly as they are in
+              -- the other promo queries.
+              {_ONLINE_STORE_FILTER}
               {where}
         ),
         calc AS (
@@ -1102,6 +1106,7 @@ def count_grouped_promos_dropped(conn: Connection) -> dict:
                                AND pr.item_code = p.item_code
             WHERE (p.promo_end >= NOW() OR p.promo_end IS NULL)
               AND c.name IS NOT NULL
+              {_ONLINE_STORE_FILTER}
         ),
         calc AS (
             SELECT *, CASE WHEN shelf_price IS NOT NULL AND shelf_price > 0
