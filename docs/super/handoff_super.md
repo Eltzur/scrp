@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: July 30, 2026 (end of session SU10A-4)
+> Last updated: August 2, 2026 (end of session SU10A-5)
 
 ---
 
@@ -84,7 +84,7 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 
 ## 📊 Current Production State
 
-**Last updated: July 30, 2026 (end of session SU10A-4)**
+**Last updated: August 2, 2026 (end of session SU10A-5)**
 
 - **14 chains** in registry: Shufersal, Rami Levy, Osher Ad, Victory, Yochananof, Keshet, Carrefour, Tiv Taam, King Store, Shefa Birkat Hashem, Shuk Hayir, Fresh Market, Super Yuda, חצי חינם / Hazi Hinam (added 9d-9)
 - **~1,200 stores** in active_stores.yaml (post 9d-9 additions: Rami Levy +72→98, Yochananof +35→50, Keshet +12→22, Osher Ad +11→23, Hazi Hinam +1→12; Paz + Dor Alon removed in 9d-8)
@@ -99,6 +99,7 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
   - *Historical context for why the image path looks the way it does:* the images still sit in `~/gs1_images` on the VPS as loose `dude`-owned files, with no nginx route, no web root, no URL scheme and no `product_image_url` column populated — `www-data` cannot read `~dude`. Rather than relocating ~11.5K files, the API serves them directly: the filename is the GTIN and the GTIN is the item_code, so it resolves with a `stat()` and no DB hit. That permission gap is worked around, not closed, so a future move to nginx/CDN serving is still an open option.
 - **Canonical names**: ✅ RESOLVED (was "blocked on GS1 IL access" — that access is live and the pipeline has run). Weighted token voting (session 8b) plus GS1 enrichment both write `items.item_name`; **10,585 items are stamped `name_source='gs1'`**. SU10A-3 also fixed the display bug that made this invisible: the API was showing one chain's arbitrary raw scrape instead of the computed canonical name, so **87% of the GS1 enrichment was landing in the DB and never reaching a user**. Both ranking and display now read `items.item_name`.
 - **Search** ranks by relevance tier (item_name prefix → whole word → substring → manufacturer-only), then multi-chain, then cheapest, then `item_code` as a deterministic tie-break. **Numeric and percentage tokens are NOT filtered** — they are product attributes and were previously discarded, silently widening every sized query (SU10A-3 reversed this; the old "tokens filtered" behaviour from session 8b is gone). `חלב 3%` narrows to 3% milk; `במבה 80` narrows to 80 g. Bare numbers match on a digit-run boundary so `80` does not match inside `180`. **Length < 2 is the only remaining token filter.**
+- **Promos**: ✅ REBUILT AND RESOLVED (SU10A-5) — previously flagged "CRITICALLY BROKEN" on a premise that did not survive audit. A UNIQUE (store_fk, item_code, promo_id) constraint makes duplicate rows structurally impossible; the large per-chain counts are legitimate per-store fan-out. **All 14 chains are now populated** (~560K rows, up from 274K) after onboarding the 4 that produced none. Discounts are computed at READ TIME in `db/query.py` — never stored — so unit semantics stay fixable without re-scraping. Served by `GET /promos/grouped` (chain → city → branch, no dedup, no cap). **Never key promo logic on `reward_type` / `DiscountType` / rate or `min_qty` units without per-chain verification** — all three vary by chain.
 - **Known coverage gap**: Bnei Brak has no Carrefour/Yenot Bitan/Mega presence (verified via carrefour.co.il store locator) — accepted, not a bug.
 - **Live site status**: ✅ super.xxl.co.il + xxl.co.il fully operational, all API calls served from Kamatera over HTTPS.
 
@@ -106,7 +107,23 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 
 ## ✅ Sessions Completed
 
+### Session SU10A-5 (August 2, 2026) — city_canonical_review.csv reconciled + promo pipeline rebuilt (all 14 chains live)
+
+**City CSV — resolved.** The "three divergent versions" was largely illusory: the server's uncommitted 1,078-row/9-col file and the reverted c3833a0 were byte-identical apart from CRLF vs LF. Committed the 1,078-row/9-col builder output as baseline (ec1142d) — two builder-versions newer than the old 890-row/7-col version, carrying 13 hand-entered action=delete review decisions that existed nowhere else. Provenance: an undocumented June 2 re-run of build_city_canonical.py (after 256bf68 added chain_id) plus a manual review pass; pinned by git timeline. DB check: all 13 delete-marked stores are already absent from stores — deletes effected, nothing pending. NOTE: the CSV's store_id column is actually stores.id, not stores.store_id.
+
+**Promos — the "60K corrupt Victory rows" narrative was FALSE.** A UNIQUE (store_fk, item_code, promo_id) constraint makes duplicate rows structurally impossible; Victory's 148K rows are legitimate per-store fan-out and among the cleanest data we have. The real defects: (1) 4 chains produced zero promos — the 3 BinaProjects chains (King Store, Shefa, Shuk Hayir) raised NotImplementedError and HaziHinam parsed to zero (variant schema); (2) three unit-mismatch bugs, each caught by a dry-run gate — Rami Levy encodes MinQty as agorot (5990=₪59.90), HaziHinam encodes DiscountRate as basis points (5000=50%), and reward_type is chain-specific (Victory 1+1 = reward_type 10) so it must never be branch logic; (3) the display collapsed per-branch rows via DISTINCT ON and masked garbage with a ≤99% cap.
+
+**Shipped:** new GET /promos/grouped endpoint with discount computed at READ TIME (store raw, stay re-fixable), min_qty-aware, uniform rate>100→/100 basis-points normalization, 0–100 guard, active-only, online-store filter, no dedup/cap (5ef8bc8, d57f728, 20a9ec5, d2afb1c). Grouped chain→city→branch frontend; city logic extracted to web/src/utils/city.ts shared with HomePage. One shared variant parser parser/price_parser.py::parse_promo_file_flat covering Bina+HaziHinam (shared parse_promo_file untouched); PROMO_PARSER hook in base.py. All 14 chains now populated — promos table 274K→560K rows; promo_type populated for the first time (new rows only). db/migrations/su10a5_promos.sql (450cdc1) formalizes the previously ad-hoc table with GRANT incl. the sequence USAGE/SELECT. Dead PROMO_CHAINS/uses_promo() removed (ccd0b56) — never called, and it had falsely named the 4 empty chains as promo-enabled for months, which made this look like a config problem.
+
+**Principle:** store promo fields raw, compute discounts at read time; never key promo logic on reward_type/DiscountType/rate/min_qty units without per-chain verification.
+
+**Carried forward:** King Store 68% catalog match (~1,200 promoted item_codes not in items → bare barcode); 4,091 weighted-goods rows (min_qty<1) excluded — the fresh-produce/meat/fish gap; promo_type still NULL on the original 10 chains (cosmetic). Parser adds still owed for club-only, max-qty, and gift-item-count ("3 for 2") signals.
+
+---
+
 ### Session 9d-10 (June 9-14, 2026) — Store Seeding Fixes + Search Performance + Geolocation + Promo Failure
+
+> **Superseded by SU10A-5:** the "60K corrupt" framing was wrong — see SU10A-5. The rows were legitimate per-store fan-out, not duplication.
 
 #### Completed
 - publishprice.py regex bug fixed (subchain vs store_id capture). Carrefour: 59→148 seeded stores, 380K→827K prices.
@@ -383,6 +400,8 @@ Pushing to GitHub does not update the server. `git push` only updates the remote
 
 **Still the top explicit priority, unchanged:** the promo pipeline remains CRITICALLY BROKEN (Victory alone has 60K+ corrupt rows) and needs a dedicated audit-and-rebuild session — do not attempt incremental fixes.
 
+> **Superseded by SU10A-5:** that rebuild happened and the premise did not survive it. The rows were never corrupt — a UNIQUE constraint makes duplicates impossible, and Victory's data is among the cleanest we hold. The promo pipeline is REBUILT and RESOLVED: all 14 chains populated, discounts computed at read time. See SU10A-5.
+
 **Session naming note:** this session continues the SU10A-* lineage (SU10A-1 → SU10A-4) rather than switching to the CLAUDE.md table's stated SUXX-a format — a deliberate decision made this session, not an oversight. Future sessions should keep using SU10A-N.
 
 ---
@@ -498,7 +517,7 @@ Pushing to GitHub does not update the server. `git push` only updates the remote
 | **9d-7** | StoresFull XML ingestion + cron fixes | ✅ 244 city_norm rows updated from StoresFull XMLs. systemd timeout→infinity + 4G swap (OOM fix). Cron: 429 stores, 2.45M prices, 11 chains. Decision: switch to delta (Price) files for daily scraping. |
 | **9d-8** | city_canonical rebuild + parallel chains + Shufersal 403 fix | ✅ CBS 2024 city_canonical: 1057 stores, 0 NULLs. Paz/Dor Alon removed (422 stores, 887K prices deleted). City dropdown 0.13s (was 3.7s). Chain-level ThreadPoolExecutor(max_workers=6). Shufersal lazy per-store URL fetch (403 fix). |
 | **9d-9** | Delta Price files + per-store parallelism + Hazi Hinam + missing stores | ✅ Delta for 8 chains (Shufersal + 6 Cerberus + Hazi Hinam). STORE_WORKERS=4 — Shufersal 4436s→544s (8×), Tiv Taam 6913s→93s (74×). HaziHinam scraper + seed script. +131 missing stores (Rami Levy +72, Yochananof +35, Keshet +12, Osher Ad +11, Hazi Hinam +1). docs/portals.md. run_one.py --full flag. |
-| **9d-10** | Store seeding fixes + search performance + geolocation + promo failure | ✅ Carrefour 59→148 stores (regex+padding fix). Victory rewritten to laibcatalog REST API (17→69 stores). Shufersal stores 413+844 added. Search 14s→0.28s (covering index + nestloop off + store_fk pre-fetch). IP geolocation city auto-detect. API warmup /health ping. docs/xxl-stack.md created. ❌ Promo pipeline CRITICALLY BROKEN (60K+ corrupt rows) — marked failed, needs full audit and rebuild. |
+| **9d-10** | Store seeding fixes + search performance + geolocation + promo failure | ✅ Carrefour 59→148 stores (regex+padding fix). Victory rewritten to laibcatalog REST API (17→69 stores). Shufersal stores 413+844 added. Search 14s→0.28s (covering index + nestloop off + store_fk pre-fetch). IP geolocation city auto-detect. API warmup /health ping. docs/xxl-stack.md created. ❌ Promo pipeline CRITICALLY BROKEN (60K+ corrupt rows) — marked failed, needs full audit and rebuild. **[Superseded by SU10A-5: the rows were not corrupt; pipeline rebuilt, all 14 chains live.]** |
 
 ---
 

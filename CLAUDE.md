@@ -55,7 +55,9 @@ For all other commands, select "Yes" (one-time approval) unless the command look
 - **Railway is DEAD.** Project runs on Kamatera. Never reference Railway.
 - **Never merge מודיעין עילית with מודיעין-מכבים-רעות** — separate municipalities.
 - **Never merge BE-branded Shufersal stores into the main chain** — pharmacy/beauty only.
-- **Promo data is CORRUPT** — Victory has 60K+ promo rows, data is unreliable. Do not build on promos table until a full audit and re-seed is done in a dedicated session.
+- **Promo data is REBUILT AND CORRECT as of SU10A-5.** (This bullet previously read "Promo data is CORRUPT — Victory has 60K+ promo rows". That was wrong: a UNIQUE (store_fk, item_code, promo_id) constraint makes duplicate rows impossible, and the counts are legitimate per-store fan-out.) All 14 chains are populated and the promos table is safe to build on. Two rules when you do:
+  - **Discounts are computed at READ TIME, never stored.** Store the source fields raw; interpret in `db/query.py`. That is what keeps unit semantics fixable without re-scraping.
+  - **Never key promo logic on `reward_type`, `DiscountType`, `discount_rate` scale, or `min_qty` units without verifying per chain.** All four vary: Rami Levy puts a minimum SPEND in `min_qty` (5990 = ₪59.90), Hazi Hinam publishes `DiscountRate` in basis points (5000 = 50%), and Victory encodes 1+1 as `reward_type` 10 rather than 1. Each of these produced plausible-looking but wrong output before it was caught.
 
 ## City data — IMPORTANT
 - **city_canonical is the source of truth** for all city data (rebuilt from CBS 2024 in 9d-8). Do NOT use city_norm.
