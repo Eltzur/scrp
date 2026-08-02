@@ -56,21 +56,47 @@ def promos_today(
 def promos_grouped(
     chain:  Optional[str] = Query(None, description="Filter by chain_id"),
     city:   Optional[str] = Query(None, description="Filter by city_canonical"),
+    branch: Optional[int] = Query(None, description="Filter to one branch by stores.id (store_fk)"),
+    bands:  Optional[str] = Query(None, description="CSV of discount bands: 0-10,11-25,26-50,51-75,76-99. Lower bound exclusive, upper inclusive — so 0% and 100% match no band"),
+    promo_type: Optional[str] = Query(None, description="CSV of shape classes: gift,bundle,fixed,discount,basket"),
+    q:      Optional[str] = Query(None, description="Search product name (substring) or exact item_code"),
+    ending_within_hours: Optional[int] = Query(None, ge=1, description="Only promos ending within N hours"),
+    sort:   str           = Query("discount", pattern="^(discount|savings|ending)$", description="Row order WITHIN each branch"),
     limit:  int           = Query(500, ge=1, le=5000, description="Max rows returned"),
     offset: int           = Query(0, ge=0, description="Pagination offset"),
     conn: Connection = Depends(get_db),
 ):
     """
-    Every active promo with a derivable per-unit price, ordered
-    chain → city → branch → discount desc. Flat rows; the frontend groups them.
+    Active promos ordered chain → city → branch, then by `sort` within each
+    branch. Flat rows; the frontend groups them. Not deduplicated: the same
+    item_code appears once per branch on purpose.
 
-    Not deduplicated: the same item_code appears once per branch on purpose.
     `discount_price` is the raw bundle total — compare `unit_price` against
-    `shelf_price`, never `discount_price`. Rows whose min_qty is a spend
-    threshold rather than a count (Rami Levy publishes agorot there) yield no
-    unit price and are omitted from this view; they remain in the promos table.
+    `shelf_price`, never `discount_price`.
+
+    Two kinds of row come back, distinguished by `promo_kind`:
+      * `unit`   — has a per-unit price, so unit_price / discount_pct / savings
+                   are populated.
+      * `basket` — a conditional or spend-threshold deal with no derivable unit
+                   price (including rows whose min_qty is a spend figure rather
+                   than a count). unit_price, discount_pct and savings are NULL;
+                   read promo_description and min_purchase_amount instead.
+                   A `bands` filter excludes these by construction, since they
+                   have no percentage to band.
     """
-    return fetch_grouped_promos(conn, chain_id=chain, city=city, limit=limit, offset=offset)
+    return fetch_grouped_promos(
+        conn,
+        chain_id=chain,
+        city=city,
+        branch=branch,
+        bands=[b.strip() for b in bands.split(",") if b.strip()] if bands else None,
+        promo_types=[t.strip() for t in promo_type.split(",") if t.strip()] if promo_type else None,
+        q=q,
+        ending_within_hours=ending_within_hours,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/promos/cities", response_model=list[str], summary="Cities with active promos")

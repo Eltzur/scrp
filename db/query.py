@@ -1027,10 +1027,54 @@ _UNIT_PRICE_SQL = f"""
 """
 
 
+# Discount bands, per the product spec: lower bound EXCLUSIVE, upper INCLUSIVE.
+# Note the consequence — pct 0 and pct 100 fall in no band, so any bands filter
+# also excludes exact-100% giveaways and 0% rows. That is intended: the bands are
+# for "how good is this deal", and both extremes are handled by promo_type.
+_PROMO_BANDS: dict[str, tuple[int, int]] = {
+    "0-10":  (0, 10),
+    "11-25": (10, 25),
+    "26-50": (25, 50),
+    "51-75": (50, 75),
+    "76-99": (75, 99),
+}
+
+# Shape-derived promo classification. Deliberately NOT based on reward_type or
+# DiscountType: both are chain-specific and unreliable (Victory encodes 1+1 as
+# reward_type 10, not 1), so this reads the numbers themselves, which mean the
+# same thing everywhere.
+#
+# `basket` is tested FIRST so that promo_type and promo_kind can never disagree:
+# a spend-threshold row is a basket row whatever else its fields look like.
+_PROMO_TYPE_SQL = f"""
+    CASE
+        WHEN p.min_qty > 24 OR ({_UNIT_PRICE_SQL}) IS NULL           THEN 'basket'
+        WHEN p.discount_price = 0                                     THEN 'gift'
+        WHEN p.min_qty BETWEEN 2 AND 24 AND p.discount_price > 0      THEN 'bundle'
+        WHEN p.min_qty = 1 AND p.discount_price > 0                   THEN 'fixed'
+        WHEN (p.discount_price IS NULL OR p.discount_price = 0)
+         AND ({_EFFECTIVE_RATE_SQL}) > 0                              THEN 'discount'
+        ELSE 'basket'
+    END
+"""
+
+_PROMO_SORTS = {
+    "discount": "discount_pct DESC NULLS LAST",
+    "savings":  "savings DESC NULLS LAST",
+    "ending":   "promo_end_ts ASC NULLS LAST",
+}
+
+
 def fetch_grouped_promos(
     conn: Connection,
     chain_id: str | None = None,
     city: str | None = None,
+    branch: int | None = None,
+    bands: list[str] | None = None,
+    promo_types: list[str] | None = None,
+    q: str | None = None,
+    ending_within_hours: int | None = None,
+    sort: str = "discount",
     limit: int = 500,
     offset: int = 0,
 ) -> list[dict]:
@@ -1040,12 +1084,22 @@ def fetch_grouped_promos(
       * no DISTINCT ON — the same item_code SHOULD appear once per branch, since
         the point of the view is per-branch pricing;
       * no >=10% floor and no <=99 cap — the cap only ever existed to mask the
-        min_qty bug above, and capping now would hide real data;
-      * rows with no derivable unit price are excluded rather than shown wrong.
+        min_qty bug above, and capping now would hide real data.
+
+    Basket promos (spend thresholds and other conditional deals with no derivable
+    per-unit price) are INCLUDED and tagged promo_kind='basket'. They used to be
+    dropped entirely, which hid real offers — a "spend ₪50 get ₪10 off" is a
+    promotion even though no unit price exists for it. They carry NULL
+    unit_price / discount_pct / savings and rely on promo_description plus
+    min_purchase_amount to describe themselves; nothing is fabricated from
+    min_qty, which for these rows is often a spend figure in agorot.
 
     shelf_price is LEFT JOINed and may be NULL (~18% of promo rows have no price
-    row for that store+item); such rows are returned with a NULL discount_pct
-    rather than dropped, since the promo itself is still real.
+    row for that store+item); such rows keep a NULL discount_pct rather than
+    being dropped, since the promo itself is still real.
+
+    Sorting applies WITHIN each branch — the chain -> city -> branch grouping is
+    always the outer ordering, or the client's grouped rendering would break.
     """
     params: dict = {"limit": limit, "offset": offset}
     where = ""
@@ -1055,6 +1109,45 @@ def fetch_grouped_promos(
     if city:
         where += " AND s.city_canonical = :city"
         params["city"] = city
+    if branch is not None:
+        where += " AND p.store_fk = :branch"
+        params["branch"] = branch
+    if ending_within_hours is not None:
+        # NULL promo_end means "no end date", which is the opposite of ending
+        # soon, so those rows must not qualify.
+        where += (" AND p.promo_end IS NOT NULL"
+                  " AND p.promo_end <= NOW() + make_interval(hours => :ending_hours)")
+        params["ending_hours"] = ending_within_hours
+    if q:
+        # Name match OR an exact barcode. Exact rather than LIKE on item_code:
+        # a partial barcode match is never what the user meant, and would drag
+        # in unrelated products that merely share a digit run.
+        where += " AND (i.item_name ILIKE :q_like OR p.item_code = :q_exact)"
+        params["q_like"] = f"%{q}%"
+        params["q_exact"] = q
+
+    # Post-computation filters — these reference derived columns, so they belong
+    # after the calc CTE rather than in the base WHERE.
+    having = ""
+    if bands:
+        clauses = []
+        for i, b in enumerate(bands):
+            if b not in _PROMO_BANDS:
+                continue
+            lo, hi = _PROMO_BANDS[b]
+            clauses.append(f"(discount_pct > :band_lo{i} AND discount_pct <= :band_hi{i})")
+            params[f"band_lo{i}"] = lo
+            params[f"band_hi{i}"] = hi
+        if clauses:
+            having += f" AND ({' OR '.join(clauses)})"
+    if promo_types:
+        valid = [t for t in promo_types if t in
+                 ("gift", "bundle", "fixed", "discount", "basket")]
+        if valid:
+            having += " AND promo_type = ANY(:promo_types)"
+            params["promo_types"] = valid
+
+    order_by = _PROMO_SORTS.get(sort, _PROMO_SORTS["discount"])
 
     rows = conn.execute(text(f"""
         WITH base AS (
@@ -1072,9 +1165,12 @@ def fetch_grouped_promos(
                 -- encodes the free half of a buy-one-get-one as
                 -- discount_price=0, which would otherwise render as "₪0.00".
                 p.reward_type,
+                p.min_purchase_amount,
                 p.promo_description,
                 to_char(p.promo_start, 'YYYY-MM-DD"T"HH24:MI:SS') AS promo_start,
                 to_char(p.promo_end,   'YYYY-MM-DD"T"HH24:MI:SS') AS promo_end,
+                p.promo_end AS promo_end_ts,
+                {_PROMO_TYPE_SQL} AS promo_type,
                 {_UNIT_PRICE_SQL} AS unit_price
             FROM promos p
             JOIN stores s      ON s.id = p.store_fk
@@ -1092,24 +1188,37 @@ def fetch_grouped_promos(
               {where}
         ),
         calc AS (
+            -- No longer filters out unit_price IS NULL: those are the basket
+            -- rows, which are now surfaced rather than silently dropped.
             SELECT b.*,
-                   CASE WHEN b.shelf_price IS NOT NULL AND b.shelf_price > 0
+                   (b.promo_type = 'basket') AS is_basket,
+                   CASE WHEN b.promo_type <> 'basket'
+                         AND b.shelf_price IS NOT NULL AND b.shelf_price > 0
                         THEN round((((b.shelf_price - b.unit_price)
                                      / b.shelf_price) * 100)::numeric)
-                   END AS discount_pct
+                   END AS discount_pct,
+                   CASE WHEN b.promo_type <> 'basket' AND b.shelf_price IS NOT NULL
+                        THEN round((b.shelf_price - b.unit_price)::numeric, 2)
+                   END AS savings
             FROM base b
-            WHERE b.unit_price IS NOT NULL
         )
         SELECT chain_id, chain_name, city, branch, item_code, product_name,
                shelf_price, min_qty, discount_price, reward_type,
-               round(unit_price::numeric, 2) AS unit_price,
-               discount_pct, promo_description, promo_start, promo_end
+               min_purchase_amount, promo_type,
+               CASE WHEN is_basket THEN 'basket' ELSE 'unit' END AS promo_kind,
+               -- Basket rows have no meaningful per-unit figure; returning one
+               -- would invite the client to render a price that does not exist.
+               CASE WHEN is_basket THEN NULL
+                    ELSE round(unit_price::numeric, 2) END AS unit_price,
+               discount_pct, savings,
+               promo_description, promo_start, promo_end
         FROM calc
         -- Guard: a pct outside 0-100 means the source data is bad (promo dearer
-        -- than shelf, or a negative shelf price). NULL is kept: that is simply
-        -- "no shelf price to compare", not a data error.
-        WHERE discount_pct IS NULL OR discount_pct BETWEEN 0 AND 100
-        ORDER BY chain_name, city NULLS LAST, branch, discount_pct DESC NULLS LAST
+        -- than shelf, or a negative shelf price). NULL is kept: that is either
+        -- "no shelf price to compare" or a basket row, neither a data error.
+        WHERE (discount_pct IS NULL OR discount_pct BETWEEN 0 AND 100)
+          {having}
+        ORDER BY chain_name, city NULLS LAST, branch, {order_by}
         LIMIT :limit OFFSET :offset
     """), params).mappings().all()
     return [dict(r) for r in rows]
