@@ -51,19 +51,12 @@ DELTA_CHAINS: set[str] = {
 }
 
 
-PROMO_CHAINS: set[str] = {
-    "7290027600007",  # Shufersal
-    "7290058140886",  # Rami Levy
-    "7290696200003",  # Victory  (was mislabeled "Osher Ad" — Osher Ad is 7290103152017)
-    "7290803800003",  # Yochananof
-    "7290785400000",  # Keshet
-    "7290058134977",  # Shefa           — flat variant (bina-projects)
-    "7290058148776",  # Shuk Hayir      — flat variant (bina-projects)
-    "7290058177776",  # Super Yuda
-    "7290700100008",  # Hazi Hinam      — flat variant (own portal)
-    "7290058108879",  # King Store      — flat variant (bina-projects)
-    "7290876100000",  # Fresh Market
-}
+# NOTE: there is deliberately no PROMO_CHAINS list here. Promo ingestion is not
+# opt-in per chain — the promo block in scraper/base.py runs for every chain and
+# simply does nothing when that chain's scraper has no build_promo_index. A
+# membership list existed until SU10A-5 but was never consulted by any code
+# path, so it silently implied a control that did not exist. Whether a chain
+# yields promos is determined by its scraper, not by config.
 
 
 def get_scraper(chain_id: str):
@@ -75,8 +68,3 @@ def get_scraper(chain_id: str):
 def uses_delta(chain_id: str) -> bool:
     """Return True if this chain should use Price (delta) files instead of PriceFull."""
     return chain_id in DELTA_CHAINS
-
-
-def uses_promo(chain_id: str) -> bool:
-    """Return True if this chain publishes Promo files."""
-    return chain_id in PROMO_CHAINS
