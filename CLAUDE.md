@@ -88,6 +88,7 @@ For all other commands, select "Yes" (one-time approval) unless the command look
 - Never amend + force-push to fix a BOM after the fact
 - Editing a *.sh file directly (nano, VS Code) on a fresh clone can leave the WORKING TREE copy CRLF even though .gitattributes normalizes the committed blob — verify with `od -c file | head` before chmod +x if a script was hand-edited rather than written fresh; force-checkout to fix if it's wrong.
 - **core.fileMode=false on the Windows dev machine means exec bits never commit from there.** A `chmod +x` in a Windows working tree is invisible to git under this setting — the file commits as 100644 regardless. Any new .sh script must have its exec bit set and committed from a machine/session where core.fileMode is true (e.g. via `git update-index --chmod=+x <file>` explicitly, which forces the bit through regardless of the setting), or verify with `git ls-files -s <file>` after commit — do not trust a local chmod to have "taken."
+- Before `git add -A` on a feature commit, check `git status` first — a stray modified/untracked file elsewhere in the working tree can ride along into an unrelated commit (happened in SU10A-4: a city-data CSV and a duplicate handoff doc both got swept into a product-modal commit).
 
 ## Hosting topology
 - **Kamatera (185.229.226.190) is PRIMARY for ALL xxl.co.il surfaces**, all served by nginx on Kamatera:
@@ -102,6 +103,12 @@ For all other commands, select "Yes" (one-time approval) unless the command look
 .\scripts\deploy_frontend.ps1
 - Builds web/ and scp's the output to /var/www/super.xxl.co.il on Kamatera. Because the xxl.co.il nginx block shares that same root, this updates BOTH super.xxl.co.il AND the portal (xxl.co.il / www.xxl.co.il) at once.
 - The portal is NOT deployed via a Hostinger hPanel zip upload — that path is dead.
+
+## Deploy backend
+After any backend code change is committed and pushed:
+1. `ssh dude@185.229.226.190 "cd ~/scrp && git pull origin main"` — **do not skip this.** `git push` only updates GitHub; the server runs whatever it last pulled. Restarting the service without pulling first just relaunches the old code (this caused a multi-hour production incident in SU10A-4).
+2. `ssh dude@185.229.226.190 "sudo /usr/local/bin/xxl-restart.sh scrp-api"`
+3. Verify with a curl against the actual new/changed endpoint, not just a health check — confirm the specific behavior that changed.
 
 ## Deploy flights backend + frontend
 The flights vertical (xxl-flights repo) restarts and web-root deploys are passwordless via root-owned whitelist scripts (`/etc/sudoers.d/xxl-ops`, set up in FL10A-6a). No `-t` / no sudo prompt:

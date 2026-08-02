@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: July 29, 2026 (end of session SU10A-3)
+> Last updated: July 30, 2026 (end of session SU10A-4)
 
 ---
 
@@ -84,7 +84,7 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 
 ## 📊 Current Production State
 
-**Last updated: July 29, 2026 (end of session SU10A-3)**
+**Last updated: July 30, 2026 (end of session SU10A-4)**
 
 - **14 chains** in registry: Shufersal, Rami Levy, Osher Ad, Victory, Yochananof, Keshet, Carrefour, Tiv Taam, King Store, Shefa Birkat Hashem, Shuk Hayir, Fresh Market, Super Yuda, חצי חינם / Hazi Hinam (added 9d-9)
 - **~1,200 stores** in active_stores.yaml (post 9d-9 additions: Rami Levy +72→98, Yochananof +35→50, Keshet +12→22, Osher Ad +11→23, Hazi Hinam +1→12; Paz + Dor Alon removed in 9d-8)
@@ -95,7 +95,8 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 - **City dropdown**: 0.13s response (was 3.7s — prices JOIN removed in 9d-8).
 - **Verification gate**: `active_stores.yaml` (verified to publish PriceFull/Price) is what cron uses; `scheduled_stores.yaml` is the wish-list. See `db/verification_report_9d1.md` for excluded stores.
 - **GS1 Israel catalog**: ✅ LIVE (SU10A-1/2, July 2026). Own `gs1` schema on the same Postgres. **22,559 products across 77 suppliers**; **11,496 carry full per-product detail** (`gs1.products.full_content` JSONB — kosher/Kashrut certification 100%, media assets 100%, ingredients 97%, nutrition panel 67%); **11,450 product images** fetched and resized (800px/JPEG-80, 0.62 GB). Incremental sweep is wired into the nightly cron, exception-wrapped so a GS1 failure never fails the supermarket scrape. Counts drift upward nightly — re-query rather than trusting this line.
-- **⚠️ Only ONE piece of GS1 data is customer-facing: the product name.** Everything else is fetched and stored but **not surfaced anywhere**. The images sit in `~/gs1_images` on the VPS as loose `dude`-owned files with no nginx route, no web root, no URL scheme and no `product_image_url` populated (`www-data` cannot even read `~dude`). The nutrition, kosher, ingredient and allergen data stops at `full_content` — no endpoint, model or component reads it. **Serving images and surfacing phase-2 data are two real, unstarted tasks; neither follows automatically from the backfill.**
+- **✅ GS1 phase-2 data is now customer-facing (SU10A-4).** Images and the kashrut / nutrition / ingredients / allergens blocks all reach users through the product detail modal, alongside the product name. Two endpoints serve it: `GET /product/{item_code}/details` (200 with `has_gs1_data: false` and null sections for the ~91% of items with no GTIN match — a normal case, not an error) and `GET /product/{item_code}/image`.
+  - *Historical context for why the image path looks the way it does:* the images still sit in `~/gs1_images` on the VPS as loose `dude`-owned files, with no nginx route, no web root, no URL scheme and no `product_image_url` column populated — `www-data` cannot read `~dude`. Rather than relocating ~11.5K files, the API serves them directly: the filename is the GTIN and the GTIN is the item_code, so it resolves with a `stat()` and no DB hit. That permission gap is worked around, not closed, so a future move to nginx/CDN serving is still an open option.
 - **Canonical names**: ✅ RESOLVED (was "blocked on GS1 IL access" — that access is live and the pipeline has run). Weighted token voting (session 8b) plus GS1 enrichment both write `items.item_name`; **10,585 items are stamped `name_source='gs1'`**. SU10A-3 also fixed the display bug that made this invisible: the API was showing one chain's arbitrary raw scrape instead of the computed canonical name, so **87% of the GS1 enrichment was landing in the DB and never reaching a user**. Both ranking and display now read `items.item_name`.
 - **Search** ranks by relevance tier (item_name prefix → whole word → substring → manufacturer-only), then multi-chain, then cheapest, then `item_code` as a deterministic tie-break. **Numeric and percentage tokens are NOT filtered** — they are product attributes and were previously discarded, silently widening every sized query (SU10A-3 reversed this; the old "tokens filtered" behaviour from session 8b is gone). `חלב 3%` narrows to 3% milk; `במבה 80` narrows to 80 g. Bare numbers match on a digit-run boundary so `80` does not match inside `180`. **Length < 2 is the only remaining token filter.**
 - **Known coverage gap**: Bnei Brak has no Carrefour/Yenot Bitan/Mega presence (verified via carrefour.co.il store locator) — accepted, not a bug.
@@ -354,6 +355,35 @@ Verified live: `במבה 80` → **6 rows, all 80 g** (from 69); `חלב 80` →
 2. **None of the phase-2 product data is in the UI.** The nutrition tables, kosher/Kashrut certification blocks, ingredient strings and allergen codes pulled today all live in `gs1.products.full_content` as JSONB and **stop there**. No API endpoint reads them, no model exposes them, no component renders them. Fetching the data and surfacing it are separate pieces of work and only the fetch is done.
 
 Both items are frequently assumed to follow automatically from the backfill. **They do not.** The only GS1 data currently reaching a user is the enriched *product name*, via the `canonical_name` fix in item 3 above — nothing else.
+
+> **Superseded by SU10A-4 (next entry):** both "NOT done" items above shipped the following day — images are served via `GET /product/{item_code}/image` and the phase-2 data via `GET /product/{item_code}/details`, both surfaced in the product detail modal.
+
+---
+
+### Session SU10A-4 (July 30, 2026) — GS1 product detail modal shipped + dropdown search + deploy process fixes
+
+**GS1 phase-2 data now customer-facing — closes the two items flagged NOT done at the end of SU10A-3.**
+
+Two new backend endpoints (`api/routers/product.py`):
+- `GET /product/{item_code}/details` — 200 with `has_gs1_data: true` + full payload (kashrut, nutrition table, ingredients, allergens, brand, gs1_name) when a GTIN match exists; 200 with `has_gs1_data: false` + null fields when the item_code is real but has no GS1 match (the common case, ~91% of products); 404 only for a genuinely unknown item_code; 400 for a malformed barcode.
+- `GET /product/{item_code}/image` — serves the resized JPEGs from `~/gs1_images` (filename = GTIN = item_code, no DB hit, digits-only barcode check prevents path traversal). 200 with long-lived cache headers, 404 when absent.
+
+Frontend: `ProductDetailModal.tsx` — bottom sheet on mobile / centered card on desktop, single `<button>` combining the "מידע נוסף" label and + icon (deliberately one control, not two, for accessibility — two elements firing the same action is a bad a11y pattern, not just visual redundancy). Sections self-hide when empty. A failed `/details` call silently falls back to the no-data view rather than erroring, since GS1 enrichment is supplementary. Mobile-viewport verification was explicitly deprioritized — a native iOS/Android app is planned, so the mobile browser experience is not a priority surface.
+
+**Deploy incident, root-caused and fixed — worth reading if a future deploy looks broken:**
+Pushing to GitHub does not update the server. `git push` only updates the remote; restarting `scrp-api` after a push without an explicit `git pull` on the server just relaunches the *old* code. This shipped a broken state for several hours (endpoints 404ing, frontend gracefully falling back to "no data") before being caught. Fix now documented in CLAUDE.md's new "Deploy backend" section — always `git pull origin main` on the server before restarting.
+
+**Same commit (`c3833a0`) also swept in two unrelated stray files via `git add -A`:**
+1. `data/city_canonical_review.csv` — a completely different 9-column/1,078-row version from the Windows dev machine collided with the server's own independent ~1,078-row uncommitted local edits to the same file, blocking the pull. Resolved by reverting just that file back to its exact pre-`c3833a0` git content (`3553e03`) — this made the file a no-op in the incoming diff, so the pull went through without touching the server's local edits at all. **The server's uncommitted local CSV edits are still sitting there, untouched, exactly as before** — not lost, not committed, still a single-disk-failure risk, still worth a dedicated city-data session to review and commit properly.
+2. A stray duplicate `handoff_super.md` at repo root (1,274 lines, diverged from the real `docs/super/handoff_super.md`) — removed (`a6e0e9d`).
+
+**City/chain dropdown search (`41cd14f`, frontend-only deploy).** Added a search box to the shared `MultiSelect` component in `Filters.tsx` — covers both the city and chain filters. Autofocused input, case-insensitive substring filter, "no results" state, select-all unions the filtered set with the existing selection rather than replacing it. Verified against the live 146-city catalog on production.
+
+**Flagged for future care, not urgent:** search appears to be missing fresh produce / meat / fish / chicken categories — may be a PriceFull data gap (these chains may not publish loose/weighted goods the same way as packaged items) or a search/categorization issue. Not investigated this session; worth a dedicated look.
+
+**Still the top explicit priority, unchanged:** the promo pipeline remains CRITICALLY BROKEN (Victory alone has 60K+ corrupt rows) and needs a dedicated audit-and-rebuild session — do not attempt incremental fixes.
+
+**Session naming note:** this session continues the SU10A-* lineage (SU10A-1 → SU10A-4) rather than switching to the CLAUDE.md table's stated SUXX-a format — a deliberate decision made this session, not an oversight. Future sessions should keep using SU10A-N.
 
 ---
 
