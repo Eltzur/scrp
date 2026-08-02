@@ -71,10 +71,15 @@ function PromoRow({ item }: { item: GroupedPromoItem }) {
         <p className="text-sm text-gray-900 leading-snug" dir="auto">
           {item.product_name ?? item.promo_description ?? item.item_code}
         </p>
-        {isBundle && (
+        {/* Suppressed for freebies: a gift promo has discount_price 0, so this
+            would read "5 units for ₪0.00". The description carries the terms. */}
+        {isBundle && !isFreebie && (
           <span className="inline-block mt-1 text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
             {Math.round(item.min_qty!)} יח' ב-{fmtPrice(item.discount_price ?? 0)}
           </span>
+        )}
+        {isFreebie && item.promo_description && (
+          <p className="text-[11px] text-gray-500 mt-1" dir="auto">{item.promo_description}</p>
         )}
         {item.promo_end && (
           <p className="text-[11px] text-gray-400 mt-1">{fmtDate(item.promo_end)}</p>
