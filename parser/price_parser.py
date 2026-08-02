@@ -119,3 +119,131 @@ def parse_promo_file(path: Path) -> tuple:
                     }
 
     return header, _items()
+
+
+# ---------------------------------------------------------------------------
+# Flat-variant promo parser (BinaProjects + Hazi Hinam)
+# ---------------------------------------------------------------------------
+#
+# These two portals publish a DIFFERENT promo shape from the four that
+# parse_promo_file() handles. Confirmed from live files in SU10A-5 recon:
+#
+#   * no <Groups>/<Group> level at all;
+#   * items are <Item><ItemCode>, not <PromotionItem>;
+#   * every discount field lives on <Promotion>, so all items under one
+#     promotion INHERIT the same price/qty rather than carrying their own;
+#   * dates are split into <...Date> + <...Hour> instead of one DateTime.
+#
+# Feeding these files to parse_promo_file() yields ZERO rows silently — the
+# Group loop never enters — which is exactly why King Store, Shefa, Shuk Hayir
+# and Hazi Hinam had no promos at all. It is a separate function on purpose:
+# the ten working chains depend on parse_promo_file() unchanged.
+
+def _first_text(el, *tags, default=None):
+    """First non-empty value among several spellings of the same field.
+
+    The two portals disagree on casing and spelling for identical fields
+    (PromotionId/PromotionID, MinPurchaseAmnt/MinPurchaseAmount), so every
+    lookup accepts the known variants rather than guessing per chain.
+    """
+    for tag in tags:
+        v = _text(el, tag)
+        if v not in (None, ""):
+            return v
+    return default
+
+
+def _first_real(el, *tags):
+    v = _first_text(el, *tags)
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except ValueError:
+        return None
+
+
+def _first_int(el, *tags):
+    v = _first_text(el, *tags)
+    if v is None:
+        return None
+    try:
+        return int(float(v))  # some fields arrive as "1.00"
+    except ValueError:
+        return None
+
+
+def _join_dt(date_val: str | None, hour_val: str | None) -> str | None:
+    """Combine split date + hour into one 'YYYY-MM-DD HH:MM:SS' stamp."""
+    if not date_val:
+        return None
+    date_val = date_val.strip()
+    hour_val = (hour_val or "").strip()
+    if not hour_val:
+        return date_val
+    # Some files already carry a full datetime in the date field.
+    if " " in date_val or "T" in date_val:
+        return date_val.replace("T", " ").split(".")[0]
+    return f"{date_val} {hour_val.split('.')[0]}"
+
+
+def parse_promo_file_flat(path: Path) -> tuple:
+    """Parse a flat-variant Promo/PromoFull file (BinaProjects, Hazi Hinam).
+
+    Returns (header, items_generator) — same contract as parse_promo_file, so
+    callers and bulk_insert_promos need no special casing.
+
+    Emits one row per <Item>, carrying the parent <Promotion>'s discount fields
+    down onto each row. That fan-out is inherent to the format: a single Bina
+    promotion can list 872 items, and each is a real promoted product.
+    """
+    tree = etree.parse(str(path))
+    root = tree.getroot()
+
+    header = {
+        "chain_id":     (_first_text(root, "ChainID", "ChainId") or "").strip(),
+        "sub_chain_id": (_first_text(root, "SubChainID", "SubChainId") or "").strip(),
+        "store_id":     (_first_text(root, "StoreID", "StoreId") or "").strip(),
+    }
+
+    def _items():
+        for promo_el in root.iter("Promotion"):
+            promo_id    = _first_text(promo_el, "PromotionId", "PromotionID")
+            description = _first_text(promo_el, "PromotionDescription")
+            # DiscountType finally gives promos.promo_type a value; the shared
+            # parser never populated that column for any chain.
+            promo_type  = _first_int(promo_el,  "DiscountType")
+            allow_multi = _first_int(promo_el,  "AllowMultipleDiscounts")
+            reward_type = _first_int(promo_el,  "RewardType")
+            min_qty     = _first_real(promo_el, "MinQty")
+            disc_rate   = _first_real(promo_el, "DiscountRate")
+            disc_price  = _first_real(promo_el, "DiscountedPrice")
+            min_purch   = _first_real(promo_el, "MinPurchaseAmnt", "MinPurchaseAmount")
+            start_dt    = _join_dt(_first_text(promo_el, "PromotionStartDate"),
+                                   _first_text(promo_el, "PromotionStartHour"))
+            end_dt      = _join_dt(_first_text(promo_el, "PromotionEndDate"),
+                                   _first_text(promo_el, "PromotionEndHour"))
+
+            # Only real promoted items — GiftsItems is a sibling container and
+            # its entries are not products the shopper is buying at this price.
+            for items_el in promo_el.findall("PromotionItems"):
+                for item_el in items_el.iter("Item"):
+                    item_code = _text(item_el, "ItemCode")
+                    if not item_code:
+                        continue
+                    yield {
+                        "item_code":                item_code,
+                        "promo_id":                 promo_id,
+                        "promo_description":        description,
+                        "promo_type":               promo_type,
+                        "allow_multiple_discounts": allow_multi,
+                        "promo_start":              start_dt,
+                        "promo_end":                end_dt,
+                        "min_purchase_amount":      min_purch,
+                        "reward_type":              reward_type,
+                        "min_qty":                  min_qty,
+                        "discount_rate":            disc_rate,
+                        "discount_price":           disc_price,
+                    }
+
+    return header, _items()

@@ -27,6 +27,7 @@ from sqlalchemy import text
 
 from scraper.base import ChainScraper
 from scraper.cerberus import CITY_CODES
+from parser.price_parser import parse_promo_file_flat
 from db.db import upsert_chain
 from scraper.city_names import normalize_city, city_override
 from scraper.city_matcher import resolve_city
@@ -40,6 +41,11 @@ class BinaProjectsScraper(ChainScraper):
     BASE_URL:   str  = ""
     CHAIN_NAME: str  = ""
     CITY_CODES: dict = CITY_CODES
+
+    # bina-projects promo files are the flat variant: no <Group>, items as
+    # <Item>, discount fields on <Promotion>. The shared parser returns zero
+    # rows on them, which is why these chains had no promos before SU10A-5.
+    PROMO_PARSER = staticmethod(parse_promo_file_flat)
 
     def __init__(self):
         super().__init__()
@@ -138,15 +144,27 @@ class BinaProjectsScraper(ChainScraper):
     # ------------------------------------------------------------------
 
     def build_pricefull_index(self, target_store_ids: set) -> dict:
+        return self._build_file_index(target_store_ids, "4", "PriceFull")
+
+    def build_promo_index(self, target_store_ids: set) -> dict:
+        """PromoFull index. WFileType=5 on the same MainIO_Hok endpoint.
+
+        Same newest-per-store selection as prices — only the file type and
+        prefix differ, so the two share _build_file_index rather than keeping
+        two copies of the Download.aspx resolution logic in sync.
+        """
+        return self._build_file_index(target_store_ids, "5", "PromoFull")
+
+    def _build_file_index(self, target_store_ids: set, wfiletype: str, prefix: str) -> dict:
         files = self._post_json(f"{self.BASE_URL}/MainIO_Hok.aspx", {
-            "WStore": "", "WDate": "", "WFileType": "4",
+            "WStore": "", "WDate": "", "WFileType": wfiletype,
         })
         if not files:
-            log.warning(f"{self.CHAIN_NAME}: no PriceFull files returned from MainIO_Hok.")
+            log.warning(f"{self.CHAIN_NAME}: no {prefix} files returned from MainIO_Hok.")
             return {}
 
         pattern = re.compile(
-            rf"^PriceFull{re.escape(self.CHAIN_ID)}-(\d+)-(\d{{12}})\.gz$",
+            rf"^{prefix}{re.escape(self.CHAIN_ID)}-(\d+)-(\d{{12}})\.gz$",
             re.IGNORECASE,
         )
 
@@ -192,7 +210,7 @@ class BinaProjectsScraper(ChainScraper):
             }
 
         log.info(
-            f"{self.CHAIN_NAME}: PriceFull index built — "
+            f"{self.CHAIN_NAME}: {prefix} index built — "
             f"{len(index)} stores available, {len(target_store_ids)} targeted."
         )
         return index

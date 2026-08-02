@@ -996,14 +996,32 @@ def fetch_promo_chains(conn: Connection) -> list[dict]:
 #
 # Deliberately NOT stored on the row — computed per query so the semantics stay
 # re-fixable without re-scraping.
-_UNIT_PRICE_SQL = """
+
+# Portals disagree on the SCALE of DiscountRate. Hazi Hinam publishes basis
+# points — 5000 for a deal its own description calls "השני ב50%" — while
+# bina-projects and the rest publish a plain percent (max 100). The parser
+# stores the raw value on purpose, so the scale stays re-fixable here without
+# re-scraping; this is the single place that interprets it.
+#
+# The rule is universal rather than per-chain: a discount above 100% is
+# impossible, so any such value can only be basis points.
+_EFFECTIVE_RATE_SQL = """
+    CASE WHEN p.discount_rate > 100 THEN p.discount_rate / 100.0
+         ELSE p.discount_rate END
+"""
+
+_UNIT_PRICE_SQL = f"""
     CASE
         WHEN p.min_qty BETWEEN 1 AND 24 AND p.discount_price > 0
             THEN p.discount_price / p.min_qty
-        -- Percentage-only promos: discount_price is 0 and the saving lives in
-        -- discount_rate, so derive the unit price off the shelf price instead.
-        WHEN p.discount_price = 0 AND p.discount_rate > 0 AND pr.item_price IS NOT NULL
-            THEN pr.item_price * (1 - p.discount_rate / 100.0)
+        -- Percentage-only promos carry no fixed price at all: DiscountType=0
+        -- rows leave DiscountedPrice absent (NULL) or zero depending on the
+        -- portal, so both must fall through to the rate branch or the promo is
+        -- silently lost.
+        WHEN (p.discount_price IS NULL OR p.discount_price = 0)
+         AND ({_EFFECTIVE_RATE_SQL}) > 0
+         AND pr.item_price IS NOT NULL
+            THEN pr.item_price * (1 - ({_EFFECTIVE_RATE_SQL}) / 100.0)
         ELSE NULL
     END
 """

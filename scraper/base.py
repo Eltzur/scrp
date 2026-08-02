@@ -18,7 +18,11 @@ from db.db import (
     bulk_insert_promos,
     _pad_store_id,
 )
-from parser.price_parser import parse_file as parse_price_file, parse_promo_file
+from parser.price_parser import (
+    parse_file as parse_price_file,
+    parse_promo_file,
+    parse_promo_file_flat,  # noqa: F401  (re-exported for variant scrapers)
+)
 from scraper.city_names import normalize_city
 
 log = logging.getLogger(__name__)
@@ -28,6 +32,12 @@ RAW_DIR = Path(__file__).parent.parent / "sample_data" / "raw"
 class ChainScraper(abc.ABC):
     CHAIN_ID: str = ""
     REQUEST_DELAY: float = 0.5
+
+    # Which promo parser this chain's files need. Defaults to the shared
+    # Groups/PromotionItem schema used by 10 of the 14 chains; BinaProjects and
+    # Hazi Hinam override it with the flat variant. staticmethod so assigning a
+    # plain function here does not turn it into a bound method.
+    PROMO_PARSER = staticmethod(parse_promo_file)
     STORE_WORKERS: int = 4
 
     def __init__(self):
@@ -221,7 +231,7 @@ class ChainScraper(abc.ABC):
                         gz_p.unlink(missing_ok=True)
                     tmp_p = RAW_DIR / (promo_entry["filename"] + ".xml")
                     tmp_p.write_bytes(promo_data)
-                    _, promo_items = parse_promo_file(tmp_p)
+                    _, promo_items = self.PROMO_PARSER(tmp_p)
                     promo_items = list(promo_items)
                     tmp_p.unlink(missing_ok=True)
                     wconn.execute(text("DELETE FROM promos WHERE store_fk=:fk"), {"fk": store_fk})

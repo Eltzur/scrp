@@ -14,6 +14,7 @@ from lxml import html
 from sqlalchemy import text
 
 from scraper.base import ChainScraper
+from parser.price_parser import parse_promo_file_flat
 from db.db import upsert_chain, _pad_store_id
 
 log = logging.getLogger(__name__)
@@ -41,6 +42,11 @@ _STORES: list[tuple[str, str, str]] = [
 class HaziHinamScraper(ChainScraper):
     CHAIN_ID     = CHAIN_ID
     STORE_WORKERS = 4
+
+    # The fetch below always worked; the shared parser silently returned zero
+    # rows because these files are the flat variant (no <Group>, items as
+    # <Item>, discount fields on <Promotion>). Same shape as bina-projects.
+    PROMO_PARSER = staticmethod(parse_promo_file_flat)
 
     def load_stores(self, conn) -> dict:
         upsert_chain(conn, self.CHAIN_ID, CHAIN_NAME)

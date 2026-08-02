@@ -54,14 +54,14 @@ DELTA_CHAINS: set[str] = {
 PROMO_CHAINS: set[str] = {
     "7290027600007",  # Shufersal
     "7290058140886",  # Rami Levy
-    "7290696200003",  # Osher Ad
+    "7290696200003",  # Victory  (was mislabeled "Osher Ad" — Osher Ad is 7290103152017)
     "7290803800003",  # Yochananof
     "7290785400000",  # Keshet
-    "7290058134977",  # Shefa
-    "7290058148776",  # Shuk Hayir
+    "7290058134977",  # Shefa           — flat variant (bina-projects)
+    "7290058148776",  # Shuk Hayir      — flat variant (bina-projects)
     "7290058177776",  # Super Yuda
-    "7290700100008",  # Hazi Hinam
-    "7290058108879",  # King Store
+    "7290700100008",  # Hazi Hinam      — flat variant (own portal)
+    "7290058108879",  # King Store      — flat variant (bina-projects)
     "7290876100000",  # Fresh Market
 }
 
