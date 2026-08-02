@@ -20,7 +20,9 @@ interface MultiSelectProps {
 }
 
 function MultiSelect({ options, selected, onChange, placeholder, disabled = false }: MultiSelectProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   const sel = selected ?? [];
 
@@ -32,6 +34,18 @@ function MultiSelect({ options, selected, onChange, placeholder, disabled = fals
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
+
+  // Clear on both edges of the transition, so a dropdown never reopens showing
+  // the previous session's query (and its filtered subset) as if it were the
+  // full list.
+  useEffect(() => { setQuery(''); }, [open]);
+
+  // localeCompare-style folding is unnecessary here: Hebrew has no case, and
+  // toLowerCase covers the Latin-script chain names.
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? options.filter(o => o.label.toLowerCase().includes(q))
+    : options;
 
   const toggle = (val: string) => {
     const next = sel.includes(val) ? sel.filter(v => v !== val) : [...sel, val];
@@ -64,10 +78,27 @@ function MultiSelect({ options, selected, onChange, placeholder, disabled = fals
                      min-w-[180px] max-h-72 flex flex-col"
           dir="rtl"
         >
+          <div className="px-2 pt-2 pb-1 border-b border-gray-100 shrink-0">
+            <input
+              type="text"
+              autoFocus
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder={t('filters.search_placeholder')}
+              className="w-full px-2 py-1 border border-gray-300 rounded-lg text-sm text-gray-700
+                         placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
           <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 shrink-0">
             <button
               onMouseDown={e => e.preventDefault()}
-              onClick={() => onChange(options.map(o => o.value))}
+              // Union with the existing selection rather than replacing it, and
+              // only over what the query currently shows — that is what makes
+              // repeated filter-then-select-all accumulate instead of clobber.
+              onClick={() => {
+                const merged = Array.from(new Set([...sel, ...filtered.map(o => o.value)]));
+                onChange(merged.length ? merged : null);
+              }}
               className="text-xs text-emerald-600 hover:text-emerald-800 font-medium"
             >
               בחר הכל
@@ -81,7 +112,7 @@ function MultiSelect({ options, selected, onChange, placeholder, disabled = fals
             </button>
           </div>
           <ul className="overflow-y-auto">
-            {options.map(o => (
+            {filtered.map(o => (
               <li key={o.value}>
                 <label className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm text-gray-700">
                   <input
@@ -94,6 +125,11 @@ function MultiSelect({ options, selected, onChange, placeholder, disabled = fals
                 </label>
               </li>
             ))}
+            {filtered.length === 0 && (
+              <li className="px-3 py-2 text-sm text-gray-400">
+                {t('filters.no_results')}
+              </li>
+            )}
           </ul>
         </div>
       )}

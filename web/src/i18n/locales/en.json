@@ -21,7 +21,9 @@
     "group_chain": "Chain",
     "group_store": "Store",
     "compare_disabled_city": "Compare mode needs 2+ chains. {{city}} only has {{chain_name}}.",
-    "compare_off": "Turn off compare mode"
+    "compare_off": "Turn off compare mode",
+    "search_placeholder": "Search...",
+    "no_results": "No results found"
   },
   "stats": {
     "summary": "Searching across {{chains}} chains, {{stores}} stores, {{prices}} prices"

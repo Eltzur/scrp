@@ -21,7 +21,9 @@
     "group_chain": "רשת",
     "group_store": "סניף",
     "compare_disabled_city": "מצב השוואה דורש 2+ רשתות. ב{{city}} זמינה רק {{chain_name}}.",
-    "compare_off": "כבה מצב השוואה"
+    "compare_off": "כבה מצב השוואה",
+    "search_placeholder": "חיפוש...",
+    "no_results": "לא נמצאו תוצאות"
   },
   "stats": {
     "summary": "מחפש ב-{{chains}} רשתות, {{stores}} סניפים, {{prices}} מחירים"
