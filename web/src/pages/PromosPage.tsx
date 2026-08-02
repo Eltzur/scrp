@@ -58,9 +58,13 @@ function groupRows(rows: GroupedPromoItem[]): ChainGroup[] {
 
 function PromoRow({ item }: { item: GroupedPromoItem }) {
   const isBundle = item.min_qty != null && item.min_qty > 1;
-  // A 1+1 stores the free half as discount_price=0, which the generic formula
-  // reads as "100% off, ₪0.00". Show it as 1+1 instead of a fictional free item.
-  const isOneForOne = item.reward_type === 1 && item.discount_price === 0;
+  // A zero unit price is never a real price — nothing is bought for ₪0.00. It
+  // marks the free half of a gift/1+1 deal, which the generic formula would
+  // otherwise render as "-100%, ₪0.00". Keyed on the price rather than on
+  // reward_type because that code is chain-specific and unreliable: Victory
+  // encodes its 1+1 as reward_type=10, not 1.
+  const isFreebie = item.unit_price === 0 || item.discount_price === 0;
+  const freebieLabel = /1\s*\+\s*1/.test(item.promo_description ?? '') ? '1+1' : 'מבצע';
   return (
     <div className="flex items-start justify-between gap-3 px-3 py-2.5 border-t border-gray-100 first:border-t-0">
       <div className="min-w-0 flex-1">
@@ -78,9 +82,9 @@ function PromoRow({ item }: { item: GroupedPromoItem }) {
       </div>
 
       <div className="flex flex-col items-end gap-1 shrink-0" dir="ltr">
-        {isOneForOne ? (
+        {isFreebie ? (
           <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-            1+1
+            {freebieLabel}
           </span>
         ) : item.discount_pct != null && (
           <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
@@ -91,12 +95,12 @@ function PromoRow({ item }: { item: GroupedPromoItem }) {
           {item.shelf_price != null && (
             <span className={clsx(
               'text-xs',
-              isOneForOne ? 'text-gray-500' : 'text-gray-400 line-through',
+              isFreebie ? 'text-gray-500' : 'text-gray-400 line-through',
             )}>
               {fmtPrice(item.shelf_price)}
             </span>
           )}
-          {!isOneForOne && item.unit_price != null && (
+          {!isFreebie && item.unit_price != null && (
             <span className="text-sm font-bold text-emerald-700">{fmtPrice(item.unit_price)}</span>
           )}
         </div>
