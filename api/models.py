@@ -236,6 +236,7 @@ class GroupedPromoItem(BaseModel):
     shelf_price: float | None   = Field(None, description="Current shelf price at this store; NULL when we hold no price row (~18%)")
     min_qty: float | None       = Field(None, description="Units required for the bundle price")
     discount_price: float | None = Field(None, description="Raw DiscountedPrice — a BUNDLE TOTAL, not per unit")
+    reward_type: int | None     = Field(None, description="Source RewardType; 1 = buy-one-get-one, where discount_price=0 marks the free item rather than a 100% discount")
     unit_price: float | None    = Field(None, description="discount_price / min_qty — the per-unit figure to compare against shelf_price")
     discount_pct: float | None  = Field(None, description="Rounded % off shelf_price; NULL when shelf_price is unknown")
     promo_description: str | None

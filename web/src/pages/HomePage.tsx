@@ -10,6 +10,7 @@ import ResultsList from '../components/ResultsList';
 import { useSearch, useCompare } from '../api/hooks';
 import { searchProducts, compareProducts } from '../api/client';
 import type { ProductWithPrices, CityInfo } from '../api/client';
+import { defaultCity, matchIpCity, rememberCity, storedCity } from '../utils/city';
 
 const DEFAULT_FILTERS: FilterState = {
   city:        null,
@@ -18,32 +19,8 @@ const DEFAULT_FILTERS: FilterState = {
   groupBy:     'chain',
 };
 
-const CITY_STORAGE_KEY = 'xxl_last_city';
-const FALLBACK_CITY    = 'תל אביב-יפו';
-
-/** Match an IP-returned city name against our canonical city list. */
-function matchIpCity(ipCity: string, cities: CityInfo[]): string | null {
-  const s = ipCity.trim();
-  if (!s) return null;
-  return (
-    cities.find(c => c.city === s)?.city ??
-    // e.g. IP returns "תל אביב", DB has "תל אביב-יפו"
-    cities.find(c => c.city.startsWith(s))?.city ??
-    // e.g. IP returns a long variant that starts with the DB canonical
-    cities.find(c => s.startsWith(c.city))?.city ??
-    null
-  );
-}
-
-/** Best available fallback city from the loaded list. */
-function defaultCity(cities: CityInfo[]): string {
-  return (
-    cities.find(c => c.city === FALLBACK_CITY)?.city ??
-    cities.find(c => c.city.includes('תל אביב'))?.city ??
-    cities[0]?.city ??
-    FALLBACK_CITY
-  );
-}
+// City resolution lives in utils/city so PromosPage defaults to the same city
+// this page is searching in. Behaviour here is unchanged.
 
 const PAGE_SIZE = 30;
 
@@ -77,8 +54,8 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
     cityDetected.current = true;
 
     // 1. Prefer the city the user last used.
-    const saved = localStorage.getItem(CITY_STORAGE_KEY);
-    if (saved && cities.some(c => c.city === saved)) {
+    const saved = storedCity(cities);
+    if (saved) {
       setFilters(f => ({ ...f, city: [saved] }));
       return;
     }
@@ -98,7 +75,7 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
   // Persist single-city selections to localStorage so next visit skips geolocation.
   useEffect(() => {
     if (filters.city?.length === 1) {
-      localStorage.setItem(CITY_STORAGE_KEY, filters.city[0]);
+      rememberCity(filters.city[0]);
     }
   }, [filters.city]);
 

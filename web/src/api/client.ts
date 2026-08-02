@@ -285,3 +285,45 @@ export const getProductDetails = (itemCode: string): Promise<ProductDetails> =>
  *  alone. */
 export const productImageUrl = (itemCode: string): string =>
   `${http.defaults.baseURL ?? ''}/product/${itemCode}/image`;
+
+// --- Grouped promos (chain → city → branch view) ----------------------------
+
+export interface GroupedPromoItem {
+  chain_id: string;
+  chain_name: string | null;
+  city: string | null;
+  branch: string | null;
+  item_code: string;
+  product_name: string | null;
+  shelf_price: number | null;
+  min_qty: number | null;
+  /** Raw DiscountedPrice — a BUNDLE TOTAL. Never show this as a unit price. */
+  discount_price: number | null;
+  /** 1 = buy-one-get-one; discount_price=0 then marks the free item, NOT 100% off. */
+  reward_type: number | null;
+  /** discount_price / min_qty — the figure to compare against shelf_price. */
+  unit_price: number | null;
+  discount_pct: number | null;
+  promo_description: string | null;
+  promo_start: string | null;
+  promo_end: string | null;
+}
+
+export interface GroupedPromoOpts {
+  city?: string;
+  chainId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** Rows arrive pre-sorted chain → city → branch → discount desc. Preserve that
+ *  order; re-sorting client-side would break the grouped rendering. */
+export const getGroupedPromos = (opts: GroupedPromoOpts = {}): Promise<GroupedPromoItem[]> =>
+  http.get<GroupedPromoItem[]>('/promos/grouped', {
+    params: {
+      ...(opts.city    ? { city:  opts.city    } : {}),
+      ...(opts.chainId ? { chain: opts.chainId } : {}),
+      limit:  opts.limit  ?? 300,
+      offset: opts.offset ?? 0,
+    },
+  }).then(r => r.data);

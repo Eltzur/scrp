@@ -1050,6 +1050,10 @@ def fetch_grouped_promos(
                 pr.item_price     AS shelf_price,
                 p.min_qty,
                 p.discount_price,
+                -- Needed to tell a genuine 100%-off from a 1+1: the source
+                -- encodes the free half of a buy-one-get-one as
+                -- discount_price=0, which would otherwise render as "₪0.00".
+                p.reward_type,
                 p.promo_description,
                 to_char(p.promo_start, 'YYYY-MM-DD"T"HH24:MI:SS') AS promo_start,
                 to_char(p.promo_end,   'YYYY-MM-DD"T"HH24:MI:SS') AS promo_end,
@@ -1079,7 +1083,7 @@ def fetch_grouped_promos(
             WHERE b.unit_price IS NOT NULL
         )
         SELECT chain_id, chain_name, city, branch, item_code, product_name,
-               shelf_price, min_qty, discount_price,
+               shelf_price, min_qty, discount_price, reward_type,
                round(unit_price::numeric, 2) AS unit_price,
                discount_pct, promo_description, promo_start, promo_end
         FROM calc
