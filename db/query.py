@@ -978,3 +978,148 @@ def fetch_promo_chains(conn: Connection) -> list[dict]:
         ORDER BY c.name
     """)).mappings().all()
     return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Grouped promos (chain -> city -> branch view)
+# ---------------------------------------------------------------------------
+
+# The whole point of this query is that DiscountedPrice is a BUNDLE TOTAL, not a
+# unit price: "2 ב-20" stores discount_price=20 with min_qty=2, so the shelf
+# comparison is 10, not 20. Dividing is only valid when min_qty is a real count.
+#
+# Rami Levy publishes MinQty as a minimum SPEND in agorot (5990 = 59.90 ILS) on
+# 38,121 rows. Dividing by that manufactured ~100% discounts, which is why the
+# old endpoint needed a LEAST(..., 99) cap to hide them. The 1..24 window is the
+# fix: above it the value is not a count, so no unit price is derivable and the
+# row is excluded from this per-product view rather than shown as a fake deal.
+#
+# Deliberately NOT stored on the row — computed per query so the semantics stay
+# re-fixable without re-scraping.
+_UNIT_PRICE_SQL = """
+    CASE
+        WHEN p.min_qty BETWEEN 1 AND 24 AND p.discount_price > 0
+            THEN p.discount_price / p.min_qty
+        -- Percentage-only promos: discount_price is 0 and the saving lives in
+        -- discount_rate, so derive the unit price off the shelf price instead.
+        WHEN p.discount_price = 0 AND p.discount_rate > 0 AND pr.item_price IS NOT NULL
+            THEN pr.item_price * (1 - p.discount_rate / 100.0)
+        ELSE NULL
+    END
+"""
+
+
+def fetch_grouped_promos(
+    conn: Connection,
+    chain_id: str | None = None,
+    city: str | None = None,
+    limit: int = 500,
+    offset: int = 0,
+) -> list[dict]:
+    """Per-branch promo rows for the chain -> city -> branch display.
+
+    Differs from fetch_today_promos on purpose:
+      * no DISTINCT ON — the same item_code SHOULD appear once per branch, since
+        the point of the view is per-branch pricing;
+      * no >=10% floor and no <=99 cap — the cap only ever existed to mask the
+        min_qty bug above, and capping now would hide real data;
+      * rows with no derivable unit price are excluded rather than shown wrong.
+
+    shelf_price is LEFT JOINed and may be NULL (~18% of promo rows have no price
+    row for that store+item); such rows are returned with a NULL discount_pct
+    rather than dropped, since the promo itself is still real.
+    """
+    params: dict = {"limit": limit, "offset": offset}
+    where = ""
+    if chain_id:
+        where += " AND s.chain_id = :chain_id"
+        params["chain_id"] = chain_id
+    if city:
+        where += " AND s.city_canonical = :city"
+        params["city"] = city
+
+    rows = conn.execute(text(f"""
+        WITH base AS (
+            SELECT
+                s.chain_id,
+                c.name            AS chain_name,
+                s.city_canonical  AS city,
+                s.store_name      AS branch,
+                p.item_code,
+                i.item_name       AS product_name,
+                pr.item_price     AS shelf_price,
+                p.min_qty,
+                p.discount_price,
+                p.promo_description,
+                to_char(p.promo_start, 'YYYY-MM-DD"T"HH24:MI:SS') AS promo_start,
+                to_char(p.promo_end,   'YYYY-MM-DD"T"HH24:MI:SS') AS promo_end,
+                {_UNIT_PRICE_SQL} AS unit_price
+            FROM promos p
+            JOIN stores s      ON s.id = p.store_fk
+            JOIN chains c      ON c.chain_id = s.chain_id
+            LEFT JOIN items i  ON i.item_code = p.item_code
+            -- prices is UNIQUE(store_fk, item_code), so this cannot fan out.
+            LEFT JOIN prices pr ON pr.store_fk = p.store_fk
+                               AND pr.item_code = p.item_code
+            WHERE (p.promo_end >= NOW() OR p.promo_end IS NULL)
+              AND c.name IS NOT NULL
+              {where}
+        ),
+        calc AS (
+            SELECT b.*,
+                   CASE WHEN b.shelf_price IS NOT NULL AND b.shelf_price > 0
+                        THEN round((((b.shelf_price - b.unit_price)
+                                     / b.shelf_price) * 100)::numeric)
+                   END AS discount_pct
+            FROM base b
+            WHERE b.unit_price IS NOT NULL
+        )
+        SELECT chain_id, chain_name, city, branch, item_code, product_name,
+               shelf_price, min_qty, discount_price,
+               round(unit_price::numeric, 2) AS unit_price,
+               discount_pct, promo_description, promo_start, promo_end
+        FROM calc
+        -- Guard: a pct outside 0-100 means the source data is bad (promo dearer
+        -- than shelf, or a negative shelf price). NULL is kept: that is simply
+        -- "no shelf price to compare", not a data error.
+        WHERE discount_pct IS NULL OR discount_pct BETWEEN 0 AND 100
+        ORDER BY chain_name, city NULLS LAST, branch, discount_pct DESC NULLS LAST
+        LIMIT :limit OFFSET :offset
+    """), params).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def count_grouped_promos_dropped(conn: Connection) -> dict:
+    """Diagnostic: how many rows each exclusion rule removes. Read-only."""
+    row = conn.execute(text(f"""
+        WITH base AS (
+            SELECT p.min_qty, p.discount_price, pr.item_price AS shelf_price,
+                   {_UNIT_PRICE_SQL} AS unit_price
+            FROM promos p
+            JOIN stores s ON s.id = p.store_fk
+            JOIN chains c ON c.chain_id = s.chain_id
+            LEFT JOIN prices pr ON pr.store_fk = p.store_fk
+                               AND pr.item_code = p.item_code
+            WHERE (p.promo_end >= NOW() OR p.promo_end IS NULL)
+              AND c.name IS NOT NULL
+        ),
+        calc AS (
+            SELECT *, CASE WHEN shelf_price IS NOT NULL AND shelf_price > 0
+                           THEN round((((shelf_price - unit_price)
+                                        / shelf_price) * 100)::numeric)
+                      END AS discount_pct
+            FROM base
+        )
+        SELECT
+            count(*)                                                   AS active_rows,
+            count(*) FILTER (WHERE unit_price IS NULL)                 AS dropped_no_unit_price,
+            count(*) FILTER (WHERE unit_price IS NOT NULL
+                              AND discount_pct IS NOT NULL
+                              AND (discount_pct < 0 OR discount_pct > 100)) AS dropped_pct_guard,
+            count(*) FILTER (WHERE unit_price IS NOT NULL
+                              AND discount_pct IS NULL)                AS kept_null_pct,
+            count(*) FILTER (WHERE unit_price IS NOT NULL
+                              AND discount_pct BETWEEN 0 AND 100)      AS kept_with_pct
+        FROM calc
+    """)).mappings().first()
+    return dict(row) if row else {}

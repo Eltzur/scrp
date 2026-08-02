@@ -4,9 +4,9 @@ from pydantic import BaseModel
 from sqlalchemy.engine import Connection
 
 from api.dependencies import get_db
-from api.models import HotPromoItem, PromoItem
+from api.models import GroupedPromoItem, HotPromoItem, PromoItem
 from db.query import (
-    fetch_promo_chains, fetch_promo_cities,
+    fetch_grouped_promos, fetch_promo_chains, fetch_promo_cities,
     fetch_promos, fetch_promos_bulk, fetch_today_promos, lookup_store_fk,
 )
 
@@ -46,6 +46,31 @@ def promos_today(
     conn: Connection = Depends(get_db),
 ):
     return fetch_today_promos(conn, city=city, chain_id=chain_id)
+
+
+@router.get(
+    "/promos/grouped",
+    response_model=list[GroupedPromoItem],
+    summary="Per-branch promos for the chain → city → branch view",
+)
+def promos_grouped(
+    chain:  Optional[str] = Query(None, description="Filter by chain_id"),
+    city:   Optional[str] = Query(None, description="Filter by city_canonical"),
+    limit:  int           = Query(500, ge=1, le=5000, description="Max rows returned"),
+    offset: int           = Query(0, ge=0, description="Pagination offset"),
+    conn: Connection = Depends(get_db),
+):
+    """
+    Every active promo with a derivable per-unit price, ordered
+    chain → city → branch → discount desc. Flat rows; the frontend groups them.
+
+    Not deduplicated: the same item_code appears once per branch on purpose.
+    `discount_price` is the raw bundle total — compare `unit_price` against
+    `shelf_price`, never `discount_price`. Rows whose min_qty is a spend
+    threshold rather than a count (Rami Levy publishes agorot there) yield no
+    unit price and are omitted from this view; they remain in the promos table.
+    """
+    return fetch_grouped_promos(conn, chain_id=chain, city=city, limit=limit, offset=offset)
 
 
 @router.get("/promos/cities", response_model=list[str], summary="Cities with active promos")

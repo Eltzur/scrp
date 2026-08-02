@@ -216,3 +216,28 @@ class ProductDetails(BaseModel):
     nutrition: NutritionTable | None = None
     ingredients: str | None        = Field(None, description="Full ingredient string, incl. percentages")
     allergens: AllergenInfo | None = None
+
+
+class GroupedPromoItem(BaseModel):
+    """One promo row for the chain -> city -> branch display.
+
+    Flat by design: the frontend groups by chain -> city -> branch. Unlike
+    /promos/today these are NOT deduplicated, so the same item_code appears once
+    per branch — that per-branch granularity is the point of the view.
+    """
+    model_config = ConfigDict(from_attributes=True)
+
+    chain_id: str
+    chain_name: str | None
+    city: str | None            = Field(None, description="stores.city_canonical; may be NULL for a few stores")
+    branch: str | None          = Field(None, description="stores.store_name")
+    item_code: str
+    product_name: str | None    = Field(None, description="Canonical items.item_name; NULL if the promo item is not in our catalog")
+    shelf_price: float | None   = Field(None, description="Current shelf price at this store; NULL when we hold no price row (~18%)")
+    min_qty: float | None       = Field(None, description="Units required for the bundle price")
+    discount_price: float | None = Field(None, description="Raw DiscountedPrice — a BUNDLE TOTAL, not per unit")
+    unit_price: float | None    = Field(None, description="discount_price / min_qty — the per-unit figure to compare against shelf_price")
+    discount_pct: float | None  = Field(None, description="Rounded % off shelf_price; NULL when shelf_price is unknown")
+    promo_description: str | None
+    promo_start: str | None
+    promo_end: str | None
