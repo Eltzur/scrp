@@ -63,10 +63,13 @@ export default function App() {
     initGA();
   }, []);
 
-  // Track SPA route changes (GA4 pageview per navigation)
+  // Track SPA route changes (GA4 pageview per navigation).
+  // Depends on `search` as well as `pathname`: the search page keeps its query
+  // in the query string, so /search?q=X -> /search?q=Y is a real navigation the
+  // user made, and pathname alone would report it as no movement at all.
   useEffect(() => {
-    trackPageview(location.pathname);
-  }, [location.pathname]);
+    trackPageview(location.pathname + location.search);
+  }, [location.pathname, location.search]);
 
   return (
     <>

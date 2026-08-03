@@ -48,9 +48,30 @@ export function initGA(): void {
   document.head.appendChild(script);
 
   gaInitialised = true;
+
+  // Send the page_view for the page the user is ALREADY on.
+  //
+  // Without this, a first-time visitor sends nothing at all: both mount effects
+  // in App.tsx run before consent exists, so initGA() and trackPageview() each
+  // bail out; clicking accept then calls initGA() but nothing calls
+  // trackPageview() again. Since config sets send_page_view:false, GA received
+  // only `js` and `config` — no event — so a session that accepted and read one
+  // page was invisible. Page views previously began at the user's SECOND
+  // navigation.
+  trackPageview(window.location.pathname + window.location.search);
 }
+
+// Guards the one case where two code paths legitimately race to report the same
+// page: on a RETURN visit consent already exists, so App.tsx's mount effect runs
+// initGA() (which sends the view above) and then its route-change effect fires
+// for the very same location. Suppressing only a CONSECUTIVE repeat keeps real
+// A -> B -> A navigation counted, and also absorbs React StrictMode's
+// double-invoked effects in development.
+let lastTrackedPath: string | null = null;
 
 export function trackPageview(path: string): void {
   if (!gaInitialised || !GA_ID) return;
+  if (path === lastTrackedPath) return;
+  lastTrackedPath = path;
   window.gtag('event', 'page_view', { page_path: path });
 }
