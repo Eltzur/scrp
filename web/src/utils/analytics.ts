@@ -21,6 +21,27 @@ export function setCookieConsent(value: boolean): void {
   if (value) initGA();
 }
 
+/** Fired to ask a mounted CookieBanner to show itself again. */
+export const COOKIE_PREFS_EVENT = 'xxl:cookie-preferences';
+
+/**
+ * Manual re-entry to the consent choice.
+ *
+ * Declining wrote 'false', which satisfies neither the banner's render test
+ * (key absent) nor the GA gate (key === 'true'), so a declined visitor had no
+ * banner and no analytics and no way back — the documented escape was "clear
+ * your browser's site data". This clears the stored choice and re-opens the
+ * banner so the decision can be made again.
+ *
+ * Deliberately user-initiated only: nothing calls this automatically, so a
+ * decline is still respected and never re-prompted on its own.
+ */
+export function openCookiePreferences(): void {
+  try { localStorage.removeItem(CONSENT_KEY); }
+  catch { /* private mode */ }
+  window.dispatchEvent(new Event(COOKIE_PREFS_EVENT));
+}
+
 /**
  * Injects the gtag.js script if:
  *  - A valid (non-placeholder) measurement ID is configured, AND
@@ -71,6 +92,12 @@ let lastTrackedPath: string | null = null;
 
 export function trackPageview(path: string): void {
   if (!gaInitialised || !GA_ID) return;
+  // Re-checked at send time, not just at init. Until now consent could only be
+  // granted once and never revisited, so an already-initialised tag could not
+  // outlive its permission. The preferences control makes accept-then-decline
+  // reachable within one page session, and gtag.js stays loaded once injected —
+  // without this the tag would keep reporting after the user withdrew consent.
+  if (!hasCookieConsent()) return;
   if (path === lastTrackedPath) return;
   lastTrackedPath = path;
   window.gtag('event', 'page_view', { page_path: path });

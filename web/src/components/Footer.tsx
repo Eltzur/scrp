@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { openCookiePreferences } from '../utils/analytics';
 
 export default function Footer() {
   return (
@@ -10,6 +11,15 @@ export default function Footer() {
         <Link to="/disclaimer" className="hover:text-emerald-600 transition-colors">תנאי שימוש וכתב ויתור</Link>
         <span className="text-gray-300">|</span>
         <a href="mailto:info@xxl.co.il" className="hover:text-emerald-600 transition-colors">צור קשר</a>
+        <span className="text-gray-300">|</span>
+        {/* Re-entry to the consent choice from every page, since a declined
+            visitor otherwise has no route back to the banner. */}
+        <button
+          onClick={openCookiePreferences}
+          className="hover:text-emerald-600 transition-colors"
+        >
+          עוגיות
+        </button>
       </p>
     </footer>
   );

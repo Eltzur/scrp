@@ -1,11 +1,21 @@
-import { useState } from 'react';
-import { setCookieConsent } from '../utils/analytics';
+import { useEffect, useState } from 'react';
+import { setCookieConsent, COOKIE_PREFS_EVENT } from '../utils/analytics';
 
 export default function CookieBanner() {
+  // Unchanged: shows on a first visit only. A stored choice — 'true' OR
+  // 'false' — keeps it hidden, so a decline is never re-prompted by itself.
   const [visible, setVisible] = useState<boolean>(() => {
     try { return localStorage.getItem('xxl_cookie_consent') === null; }
     catch { return false; }
   });
+
+  // The only way the banner comes back after a choice: the user asking for it
+  // via the cookie-preferences control.
+  useEffect(() => {
+    const reopen = () => setVisible(true);
+    window.addEventListener(COOKIE_PREFS_EVENT, reopen);
+    return () => window.removeEventListener(COOKIE_PREFS_EVENT, reopen);
+  }, []);
 
   if (!visible) return null;
 

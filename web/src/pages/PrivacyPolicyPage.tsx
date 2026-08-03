@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
+import { Cookie } from 'lucide-react';
 import XxlLogo from '../components/XxlLogo';
 import Footer from '../components/Footer';
+import { openCookiePreferences } from '../utils/analytics';
 
 export default function PrivacyPolicyPage() {
   return (
@@ -64,7 +66,15 @@ export default function PrivacyPolicyPage() {
 
             <section id="cookies">
               <h2 className="text-xl font-semibold text-[#022C22] mb-3">5. עוגיות</h2>
-              <p>העוגיות מסייעות לנו להפעיל את האתר ולהבין את השימוש בו. עוגיות חיוניות לתפעול האתר פועלות תמיד. עוגיות ניתוח (Google Analytics) פועלות רק לאחר שתאשרו זאת בבאנר העוגיות המוצג בכניסתכם הראשונה לאתר. תוכלו לשנות את בחירתכם בכל עת על ידי ניקוי נתוני האתר בדפדפן וטעינה מחדש.</p>
+              <p>העוגיות מסייעות לנו להפעיל את האתר ולהבין את השימוש בו. עוגיות חיוניות לתפעול האתר פועלות תמיד. עוגיות ניתוח (Google Analytics) פועלות רק לאחר שתאשרו זאת בבאנר העוגיות המוצג בכניסתכם הראשונה לאתר. תוכלו לשנות את בחירתכם בכל עת:</p>
+              <button
+                onClick={openCookiePreferences}
+                className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-600
+                           text-sm font-medium text-emerald-700 hover:bg-emerald-50 transition-colors"
+              >
+                <Cookie size={15} />
+                נהל העדפות עוגיות
+              </button>
             </section>
 
             <section>
