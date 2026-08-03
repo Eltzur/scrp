@@ -288,11 +288,22 @@ export const productImageUrl = (itemCode: string): string =>
 
 // --- Grouped promos (chain → city → branch view) ----------------------------
 
+export type PromoKind = 'unit' | 'basket';
+export type PromoShape = 'gift' | 'bundle' | 'fixed' | 'discount' | 'basket';
+export type PromoSort = 'discount' | 'savings' | 'ending';
+
 export interface GroupedPromoItem {
   chain_id: string;
   chain_name: string | null;
   city: string | null;
   branch: string | null;
+  /** stores.id — pass back as `branch` to filter to this one branch. */
+  store_fk: number;
+  /** 'basket' rows have no derivable unit price: no unit_price, pct or savings. */
+  promo_kind: PromoKind;
+  promo_type: PromoShape | null;
+  savings: number | null;
+  min_purchase_amount: number | null;
   item_code: string;
   product_name: string | null;
   shelf_price: number | null;
@@ -312,6 +323,15 @@ export interface GroupedPromoItem {
 export interface GroupedPromoOpts {
   city?: string;
   chainId?: string;
+  /** stores.id of a single branch. */
+  branch?: number;
+  /** Discount bands, e.g. ['26-50','51-75']. Excludes basket rows (no pct). */
+  bands?: string[];
+  promoTypes?: PromoShape[];
+  /** Product name substring, or an exact barcode. */
+  q?: string;
+  endingWithinHours?: number;
+  sort?: PromoSort;
   limit?: number;
   offset?: number;
 }
@@ -320,9 +340,17 @@ export interface GroupedPromoOpts {
  *  order; re-sorting client-side would break the grouped rendering. */
 export const getGroupedPromos = (opts: GroupedPromoOpts = {}): Promise<GroupedPromoItem[]> =>
   http.get<GroupedPromoItem[]>('/promos/grouped', {
+    // axios encodes params via the shared paramsSerializer (URLSearchParams),
+    // which percent-encodes Hebrew correctly — do NOT hand-build this query.
     params: {
       ...(opts.city    ? { city:  opts.city    } : {}),
       ...(opts.chainId ? { chain: opts.chainId } : {}),
+      ...(opts.branch != null ? { branch: opts.branch } : {}),
+      ...(opts.bands?.length      ? { bands: opts.bands.join(',') } : {}),
+      ...(opts.promoTypes?.length ? { promo_type: opts.promoTypes.join(',') } : {}),
+      ...(opts.q ? { q: opts.q } : {}),
+      ...(opts.endingWithinHours ? { ending_within_hours: opts.endingWithinHours } : {}),
+      ...(opts.sort && opts.sort !== 'discount' ? { sort: opts.sort } : {}),
       limit:  opts.limit  ?? 300,
       offset: opts.offset ?? 0,
     },
