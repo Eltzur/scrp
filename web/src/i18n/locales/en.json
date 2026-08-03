@@ -34,7 +34,11 @@
     "only_at": "Only at {{chain}}",
     "chains_count": "{{count}} chains",
     "barcode": "{{code}}",
-    "more_info": "More info"
+    "more_info": "More info",
+    "promo": "Promo",
+    "promo_bundle": "{{qty}} for ₪{{total}}",
+    "promo_per_unit": "₪{{price}} each",
+    "promo_at_branch": "at {{branch}}"
   },
   "product_modal": {
     "close": "Close",

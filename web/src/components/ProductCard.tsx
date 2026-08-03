@@ -70,6 +70,26 @@ function fmtBundlePrice(price: number): string {
   return price % 1 === 0 ? price.toFixed(0) : price.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
 }
 
+/** Condition text for a promo quote.
+ *
+ *  A bundle must NEVER show a bare per-unit number: "₪3.75" alone reads as the
+ *  shelf price of one unit, when in fact it only applies if you buy 8. The
+ *  bundle total is COMPUTED (promo_price × promo_min_qty) rather than parsed out
+ *  of promo_description, which is freeform chain text and not reliable.
+ *  Returns null for single-unit promos, where no quantity condition exists.
+ */
+function bundleCondition(q: PriceQuote): { total: string; perUnit: string; qty: number } | null {
+  const qty = q.promo_min_qty ?? 1;
+  if (!(qty > 1) || q.promo_price == null) return null;
+  // 2dp on both: these are money, and fmtBundlePrice strips trailing zeros
+  // ("14.9"), which reads wrong next to the ₪14.90 shown elsewhere on the card.
+  return {
+    qty: Math.round(qty),
+    total: (q.promo_price * qty).toFixed(2),
+    perUnit: q.promo_price.toFixed(2),
+  };
+}
+
 export default function ProductCard({ item, promosByStore }: Props) {
   const { t, i18n }   = useTranslation();
   const navigate      = useNavigate();
@@ -173,14 +193,16 @@ export default function ProductCard({ item, promosByStore }: Props) {
         {quotes.map((q, i) => {
           const isCheapest = i === 0 && isComparable;
           const { discountPct, bundleLabel, buyOneGetOne, promoDesc } = getPromoBadges(q, product.item_code, promosByStore);
+          const cond = q.is_promo ? bundleCondition(q) : null;
           return (
             <div
               key={`${q.chain_id}-${q.store_id}`}
               className={clsx(
-                'flex items-center justify-between px-3 py-2 text-sm',
+                'px-3 py-2 text-sm',
                 isCheapest ? 'bg-emerald-50' : 'bg-white',
               )}
             >
+            <div className="flex items-center justify-between">
               {/* Chain + city */}
               <div className="flex items-center gap-1.5 min-w-0">
                 {isCheapest && (
@@ -196,9 +218,19 @@ export default function ProductCard({ item, promosByStore }: Props) {
 
               {/* Price + delta + promo badges — always LTR for numerals */}
               <div className="flex items-center gap-1.5 shrink-0 ms-2" dir="ltr">
+                {/* Struck shelf price, so the promo price is never mistaken for
+                    the ordinary one. */}
+                {q.is_promo && q.shelf_price != null && (
+                  <span className="text-xs text-gray-400 line-through">{fmtPrice(q.shelf_price)}</span>
+                )}
                 <span className={clsx('font-semibold', isCheapest ? 'text-emerald-700' : 'text-gray-800')}>
                   {fmtPrice(q.price)}
                 </span>
+                {q.is_promo && (
+                  <span className="text-xs font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                    {t('product_card.promo')}
+                  </span>
+                )}
                 {isComparable && !isCheapest && q.delta_from_cheapest > 0 && (
                   <span className="text-xs text-rose-500 font-medium">
                     +{fmtPrice(q.delta_from_cheapest)}
@@ -230,6 +262,31 @@ export default function ProductCard({ item, promosByStore }: Props) {
                   </span>
                 )}
               </div>
+            </div>
+
+            {/* Promo condition + branch. A promo is store-local, unlike the
+                chain-level shelf quotes, so the branch must be named or the
+                price is not actionable. */}
+            {q.is_promo && (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1" dir="auto">
+                {cond && (
+                  <span
+                    className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200"
+                    title={q.promo_description ?? undefined}
+                  >
+                    {t('product_card.promo_bundle', { qty: cond.qty, total: cond.total })}
+                    <span className="text-amber-700/70">
+                      {' · '}{t('product_card.promo_per_unit', { price: cond.perUnit })}
+                    </span>
+                  </span>
+                )}
+                {q.store_name && (
+                  <span className="text-[11px] text-gray-500 truncate" dir="auto">
+                    {t('product_card.promo_at_branch', { branch: q.store_name })}
+                  </span>
+                )}
+              </div>
+            )}
             </div>
           );
         })}

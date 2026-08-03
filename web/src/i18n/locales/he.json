@@ -34,7 +34,11 @@
     "only_at": "בלעדי ב{{chain}}",
     "chains_count": "{{count}} רשתות",
     "barcode": "{{code}}",
-    "more_info": "מידע נוסף"
+    "more_info": "מידע נוסף",
+    "promo": "מבצע",
+    "promo_bundle": "{{qty}} יח' ב-₪{{total}}",
+    "promo_per_unit": "₪{{price}} ליח׳",
+    "promo_at_branch": "בסניף {{branch}}"
   },
   "product_modal": {
     "close": "סגירה",

@@ -3,514 +3,2071 @@
  * Do not make direct changes to the file.
  */
 
-
 export interface paths {
-  "/health": {
-    /**
-     * Liveness check
-     * @description Returns ok when the server is running.
-     */
-    get: operations["health_health_get"];
-  };
-  "/stats": {
-    /**
-     * Database statistics
-     * @description Counts of chains, stores, items, and prices; last successful fetch per chain.
-     */
-    get: operations["stats_stats_get"];
-  };
-  "/chains": {
-    /**
-     * All loaded chains
-     * @description Returns one entry per chain in the database with barcode and store counts.
-     */
-    get: operations["chains_chains_get"];
-  };
-  "/stores": {
-    /**
-     * Store branches
-     * @description List supermarket branches. Filter by chain and/or city.
-     * Only returns stores that have at least store metadata loaded.
-     */
-    get: operations["stores_stores_get"];
-  };
-  "/cities": {
-    /**
-     * Cities with price data
-     * @description Cities that have actual price data loaded, with chain/store/price counts.
-     */
-    get: operations["cities_cities_get"];
-  };
-  "/search": {
-    /**
-     * Search products by name
-     * @description Search for products by Hebrew or English name. Multi-word queries match ALL words
-     * in any order. Returns multi-chain products first, then single-chain.
-     * Supports pagination via offset. group_by=store returns one row per store.
-     */
-    get: operations["search_search_get"];
-  };
-  "/compare": {
-    /**
-     * Cross-chain price comparison
-     * @description Like /search but returns ONLY products available in 2+ chains, with
-     * delta_from_cheapest on each quote showing how much more expensive vs the cheapest chain.
-     */
-    get: operations["compare_compare_get"];
-  };
-  "/product/{barcode}": {
-    /**
-     * All prices for one barcode
-     * @description Fetch every price quote across all stores for a single barcode.
-     * Returns 404 if the barcode is not found in any chain.
-     * Returns 400 if the barcode format is invalid (not 8–14 digits).
-     */
-    get: operations["product_product__barcode__get"];
-  };
+    "/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Liveness check
+         * @description Returns ok when the server is running.
+         */
+        get: operations["health_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Database statistics
+         * @description Counts of chains, stores, items, and prices; last successful fetch per chain.
+         */
+        get: operations["stats_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * All loaded chains
+         * @description Returns one entry per chain in the database with barcode and store counts.
+         */
+        get: operations["chains_chains_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Store branches
+         * @description List supermarket branches. Filter by chain and/or city.
+         *     Only returns stores that have at least store metadata loaded.
+         */
+        get: operations["stores_stores_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cities with price data
+         * @description Cities that have actual price data loaded, with chain/store/price counts.
+         */
+        get: operations["cities_cities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search products by name
+         * @description Search for products by Hebrew or English name. Multi-word queries match ALL words
+         *     in any order. Returns multi-chain products first, then single-chain.
+         *     Supports pagination via offset. group_by=store returns one row per store.
+         */
+        get: operations["search_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cross-chain price comparison
+         * @description Like /search but returns ONLY products available in 2+ chains, with
+         *     delta_from_cheapest on each quote showing how much more expensive vs the cheapest chain.
+         */
+        get: operations["compare_compare_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/product/{barcode}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * All prices for one barcode
+         * @description Fetch every price quote across all stores for a single barcode.
+         *     Returns 404 if the barcode is not found in any chain.
+         *     Returns 400 if the barcode format is invalid (not 8–14 digits).
+         */
+        get: operations["product_product__barcode__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/product/{barcode}/details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GS1 enrichment detail for one barcode
+         * @description Kashrut, nutrition, ingredients and allergens for one barcode, joined from
+         *     the GS1 catalog (active products only), plus whether an image exists.
+         *
+         *     **A missing GS1 match is not an error.** Only ~8% of items have one, so this
+         *     returns 200 with `has_gs1_data: false` and null sections for the rest —
+         *     the client renders name and prices and omits the enrichment. 404 is reserved
+         *     for a barcode that is not in the catalog at all; 400 for a malformed one.
+         */
+        get: operations["product_details_product__barcode__details_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/product/{barcode}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Product image (JPEG) for one barcode
+         * @description Stream this product's GS1 image. 404 when we hold none — true for most
+         *     barcodes, so the client should treat it as a normal placeholder case.
+         *
+         *     Deliberately does not touch the database: the filename is the GTIN and the
+         *     GTIN is the item_code, so a stat() answers the question outright.
+         */
+        get: operations["product_image_product__barcode__image_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/basket/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compare basket across chains
+         * @description Given a list of barcodes + quantities, returns the total cost at each chain
+         *     along with which items each chain stocks. Chains are sorted by items found
+         *     (desc) then total price (asc). First chain in the list is the winner.
+         *     Free tier: max 25 items.
+         */
+        post: operations["compare_basket_basket_compare_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/baskets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Baskets */
+        get: operations["list_baskets_baskets_get"];
+        put?: never;
+        /** Create Basket */
+        post: operations["create_basket_baskets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/baskets/{basket_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Basket */
+        get: operations["get_basket_baskets__basket_id__get"];
+        /** Update Basket */
+        put: operations["update_basket_baskets__basket_id__put"];
+        post?: never;
+        /** Delete Basket */
+        delete: operations["delete_basket_baskets__basket_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/favorites/{barcode}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Toggle Favorite
+         * @description Toggle: add if not favorited, remove if already favorited.
+         *     Returns {"favorited": bool} reflecting the new state.
+         */
+        post: operations["toggle_favorite_favorites__barcode__post"];
+        /**
+         * Remove Favorite
+         * @description Explicitly remove a barcode from favorites (no-op if not present).
+         */
+        delete: operations["remove_favorite_favorites__barcode__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/favorites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Favorites
+         * @description List all favorited barcodes with canonical name from items table.
+         */
+        get: operations["list_favorites_favorites_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/freshness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Data freshness per chain
+         * @description Most recent successful load timestamp per chain (files_loaded > 0).
+         */
+        get: operations["freshness_freshness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-store 72h coverage by chain
+         * @description 72h load coverage per chain, using active_stores.yaml as the configured denominator.
+         */
+        get: operations["coverage_coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/promos/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Active promos for many stores in one request */
+        post: operations["promos_bulk_promos_bulk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/promos/today": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Hot deals — active promos with ≥10% discount or 1+1 */
+        get: operations["promos_today_promos_today_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/promos/grouped": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-branch promos for the chain → city → branch view
+         * @description Active promos ordered chain → city → branch, then by `sort` within each
+         *     branch. Flat rows; the frontend groups them. Not deduplicated: the same
+         *     item_code appears once per branch on purpose.
+         *
+         *     `discount_price` is the raw bundle total — compare `unit_price` against
+         *     `shelf_price`, never `discount_price`.
+         *
+         *     Two kinds of row come back, distinguished by `promo_kind`:
+         *       * `unit`   — has a per-unit price, so unit_price / discount_pct / savings
+         *                    are populated.
+         *       * `basket` — a conditional or spend-threshold deal with no derivable unit
+         *                    price (including rows whose min_qty is a spend figure rather
+         *                    than a count). unit_price, discount_pct and savings are NULL;
+         *                    read promo_description and min_purchase_amount instead.
+         *                    A `bands` filter excludes these by construction, since they
+         *                    have no percentage to band.
+         */
+        get: operations["promos_grouped_promos_grouped_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/promos/cities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cities with active promos */
+        get: operations["promo_cities_promos_cities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/promos/chains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Chains with active promos */
+        get: operations["promo_chains_promos_chains_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/promos/store/{chain_id}/{store_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Active promos for a store by chain_id + store_id */
+        get: operations["promos_by_store_promos_store__chain_id___store_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/promos/{store_fk}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Active promos for a store by stores.id (FK) */
+        get: operations["promos_by_fk_promos__store_fk__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
-
 export type webhooks = Record<string, never>;
-
 export interface components {
-  schemas: {
-    /**
-     * ChainSummary
-     * @description One loaded chain with aggregate stats.
-     */
-    ChainSummary: {
-      /**
-       * Chain Id
-       * @description Chain barcode prefix / government ID
-       */
-      chain_id: string;
-      /**
-       * Name
-       * @description Hebrew chain name
-       */
-      name: string;
-      /**
-       * Total Barcodes
-       * @description Distinct barcodes with prices loaded
-       */
-      total_barcodes: number;
-      /**
-       * Total Stores Loaded
-       * @description Stores we have price data for
-       */
-      total_stores_loaded: number;
+    schemas: {
+        /**
+         * AllergenInfo
+         * @description Coded allergen declarations.
+         */
+        AllergenInfo: {
+            /**
+             * Contains
+             * @description Declared allergens
+             */
+            contains?: string[];
+            /**
+             * May Contain
+             * @description Trace / shared-line warnings
+             */
+            may_contain?: string[];
+        };
+        /** BasketBreakdownItem */
+        BasketBreakdownItem: {
+            /** Item Code */
+            item_code: string;
+            /** Item Name */
+            item_name: string | null;
+            /** Price */
+            price: number | null;
+            /** Quantity */
+            quantity: number;
+            /** Subtotal */
+            subtotal: number | null;
+            /** Found */
+            found: boolean;
+        };
+        /** BasketChainResult */
+        BasketChainResult: {
+            /** Chain Id */
+            chain_id: string;
+            /** Chain Name */
+            chain_name: string | null;
+            /** Total Price */
+            total_price: number;
+            /** Items Found */
+            items_found: number;
+            /** Items Missing */
+            items_missing: number;
+            /** Breakdown */
+            breakdown: components["schemas"]["BasketBreakdownItem"][];
+        };
+        /** BasketItem */
+        BasketItem: {
+            /** Item Code */
+            item_code: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+        };
+        /** BasketItemIn */
+        BasketItemIn: {
+            /** Barcode */
+            barcode: string;
+            /** Name */
+            name: string;
+            /** Qty */
+            qty: number;
+        };
+        /** BasketRequest */
+        BasketRequest: {
+            /** Items */
+            items: components["schemas"]["BasketItem"][];
+            /** Chain Ids */
+            chain_ids?: string[] | null;
+            /** Cities */
+            cities?: string[] | null;
+        };
+        /** BasketResponse */
+        BasketResponse: {
+            /** Chains */
+            chains: components["schemas"]["BasketChainResult"][];
+            /** Winner Chain Id */
+            winner_chain_id: string | null;
+            /** Item Limit */
+            item_limit: number;
+            /** Items Requested */
+            items_requested: number;
+        };
+        /**
+         * ChainCoverage
+         * @description 72h per-store coverage for one chain.
+         */
+        ChainCoverage: {
+            /** Chain Id */
+            chain_id: string;
+            /** Chain Name */
+            chain_name: string | null;
+            /**
+             * Stores Configured
+             * @description Configured store count from active_stores.yaml
+             */
+            stores_configured: number;
+            /**
+             * Stores Loaded 72H
+             * @description Stores with status='loaded' in fetch_store_runs within 72h
+             */
+            stores_loaded_72h: number;
+            /**
+             * Stores Seen 72H
+             * @description Stores that appeared in fetch_store_runs within 72h (any status)
+             */
+            stores_seen_72h: number;
+            /**
+             * Coverage Pct
+             * @description stores_loaded_72h / stores_configured × 100
+             */
+            coverage_pct: number;
+        };
+        /**
+         * ChainFreshness
+         * @description Last successful load timestamp for one chain.
+         */
+        ChainFreshness: {
+            /** Chain Name */
+            chain_name: string;
+            /**
+             * Last Loaded At
+             * @description ISO 8601 UTC timestamp of last run with files_loaded > 0
+             */
+            last_loaded_at?: string | null;
+        };
+        /**
+         * ChainSummary
+         * @description One loaded chain with aggregate stats.
+         */
+        ChainSummary: {
+            /**
+             * Chain Id
+             * @description Chain barcode prefix / government ID
+             */
+            chain_id: string;
+            /**
+             * Name
+             * @description Hebrew chain name
+             */
+            name: string;
+            /**
+             * Total Barcodes
+             * @description Distinct barcodes with prices loaded
+             */
+            total_barcodes: number;
+            /**
+             * Total Stores Loaded
+             * @description Stores we have price data for
+             */
+            total_stores_loaded: number;
+        };
+        /**
+         * CityInfo
+         * @description A city with price coverage statistics.
+         */
+        CityInfo: {
+            /** City */
+            city: string;
+            /**
+             * Chain Count
+             * @description Number of distinct chains with prices in this city
+             */
+            chain_count: number;
+            /**
+             * Store Count
+             * @description Number of stores with prices in this city
+             */
+            store_count: number;
+            /**
+             * Chain Ids
+             * @description chain_ids present in this city
+             */
+            chain_ids?: string[];
+        };
+        /**
+         * CoverageResponse
+         * @description Per-store 72h coverage snapshot across all configured chains.
+         */
+        CoverageResponse: {
+            /**
+             * Chains
+             * @description One entry per chain, sorted by coverage_pct ascending (worst first)
+             */
+            chains: components["schemas"]["ChainCoverage"][];
+        };
+        /**
+         * FreshnessResponse
+         * @description Data freshness snapshot across all chains.
+         */
+        FreshnessResponse: {
+            /**
+             * Oldest Last Loaded At
+             * @description Earliest last_loaded_at across chains that have data
+             */
+            oldest_last_loaded_at?: string | null;
+            /**
+             * Chains
+             * @description One entry per chain, sorted oldest-first then nulls
+             */
+            chains: components["schemas"]["ChainFreshness"][];
+        };
+        /**
+         * GroupedPromoItem
+         * @description One promo row for the chain -> city -> branch display.
+         *
+         *     Flat by design: the frontend groups by chain -> city -> branch. Unlike
+         *     /promos/today these are NOT deduplicated, so the same item_code appears once
+         *     per branch — that per-branch granularity is the point of the view.
+         */
+        GroupedPromoItem: {
+            /** Chain Id */
+            chain_id: string;
+            /** Chain Name */
+            chain_name: string | null;
+            /**
+             * City
+             * @description stores.city_canonical; may be NULL for a few stores
+             */
+            city?: string | null;
+            /**
+             * Branch
+             * @description stores.store_name
+             */
+            branch?: string | null;
+            /**
+             * Store Fk
+             * @description stores.id — pass back as ?branch= to filter to this branch
+             */
+            store_fk: number;
+            /** Item Code */
+            item_code: string;
+            /**
+             * Product Name
+             * @description Canonical items.item_name; NULL if the promo item is not in our catalog
+             */
+            product_name?: string | null;
+            /**
+             * Shelf Price
+             * @description Current shelf price at this store; NULL when we hold no price row (~18%)
+             */
+            shelf_price?: number | null;
+            /**
+             * Min Qty
+             * @description Units required for the bundle price
+             */
+            min_qty?: number | null;
+            /**
+             * Promo Kind
+             * @description 'unit' = has a per-unit price; 'basket' = conditional/spend-threshold deal with no derivable unit price
+             * @default unit
+             */
+            promo_kind: string;
+            /**
+             * Promo Type
+             * @description Shape-derived class: gift | bundle | fixed | discount | basket. Derived from the numbers, NOT from reward_type (which is chain-specific)
+             */
+            promo_type?: string | null;
+            /**
+             * Savings
+             * @description shelf_price - unit_price in shekels; NULL for basket rows
+             */
+            savings?: number | null;
+            /**
+             * Min Purchase Amount
+             * @description Minimum spend condition as published; NULL when the promo has none
+             */
+            min_purchase_amount?: number | null;
+            /**
+             * Discount Price
+             * @description Raw DiscountedPrice — a BUNDLE TOTAL, not per unit
+             */
+            discount_price?: number | null;
+            /**
+             * Reward Type
+             * @description Source RewardType; 1 = buy-one-get-one, where discount_price=0 marks the free item rather than a 100% discount
+             */
+            reward_type?: number | null;
+            /**
+             * Unit Price
+             * @description discount_price / min_qty — the per-unit figure to compare against shelf_price
+             */
+            unit_price?: number | null;
+            /**
+             * Discount Pct
+             * @description Rounded % off shelf_price; NULL when shelf_price is unknown
+             */
+            discount_pct?: number | null;
+            /** Promo Description */
+            promo_description: string | null;
+            /** Promo Start */
+            promo_start: string | null;
+            /** Promo End */
+            promo_end: string | null;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HotPromoItem
+         * @description One hot-deal promo row returned by GET /promos/today.
+         */
+        HotPromoItem: {
+            /** Item Code */
+            item_code: string;
+            /** Promo Description */
+            promo_description: string | null;
+            /** Discount Pct */
+            discount_pct: number | null;
+            /** Item Price */
+            item_price: number | null;
+            /** Discount Price */
+            discount_price: number | null;
+            /** Min Qty */
+            min_qty: number | null;
+            /** Reward Type */
+            reward_type: number | null;
+            /** Chain Name */
+            chain_name: string | null;
+            /** Store Name */
+            store_name: string | null;
+            /** City */
+            city: string | null;
+            /** Promo End */
+            promo_end: string | null;
+        };
+        /**
+         * KashrutInfo
+         * @description Kosher certification block from GS1. Every field is optional — suppliers
+         *     fill this in very unevenly, and a blank field means 'not declared', not 'no'.
+         */
+        KashrutInfo: {
+            /**
+             * Supervision Type
+             * @description e.g. בשרי / חלבי / פרווה
+             */
+            supervision_type?: string | null;
+            /**
+             * Rabbinate
+             * @description Certifying rabbinate(s)
+             */
+            rabbinate?: string[];
+            /**
+             * Board
+             * @description Board of supervision (בד"ץ etc.)
+             */
+            board?: string[];
+            /** Kosher For Passover */
+            kosher_for_passover?: string | null;
+            /** Passover Remark */
+            passover_remark?: string | null;
+            /**
+             * Israel Milk
+             * @description חלב ישראל
+             */
+            israel_milk?: string | null;
+            /**
+             * Cooking Israel
+             * @description בישול ישראל
+             */
+            cooking_israel?: string | null;
+            /**
+             * Sabbath Observing
+             * @description מפעל שומר שבת
+             */
+            sabbath_observing?: string | null;
+            /** Sheviit Orlah Tevel */
+            sheviit_orlah_tevel?: string | null;
+        };
+        /**
+         * NutritionRow
+         * @description One line of the nutrition panel.
+         */
+        NutritionRow: {
+            /**
+             * Label
+             * @description e.g. אנרגיה (קלוריות)
+             */
+            label?: string | null;
+            /**
+             * Value
+             * @description Raw numeric string; may be a GS1 code like 'L 0.5'
+             */
+            value?: string | null;
+            /**
+             * Uom
+             * @description Unit of measure
+             */
+            uom?: string | null;
+            /**
+             * Text
+             * @description Supplier's own rendering — prefer this for display; it is the only form that survives non-numeric declarations such as 'פחות מ-0.5 גרם'
+             */
+            text?: string | null;
+        };
+        /**
+         * NutritionTable
+         * @description Nutrition panel. Absent for ~1/3 of products that publish none.
+         */
+        NutritionTable: {
+            /**
+             * Basis
+             * @description Measurement basis, e.g. ל-100 גרם
+             */
+            basis?: string | null;
+            /** Rows */
+            rows?: components["schemas"]["NutritionRow"][];
+        };
+        /**
+         * PriceQuote
+         * @description One chain's best (cheapest store) price for a barcode.
+         */
+        PriceQuote: {
+            /** Chain Id */
+            chain_id: string;
+            /** Chain Name */
+            chain_name: string | null;
+            /** Store Id */
+            store_id: string;
+            /** Store Name */
+            store_name: string | null;
+            /** City */
+            city: string | null;
+            /**
+             * Price
+             * @description Item price in NIS
+             */
+            price: number;
+            /**
+             * Unit Price
+             * @description Price per unit-of-measure
+             */
+            unit_price?: number | null;
+            /** Unit Of Measure */
+            unit_of_measure: string | null;
+            /**
+             * Updated At
+             * @description Date price was last updated in source XML
+             */
+            updated_at?: string | null;
+            /**
+             * Delta From Cheapest
+             * @description How much more expensive than the cheapest chain (0 = cheapest)
+             * @default 0
+             */
+            delta_from_cheapest: number;
+            /**
+             * Is Promo
+             * @description True when `price` comes from a promo rather than the shelf price
+             * @default false
+             */
+            is_promo: boolean;
+            /**
+             * Shelf Price
+             * @description Original shelf price at this store, before any promo
+             */
+            shelf_price?: number | null;
+            /**
+             * Promo Price
+             * @description Promo price per unit; equals `price` when is_promo
+             */
+            promo_price?: number | null;
+            /**
+             * Promo Min Qty
+             * @description Units required to get promo_price — >1 means a bundle condition ('N יח')
+             */
+            promo_min_qty?: number | null;
+            /**
+             * Promo Description
+             * @description Promo terms as published by the chain
+             */
+            promo_description?: string | null;
+            /**
+             * Promo End
+             * @description When the promo expires
+             */
+            promo_end?: string | null;
+            /**
+             * Store Fk
+             * @description stores.id of this branch — a promo is store-local, so a promo-winning quote must name its branch
+             */
+            store_fk?: number | null;
+        };
+        /**
+         * Product
+         * @description Core product metadata, chain-agnostic.
+         */
+        Product: {
+            /**
+             * Item Code
+             * @description Barcode / EAN
+             */
+            item_code: string;
+            /**
+             * Canonical Name
+             * @description Name from first chain to insert this barcode
+             */
+            canonical_name?: string | null;
+            /** Manufacturer */
+            manufacturer: string | null;
+            /** Unit Of Measure */
+            unit_of_measure: string | null;
+            /**
+             * Is Weighted
+             * @description True for deli/cheese items priced per kg
+             */
+            is_weighted: boolean;
+            /**
+             * Names Per Chain
+             * @description chain_id → product name as that chain calls it
+             */
+            names_per_chain?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * ProductDetails
+         * @description GS1 enrichment detail for one item_code.
+         *
+         *     ALWAYS returns 200 with this shape for a known item_code. Only ~8% of items
+         *     have a GS1 match, so `has_gs1_data: false` is the ordinary case and carries
+         *     no error — the client should render name + prices and omit the rest.
+         */
+        ProductDetails: {
+            /** Item Code */
+            item_code: string;
+            /**
+             * Has Gs1 Data
+             * @description False for the ~92% of items with no active GS1 match
+             */
+            has_gs1_data: boolean;
+            /**
+             * Has Image
+             * @description True if GET /product/{item_code}/image will return a JPEG
+             */
+            has_image: boolean;
+            /** Gtin */
+            gtin?: string | null;
+            /** Brand */
+            brand?: string | null;
+            /**
+             * Gs1 Name
+             * @description GS1 trade_item_description
+             */
+            gs1_name?: string | null;
+            /** Category */
+            category?: string | null;
+            kashrut?: components["schemas"]["KashrutInfo"] | null;
+            nutrition?: components["schemas"]["NutritionTable"] | null;
+            /**
+             * Ingredients
+             * @description Full ingredient string, incl. percentages
+             */
+            ingredients?: string | null;
+            allergens?: components["schemas"]["AllergenInfo"] | null;
+        };
+        /**
+         * ProductWithPrices
+         * @description A product together with all available price quotes.
+         */
+        ProductWithPrices: {
+            product: components["schemas"]["Product"];
+            /**
+             * Quotes
+             * @description One entry per chain, sorted cheapest first
+             */
+            quotes: components["schemas"]["PriceQuote"][];
+            /** Cheapest Price */
+            cheapest_price: number | null;
+            /** Most Expensive Price */
+            most_expensive_price: number | null;
+            /**
+             * Chains Count
+             * @description Number of distinct chains carrying this barcode
+             */
+            chains_count: number;
+        };
+        /**
+         * PromoItem
+         * @description One active promo row for a store.
+         */
+        PromoItem: {
+            /** Item Code */
+            item_code: string;
+            /** Promo Id */
+            promo_id: string | null;
+            /** Promo Description */
+            promo_description: string | null;
+            /** Promo Type */
+            promo_type: number | null;
+            /** Allow Multiple Discounts */
+            allow_multiple_discounts: boolean | null;
+            /** Min Qty */
+            min_qty: number | null;
+            /** Reward Type */
+            reward_type: number | null;
+            /** Discount Rate */
+            discount_rate: number | null;
+            /** Discount Price */
+            discount_price: number | null;
+            /** Min Purchase Amount */
+            min_purchase_amount: number | null;
+            /** Promo Start */
+            promo_start: string | null;
+            /** Promo End */
+            promo_end: string | null;
+            /** Discount Pct */
+            discount_pct: number | null;
+        };
+        /** SaveBasketRequest */
+        SaveBasketRequest: {
+            /** Name */
+            name: string;
+            /** Items */
+            items: components["schemas"]["BasketItemIn"][];
+        };
+        /**
+         * SearchResult
+         * @description Response for GET /search and GET /compare.
+         */
+        SearchResult: {
+            /** Query */
+            query: string;
+            /**
+             * Total Matches
+             * @description Distinct barcodes matching the query
+             */
+            total_matches: number;
+            /**
+             * Comparable Count
+             * @description Barcodes available in 2+ chains
+             */
+            comparable_count: number;
+            /**
+             * Has More
+             * @description True when more results exist beyond current page
+             * @default false
+             */
+            has_more: boolean;
+            /**
+             * Items
+             * @description Multi-chain products first (sorted by cheapest price), then single-chain
+             */
+            items: components["schemas"]["ProductWithPrices"][];
+        };
+        /**
+         * StatsResponse
+         * @description Database statistics snapshot.
+         */
+        StatsResponse: {
+            /** Chains Count */
+            chains_count: number;
+            /**
+             * Stores Count
+             * @description Stores with at least one price loaded
+             */
+            stores_count: number;
+            /**
+             * Items Count
+             * @description Distinct barcodes in items table
+             */
+            items_count: number;
+            /**
+             * Prices Count
+             * @description Total price rows across all stores
+             */
+            prices_count: number;
+            /**
+             * Last Fetch Per Chain
+             * @description chain name → ISO timestamp of last successful fetch
+             */
+            last_fetch_per_chain: {
+                [key: string]: string | null;
+            };
+        };
+        /**
+         * Store
+         * @description A single supermarket branch.
+         */
+        Store: {
+            /** Store Id */
+            store_id: string;
+            /** Chain Id */
+            chain_id: string;
+            /**
+             * Chain Name
+             * @description Hebrew chain name
+             */
+            chain_name?: string | null;
+            /**
+             * Store Name
+             * @description Branch name / location label
+             */
+            store_name?: string | null;
+            /** City */
+            city: string | null;
+            /** Address */
+            address: string | null;
+        };
+        /** UpdateBasketRequest */
+        UpdateBasketRequest: {
+            /** Name */
+            name?: string | null;
+            /** Items */
+            items?: components["schemas"]["BasketItemIn"][] | null;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
+        };
+        /** _PromoBulkRequest */
+        _PromoBulkRequest: {
+            /** Stores */
+            stores: components["schemas"]["_StoreRef"][];
+        };
+        /** _StoreRef */
+        _StoreRef: {
+            /** Chain Id */
+            chain_id: string;
+            /** Store Id */
+            store_id: string;
+        };
     };
-    /**
-     * CityInfo
-     * @description A city with price coverage statistics.
-     */
-    CityInfo: {
-      /** City */
-      city: string;
-      /**
-       * Chain Count
-       * @description Number of distinct chains with prices in this city
-       */
-      chain_count: number;
-      /**
-       * Store Count
-       * @description Number of stores with prices in this city
-       */
-      store_count: number;
-      /**
-       * Chain Ids
-       * @description chain_ids present in this city
-       */
-      chain_ids?: string[];
-    };
-    /** HTTPValidationError */
-    HTTPValidationError: {
-      /** Detail */
-      detail?: components["schemas"]["ValidationError"][];
-    };
-    /**
-     * PriceQuote
-     * @description One chain's best (cheapest store) price for a barcode.
-     */
-    PriceQuote: {
-      /** Chain Id */
-      chain_id: string;
-      /** Chain Name */
-      chain_name: string | null;
-      /** Store Id */
-      store_id: string;
-      /** Store Name */
-      store_name: string | null;
-      /** City */
-      city: string | null;
-      /**
-       * Price
-       * @description Item price in NIS
-       */
-      price: number;
-      /**
-       * Unit Price
-       * @description Price per unit-of-measure
-       */
-      unit_price?: number | null;
-      /** Unit Of Measure */
-      unit_of_measure: string | null;
-      /**
-       * Updated At
-       * @description Date price was last updated in source XML
-       */
-      updated_at?: string | null;
-      /**
-       * Delta From Cheapest
-       * @description How much more expensive than the cheapest chain (0 = cheapest)
-       * @default 0
-       */
-      delta_from_cheapest?: number;
-    };
-    /**
-     * Product
-     * @description Core product metadata, chain-agnostic.
-     */
-    Product: {
-      /**
-       * Item Code
-       * @description Barcode / EAN
-       */
-      item_code: string;
-      /**
-       * Canonical Name
-       * @description Name from first chain to insert this barcode
-       */
-      canonical_name?: string | null;
-      /** Manufacturer */
-      manufacturer: string | null;
-      /** Unit Of Measure */
-      unit_of_measure: string | null;
-      /**
-       * Is Weighted
-       * @description True for deli/cheese items priced per kg
-       */
-      is_weighted: boolean;
-      /**
-       * Names Per Chain
-       * @description chain_id → product name as that chain calls it
-       */
-      names_per_chain?: {
-        [key: string]: string;
-      };
-    };
-    /**
-     * ProductWithPrices
-     * @description A product together with all available price quotes.
-     */
-    ProductWithPrices: {
-      product: components["schemas"]["Product"];
-      /**
-       * Quotes
-       * @description One entry per chain, sorted cheapest first
-       */
-      quotes: components["schemas"]["PriceQuote"][];
-      /** Cheapest Price */
-      cheapest_price: number | null;
-      /** Most Expensive Price */
-      most_expensive_price: number | null;
-      /**
-       * Chains Count
-       * @description Number of distinct chains carrying this barcode
-       */
-      chains_count: number;
-    };
-    /**
-     * SearchResult
-     * @description Response for GET /search and GET /compare.
-     */
-    SearchResult: {
-      /** Query */
-      query: string;
-      /**
-       * Total Matches
-       * @description Distinct barcodes matching the query
-       */
-      total_matches: number;
-      /**
-       * Comparable Count
-       * @description Barcodes available in 2+ chains
-       */
-      comparable_count: number;
-      /**
-       * Has More
-       * @description True when more results exist beyond current page
-       * @default false
-       */
-      has_more?: boolean;
-      /**
-       * Items
-       * @description Multi-chain products first (sorted by cheapest price), then single-chain
-       */
-      items: components["schemas"]["ProductWithPrices"][];
-    };
-    /**
-     * StatsResponse
-     * @description Database statistics snapshot.
-     */
-    StatsResponse: {
-      /** Chains Count */
-      chains_count: number;
-      /**
-       * Stores Count
-       * @description Stores with at least one price loaded
-       */
-      stores_count: number;
-      /**
-       * Items Count
-       * @description Distinct barcodes in items table
-       */
-      items_count: number;
-      /**
-       * Prices Count
-       * @description Total price rows across all stores
-       */
-      prices_count: number;
-      /**
-       * Last Fetch Per Chain
-       * @description chain name → ISO timestamp of last successful fetch
-       */
-      last_fetch_per_chain: {
-        [key: string]: string | null;
-      };
-    };
-    /**
-     * Store
-     * @description A single supermarket branch.
-     */
-    Store: {
-      /** Store Id */
-      store_id: string;
-      /** Chain Id */
-      chain_id: string;
-      /**
-       * Chain Name
-       * @description Hebrew chain name
-       */
-      chain_name?: string | null;
-      /**
-       * Store Name
-       * @description Branch name / location label
-       */
-      store_name?: string | null;
-      /** City */
-      city: string | null;
-      /** Address */
-      address: string | null;
-    };
-    /** ValidationError */
-    ValidationError: {
-      /** Location */
-      loc: (string | number)[];
-      /** Message */
-      msg: string;
-      /** Error Type */
-      type: string;
-      /** Input */
-      input?: unknown;
-      /** Context */
-      ctx?: Record<string, never>;
-    };
-  };
-  responses: never;
-  parameters: never;
-  requestBodies: never;
-  headers: never;
-  pathItems: never;
+    responses: never;
+    parameters: never;
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
 }
-
 export type $defs = Record<string, never>;
-
-export type external = Record<string, never>;
-
 export interface operations {
-
-  /**
-   * Liveness check
-   * @description Returns ok when the server is running.
-   */
-  health_health_get: {
-    responses: {
-      /** @description Successful Response */
-      200: {
-        content: {
-          "application/json": unknown;
+    health_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-      };
-    };
-  };
-  /**
-   * Database statistics
-   * @description Counts of chains, stores, items, and prices; last successful fetch per chain.
-   */
-  stats_stats_get: {
-    responses: {
-      /** @description Successful Response */
-      200: {
-        content: {
-          "application/json": components["schemas"]["StatsResponse"];
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
         };
-      };
     };
-  };
-  /**
-   * All loaded chains
-   * @description Returns one entry per chain in the database with barcode and store counts.
-   */
-  chains_chains_get: {
-    responses: {
-      /** @description Successful Response */
-      200: {
-        content: {
-          "application/json": components["schemas"]["ChainSummary"][];
+    stats_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-      };
-    };
-  };
-  /**
-   * Store branches
-   * @description List supermarket branches. Filter by chain and/or city.
-   * Only returns stores that have at least store metadata loaded.
-   */
-  stores_stores_get: {
-    parameters: {
-      query?: {
-        /** @description Filter by chain_id */
-        chain?: string | null;
-        /** @description Filter by city (Hebrew or English) */
-        city?: string | null;
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        content: {
-          "application/json": components["schemas"]["Store"][];
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatsResponse"];
+                };
+            };
         };
-      };
-      /** @description Validation Error */
-      422: {
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
     };
-  };
-  /**
-   * Cities with price data
-   * @description Cities that have actual price data loaded, with chain/store/price counts.
-   */
-  cities_cities_get: {
-    responses: {
-      /** @description Successful Response */
-      200: {
-        content: {
-          "application/json": components["schemas"]["CityInfo"][];
+    chains_chains_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-      };
-    };
-  };
-  /**
-   * Search products by name
-   * @description Search for products by Hebrew or English name. Multi-word queries match ALL words
-   * in any order. Returns multi-chain products first, then single-chain.
-   * Supports pagination via offset. group_by=store returns one row per store.
-   */
-  search_search_get: {
-    parameters: {
-      query: {
-        /** @description Product name or manufacturer (multi-word AND) */
-        q: string;
-        /** @description Max products returned */
-        limit?: number;
-        /** @description Pagination offset */
-        offset?: number;
-        /** @description Filter to stores in this city */
-        city?: string | null;
-        /** @description Filter to one chain_id */
-        chain?: string | null;
-        /** @description Group results by chain or individual store */
-        group_by?: "chain" | "store";
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        content: {
-          "application/json": components["schemas"]["SearchResult"];
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChainSummary"][];
+                };
+            };
         };
-      };
-      /** @description Validation Error */
-      422: {
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
     };
-  };
-  /**
-   * Cross-chain price comparison
-   * @description Like /search but returns ONLY products available in 2+ chains, with
-   * delta_from_cheapest on each quote showing how much more expensive vs the cheapest chain.
-   */
-  compare_compare_get: {
-    parameters: {
-      query: {
-        /** @description Product name or manufacturer */
-        q: string;
-        /** @description Max products returned */
-        limit?: number;
-        /** @description Pagination offset */
-        offset?: number;
-        /** @description Filter to stores in this city */
-        city?: string | null;
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        content: {
-          "application/json": components["schemas"]["SearchResult"];
+    stores_stores_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by chain_id */
+                chain?: string | null;
+                /** @description Filter by city (Hebrew or English) */
+                city?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-      };
-      /** @description Validation Error */
-      422: {
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Store"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
-      };
     };
-  };
-  /**
-   * All prices for one barcode
-   * @description Fetch every price quote across all stores for a single barcode.
-   * Returns 404 if the barcode is not found in any chain.
-   * Returns 400 if the barcode format is invalid (not 8–14 digits).
-   */
-  product_product__barcode__get: {
-    parameters: {
-      path: {
-        /** @description EAN/barcode — 8 to 14 digits */
-        barcode: string;
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        content: {
-          "application/json": components["schemas"]["ProductWithPrices"];
+    cities_cities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-      };
-      /** @description Validation Error */
-      422: {
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CityInfo"][];
+                };
+            };
         };
-      };
     };
-  };
+    search_search_get: {
+        parameters: {
+            query: {
+                /** @description Product name or manufacturer (multi-word AND) */
+                q: string;
+                /** @description Max products returned */
+                limit?: number;
+                /** @description Pagination offset */
+                offset?: number;
+                /** @description Filter to stores in these cities (repeat param for multiple) */
+                city?: string[] | null;
+                /** @description Filter to chain_ids (repeat param for multiple) */
+                chain?: string[] | null;
+                /** @description Group results by chain or individual store */
+                group_by?: "chain" | "store";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compare_compare_get: {
+        parameters: {
+            query: {
+                /** @description Product name or manufacturer */
+                q: string;
+                /** @description Max products returned */
+                limit?: number;
+                /** @description Pagination offset */
+                offset?: number;
+                /** @description Filter to stores in these cities (repeat param for multiple) */
+                city?: string[] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    product_product__barcode__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description EAN/barcode — 8 to 14 digits */
+                barcode: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductWithPrices"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    product_details_product__barcode__details_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description EAN/barcode — 8 to 14 digits */
+                barcode: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    product_image_product__barcode__image_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description EAN/barcode — 8 to 14 digits */
+                barcode: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resized JPEG (800px, quality 80) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                };
+            };
+            /** @description No image on file for this barcode */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compare_basket_basket_compare_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BasketRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BasketResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_baskets_baskets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    create_basket_baskets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveBasketRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_basket_baskets__basket_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                basket_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_basket_baskets__basket_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                basket_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBasketRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_basket_baskets__basket_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                basket_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    toggle_favorite_favorites__barcode__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                barcode: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_favorite_favorites__barcode__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                barcode: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_favorites_favorites_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    freshness_freshness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreshnessResponse"];
+                };
+            };
+        };
+    };
+    coverage_coverage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverageResponse"];
+                };
+            };
+        };
+    };
+    promos_bulk_promos_bulk_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["_PromoBulkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: components["schemas"]["PromoItem"][];
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    promos_today_promos_today_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by city_canonical */
+                city?: string | null;
+                /** @description Filter by chain_id */
+                chain_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HotPromoItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    promos_grouped_promos_grouped_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by chain_id */
+                chain?: string | null;
+                /** @description Filter by city_canonical */
+                city?: string | null;
+                /** @description Filter to one branch by stores.id (store_fk) */
+                branch?: number | null;
+                /** @description CSV of discount bands: 0-10,11-25,26-50,51-75,76-99. Lower bound exclusive, upper inclusive — so 0% and 100% match no band */
+                bands?: string | null;
+                /** @description CSV of shape classes: gift,bundle,fixed,discount,basket */
+                promo_type?: string | null;
+                /** @description Search product name (substring) or exact item_code */
+                q?: string | null;
+                /** @description Only promos ending within N hours */
+                ending_within_hours?: number | null;
+                /** @description Row order WITHIN each branch */
+                sort?: string;
+                /** @description Max rows returned */
+                limit?: number;
+                /** @description Pagination offset */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupedPromoItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    promo_cities_promos_cities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+        };
+    };
+    promo_chains_promos_chains_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    promos_by_store_promos_store__chain_id___store_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chain_id: string;
+                store_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromoItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    promos_by_fk_promos__store_fk__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                store_fk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromoItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
 }
