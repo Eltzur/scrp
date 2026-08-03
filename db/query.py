@@ -153,7 +153,78 @@ def find_barcodes(conn: Connection, words: list[str]) -> list[str]:
 # Price rows (raw, one row per store × barcode)
 # ---------------------------------------------------------------------------
 
-_PRICE_SQL = """
+# Promo attach for the search price rows.
+#
+# A LATERAL returning AT MOST ONE row, not a plain LEFT JOIN. 2.09% of
+# (store_fk, item_code) pairs carry more than one active promo (max 12 —
+# club-variant rows like "יש{בקהילה4.90}"), and a plain join would duplicate the
+# price row once per promo. That would not merely repeat a quote: group_by_product
+# derives cheapest_price and chains_count from this row list, so duplicates would
+# corrupt both. LIMIT 1 makes the 1:1 property structural rather than incidental.
+#
+# Only classes with a genuine per-unit price are eligible. Basket rows
+# (min_qty > 24 — Rami Levy publishes a minimum SPEND there) and anything with no
+# derivable unit are excluded, as is the junk barcode 0000000000000, which
+# carries active promos but no real product.
+#
+# The gate is `promo_unit < p.item_price`: a promo that does not beat the shelf
+# price at ITS OWN store must not change anything. Comparison is per-store on
+# purpose — a promo is store-local, so comparing it to another store's shelf
+# price would invent a price nobody can actually pay.
+_PROMO_PICK_SQL = """
+LEFT JOIN LATERAL (
+    SELECT x.promo_id, x.promo_description, x.promo_min_qty,
+           x.promo_discount_price, x.promo_discount_rate,
+           x.promo_end, x.promo_unit_price
+    FROM (
+        SELECT
+            pm.promo_id,
+            pm.promo_description,
+            pm.min_qty                                       AS promo_min_qty,
+            pm.discount_price                                AS promo_discount_price,
+            pm.discount_rate                                 AS promo_discount_rate,
+            to_char(pm.promo_end, 'YYYY-MM-DD"T"HH24:MI:SS') AS promo_end,
+            CASE
+                -- direct single-unit and bundle share one expression: a bundle
+                -- total divided by its qty IS the per-unit price.
+                WHEN pm.min_qty BETWEEN 1 AND 24 AND pm.discount_price > 0
+                    THEN pm.discount_price / pm.min_qty
+                -- rate-only: no fixed price published, so derive off this
+                -- store's own shelf price. discount_rate scale is portal
+                -- specific; >100 can only be basis points.
+                WHEN (pm.discount_price IS NULL OR pm.discount_price = 0)
+                 AND (CASE WHEN pm.discount_rate > 100
+                           THEN pm.discount_rate / 100.0
+                           ELSE pm.discount_rate END) > 0
+                 AND COALESCE(pm.min_qty, 1) <= 1
+                    THEN p.item_price * (1 - (CASE WHEN pm.discount_rate > 100
+                                                   THEN pm.discount_rate / 100.0
+                                                   ELSE pm.discount_rate END) / 100.0)
+            END AS promo_unit_price
+        FROM promos pm
+        WHERE pm.store_fk  = p.store_fk
+          AND pm.item_code = p.item_code
+          AND (pm.promo_end >= NOW() OR pm.promo_end IS NULL)
+          AND pm.item_code <> '0000000000000'
+    ) x
+    WHERE x.promo_unit_price IS NOT NULL
+      AND x.promo_unit_price < p.item_price
+    ORDER BY x.promo_unit_price ASC
+    LIMIT 1
+) pmo ON TRUE
+"""
+
+_PROMO_COLS_SQL = """,
+    pmo.promo_unit_price,
+    pmo.promo_min_qty,
+    pmo.promo_id,
+    pmo.promo_description,
+    pmo.promo_end,
+    pmo.promo_discount_price,
+    pmo.promo_discount_rate
+"""
+
+_PRICE_SQL = f"""
 SELECT
     icn.item_code,
     icn.item_name,
@@ -175,19 +246,21 @@ SELECT
     s.store_id,
     s.store_name,
     s.city,
-    s.address
+    s.address,
+    p.store_fk{_PROMO_COLS_SQL}
 FROM item_chain_names icn
 JOIN items   i ON i.item_code  = icn.item_code
 JOIN prices  p ON p.item_code  = icn.item_code
 JOIN stores  s ON s.id         = p.store_fk AND s.chain_id = icn.chain_id
 JOIN chains  c ON c.chain_id   = icn.chain_id
+{_PROMO_PICK_SQL}
 WHERE icn.item_code IN :codes
 """
 
 # City-filtered variant: starts from prices so Postgres can BitmapAnd on
 # idx_prices_store_fk + idx_prices_item_code instead of doing 6K nested-loop
 # index scans across all stores.  store_fks is a pre-fetched int[] array.
-_PRICE_SQL_CITY = """
+_PRICE_SQL_CITY = f"""
 SELECT
     icn.item_code,
     icn.item_name,
@@ -209,7 +282,8 @@ SELECT
     s.store_id,
     s.store_name,
     s.city,
-    s.address
+    s.address,
+    p.store_fk{_PROMO_COLS_SQL}
 FROM prices p
 JOIN stores  s   ON s.id           = p.store_fk
 JOIN item_chain_names icn
@@ -217,6 +291,9 @@ JOIN item_chain_names icn
                AND icn.chain_id    = s.chain_id
 JOIN items   i   ON i.item_code    = p.item_code
 JOIN chains  c   ON c.chain_id     = s.chain_id
+-- City filtering is unaffected: store_fks already restricts p, and the LATERAL
+-- correlates on p.store_fk, so only in-set stores can ever attach a promo.
+{_PROMO_PICK_SQL}
 WHERE p.store_fk  = ANY(:store_fks)
   AND p.item_code = ANY(:codes)
 """
@@ -291,11 +368,21 @@ def group_by_product(rows: list[dict]) -> dict[str, dict]:
         "cheapest_price", "most_expensive_price", "chains_count"
     }
     """
-    # Best price per (item_code, chain_id) — cheapest store per chain
+    # Effective price = the lowest price actually payable at that store: the
+    # promo unit price when one attached and beat the shelf, else the shelf
+    # price. The SQL already gated on "beats shelf", so LEAST is belt-and-braces.
+    def _effective(r: dict) -> float:
+        pu = r.get("promo_unit_price")
+        return min(r["item_price"], float(pu)) if pu is not None else r["item_price"]
+
+    # Best price per (item_code, chain_id) — cheapest store per chain.
+    # Compares EFFECTIVE prices, so a promo at one branch can win the chain over
+    # a cheaper shelf price at another. That is the point: it is the price the
+    # shopper can actually pay today.
     best: dict[tuple, dict] = {}
     for r in rows:
         key = (r["item_code"], r["chain_id"])
-        if key not in best or r["item_price"] < best[key]["item_price"]:
+        if key not in best or _effective(r) < _effective(best[key]):
             best[key] = r
 
     # Collect all per-chain names per barcode
@@ -320,6 +407,8 @@ def group_by_product(rows: list[dict]) -> dict[str, dict]:
                 "names_per_chain":  dict(names_per_chain[code]),
                 "quotes":           [],
             }
+        eff = _effective(r)
+        has_promo = r.get("promo_unit_price") is not None and eff < r["item_price"]
         by_item[code]["quotes"].append({
             "chain_id":        r["chain_id"],
             "chain_name":      r["chain_name"],
@@ -327,7 +416,19 @@ def group_by_product(rows: list[dict]) -> dict[str, dict]:
             "store_name":      r["store_name"],
             "city":            r["city"],
             "address":         r.get("address"),
-            "price":           r["item_price"],
+            # `price` is the effective (payable) price, so every existing
+            # consumer — sorting, deltas, the frontend's cheapest marker —
+            # keeps working without knowing about promos.
+            "price":           eff,
+            # A promo is store-local, so a quote that wins on one must name its
+            # branch; a plain shelf quote is chain-level by comparison.
+            "store_fk":        r.get("store_fk"),
+            "is_promo":        has_promo,
+            "shelf_price":     r["item_price"],
+            "promo_price":     float(r["promo_unit_price"]) if has_promo else None,
+            "promo_min_qty":   float(r["promo_min_qty"]) if has_promo and r.get("promo_min_qty") is not None else None,
+            "promo_description": r.get("promo_description") if has_promo else None,
+            "promo_end":       r.get("promo_end") if has_promo else None,
             "unit_price":      r["unit_of_measure_price"],
             "unit_of_measure": r["unit_of_measure"],
             "updated_at":      r["price_update_date"],
@@ -362,6 +463,11 @@ def group_by_store(rows: list[dict]) -> list[dict]:
             names_per_chain[r["item_code"]][r["chain_id"]] = r["item_name"]
 
     for r in rows:
+        # Same effective-price rule as group_by_product, so group_by=store does
+        # not quietly show a shelf price the shopper would not actually pay.
+        pu = r.get("promo_unit_price")
+        eff = min(r["item_price"], float(pu)) if pu is not None else r["item_price"]
+        has_promo = pu is not None and eff < r["item_price"]
         quote = {
             "chain_id":            r["chain_id"],
             "chain_name":          r["chain_name"],
@@ -369,7 +475,14 @@ def group_by_store(rows: list[dict]) -> list[dict]:
             "store_name":          r["store_name"],
             "city":                r["city"],
             "address":             r.get("address"),
-            "price":               r["item_price"],
+            "price":               eff,
+            "store_fk":            r.get("store_fk"),
+            "is_promo":            has_promo,
+            "shelf_price":         r["item_price"],
+            "promo_price":         float(pu) if has_promo else None,
+            "promo_min_qty":       float(r["promo_min_qty"]) if has_promo and r.get("promo_min_qty") is not None else None,
+            "promo_description":   r.get("promo_description") if has_promo else None,
+            "promo_end":           r.get("promo_end") if has_promo else None,
             "unit_price":          r["unit_of_measure_price"],
             "unit_of_measure":     r["unit_of_measure"],
             "updated_at":          r["price_update_date"],
@@ -385,8 +498,8 @@ def group_by_store(rows: list[dict]) -> list[dict]:
             "is_weighted":          bool(r["is_weighted"]),
             "names_per_chain":      dict(names_per_chain[r["item_code"]]),
             "quotes":               [quote],
-            "cheapest_price":       r["item_price"],
-            "most_expensive_price": r["item_price"],
+            "cheapest_price":       eff,
+            "most_expensive_price": eff,
             "chains_count":         1,
         })
     return products

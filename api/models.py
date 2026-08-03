@@ -37,6 +37,16 @@ class PriceQuote(BaseModel):
     unit_of_measure: str | None
     updated_at: str | None    = Field(None, description="Date price was last updated in source XML")
     delta_from_cheapest: float = Field(0.0, description="How much more expensive than the cheapest chain (0 = cheapest)")
+    # Promo attach. `price` above is the EFFECTIVE (payable) price — the promo
+    # unit price when one beats the shelf, else the shelf price — so existing
+    # consumers need no changes. These fields explain how that price was reached.
+    is_promo: bool            = Field(False, description="True when `price` comes from a promo rather than the shelf price")
+    shelf_price: float | None = Field(None, description="Original shelf price at this store, before any promo")
+    promo_price: float | None = Field(None, description="Promo price per unit; equals `price` when is_promo")
+    promo_min_qty: float | None = Field(None, description="Units required to get promo_price — >1 means a bundle condition ('N יח')")
+    promo_description: str | None = Field(None, description="Promo terms as published by the chain")
+    promo_end: str | None     = Field(None, description="When the promo expires")
+    store_fk: int | None      = Field(None, description="stores.id of this branch — a promo is store-local, so a promo-winning quote must name its branch")
 
 
 class Product(BaseModel):

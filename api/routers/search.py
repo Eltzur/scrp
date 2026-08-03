@@ -97,6 +97,13 @@ def _to_model(p: dict) -> ProductWithPrices:
             unit_of_measure=q["unit_of_measure"],
             updated_at=q["updated_at"],
             delta_from_cheapest=q["delta_from_cheapest"],
+            is_promo=q.get("is_promo", False),
+            shelf_price=q.get("shelf_price"),
+            promo_price=q.get("promo_price"),
+            promo_min_qty=q.get("promo_min_qty"),
+            promo_description=q.get("promo_description"),
+            promo_end=q.get("promo_end"),
+            store_fk=q.get("store_fk"),
         )
         for q in p["quotes"]
     ]
