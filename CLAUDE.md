@@ -120,6 +120,13 @@ The flights vertical (xxl-flights repo) restarts and web-root deploys are passwo
   `ssh dude@185.229.226.190 "sudo /usr/local/bin/xxl-deploy-webroot.sh flights"`
 - `xxl-restart.sh` also accepts `scrp-api`. The scripts case-match a fixed whitelist (no wildcards); extend by adding one case branch + one sudoers line, reviewed each time. Source lives in xxl-flights `scripts/kamatera/`.
 
+## Analytics (GA4)
+- **Measurement ID `G-YB4X4E5ZKM`** — ONE property covering xxl.co.il, super.xxl.co.il and fly.xxl.co.il. They separate by hostname in reports, so there is no second property to configure.
+- **Consent-gated.** Nothing loads until `localStorage.xxl_cookie_consent === 'true'`. Declining stores `'false'`; the banner only auto-shows when the key is absent, and the footer "עוגיות" link is the re-entry that clears the choice.
+- **The tag and the property are VERIFIED working** — proven by a server-side Measurement Protocol hit landing in DebugView (`validationMessages []`, HTTP 204).
+- **If a browser shows "no data", it is almost always CLIENT-SIDE blocking** — an ad blocker, a privacy extension swapping GA for a surrogate stub, or Android Private DNS — **not a site bug.** Observed here on both the dev desktop (extension surrogate `google-analytics_analytics.js`, `google_tag_manager` left undefined) and phones (Mi Browser blocker / Private DNS). CSP has been ruled out: there is no CSP header or meta tag anywhere.
+- **Never re-debug this as a tagging problem without first ruling out client-side blocking.** Confirm with a server-side MP hit to DebugView; use **nginx access logs** for true, unblockable traffic counts, since GA undercounts blocked users by design.
+
 ## Key file locations
 - Scraper registry: scraper/registry.py
 - City normalization: scraper/city_names.py (CITY_VARIANTS, STORE_CITY_OVERRIDES)
