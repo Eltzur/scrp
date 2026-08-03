@@ -231,6 +231,7 @@ class GroupedPromoItem(BaseModel):
     chain_name: str | None
     city: str | None            = Field(None, description="stores.city_canonical; may be NULL for a few stores")
     branch: str | None          = Field(None, description="stores.store_name")
+    store_fk: int               = Field(description="stores.id — pass back as ?branch= to filter to this branch")
     item_code: str
     product_name: str | None    = Field(None, description="Canonical items.item_name; NULL if the promo item is not in our catalog")
     shelf_price: float | None   = Field(None, description="Current shelf price at this store; NULL when we hold no price row (~18%)")

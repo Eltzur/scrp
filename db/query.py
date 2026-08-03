@@ -1156,6 +1156,10 @@ def fetch_grouped_promos(
                 c.name            AS chain_name,
                 s.city_canonical  AS city,
                 s.store_name      AS branch,
+                -- The branch filter takes ?branch=<store_fk>, so the client
+                -- needs the id to build its options and echo it back. Neither
+                -- this endpoint nor /stores exposed stores.id before.
+                p.store_fk,
                 p.item_code,
                 i.item_name       AS product_name,
                 pr.item_price     AS shelf_price,
@@ -1202,7 +1206,7 @@ def fetch_grouped_promos(
                    END AS savings
             FROM base b
         )
-        SELECT chain_id, chain_name, city, branch, item_code, product_name,
+        SELECT chain_id, chain_name, city, branch, store_fk, item_code, product_name,
                shelf_price, min_qty, discount_price, reward_type,
                min_purchase_amount, promo_type,
                CASE WHEN is_basket THEN 'basket' ELSE 'unit' END AS promo_kind,
