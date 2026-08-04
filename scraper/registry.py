@@ -41,10 +41,10 @@ DELTA_CHAINS: set[str] = {
     "7290876100000",  # Fresh Market    — Cerberus
     "7290058177776",  # Super Yuda      — Cerberus
     "7290700100008",  # Hazi Hinam      — custom portal, own build_price_index
+    "7290873255550",  # Tiv Taam        — Cerberus, confirmed same delta schema as Rami Levy/Keshet (SU10A-6)
+    "7290055700007",  # Carrefour       — PublishPriceScraper, build_price_index/build_promo_index already implemented
+    "7290696200003",  # Victory         — own REST client, build_price_index/build_promo_index already implemented
     # Excluded — build_price_index not implemented for their portal type:
-    # Tiv Taam     (7290873255550) — Cerberus but no daily Price delta files
-    # Carrefour    (7290055700007) — PublishPrice portal
-    # Victory      (7290696200003) — custom REST API
     # King Store   (7290058108879) — Bina Projects
     # Shefa        (7290058134977) — Bina Projects
     # Shuk Hayir   (7290058148776) — Bina Projects

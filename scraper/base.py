@@ -234,7 +234,6 @@ class ChainScraper(abc.ABC):
                     _, promo_items = self.PROMO_PARSER(tmp_p)
                     promo_items = list(promo_items)
                     tmp_p.unlink(missing_ok=True)
-                    wconn.execute(text("DELETE FROM promos WHERE store_fk=:fk"), {"fk": store_fk})
                     n_promos = bulk_insert_promos(wconn, store_fk, promo_items)
                     wconn.commit()
                     log.info(f"    -> {n_promos} promos loaded for store {sid}.")
