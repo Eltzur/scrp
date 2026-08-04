@@ -98,6 +98,7 @@ def _to_model(p: dict) -> ProductWithPrices:
             updated_at=q["updated_at"],
             delta_from_cheapest=q["delta_from_cheapest"],
             is_promo=q.get("is_promo", False),
+            promo_kind=q.get("promo_kind", "shelf"),
             shelf_price=q.get("shelf_price"),
             promo_price=q.get("promo_price"),
             promo_min_qty=q.get("promo_min_qty"),

@@ -41,6 +41,7 @@ class PriceQuote(BaseModel):
     # unit price when one beats the shelf, else the shelf price — so existing
     # consumers need no changes. These fields explain how that price was reached.
     is_promo: bool            = Field(False, description="True when `price` comes from a promo rather than the shelf price")
+    promo_kind: str           = Field("shelf", description="'shelf' = ordinary price; 'promo' = promo beat the shelf; 'promo_only' = this branch has NO shelf price for the item, so there is nothing to strike through")
     shelf_price: float | None = Field(None, description="Original shelf price at this store, before any promo")
     promo_price: float | None = Field(None, description="Promo price per unit; equals `price` when is_promo")
     promo_min_qty: float | None = Field(None, description="Units required to get promo_price — >1 means a bundle condition ('N יח')")

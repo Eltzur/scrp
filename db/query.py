@@ -257,6 +257,102 @@ JOIN chains  c ON c.chain_id   = icn.chain_id
 WHERE icn.item_code IN :codes
 """
 
+# Promo-only quotes: a store running a promo on an item it has NO price row for.
+#
+# ~146K active promo rows sit at store+item pairs with no shelf price, and 4,780
+# items would show a cheaper price than search currently displays because of it.
+# Search is price-row driven, so these were invisible: no price row, no quote.
+#
+# Only classes whose unit price stands alone are eligible. Rate-only promos are
+# excluded outright — their price is shelf x (1 - rate), and there is no shelf
+# here to apply it to, so the figure cannot be derived at all. Basket rows
+# (min_qty > 24, a minimum SPEND for some chains) and barcode 0000000000000 are
+# excluded for the same reasons they are in the shelf path.
+#
+# item_chain_names is LEFT JOINed, unlike the shelf SQL which INNER JOINs it:
+# 41% of promo-only (item, chain) pairs have no icn row, so an inner join would
+# silently discard two-fifths of exactly what this query exists to surface.
+# names_per_chain falls back to items.item_name.
+_PROMO_ONLY_COLS = """
+    p.item_code,
+    COALESCE(icn.item_name, i.item_name) AS item_name,
+    i.item_name   AS canonical_item_name,
+    COALESCE(icn.manufacturer_name, i.manufacturer_name) AS manufacturer_name,
+    i.unit_of_measure,
+    i.is_weighted,
+    i.item_type,
+    i.quantity,
+    i.unit_qty,
+    -- No shelf price exists. NULL rather than 0 so the frontend can tell
+    -- "no shelf to compare" from "free", and _effective() falls through to the
+    -- promo price.
+    NULL::double precision AS item_price,
+    NULL::double precision AS unit_of_measure_price,
+    NULL::text             AS price_update_date,
+    c.chain_id,
+    c.name        AS chain_name,
+    s.store_id,
+    s.store_name,
+    s.city,
+    s.address,
+    p.store_fk,
+    (p.discount_price / p.min_qty)                   AS promo_unit_price,
+    p.min_qty                                        AS promo_min_qty,
+    p.promo_id,
+    p.promo_description,
+    to_char(p.promo_end, 'YYYY-MM-DD"T"HH24:MI:SS')  AS promo_end,
+    p.discount_price                                 AS promo_discount_price,
+    p.discount_rate                                  AS promo_discount_rate
+"""
+
+_PROMO_ONLY_WHERE = """
+      (p.promo_end >= NOW() OR p.promo_end IS NULL)
+  AND p.item_code <> '0000000000000'
+  AND p.discount_price > 0
+  AND p.min_qty BETWEEN 1 AND 24
+  AND c.name IS NOT NULL
+  -- The defining condition: this store has no shelf price for this item.
+  AND NOT EXISTS (
+      SELECT 1 FROM prices pr
+      WHERE pr.store_fk = p.store_fk AND pr.item_code = p.item_code
+  )
+"""
+
+# DISTINCT ON keeps one row per (store_fk, item_code) — the cheapest unit price.
+# Same multi-promo hazard as the shelf path: 2% of pairs carry more than one
+# active promo, and without this each would become a separate duplicate quote.
+_PROMO_ONLY_SQL = f"""
+SELECT DISTINCT ON (p.store_fk, p.item_code)
+{_PROMO_ONLY_COLS}
+FROM promos p
+JOIN stores s     ON s.id = p.store_fk
+JOIN chains c     ON c.chain_id = s.chain_id
+JOIN items  i     ON i.item_code = p.item_code
+LEFT JOIN item_chain_names icn
+                  ON icn.item_code = p.item_code AND icn.chain_id = s.chain_id
+WHERE p.item_code IN :codes
+  AND {_PROMO_ONLY_WHERE}
+  /*EXTRA*/
+ORDER BY p.store_fk, p.item_code, (p.discount_price / p.min_qty) ASC
+"""
+
+_PROMO_ONLY_SQL_CITY = f"""
+SELECT DISTINCT ON (p.store_fk, p.item_code)
+{_PROMO_ONLY_COLS}
+FROM promos p
+JOIN stores s     ON s.id = p.store_fk
+JOIN chains c     ON c.chain_id = s.chain_id
+JOIN items  i     ON i.item_code = p.item_code
+LEFT JOIN item_chain_names icn
+                  ON icn.item_code = p.item_code AND icn.chain_id = s.chain_id
+WHERE p.store_fk  = ANY(:store_fks)
+  AND p.item_code = ANY(:codes)
+  AND {_PROMO_ONLY_WHERE}
+  /*EXTRA*/
+ORDER BY p.store_fk, p.item_code, (p.discount_price / p.min_qty) ASC
+"""
+
+
 # City-filtered variant: starts from prices so Postgres can BitmapAnd on
 # idx_prices_store_fk + idx_prices_item_code instead of doing 6K nested-loop
 # index scans across all stores.  store_fks is a pre-fetched int[] array.
@@ -299,6 +395,19 @@ WHERE p.store_fk  = ANY(:store_fks)
 """
 
 
+def _fetch_promo_only(conn: Connection, sql: str, params: dict) -> list[dict]:
+    """Run a promo-only branch and return its rows.
+
+    Executed as a separate statement rather than UNION ALL'd into the price SQL:
+    each branch ends in its own ORDER BY (DISTINCT ON requires one), and the
+    existing code appends filter fragments and the final ORDER BY by string
+    concatenation — both of which become invalid inside a UNION. Two statements
+    keep each branch independently planned and indexable, and the caller
+    concatenates the row lists, which is what UNION ALL would have produced.
+    """
+    return [dict(r) for r in conn.execute(text(sql), params).mappings().all()]
+
+
 def fetch_prices(
     conn: Connection,
     barcodes: list[str],
@@ -323,34 +432,69 @@ def fetch_prices(
         if not store_fks:
             return []
 
-        # Disable nested loops for this transaction so the planner uses
-        # BitmapAnd rather than repeating 6K index scans across all stores.
-        conn.execute(text("SET LOCAL enable_nestloop = off"))
-
         sql: str = _PRICE_SQL_CITY
         params: dict = {"store_fks": store_fks, "codes": list(barcodes)}
+        po_sql: str = _PROMO_ONLY_SQL_CITY
+        po_extra = ""
         if chain_id:
-            sql += " AND s.chain_id = ANY(:chain_id)"
+            sql      += " AND s.chain_id = ANY(:chain_id)"
+            po_extra += " AND s.chain_id = ANY(:chain_id)"
             params["chain_id"] = list(chain_id)
         if store_only:
-            sql += " AND s.store_id = :store_only"
+            sql      += " AND s.store_id = :store_only"
+            po_extra += " AND s.store_id = :store_only"
             params["store_only"] = store_only
+        # Injected INSIDE the WHERE: the promo-only SQL ends in an ORDER BY that
+        # DISTINCT ON requires, so appending filters after it would be invalid.
+        po_sql = po_sql.replace("/*EXTRA*/", po_extra)
+
+        # The promo-only NOT EXISTS needs a Nested Loop Anti Join over
+        # prices(store_fk, item_code). Under enable_nestloop=off the planner
+        # picks a hash/merge plan and the same statement goes 13ms -> 7.8s,
+        # taking the whole city search from ~610ms to ~8.5s for four extra rows.
+        #
+        # Set explicitly rather than merely ordering this before the `off` below:
+        # SET LOCAL lasts for the TRANSACTION, not the statement, so on the
+        # second and later fetch_prices calls on one connection the flag is
+        # already off and mere ordering fixes nothing (measured: call 1 817ms,
+        # call 2 8734ms). Toggling per statement is correct regardless of how
+        # many times this runs per transaction.
+        conn.execute(text("SET LOCAL enable_nestloop = on"))
+        rows = _fetch_promo_only(conn, po_sql, params)
+
+        # Disable nested loops for the price query so the planner uses BitmapAnd
+        # rather than repeating 6K index scans across all stores (9d-8).
+        conn.execute(text("SET LOCAL enable_nestloop = off"))
+
         sql += " ORDER BY p.item_price"
-        return [dict(r) for r in conn.execute(text(sql), params).mappings().all()]
+        rows += [dict(r) for r in conn.execute(text(sql), params).mappings().all()]
+        return rows
 
     # No city filter: original query with expandable IN clause.
     sql = _PRICE_SQL
     params = {"codes": tuple(barcodes)}
     expanding = [bindparam("codes", expanding=True)]
+    po_extra = ""
+    po_expanding: list = []
     if chain_id:
         sql += " AND c.chain_id IN :chain_id"
         params["chain_id"] = chain_id
         expanding.append(bindparam("chain_id", expanding=True))
+        po_extra += " AND c.chain_id IN :chain_id"
+        po_expanding.append(bindparam("chain_id", expanding=True))
     if store_only:
         sql += " AND s.store_id = :store_only"
         params["store_only"] = store_only
+        po_extra += " AND s.store_id = :store_only"
     sql += " ORDER BY p.item_price"
-    return [dict(r) for r in conn.execute(text(sql).bindparams(*expanding), params).mappings().all()]
+    rows = [dict(r) for r in conn.execute(text(sql).bindparams(*expanding), params).mappings().all()]
+
+    po_sql = _PROMO_ONLY_SQL.replace("/*EXTRA*/", po_extra)
+    rows += [dict(r) for r in conn.execute(
+        text(po_sql).bindparams(bindparam("codes", expanding=True), *po_expanding),
+        params,
+    ).mappings().all()]
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -373,7 +517,13 @@ def group_by_product(rows: list[dict]) -> dict[str, dict]:
     # price. The SQL already gated on "beats shelf", so LEAST is belt-and-braces.
     def _effective(r: dict) -> float:
         pu = r.get("promo_unit_price")
-        return min(r["item_price"], float(pu)) if pu is not None else r["item_price"]
+        shelf = r.get("item_price")
+        # A promo-only quote has no shelf price at all: the promo unit price IS
+        # the only price, so it becomes the effective one rather than being
+        # compared against a NULL.
+        if shelf is None:
+            return float(pu)
+        return min(shelf, float(pu)) if pu is not None else shelf
 
     # Best price per (item_code, chain_id) — cheapest store per chain.
     # Compares EFFECTIVE prices, so a promo at one branch can win the chain over
@@ -408,7 +558,11 @@ def group_by_product(rows: list[dict]) -> dict[str, dict]:
                 "quotes":           [],
             }
         eff = _effective(r)
-        has_promo = r.get("promo_unit_price") is not None and eff < r["item_price"]
+        shelf = r.get("item_price")
+        promo_only = shelf is None and r.get("promo_unit_price") is not None
+        has_promo = promo_only or (
+            r.get("promo_unit_price") is not None and shelf is not None and eff < shelf
+        )
         by_item[code]["quotes"].append({
             "chain_id":        r["chain_id"],
             "chain_name":      r["chain_name"],
@@ -424,7 +578,10 @@ def group_by_product(rows: list[dict]) -> dict[str, dict]:
             # branch; a plain shelf quote is chain-level by comparison.
             "store_fk":        r.get("store_fk"),
             "is_promo":        has_promo,
-            "shelf_price":     r["item_price"],
+            # 'promo_only' tells the frontend there is no shelf price to strike
+            # through — the promo IS the price at this branch.
+            "promo_kind":      "promo_only" if promo_only else ("promo" if has_promo else "shelf"),
+            "shelf_price":     shelf,
             "promo_price":     float(r["promo_unit_price"]) if has_promo else None,
             "promo_min_qty":   float(r["promo_min_qty"]) if has_promo and r.get("promo_min_qty") is not None else None,
             "promo_description": r.get("promo_description") if has_promo else None,
@@ -466,8 +623,10 @@ def group_by_store(rows: list[dict]) -> list[dict]:
         # Same effective-price rule as group_by_product, so group_by=store does
         # not quietly show a shelf price the shopper would not actually pay.
         pu = r.get("promo_unit_price")
-        eff = min(r["item_price"], float(pu)) if pu is not None else r["item_price"]
-        has_promo = pu is not None and eff < r["item_price"]
+        shelf = r.get("item_price")
+        promo_only = shelf is None and pu is not None
+        eff = float(pu) if promo_only else (min(shelf, float(pu)) if pu is not None else shelf)
+        has_promo = promo_only or (pu is not None and shelf is not None and eff < shelf)
         quote = {
             "chain_id":            r["chain_id"],
             "chain_name":          r["chain_name"],
@@ -478,7 +637,8 @@ def group_by_store(rows: list[dict]) -> list[dict]:
             "price":               eff,
             "store_fk":            r.get("store_fk"),
             "is_promo":            has_promo,
-            "shelf_price":         r["item_price"],
+            "promo_kind":          "promo_only" if promo_only else ("promo" if has_promo else "shelf"),
+            "shelf_price":         shelf,
             "promo_price":         float(pu) if has_promo else None,
             "promo_min_qty":       float(r["promo_min_qty"]) if has_promo and r.get("promo_min_qty") is not None else None,
             "promo_description":   r.get("promo_description") if has_promo else None,
