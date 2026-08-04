@@ -257,7 +257,14 @@ export default function ProductCard({ item, promosByStore }: Props) {
                   </span>
                 )}
                 {promoDesc != null && (
-                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
+                  // Bounded + truncated: this is freeform chain text of any
+                  // length, and inside a shrink-0 row an unbounded string
+                  // pushes the PRICE out of view entirely — measured on the
+                  // promo-only TV card (scrollWidth 351 vs clientWidth 303).
+                  <span
+                    className="text-xs font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 max-w-[7rem] truncate"
+                    title={promoDesc}
+                  >
                     {promoDesc}
                   </span>
                 )}

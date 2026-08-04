@@ -963,6 +963,12 @@ export interface components {
              */
             is_promo: boolean;
             /**
+             * Promo Kind
+             * @description 'shelf' = ordinary price; 'promo' = promo beat the shelf; 'promo_only' = this branch has NO shelf price for the item, so there is nothing to strike through
+             * @default shelf
+             */
+            promo_kind: string;
+            /**
              * Shelf Price
              * @description Original shelf price at this store, before any promo
              */
