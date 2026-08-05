@@ -50,8 +50,18 @@ def _build_result(
     # item_code is a final deterministic tie-break: without it, equal-priced
     # items ordered arbitrarily and offset pages could overlap between requests
     # (test_search_has_more_and_pagination was already failing on main).
+    # A single-source promo-only product (no shelf price anywhere — every quote
+    # is a promo) is not a cross-chain comparison, but it IS real savings info
+    # that compare mode (the default view) would otherwise hide entirely, since
+    # its chains_count is 1. Surface those specifically; ordinary single-chain
+    # shelf products stay filtered in compare mode as before (SU10A-6).
+    def _is_promo_only(p: dict) -> bool:
+        return bool(p["quotes"]) and all(q["promo_kind"] == "promo_only" for q in p["quotes"])
+
     pool = [(c, p) for c, p in multi.items()]
-    if not compare_only:
+    if compare_only:
+        pool += [(c, p) for c, p in single.items() if _is_promo_only(p)]
+    else:
         pool += [(c, p) for c, p in single.items()]
 
     ordered = [

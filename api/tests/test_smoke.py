@@ -91,7 +91,12 @@ def test_compare_only_multi_chain():
     assert r.status_code == 200
     body = r.json()
     for item in body["items"]:
-        assert item["chains_count"] >= 2
+        # Compare mode returns 2+-chain products PLUS single-source promo-only
+        # deals (every quote a promo, no shelf price) — an intentional exemption
+        # (SU10A-6). Any single-chain item that appears must be promo-only.
+        if item["chains_count"] < 2:
+            assert item["quotes"]
+            assert all(q["promo_kind"] == "promo_only" for q in item["quotes"])
 
 
 def test_compare_has_more_field():
