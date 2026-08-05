@@ -7,7 +7,9 @@ asymmetry where the HQ promo catalog references far more products than any branc
 price-publishes. Store coverage was ruled out (only 3 King Store branches
 un-scraped, 0 orphan overlap), so these cannot be reached by scraping.
 
-~5,372 King Store orphans carry a GTIN matching an ACTIVE GS1 product, so a real
+~1,696 King Store orphans carry a GTIN matching an ACTIVE GS1 product (5,372 match
+a GTIN under any status, but 3,683 of those are cancelled and must not name a
+customer-facing item — see gs1_enrich_items.py's active-only rule), so a real
 manufacturer name (and, for 13-digit GTINs, an image already on disk served by
 the API) is available. This creates minimal items rows for exactly those:
 item_name + name_source='gs1', everything else NULL (no price/pack data exists
