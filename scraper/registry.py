@@ -44,10 +44,9 @@ DELTA_CHAINS: set[str] = {
     "7290873255550",  # Tiv Taam        — Cerberus, confirmed same delta schema as Rami Levy/Keshet (SU10A-6)
     "7290055700007",  # Carrefour       — PublishPriceScraper, build_price_index/build_promo_index already implemented
     "7290696200003",  # Victory         — own REST client, build_price_index/build_promo_index already implemented
-    # Excluded — build_price_index not implemented for their portal type:
-    # King Store   (7290058108879) — Bina Projects
-    # Shefa        (7290058134977) — Bina Projects
-    # Shuk Hayir   (7290058148776) — Bina Projects
+    "7290058108879",  # King Store      — Bina Projects, build_price_index added SU10A-6
+    "7290058134977",  # Shefa           — Bina Projects, same
+    "7290058148776",  # Shuk Hayir      — Bina Projects, same
 }
 
 

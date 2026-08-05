@@ -47,7 +47,7 @@ def parse_file(path: Path) -> tuple:
             yield {
                 "item_code":             _text(el, "ItemCode"),
                 "item_type":             _int(el,  "ItemType"),
-                "item_name":             _text(el, "ItemName"),
+                "item_name":             _first_text(el, "ItemName", "ItemNm"),
                 "manufacturer_name":     _first_text(el, "ManufacturerName", "ManufactureName"),
                 "manufacture_country":   _text(el, "ManufactureCountry"),
                 "unit_qty":              _text(el, "UnitQty"),

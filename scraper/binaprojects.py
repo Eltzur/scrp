@@ -7,7 +7,9 @@ Portal contract (3 JSON endpoints, all POST):
       -> [{"Kod": <int>, "Nm": <str>}]
   - {BASE}/MainIO_Hok.aspx  (form: WStore="", WDate="", WFileType="4")
       -> list of file objects with FileNm, Store, DateFile.
-      WFileType=4 = PriceFull. Returns full history (~1000 files).
+      WFileType: 1=StoresFull, 2=Price (delta), 3=Promo (delta),
+      4=PriceFull, 5=PromoFull. 6+ return nothing. Each returns full
+      history (~1000 files).
       Order is not reliable — use the 12-digit YYYYMMDDHHMM stamp
       embedded in FileNm for newest-per-store selection.
   - {BASE}/Download.aspx?FileNm=<name>  (empty body)
@@ -146,14 +148,24 @@ class BinaProjectsScraper(ChainScraper):
     def build_pricefull_index(self, target_store_ids: set) -> dict:
         return self._build_file_index(target_store_ids, "4", "PriceFull")
 
+    def build_price_index(self, target_store_ids: set) -> dict:
+        """Daily Price (delta) index. WFileType=2 on the same MainIO_Hok endpoint.
+
+        Its existence is what puts these chains in DELTA_CHAINS — the base
+        class calls this instead of build_pricefull_index when delta is on.
+        The "Price" prefix cannot collide with "PriceFull": the pattern in
+        _build_file_index requires the chain id immediately after the prefix.
+        """
+        return self._build_file_index(target_store_ids, "2", "Price")
+
     def build_promo_index(self, target_store_ids: set) -> dict:
-        """PromoFull index. WFileType=5 on the same MainIO_Hok endpoint.
+        """Daily Promo (delta) index. WFileType=3 on the same MainIO_Hok endpoint.
 
         Same newest-per-store selection as prices — only the file type and
         prefix differ, so the two share _build_file_index rather than keeping
         two copies of the Download.aspx resolution logic in sync.
         """
-        return self._build_file_index(target_store_ids, "5", "PromoFull")
+        return self._build_file_index(target_store_ids, "3", "Promo")
 
     def _build_file_index(self, target_store_ids: set, wfiletype: str, prefix: str) -> dict:
         files = self._post_json(f"{self.BASE_URL}/MainIO_Hok.aspx", {
