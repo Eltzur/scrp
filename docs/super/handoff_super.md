@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: August 3, 2026 (end of session SU10A-5)
+> Last updated: August 5, 2026 (end of session SU10A-6)
 
 ---
 
@@ -84,12 +84,12 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 
 ## 📊 Current Production State
 
-**Last updated: August 3, 2026 (end of session SU10A-5)**
+**Last updated: August 5, 2026 (end of session SU10A-6)**
 
 - **14 chains** in registry: Shufersal, Rami Levy, Osher Ad, Victory, Yochananof, Keshet, Carrefour, Tiv Taam, King Store, Shefa Birkat Hashem, Shuk Hayir, Fresh Market, Super Yuda, חצי חינם / Hazi Hinam (added 9d-9)
 - **~1,200 stores** in active_stores.yaml (post 9d-9 additions: Rami Levy +72→98, Yochananof +35→50, Keshet +12→22, Osher Ad +11→23, Hazi Hinam +1→12; Paz + Dor Alon removed in 9d-8)
 - **city_canonical** is the source of truth for all city data (rebuilt from CBS 2024 in 9d-8, 0 NULLs). city_norm is legacy/broken — do not use.
-- **Delta mode active** for 8 chains: Shufersal, Rami Levy, Osher Ad, Yochananof, Keshet, Fresh Market, Super Yuda, Hazi Hinam. Controlled by `DELTA_CHAINS` in `registry.py` + `uses_delta()`.
+- **Delta mode active for ALL 14 chains** (SU10A-6 added the last 6: Tiv Taam, Carrefour, Victory, then King Store, Shefa, Shuk Hayir). Controlled by `DELTA_CHAINS` in `registry.py` + `uses_delta()`. **Delta mode has no periodic PriceFull resync** — the base class only falls back per-store when a delta file is missing, so a missed cron day silently loses that day's changes until someone runs `run_one <chain> --full`.
 - **Per-store parallelism**: `STORE_WORKERS=4` in `base.py` and `shufersal.py`. Each worker opens its own DB connection. Shufersal: 4436s → 544s (8×). Tiv Taam: 6913s → 93s (74×).
 - **Chain-level parallelism**: `cron_main.py` ThreadPoolExecutor(max_workers=6). Full cron target: <30 min (to be confirmed by next 10:00 IDT run).
 - **City dropdown**: 0.13s response (was 3.7s — prices JOIN removed in 9d-8).
@@ -138,6 +138,30 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 > **Correction to the perf note above, from the shipped fix:** running the promo-only statement *before* the `SET LOCAL` is NOT sufficient. `SET LOCAL` lasts for the **transaction**, not the statement, so on the second and later `fetch_prices` calls on one connection the flag is already off and the ordering achieves nothing (measured: call 1 817ms, call 2 8734ms). The shipped fix toggles explicitly per statement — `enable_nestloop = on` before the promo-only query, `off` before the price query. Final cost 596ms → 617ms (+3.6%). Also note **compare mode (the default) hides promo-only-only products**, since they have `chains_count = 1`.
 
 **Carried forward (open):** promo-only items in search (~86% gap); King Store 68% catalog match (~1,200 promoted item_codes not in items → bare barcode); fresh food / weighted goods (min_qty<1) into search; parser adds owed (club-only, max-qty, gift-count for "3 for 2").
+
+---
+
+### Session SU10A-6 (August 4-5, 2026) — cron killed mid-run (8 "stale" chains diagnosed), delta extended to all 14, Cerberus + Bina field-name fallbacks
+
+**The "8 failing chains" were not failing.** 8 chains last loaded Aug 2 and looked broken. There is not one `FAILED` line, traceback, or per-chain error anywhere in the Aug 2-4 journal — the Aug 2 coverage report shows `0 errors` on all 14. The cron *process* was SIGKILLed mid-download: Aug 3 died 1h55m in, Aug 4 died 4h03m in (`Result: signal`, `ExecMainStatus=9`), so no coverage report was ever emitted on either day. `fetch_runs` shows the signature — chains that finish before the kill are `ok`, chains in flight are stuck at `status='running'` with 0/0/0, and chains scheduled later have no row at all. **The 8 "stale" chains were simply the 8 that run last.** Prior 8 days all completed in 13,828-19,314s (3.8-5.4h). Timer, disk (56%), and all portals were healthy and are not implicated.
+
+**SIGKILL cause is still UNCONFIRMED.** `kernel.dmesg_restrict=1` and `/var/log/kern.log` is `syslog:adm 0640`, so the kill record needs sudo (which prompts for a password over non-interactive SSH — plain `journalctl -u scrp-cron` works fine for `dude` and needs no sudo at all). Prime suspect is the kernel OOM killer: 1.9 GiB box, `shared_buffers=512MB`, several *idle* `scrp_app` Postgres backends at ~600 MB RSS each, and `MemoryMax=infinity`/`OOMPolicy=stop` on the unit so an OOM lands as a raw SIGKILL. Settle it with `sudo journalctl -k --since ... | grep -iE "out of memory|oom-kill|Killed process"`. Note `TimeoutStartSec=infinity` in the drop-in, so it is definitively NOT a systemd timeout.
+
+**Fix 1 — Cerberus field-name fallback (9ce86b4).** `parse_file()` matched `ManufacturerName`/`PriceUpdateDate`; the Cerberus delta feed publishes `ManufactureName`/`PriceUpdateTime`. Reused the existing `_first_text()` (already in the same file for the Bina flat promo parser) rather than duplicating it. Proof it works: after re-running, non-NULL `price_update_date` equals items inserted *exactly* — Tiv Taam 478,172 total − 164,038 NULL = 314,134 = items inserted; Victory 614,651/614,651. Every chain still on the old parser sits at 94-100% NULL, every re-run chain dropped sharply.
+
+**Fix 2 — promo upsert (9ce86b4).** Deleted the `DELETE FROM promos WHERE store_fk=:fk` that ran before every promo insert in `base.py::_process_store`. `bulk_insert_promos` is a genuine upsert (`ON CONFLICT (store_fk,item_code,promo_id) DO UPDATE` on all 10 fields, plus in-batch dedup), so duplicates were structurally impossible and the DELETE was only wiping a store's whole promo set on every partial file. Verified safe to drop: **all 447,663 promo rows have a non-NULL `promo_end`**, and every read path in `db/query.py` filters `(promo_end >= NOW() OR promo_end IS NULL)` — so the rows that now linger are unreachable from the API and the `IS NULL` branch is dead code in practice. Residual is housekeeping only: 15,169 expired rows (3.4%) now accumulate; an occasional `DELETE FROM promos WHERE promo_end < NOW() - interval '30 days'` caps it.
+
+**Fix 3 — delta for Tiv Taam / Carrefour / Victory (9ce86b4).** `build_price_index`/`build_promo_index` already existed for all three; only the `DELTA_CHAINS` membership was missing. Verified: Tiv Taam 46/46 files 314,134 items 0 errors 279s; Carrefour 87/87 383,747 items 0 errors 383s; Victory 69/69 614,651 items 0 errors 822s. **These three consumed ~2h20m of the Aug 4 cron and now take 24 min combined** — which should pull the run well inside the window where it was being killed. That is mitigation, not diagnosis.
+
+**Fix 4 — Bina Projects delta support (aa95f32).** Probed `MainIO_Hok.aspx`: **WFileType 1=StoresFull, 2=Price (delta), 3=Promo (delta), 4=PriceFull, 5=PromoFull, 6+ return nothing.** Added `build_price_index` → `_build_file_index(ids, "2", "Price")` and switched `build_promo_index` from `"5"/"PromoFull"` to `"3"/"Promo"`. The `"Price"` prefix cannot cross-match `PriceFull` — the pattern is `^{prefix}{CHAIN_ID}-(\d+)-(\d{12})\.gz$`, so the chain id must follow the prefix immediately. King Store/Shefa/Shuk Hayir moved into `DELTA_CHAINS`; **all 14 chains are now delta.** Delta coverage is identical to PriceFull coverage (28/30, 22/30, 19/20) — the skipped stores are the same chronic no-file stores from 9d-10, including Shefa's 8 known promo-only branches, not a delta regression. Bina files are ZIP despite the `.gz` extension (`PK` magic) — the scraper already handles both.
+
+**Fix 5 — `ItemNm` (aa95f32).** Bina publishes the product name as `ItemNm`, and **this is true of PriceFull as well as the delta feed**, not just delta. Confirmed by sampling a live file: `PriceFull7290058108879-340` carries `ItemNm` on all 2,364 items with **zero** missing, alongside a standard `ManufacturerName`. That asymmetry explains the whole picture — the old parser matched `ManufacturerName` fine but missed the name, so the 3 Bina chains sat at ~84% NULL `item_name` while every other chain was at 0.0%, and every *delisted* Bina item left a permanent row with manufacturer set and name NULL.
+
+**Catalog backfill.** A `run_one <chain> --full` pass on the 3 Bina chains under the fixed parser (King Store 28/28 146,325 items; Shefa 22/22 60,775; Shuk Hayir 19/19 81,837; all 0 errors) dropped their `item_chain_names` `item_name` NULL rate 84%→21-28% and `manufacturer_name` to 0.0%, and closed their Aug 3-4 data gap. Then one `UPDATE items ... FROM item_chain_names`: **`items.item_name` 12,744→4,978 NULL, `items.manufacturer_name` 79,294→54,056**, with 0 rows left backfillable afterwards.
+
+**STRUCTURAL GOTCHA — re-scraping never repairs `items`.** `bulk_insert_items` is `ON CONFLICT(item_code) DO NOTHING` ("first writer wins canonical name", `db/db.py`), so once an `items` row exists with a NULL field it is **frozen** no matter how many times the chain is re-scraped. Only `item_chain_names` refreshes (`DO UPDATE`). **Any future parser field fix therefore needs an explicit SQL backfill to reach `items` — the scrape alone will not do it,** and judging a parser fix by an `items` NULL count will read as failure even when the parser is correct. Measure per-chain on `item_chain_names` instead.
+
+**Carried forward (open):** (1) **SIGKILL cause unconfirmed** — one `sudo journalctl -k` settles it; tomorrow's cron is the real test of whether delta alone fixed it. (2) 7 chains are still 94-100% NULL `manufacturer_name` in `item_chain_names` because they have not re-run since Fix 1 (Shufersal, Super Yuda, Osher Ad, Hazi Hinam, Fresh Market, Rami Levy, Yochananof) — **re-run the same backfill UPDATE after the next cron** to clear most of the remaining 54,056. (3) Delta has no periodic PriceFull resync (see Current Production State). (4) Fresh Market promos are 1,525/1,525 expired, 0 active. (5) Tiv Taam yields only 323 promos across 46 stores (~7/store) vs Carrefour 16,955 and Victory 72,828 — its promo index reports "54 stores available, 1 targeted" on every store; looks like a Bina-style index bug, unrelated to this session's changes. (6) The 4,978 residual NULL `item_name` are item codes with no name published by any chain — nothing left to extract.
 
 ---
 
