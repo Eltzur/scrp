@@ -29,7 +29,7 @@ from sqlalchemy import text
 
 from scraper.base import ChainScraper
 from scraper.cerberus import CITY_CODES
-from parser.price_parser import parse_promo_file_flat
+from parser.price_parser import parse_promo_file_auto
 from db.db import upsert_chain
 from scraper.city_names import normalize_city, city_override
 from scraper.city_matcher import resolve_city
@@ -47,7 +47,7 @@ class BinaProjectsScraper(ChainScraper):
     # bina-projects promo files are the flat variant: no <Group>, items as
     # <Item>, discount fields on <Promotion>. The shared parser returns zero
     # rows on them, which is why these chains had no promos before SU10A-5.
-    PROMO_PARSER = staticmethod(parse_promo_file_flat)
+    PROMO_PARSER = staticmethod(parse_promo_file_auto)
 
     def __init__(self):
         super().__init__()

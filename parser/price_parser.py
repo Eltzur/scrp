@@ -247,3 +247,23 @@ def parse_promo_file_flat(path: Path) -> tuple:
                     }
 
     return header, _items()
+
+
+def parse_promo_file_auto(path):
+    """Shape-detecting Bina promo parser (SU10A-7).
+
+    King Store migrated its promo files from the flat Bina shape
+    (<PromotionItems><Item>, discount fields on <Promotion>) to the STANDARD
+    nested shape (<Groups><Group><PromotionItems><PromotionItem>) in Aug 2026,
+    in lockstep with its filename-format change. Shefa and Shuk Hayir are still
+    flat but will likely follow, so detect per FILE rather than hard-code per
+    chain — each self-heals the day its portal flips.
+
+    Discriminator: the standard shape always has a <Groups> container; the flat
+    shape never does. Checked on raw bytes so the file is parsed once (by the
+    delegate), not twice — matters on a memory-constrained box.
+    """
+    raw = Path(str(path)).read_bytes()
+    if b"<Groups>" in raw or b"<Groups " in raw:
+        return parse_promo_file(path)
+    return parse_promo_file_flat(path)
