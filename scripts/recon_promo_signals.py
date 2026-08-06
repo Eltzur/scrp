@@ -41,7 +41,7 @@ for cid, label in CHAINS.items():
     try:
         sc = get_scraper(cid)
         sc.load_stores(conn)
-        sids = [str(s) for s in by_chain.get(cid, [])][:10]
+        sids = [str(s) for s in by_chain.get(cid, [])]
         idx = sc.build_promo_index(set(sids))
         entry = next((idx[s] for s in sids if s in idx), None)
         if entry is None and idx:
@@ -51,10 +51,11 @@ for cid, label in CHAINS.items():
         gz = RAW_DIR / (entry["filename"] + ".gz")
         sc._download_gz(entry["url"], gz)
         data = sc._decompress(gz); gz.unlink(missing_ok=True)
-        root = etree.fromstring(data if isinstance(data, (bytes, bytearray)) else data.encode())
+        _parser = etree.XMLParser(recover=True)
+        root = etree.fromstring(data if isinstance(data, (bytes, bytearray)) else data.encode(), _parser)
         proms = root.findall(".//Promotion")
         n = len(proms); club_r = mq = gc = gi = 0
-        cv, rv = Counter(), Counter()
+        cv, rv, gv = Counter(), Counter(), Counter()
         for p in proms:
             s = sig(p)
             club = s.get("ClubID") or s.get("ClubId")
@@ -65,11 +66,13 @@ for cid, label in CHAINS.items():
             if s.get("AdditionalGiftCount") and s["AdditionalGiftCount"] not in ("0", ""): gc += 1
             if s.get("GiftsItems") and s["GiftsItems"] not in ("0", ""): gi += 1
             if s.get("RewardType"): rv[s["RewardType"]] += 1
+            if s.get("IsGiftItem"): gv[s["IsGiftItem"]] += 1
         print(f"  {n} promotions in this store's file")
         print(f"  club-restricted:{club_r}  max_qty set:{mq}  AddGiftCount>0:{gc}  GiftsItems>0:{gi}")
         print(f"  club values:{dict(cv.most_common(6))}")
         print(f"  reward_type values:{dict(rv.most_common(8))}")
-        for p in proms[:2]:
+        print(f"  IsGiftItem values:{dict(gv.most_common(8))}")
+        for p in proms[:4]:
             print("   sample:", sig(p), "| desc:", (p.findtext(".//PromotionDescription") or "")[:35])
     except Exception as e:
         print("  ERROR:", repr(e))
