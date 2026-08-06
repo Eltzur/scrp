@@ -175,8 +175,16 @@ class BinaProjectsScraper(ChainScraper):
             log.warning(f"{self.CHAIN_NAME}: no {prefix} files returned from MainIO_Hok.")
             return {}
 
-        pattern = re.compile(
+        # King Store's portal changed its filename scheme Aug 2026 (SU10A-7):
+        #   old: {prefix}{chain}-{store}-{YYYYMMDDHHMM}.gz            (2 segments)
+        #   new: {prefix}{chain}-{subchain}-{store}-{YYYYMMDD}-{HHMMSS}.gz  (4 segments)
+        # Shefa + Shuk Hayir still publish the old form, so BOTH must be accepted.
+        pat_old = re.compile(
             rf"^{prefix}{re.escape(self.CHAIN_ID)}-(\d+)-(\d{{12}})\.gz$",
+            re.IGNORECASE,
+        )
+        pat_new = re.compile(
+            rf"^{prefix}{re.escape(self.CHAIN_ID)}-\d+-(\d+)-(\d{{8}})-(\d{{6}})\.gz$",
             re.IGNORECASE,
         )
 
@@ -186,11 +194,16 @@ class BinaProjectsScraper(ChainScraper):
         newest: dict[str, tuple[str, str]] = {}  # sid -> (FileNm, stamp)
         for f in files:
             fname = f.get("FileNm", "")
-            m = pattern.match(fname)
-            if not m:
-                continue
-            sid   = str(int(m.group(1))).zfill(3)
-            stamp = m.group(2)
+            m = pat_old.match(fname)
+            if m:
+                sid   = str(int(m.group(1))).zfill(3)
+                stamp = m.group(2)                    # 12-digit YYYYMMDDHHMM
+            else:
+                m = pat_new.match(fname)
+                if not m:
+                    continue
+                sid   = str(int(m.group(1))).zfill(3) # store is the 2nd numeric segment now
+                stamp = m.group(2) + m.group(3)       # YYYYMMDD + HHMMSS = 14-digit, sorts correctly
             if sid not in newest or stamp > newest[sid][1]:
                 newest[sid] = (fname, stamp)
 
