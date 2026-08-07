@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: August 5, 2026 (end of session SU10A-6)
+> Last updated: August 6, 2026 (end of session SU10A-7)
 
 ---
 
@@ -84,7 +84,7 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 
 ## 📊 Current Production State
 
-**Last updated: August 5, 2026 (end of session SU10A-6)**
+**Last updated: August 6, 2026 (end of session SU10A-7)**
 
 - **14 chains** in registry: Shufersal, Rami Levy, Osher Ad, Victory, Yochananof, Keshet, Carrefour, Tiv Taam, King Store, Shefa Birkat Hashem, Shuk Hayir, Fresh Market, Super Yuda, חצי חינם / Hazi Hinam (added 9d-9)
 - **~1,200 stores** in active_stores.yaml (post 9d-9 additions: Rami Levy +72→98, Yochananof +35→50, Keshet +12→22, Osher Ad +11→23, Hazi Hinam +1→12; Paz + Dor Alon removed in 9d-8)
@@ -140,6 +140,43 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 **Carried forward (open):** promo-only items in search (~86% gap); King Store 68% catalog match (~1,200 promoted item_codes not in items → bare barcode); fresh food / weighted goods (min_qty<1) into search; parser adds owed (club-only, max-qty, gift-count for "3 for 2").
 
 > **Superseded by SU10A-6 (measured):** the real figure is 60,275 orphaned promoted item_codes for King Store — 68.7% of its 87,771 promoted codes have no items row, ~50× the "~1,200" and ~27× the "~2,250" recorded here. Earlier figures likely used a different denominator (search-reachable items, not all promoted codes); not reconstructable from the note. 96.8% of sampled 13-digit codes are checksum-valid EAN-13 — real products King Store promotes but never publishes a shelf price for, not junk data. King Store alone is ~93% of all orphaned promoted codes across the 14 chains. **Also superseded in this same list: "fresh food / weighted goods (min_qty<1) into search" — measured 84.2% already searchable (17,461 of 20,730 weighted items), so that item is effectively done and its `min_qty<1` framing was wrong; see SU10A-6 carried-forward items (11) and (12).**
+
+---
+
+### Session SU10A-7 (August 5-6, 2026) — OOM fix confirmed over two clean runs, King Store double break fixed same-day, Hazi Hinam verified flat, GS1 nightly confirmed, task-4 recon
+
+**OOM fix CONFIRMED — two more clean unattended cron runs; cause and fix are both closed.** Aug 5 finished in **10,747s** and Aug 6 in **10,029s**, **0 errors on both**, each running well past *both* historical kill points (1h55m on Aug 3, 4h03m on Aug 4). The cause was kernel-OOM, already confirmed in SU10A-6 from `journalctl -k`; the delta migration is the fix, and it now holds across consecutive unattended runs rather than a single lucky one. **Nothing here reopens the diagnosis — do not re-run it.**
+
+**But capacity remains CHRONIC, not incidental — and the correct posture is act, not watch.** A mid-run snapshot on Aug 6 caught **swap at 97.5% with only 96 MiB free**, recovering to **989 MiB free** only once the cron had finished. The box has no headroom *during* a run; it simply no longer crosses the kill line. Two levers, in order: **(1) trim the idle Postgres backends first**, and size that win with **PSS / `smaps_rollup`, never `ps` RSS** — RSS counts the 512 MB of `shared_buffers` once per backend and wildly overstates what trimming actually frees; **(2) RAM bump second**, only after (1) is measured and shown insufficient. Do not wait for a second kill to justify the work.
+
+**King Store broke TWICE on the same day, in two unrelated ways. Both were fixed same-day rather than waiting on a cron run to confirm the break.**
+
+**Break 1 — the filename format changed, and it broke EVERY file type at once, not just one.** The portal moved to `{prefix}{chain}-{subchain}-{store}-{YYYYMMDD}-{HHMMSS}.GZ` — a subchain segment inserted and the timestamp split into separate date and time fields. The Bina index regex in `binaprojects.py::_build_file_index` matched only the old form, so **stores, prices and promos all indexed to zero simultaneously**. Fix: dual-pattern matching accepting both the old and the new shape (**commit `039545e`**), which restores King Store while leaving Shefa / Shuk Hayir — still publishing the old form — untouched. **28/28 stores, 63,987 items** after the fix.
+
+**Break 2 — the promo XML migrated flat → standard nested, the same day.** King Store's promo feed moved from the flat Bina shape to the standard `<Groups><Group><PromotionItem>` nesting, which `parse_promo_file_flat` (built in SU10A-5) cannot read. Fix: a shape-detecting `parse_promo_file_auto` that inspects the **raw bytes** for `<Groups>`, delegating to the standard parser when found and to the flat parser otherwise, wired in as `BinaProjectsScraper.PROMO_PARSER` (**commit `4df1f90`**). Verified explicitly that the standard parser reads the new shape with **complete `promo_start`/`promo_end`** — that check mattered specifically because a missing `promo_end` would leave every one of these rows never expiring and permanently visible, since the read path filters on exactly that column. **27/28 stores loading promos.**
+
+**LIMITATION — record this as a standing warning, not a footnote.** `parse_promo_file_auto` matches a **byte pattern (`<Groups>`), NOT a schema.** It is safe everywhere it is currently deployed — King Store → standard, Shefa / Shuk Hayir → flat, all three verified — but **a corrupt file, or an incidental `<Groups>` string inside a genuinely flat file, will mis-route to the standard parser and yield silent 0 rows**: no exception, no `FAILED` line, nothing visible in the coverage report except a store that quietly stops having promos. **If hardening is ever wanted, the cheap version is a 0-row fallback** — when the detected parser returns 0 rows, retry with the other one. Not implemented, deliberately.
+
+**Hazi Hinam — verified NOT migrated, and deliberately left on the flat parser.** 5 of 6 sampled files are still flat, and the flat parser reads them correctly (**2,852 rows**) where the standard parser returns **0**. **Do NOT switch Hazi Hinam to `parse_promo_file_auto`.** The one file that looked like evidence of a migration — store 201's `<Groups>` — is **corruption, not a schema change**: the tags are mismatched and *both* parsers error on it. It is 1 of 12 stores, already caught by `_process_store`'s try/except, and the chain's promo data is healthy (**24,008 rows, all active**). On the filename axis Hazi Hinam is already covered — its own index logic handles the new 4-segment format — but it would **not** self-heal if its promo *schema* ever migrates for real. **That is accepted exposure, consciously taken; revisit if Hazi Hinam starts reporting 0 promos.** Using `recover=True` to salvage the corrupt file is a **separate, DEFERRED decision** — it is a broader parser-strictness change that silently accepts truncated content chain-wide, which may well be worse than skipping one store.
+
+**This is a PLATFORM-WIDE rollout, not a King Store quirk.** The 4-segment filename format appeared on **King Store AND Hazi Hinam on the same day** — two chains, two different scrapers, one change — so read it as rolling across the Bina/portal platform generally, not as a chain-specific event. The useful consequence: both fixes shipped here are forward-covering for **Shefa and Shuk Hayir** when their turn comes — dual-pattern handles the filename axis, shape-detection handles the schema axis, and neither should need a code change at migration time.
+
+**GS1 nightly sync CONFIRMED working.** `status ok` on every run; it is wired post-scrape at the end of `cron_main`, exception-wrapped as before. Current counts: **78 GLN / 22,596 products** — one supplier more than the 77 recorded in this handoff, auto-caught by the incremental sweep with no intervention. **But only +1 of "a few" newly-authorized suppliers landed, and that is the real finding.** The likely cause is the **incremental watermark skipping suppliers whose products carry old timestamps** — newly authorized, but with nothing that looks new to a timestamp-driven sweep. **A one-time `gs1_fetch --full` to backfill is recommended and PENDING.** Related operational note: **there are no GS1 runs at all on Aug 3-4**, the two OOM-killed days — the sweep sits at the *end* of cron, so a killed cron silently skips GS1 too. Assume any future cron failure also skipped the GS1 sweep unless proven otherwise.
+
+**Task 4 (parser signals) — RECON DONE, BUILD PENDING.** Findings, several of which correct or sharpen item (13) of SU10A-6:
+- **`IsGiftItem` is the quantity N in an "N for M" offer, not a boolean.** Confirmed on three independent sources — Rami Levy, Victory, **and** a King Store Bina file (`IsGiftItem=2`, description "2 for 23", `MinQty=2`, `DiscountedPrice=23`). This is the signal to build on.
+- **`reward_type=10` means multi-buy with a DIFFERENT N across chains.** N must therefore **never** be derived from the reward code — only from `IsGiftItem` plus the description. Same trap class as the SU10A-5 unit-mismatch bugs, which bit three separate times.
+- **`ClubID` appears in BOTH bare-numeric and `"0 - text"` forms *within* the standard variant.** The form is not a variant discriminator — accept both.
+- **`AddGiftCount` / `GiftsItems` are zero everywhere.** This **REVERSES** item (13)'s claim that "the flat variant is the richer gift source" — **flat is the poorer one.** Correct that expectation before scoping the build.
+- **`MaxQty` ≈ `RedemptionLimit` wherever both are set** — possibly one column under two names, rather than the two distinct concepts item (13) assumed. Verify on a chain where they genuinely differ before modelling them as independent fields.
+
+**Carried forward (open):**
+1. **One-time `gs1_fetch --full` backfill** for the newly-authorized suppliers the incremental watermark skipped — **PENDING**, and the only concrete GS1 action outstanding.
+2. **Task 4 parser-signals build** — recon complete (above), no code written. SU10A-6's build plan in item (13) still stands apart from the two corrections above.
+3. **Memory capacity — ACT, do not watch.** Trim idle Postgres backends first (PSS-sized, not `ps` RSS), RAM bump second. Chronic, and entirely unaffected by the OOM fix now being confirmed.
+4. **`parse_promo_file_auto` 0-row fallback** — known silent-failure gap; hardening not implemented.
+5. **`recover=True` for corrupt promo XML** — deferred, needs its own decision on chain-wide parser strictness.
+6. **All SU10A-6 carried-forward items other than (1) stand unchanged** — notably King Store's 60,275-code catalog gap (item 7), cross-chain PLU matching for weighted goods (item 12), and the 30-day promo cleanup sweep. **SU10A-6 item (1) is now closed twice over on the acute side; only its capacity half survives, as item 3 above.**
 
 ---
 
