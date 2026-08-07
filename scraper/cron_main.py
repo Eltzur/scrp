@@ -156,24 +156,23 @@ def ping_supabase() -> None:
 
 
 def run_gs1_catalog() -> None:
-    """Incremental GS1 Israel catalog sync (SU10A-1).
+    """Incremental GS1 catalog sync nightly; a FULL sweep on Sundays (SU10A-7).
 
-    Runs in incremental mode: no --full, so it picks up the watermark from the
-    last successful run in gs1.sync_runs and only pulls what changed. Page cap
-    stays at the module default (2000 pages) purely as a runaway backstop — the
-    entire catalogue was 46 pages, so it is not a practical limit.
-
-    A different vertical from the supermarket scrapers, so a GS1 failure is
-    logged but never fails the cron — same treatment as the canonical-name step.
-    Imported lazily (like ping_supabase's requests import) so a problem inside
-    the GS1 module can never stop the price scrape from running.
+    The incremental sweep keys on the modification_timestamp watermark, so a
+    newly-authorized vendor whose products carry old timestamps is silently
+    skipped. A weekly full sweep (full=True ignores the watermark) guarantees
+    such vendors land within a week. gs1_fetch upserts page-by-page, so a full
+    sweep's memory footprint matches the incremental one. Same failure policy:
+    lazily imported, logged, never raises.
     """
+    import datetime
+    full = datetime.date.today().weekday() == 6
     try:
         from scraper.gs1_fetch import run as gs1_run
-        rows = gs1_run()
-        log.info(f"GS1 catalog sync OK — {rows} rows upserted.")
+        rows = gs1_run(full=full)
+        log.info("GS1 catalog sync OK (%s) - %s rows upserted.", "FULL" if full else "incremental", rows)
     except Exception as exc:
-        log.error(f"GS1 catalog sync FAILED: {exc}", exc_info=True)
+        log.error("GS1 catalog sync FAILED: %s", exc, exc_info=True)
 
 
 def run_gs1_enrichment() -> None:
