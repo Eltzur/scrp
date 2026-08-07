@@ -27,6 +27,34 @@ def _int(el, tag: str):
         return None
 
 
+def _club_num(promo_el):
+    """Leading integer of a promotion's club field, searched anywhere beneath it.
+    '0' and '0 - כלל הלקוחות' both -> 0 (all customers); nonzero = club-restricted.
+    Covers standard (ClubID at Promotion level) and flat (ClubId nested under
+    AdditionalRestrictions/Clubs) in one place (SU10A-7)."""
+    for tag in ("ClubID", "ClubId"):
+        el = promo_el.find(f".//{tag}")
+        if el is not None and el.text and el.text.strip():
+            head = el.text.strip().split()[0].split("-")[0].strip()
+            try:
+                return int(float(head))
+            except (ValueError, TypeError):
+                return None
+    return None
+
+
+def _gift_count(promo_el):
+    """IsGiftItem = the N in an 'N for M' offer (SU10A-7): '2.0000' -> 2. Searched
+    beneath the promotion; None when absent. NOT AdditionalGiftCount (zero everywhere)."""
+    el = promo_el.find(".//IsGiftItem")
+    if el is None or not el.text or not el.text.strip():
+        return None
+    try:
+        return int(float(el.text.strip()))
+    except (ValueError, TypeError):
+        return None
+
+
 def parse_file(path: Path) -> tuple:
     """
     Returns (header, items_iter).
@@ -96,6 +124,9 @@ def parse_promo_file(path: Path) -> tuple:
             allow_multi = _int(promo_el,  "AllowMultipleDiscounts")
             start_dt    = _parse_dt(_text(promo_el, "PromotionStartDateTime"))
             end_dt      = _parse_dt(_text(promo_el, "PromotionEndDateTime"))
+            club_id     = _club_num(promo_el)
+            gift_count  = _gift_count(promo_el)
+            redemption  = _real(promo_el, "RedemptionLimit")
 
             for group_el in promo_el.iter("Group"):
                 min_purch = _real(group_el, "MinPurchaseAmount")
@@ -104,6 +135,9 @@ def parse_promo_file(path: Path) -> tuple:
                     item_code = _text(item_el, "ItemCode")
                     if not item_code:
                         continue
+                    max_qty = _real(item_el, "MaxQty")
+                    if max_qty is None:
+                        max_qty = redemption
                     yield {
                         "item_code":                item_code,
                         "promo_id":                 promo_id,
@@ -116,6 +150,9 @@ def parse_promo_file(path: Path) -> tuple:
                         "min_qty":                  _real(item_el, "MinQty"),
                         "discount_rate":            _real(item_el, "DiscountRate"),
                         "discount_price":           _real(item_el, "DiscountedPrice"),
+                        "club_id":                  club_id,
+                        "max_qty":                  max_qty,
+                        "gift_count":               gift_count,
                     }
 
     return header, _items()
@@ -223,6 +260,9 @@ def parse_promo_file_flat(path: Path) -> tuple:
                                    _first_text(promo_el, "PromotionStartHour"))
             end_dt      = _join_dt(_first_text(promo_el, "PromotionEndDate"),
                                    _first_text(promo_el, "PromotionEndHour"))
+            club_id     = _club_num(promo_el)
+            gift_count  = _gift_count(promo_el)
+            max_qty     = _first_real(promo_el, "MaxQty")
 
             # Only real promoted items — GiftsItems is a sibling container and
             # its entries are not products the shopper is buying at this price.
@@ -244,6 +284,9 @@ def parse_promo_file_flat(path: Path) -> tuple:
                         "min_qty":                  min_qty,
                         "discount_rate":            disc_rate,
                         "discount_price":           disc_price,
+                        "club_id":                  club_id,
+                        "max_qty":                  max_qty,
+                        "gift_count":               gift_count,
                     }
 
     return header, _items()

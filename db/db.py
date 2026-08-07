@@ -226,7 +226,7 @@ def bulk_insert_promos(conn: Connection, store_fk: int, promo_items: list[dict])
         "store_fk", "item_code", "promo_id", "promo_description",
         "promo_type", "allow_multiple_discounts", "min_qty", "reward_type",
         "discount_rate", "discount_price", "min_purchase_amount",
-        "promo_start", "promo_end",
+        "promo_start", "promo_end", "club_id", "max_qty", "gift_count",
     )
     conflict_clause = (
         " ON CONFLICT (store_fk, item_code, promo_id) DO UPDATE SET"
@@ -239,7 +239,10 @@ def bulk_insert_promos(conn: Connection, store_fk: int, promo_items: list[dict])
         " discount_price=excluded.discount_price,"
         " min_purchase_amount=excluded.min_purchase_amount,"
         " promo_start=excluded.promo_start,"
-        " promo_end=excluded.promo_end"
+        " promo_end=excluded.promo_end,"
+        " club_id=excluded.club_id,"
+        " max_qty=excluded.max_qty,"
+        " gift_count=excluded.gift_count"
     )
     total = 0
     for i0 in range(0, len(promo_items), PRICE_INSERT_BATCH_SIZE):
@@ -250,7 +253,8 @@ def bulk_insert_promos(conn: Connection, store_fk: int, promo_items: list[dict])
             # e.g. j=1,n=10 → "p1_10"; j=11,n=0 → "p11_0" — unambiguous.
             placeholders.append(
                 f"(:p{j}_0,:p{j}_1,:p{j}_2,:p{j}_3,:p{j}_4,"
-                f":p{j}_5,:p{j}_6,:p{j}_7,:p{j}_8,:p{j}_9,:p{j}_10,:p{j}_11,:p{j}_12)"
+                f":p{j}_5,:p{j}_6,:p{j}_7,:p{j}_8,:p{j}_9,:p{j}_10,:p{j}_11,:p{j}_12,"
+                f":p{j}_13,:p{j}_14,:p{j}_15)"
             )
             params.update({
                 f"p{j}_0":  store_fk,
@@ -266,6 +270,9 @@ def bulk_insert_promos(conn: Connection, store_fk: int, promo_items: list[dict])
                 f"p{j}_10": item.get("min_purchase_amount"),
                 f"p{j}_11": item.get("promo_start"),
                 f"p{j}_12": item.get("promo_end"),
+                f"p{j}_13": item.get("club_id"),
+                f"p{j}_14": item.get("max_qty"),
+                f"p{j}_15": item.get("gift_count"),
             })
         conn.execute(text(
             f"INSERT INTO promos ({','.join(cols)})"
