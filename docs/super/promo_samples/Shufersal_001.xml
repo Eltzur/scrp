@@ -1,0 +1,710 @@
+﻿<Root>
+  <ChainID>7290027600007</ChainID>
+  <SubChainID>001</SubChainID>
+  <StoreID>001</StoreID>
+  <BikoretNo>9</BikoretNo>
+  <Promotions>
+    <Promotion>
+      <PromotionUpdateTime>2026-08-02T13:00:00.000</PromotionUpdateTime>
+      <AllowMultipleDiscounts>1</AllowMultipleDiscounts>
+      <PromotionID>4543979</PromotionID>
+      <PromotionDescription>קטיף 9.90 דלורית אורגני</PromotionDescription>
+      <PromotionStartDateTime>2026-07-20T00:00:00.000</PromotionStartDateTime>
+      <PromotionEndDateTime>2026-08-10T02:59:00.000</PromotionEndDateTime>
+      <PromotionStartHour>00:00:00.000</PromotionStartHour>
+      <PromotionEndHour>02:59:00.000</PromotionEndHour>
+      <PromotionDays />
+      <RedemptionLimit>0</RedemptionLimit>
+      <MinNoOfItemOffered>10</MinNoOfItemOffered>
+      <ClubID>0 - כלל הלקוחות</ClubID>
+      <IsGiftItem />
+      <AdditionalIsCoupon>0</AdditionalIsCoupon>
+      <AdditionalRestrictions />
+      <Remarks />
+      <Groups>
+        <Group>
+          <GroupID>1</GroupID>
+          <MinPurchaseAmount></MinPurchaseAmount>
+          <DiscountType></DiscountType>
+          <PromotionItems>
+            <PromotionItem>
+              <ItemCode>7290000910345</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>3</RewardType>
+              <MinQty>0.01</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate>38</DiscountRate>
+              <DiscountedPrice>9.90</DiscountedPrice>
+              <DiscountedPricePerMida>9.900</DiscountedPricePerMida>
+              <bIsWeighted>1</bIsWeighted>
+            </PromotionItem>
+          </PromotionItems>
+        </Group>
+      </Groups>
+    </Promotion>
+    <Promotion>
+      <PromotionUpdateTime>2026-08-02T13:00:00.000</PromotionUpdateTime>
+      <AllowMultipleDiscounts>1</AllowMultipleDiscounts>
+      <PromotionID>4554183</PromotionID>
+      <PromotionDescription>2ב13.90 כוסברה/פטרוזיליה/שמיר/נענע /חסה</PromotionDescription>
+      <PromotionStartDateTime>2026-07-27T00:00:00.000</PromotionStartDateTime>
+      <PromotionEndDateTime>2026-08-10T02:59:00.000</PromotionEndDateTime>
+      <PromotionStartHour>00:00:00.000</PromotionStartHour>
+      <PromotionEndHour>02:59:00.000</PromotionEndHour>
+      <PromotionDays />
+      <RedemptionLimit>0</RedemptionLimit>
+      <MinNoOfItemOffered>10</MinNoOfItemOffered>
+      <ClubID>0 - כלל הלקוחות</ClubID>
+      <IsGiftItem />
+      <AdditionalIsCoupon>0</AdditionalIsCoupon>
+      <AdditionalRestrictions />
+      <Remarks />
+      <Groups>
+        <Group>
+          <GroupID>1</GroupID>
+          <MinPurchaseAmount></MinPurchaseAmount>
+          <DiscountType></DiscountType>
+          <PromotionItems>
+            <PromotionItem>
+              <ItemCode>7290013090157</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>13.90</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+            <PromotionItem>
+              <ItemCode>7290013090492</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>13.90</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+            <PromotionItem>
+              <ItemCode>7290013090508</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>13.90</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+            <PromotionItem>
+              <ItemCode>7290013090515</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>13.90</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+          </PromotionItems>
+        </Group>
+      </Groups>
+    </Promotion>
+    <Promotion>
+      <PromotionUpdateTime>2026-08-02T13:00:00.000</PromotionUpdateTime>
+      <AllowMultipleDiscounts>1</AllowMultipleDiscounts>
+      <PromotionID>4554184</PromotionID>
+      <PromotionDescription>קטיף 2ב18.9בצל ירוק/ס.עלים/מנגולד אורגני</PromotionDescription>
+      <PromotionStartDateTime>2026-07-27T00:00:00.000</PromotionStartDateTime>
+      <PromotionEndDateTime>2026-08-10T02:59:00.000</PromotionEndDateTime>
+      <PromotionStartHour>00:00:00.000</PromotionStartHour>
+      <PromotionEndHour>02:59:00.000</PromotionEndHour>
+      <PromotionDays />
+      <RedemptionLimit>0</RedemptionLimit>
+      <MinNoOfItemOffered>10</MinNoOfItemOffered>
+      <ClubID>0 - כלל הלקוחות</ClubID>
+      <IsGiftItem />
+      <AdditionalIsCoupon>0</AdditionalIsCoupon>
+      <AdditionalRestrictions />
+      <Remarks />
+      <Groups>
+        <Group>
+          <GroupID>1</GroupID>
+          <MinPurchaseAmount></MinPurchaseAmount>
+          <DiscountType></DiscountType>
+          <PromotionItems>
+            <PromotionItem>
+              <ItemCode>7290013090225</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>18.90</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+            <PromotionItem>
+              <ItemCode>7290013090379</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>18.90</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+          </PromotionItems>
+        </Group>
+      </Groups>
+    </Promotion>
+    <Promotion>
+      <PromotionUpdateTime>2026-08-02T13:00:00.000</PromotionUpdateTime>
+      <AllowMultipleDiscounts>1</AllowMultipleDiscounts>
+      <PromotionID>4554185</PromotionID>
+      <PromotionDescription>קטיף 2ב 25.90 תרד/קייל/פאקצוי אורגני</PromotionDescription>
+      <PromotionStartDateTime>2026-07-27T00:00:00.000</PromotionStartDateTime>
+      <PromotionEndDateTime>2026-08-10T02:59:00.000</PromotionEndDateTime>
+      <PromotionStartHour>00:00:00.000</PromotionStartHour>
+      <PromotionEndHour>02:59:00.000</PromotionEndHour>
+      <PromotionDays />
+      <RedemptionLimit>0</RedemptionLimit>
+      <MinNoOfItemOffered>10</MinNoOfItemOffered>
+      <ClubID>0 - כלל הלקוחות</ClubID>
+      <IsGiftItem />
+      <AdditionalIsCoupon>0</AdditionalIsCoupon>
+      <AdditionalRestrictions />
+      <Remarks />
+      <Groups>
+        <Group>
+          <GroupID>1</GroupID>
+          <MinPurchaseAmount></MinPurchaseAmount>
+          <DiscountType></DiscountType>
+          <PromotionItems>
+            <PromotionItem>
+              <ItemCode>7290013090409</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>25.90</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+            <PromotionItem>
+              <ItemCode>7290013090430</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>25.90</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+            <PromotionItem>
+              <ItemCode>7290013090461</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>25.90</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+          </PromotionItems>
+        </Group>
+      </Groups>
+    </Promotion>
+    <Promotion>
+      <PromotionUpdateTime>2026-08-02T13:00:00.000</PromotionUpdateTime>
+      <AllowMultipleDiscounts>1</AllowMultipleDiscounts>
+      <PromotionID>4554186</PromotionID>
+      <PromotionDescription>קטיף 2 ב25.90חסה לבבות/לאליק/סלנובה אורג</PromotionDescription>
+      <PromotionStartDateTime>2026-07-27T00:00:00.000</PromotionStartDateTime>
+      <PromotionEndDateTime>2026-08-10T02:59:00.000</PromotionEndDateTime>
+      <PromotionStartHour>00:00:00.000</PromotionStartHour>
+      <PromotionEndHour>02:59:00.000</PromotionEndHour>
+      <PromotionDays />
+      <RedemptionLimit>0</RedemptionLimit>
+      <MinNoOfItemOffered>10</MinNoOfItemOffered>
+      <ClubID>0 - כלל הלקוחות</ClubID>
+      <IsGiftItem />
+      <AdditionalIsCoupon>0</AdditionalIsCoupon>
+      <AdditionalRestrictions />
+      <Remarks />
+      <Groups>
+        <Group>
+          <GroupID>1</GroupID>
+          <MinPurchaseAmount></MinPurchaseAmount>
+          <DiscountType></DiscountType>
+          <PromotionItems>
+            <PromotionItem>
+              <ItemCode>7290013090171</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>25.90</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+            <PromotionItem>
+              <ItemCode>7290018758045</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>25.90</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+          </PromotionItems>
+        </Group>
+      </Groups>
+    </Promotion>
+    <Promotion>
+      <PromotionUpdateTime>2026-08-02T13:00:00.000</PromotionUpdateTime>
+      <AllowMultipleDiscounts>1</AllowMultipleDiscounts>
+      <PromotionID>4554208</PromotionID>
+      <PromotionDescription>קטיף 8.90 עגבניה אשכולות אורגני</PromotionDescription>
+      <PromotionStartDateTime>2026-07-27T00:00:00.000</PromotionStartDateTime>
+      <PromotionEndDateTime>2026-08-10T02:59:00.000</PromotionEndDateTime>
+      <PromotionStartHour>00:00:00.000</PromotionStartHour>
+      <PromotionEndHour>02:59:00.000</PromotionEndHour>
+      <PromotionDays />
+      <RedemptionLimit>0</RedemptionLimit>
+      <MinNoOfItemOffered>10</MinNoOfItemOffered>
+      <ClubID>0 - כלל הלקוחות</ClubID>
+      <IsGiftItem />
+      <AdditionalIsCoupon>0</AdditionalIsCoupon>
+      <AdditionalRestrictions />
+      <Remarks />
+      <Groups>
+        <Group>
+          <GroupID>1</GroupID>
+          <MinPurchaseAmount></MinPurchaseAmount>
+          <DiscountType></DiscountType>
+          <PromotionItems>
+            <PromotionItem>
+              <ItemCode>7290013090010</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>3</RewardType>
+              <MinQty>1.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate>31</DiscountRate>
+              <DiscountedPrice>8.90</DiscountedPrice>
+              <DiscountedPricePerMida>1.78</DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+          </PromotionItems>
+        </Group>
+      </Groups>
+    </Promotion>
+    <Promotion>
+      <PromotionUpdateTime>2026-08-02T15:40:00.000</PromotionUpdateTime>
+      <AllowMultipleDiscounts>1</AllowMultipleDiscounts>
+      <PromotionID>4554213</PromotionID>
+      <PromotionDescription>קטיף 2ב19.90 שיני שום מקולף אורגני</PromotionDescription>
+      <PromotionStartDateTime>2026-07-27T00:00:00.000</PromotionStartDateTime>
+      <PromotionEndDateTime>2026-08-10T02:59:00.000</PromotionEndDateTime>
+      <PromotionStartHour>00:00:00.000</PromotionStartHour>
+      <PromotionEndHour>02:59:00.000</PromotionEndHour>
+      <PromotionDays />
+      <RedemptionLimit>0</RedemptionLimit>
+      <MinNoOfItemOffered>10</MinNoOfItemOffered>
+      <ClubID>0 - כלל הלקוחות</ClubID>
+      <IsGiftItem />
+      <AdditionalIsCoupon>0</AdditionalIsCoupon>
+      <AdditionalRestrictions />
+      <Remarks />
+      <Groups>
+        <Group>
+          <GroupID>1</GroupID>
+          <MinPurchaseAmount></MinPurchaseAmount>
+          <DiscountType></DiscountType>
+          <PromotionItems>
+            <PromotionItem>
+              <ItemCode>6902023070524</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>1</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate>33</DiscountRate>
+              <DiscountedPrice>19.90</DiscountedPrice>
+              <DiscountedPricePerMida>9.95</DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+          </PromotionItems>
+        </Group>
+      </Groups>
+    </Promotion>
+    <Promotion>
+      <PromotionUpdateTime>2026-08-02T13:00:00.000</PromotionUpdateTime>
+      <AllowMultipleDiscounts>1</AllowMultipleDiscounts>
+      <PromotionID>4554221</PromotionID>
+      <PromotionDescription>קטיף 2 ב19.90 פלפל סוויט אורגני 200 גר</PromotionDescription>
+      <PromotionStartDateTime>2026-07-27T00:00:00.000</PromotionStartDateTime>
+      <PromotionEndDateTime>2026-08-10T02:59:00.000</PromotionEndDateTime>
+      <PromotionStartHour>00:00:00.000</PromotionStartHour>
+      <PromotionEndHour>02:59:00.000</PromotionEndHour>
+      <PromotionDays />
+      <RedemptionLimit>0</RedemptionLimit>
+      <MinNoOfItemOffered>10</MinNoOfItemOffered>
+      <ClubID>0 - כלל הלקוחות</ClubID>
+      <IsGiftItem />
+      <AdditionalIsCoupon>0</AdditionalIsCoupon>
+      <AdditionalRestrictions />
+      <Remarks />
+      <Groups>
+        <Group>
+          <GroupID>1</GroupID>
+          <MinPurchaseAmount></MinPurchaseAmount>
+          <DiscountType></DiscountType>
+          <PromotionItems>
+            <PromotionItem>
+              <ItemCode>7290013090683</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>19.90</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+          </PromotionItems>
+        </Group>
+      </Groups>
+    </Promotion>
+    <Promotion>
+      <PromotionUpdateTime>2026-08-02T13:00:00.000</PromotionUpdateTime>
+      <AllowMultipleDiscounts>1</AllowMultipleDiscounts>
+      <PromotionID>4554222</PromotionID>
+      <PromotionDescription>קטיף 11.90 תפוח אדמה בייבי אורגני יחידה</PromotionDescription>
+      <PromotionStartDateTime>2026-07-27T00:00:00.000</PromotionStartDateTime>
+      <PromotionEndDateTime>2026-08-10T02:59:00.000</PromotionEndDateTime>
+      <PromotionStartHour>00:00:00.000</PromotionStartHour>
+      <PromotionEndHour>02:59:00.000</PromotionEndHour>
+      <PromotionDays />
+      <RedemptionLimit>0</RedemptionLimit>
+      <MinNoOfItemOffered>10</MinNoOfItemOffered>
+      <ClubID>0 - כלל הלקוחות</ClubID>
+      <IsGiftItem />
+      <AdditionalIsCoupon>0</AdditionalIsCoupon>
+      <AdditionalRestrictions />
+      <Remarks />
+      <Groups>
+        <Group>
+          <GroupID>1</GroupID>
+          <MinPurchaseAmount></MinPurchaseAmount>
+          <DiscountType></DiscountType>
+          <PromotionItems>
+            <PromotionItem>
+              <ItemCode>7290020520500</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>3</RewardType>
+              <MinQty>1.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate>25</DiscountRate>
+              <DiscountedPrice>11.90</DiscountedPrice>
+              <DiscountedPricePerMida>11.90</DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+          </PromotionItems>
+        </Group>
+      </Groups>
+    </Promotion>
+    <Promotion>
+      <PromotionUpdateTime>2026-08-02T13:00:00.000</PromotionUpdateTime>
+      <AllowMultipleDiscounts>1</AllowMultipleDiscounts>
+      <PromotionID>4554226</PromotionID>
+      <PromotionDescription>קטיף 13.90 לוף אורגני</PromotionDescription>
+      <PromotionStartDateTime>2026-07-27T00:00:00.000</PromotionStartDateTime>
+      <PromotionEndDateTime>2026-08-10T02:59:00.000</PromotionEndDateTime>
+      <PromotionStartHour>00:00:00.000</PromotionStartHour>
+      <PromotionEndHour>02:59:00.000</PromotionEndHour>
+      <PromotionDays />
+      <RedemptionLimit>0</RedemptionLimit>
+      <MinNoOfItemOffered>10</MinNoOfItemOffered>
+      <ClubID>0 - כלל הלקוחות</ClubID>
+      <IsGiftItem />
+      <AdditionalIsCoupon>0</AdditionalIsCoupon>
+      <AdditionalRestrictions />
+      <Remarks />
+      <Groups>
+        <Group>
+          <GroupID>1</GroupID>
+          <MinPurchaseAmount></MinPurchaseAmount>
+          <DiscountType></DiscountType>
+          <PromotionItems>
+            <PromotionItem>
+              <ItemCode>7290013090386</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>3</RewardType>
+              <MinQty>1.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate>22</DiscountRate>
+              <DiscountedPrice>13.90</DiscountedPrice>
+              <DiscountedPricePerMida>13.90</DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+          </PromotionItems>
+        </Group>
+      </Groups>
+    </Promotion>
+    <Promotion>
+      <PromotionUpdateTime>2026-08-02T09:30:00.000</PromotionUpdateTime>
+      <AllowMultipleDiscounts>1</AllowMultipleDiscounts>
+      <PromotionID>4564302</PromotionID>
+      <PromotionDescription>ב. 2ב45 ציפס קלאסי/אמריקאי/זיגזג קפוא</PromotionDescription>
+      <PromotionStartDateTime>2026-08-02T00:00:00.000</PromotionStartDateTime>
+      <PromotionEndDateTime>2026-08-22T02:59:00.000</PromotionEndDateTime>
+      <PromotionStartHour>00:00:00.000</PromotionStartHour>
+      <PromotionEndHour>02:59:00.000</PromotionEndHour>
+      <PromotionDays />
+      <RedemptionLimit>0</RedemptionLimit>
+      <MinNoOfItemOffered>10</MinNoOfItemOffered>
+      <ClubID>0 - כלל הלקוחות</ClubID>
+      <IsGiftItem />
+      <AdditionalIsCoupon>0</AdditionalIsCoupon>
+      <AdditionalRestrictions />
+      <Remarks />
+      <Groups>
+        <Group>
+          <GroupID>1</GroupID>
+          <MinPurchaseAmount></MinPurchaseAmount>
+          <DiscountType></DiscountType>
+          <PromotionItems>
+            <PromotionItem>
+              <ItemCode>7296073705475</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>45.00</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+            <PromotionItem>
+              <ItemCode>7296073705482</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>45.00</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+            <PromotionItem>
+              <ItemCode>7296073705499</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>45.00</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+            <PromotionItem>
+              <ItemCode>7296073734895</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>45.00</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+            <PromotionItem>
+              <ItemCode>7296073734901</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>45.00</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+            <PromotionItem>
+              <ItemCode>7296073734918</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>10</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate></DiscountRate>
+              <DiscountedPrice>45.00</DiscountedPrice>
+              <DiscountedPricePerMida></DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+          </PromotionItems>
+        </Group>
+      </Groups>
+    </Promotion>
+    <Promotion>
+      <PromotionUpdateTime>2026-08-02T11:00:00.000</PromotionUpdateTime>
+      <AllowMultipleDiscounts>1</AllowMultipleDiscounts>
+      <PromotionID>4568177</PromotionID>
+      <PromotionDescription>3ב20 שופרסל כוס שתיה חמה 8BOZ</PromotionDescription>
+      <PromotionStartDateTime>2026-08-02T00:00:00.000</PromotionStartDateTime>
+      <PromotionEndDateTime>2026-08-22T02:59:00.000</PromotionEndDateTime>
+      <PromotionStartHour>00:00:00.000</PromotionStartHour>
+      <PromotionEndHour>02:59:00.000</PromotionEndHour>
+      <PromotionDays />
+      <RedemptionLimit>0</RedemptionLimit>
+      <MinNoOfItemOffered>10</MinNoOfItemOffered>
+      <ClubID>0 - כלל הלקוחות</ClubID>
+      <IsGiftItem />
+      <AdditionalIsCoupon>0</AdditionalIsCoupon>
+      <AdditionalRestrictions />
+      <Remarks />
+      <Groups>
+        <Group>
+          <GroupID>1</GroupID>
+          <MinPurchaseAmount></MinPurchaseAmount>
+          <DiscountType></DiscountType>
+          <PromotionItems>
+            <PromotionItem>
+              <ItemCode>7296073748335</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>1</RewardType>
+              <MinQty>3.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate>25</DiscountRate>
+              <DiscountedPrice>20.00</DiscountedPrice>
+              <DiscountedPricePerMida>6.67</DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+          </PromotionItems>
+        </Group>
+      </Groups>
+    </Promotion>
+    <Promotion>
+      <PromotionUpdateTime>2026-08-02T11:00:00.000</PromotionUpdateTime>
+      <AllowMultipleDiscounts>1</AllowMultipleDiscounts>
+      <PromotionID>4568178</PromotionID>
+      <PromotionDescription>2ב25 שופרסל כוס שתיה חמה 12OZ</PromotionDescription>
+      <PromotionStartDateTime>2026-08-02T00:00:00.000</PromotionStartDateTime>
+      <PromotionEndDateTime>2026-08-22T02:59:00.000</PromotionEndDateTime>
+      <PromotionStartHour>00:00:00.000</PromotionStartHour>
+      <PromotionEndHour>02:59:00.000</PromotionEndHour>
+      <PromotionDays />
+      <RedemptionLimit>0</RedemptionLimit>
+      <MinNoOfItemOffered>10</MinNoOfItemOffered>
+      <ClubID>0 - כלל הלקוחות</ClubID>
+      <IsGiftItem />
+      <AdditionalIsCoupon>0</AdditionalIsCoupon>
+      <AdditionalRestrictions />
+      <Remarks />
+      <Groups>
+        <Group>
+          <GroupID>1</GroupID>
+          <MinPurchaseAmount></MinPurchaseAmount>
+          <DiscountType></DiscountType>
+          <PromotionItems>
+            <PromotionItem>
+              <ItemCode>7296073748359</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>1</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate>30</DiscountRate>
+              <DiscountedPrice>25.00</DiscountedPrice>
+              <DiscountedPricePerMida>12.50</DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+          </PromotionItems>
+        </Group>
+      </Groups>
+    </Promotion>
+    <Promotion>
+      <PromotionUpdateTime>2026-08-02T11:00:00.000</PromotionUpdateTime>
+      <AllowMultipleDiscounts>1</AllowMultipleDiscounts>
+      <PromotionID>4568179</PromotionID>
+      <PromotionDescription>3ב12 שופרסל50 כוס שתיה חמה4OZ</PromotionDescription>
+      <PromotionStartDateTime>2026-08-02T00:00:00.000</PromotionStartDateTime>
+      <PromotionEndDateTime>2026-08-22T02:59:00.000</PromotionEndDateTime>
+      <PromotionStartHour>00:00:00.000</PromotionStartHour>
+      <PromotionEndHour>02:59:00.000</PromotionEndHour>
+      <PromotionDays />
+      <RedemptionLimit>0</RedemptionLimit>
+      <MinNoOfItemOffered>10</MinNoOfItemOffered>
+      <ClubID>0 - כלל הלקוחות</ClubID>
+      <IsGiftItem />
+      <AdditionalIsCoupon>0</AdditionalIsCoupon>
+      <AdditionalRestrictions />
+      <Remarks />
+      <Groups>
+        <Group>
+          <GroupID>1</GroupID>
+          <MinPurchaseAmount></MinPurchaseAmount>
+          <DiscountType></DiscountType>
+          <PromotionItems>
+            <PromotionItem>
+              <ItemCode>7296073748328</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>1</RewardType>
+              <MinQty>3.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate>49</DiscountRate>
+              <DiscountedPrice>12.00</DiscountedPrice>
+              <DiscountedPricePerMida>4.00</DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+          </PromotionItems>
+        </Group>
+      </Groups>
+    </Promotion>
+    <Promotion>
+      <PromotionUpdateTime>2026-08-02T11:00:00.000</PromotionUpdateTime>
+      <AllowMultipleDiscounts>1</AllowMultipleDiscounts>
+      <PromotionID>4568180</PromotionID>
+      <PromotionDescription>2ב16 שופרסל כוס שתיה חמה 10OZ</PromotionDescription>
+      <PromotionStartDateTime>2026-08-02T00:00:00.000</PromotionStartDateTime>
+      <PromotionEndDateTime>2026-08-22T02:59:00.000</PromotionEndDateTime>
+      <PromotionStartHour>00:00:00.000</PromotionStartHour>
+      <PromotionEndHour>02:59:00.000</PromotionEndHour>
+      <PromotionDays />
+      <RedemptionLimit>0</RedemptionLimit>
+      <MinNoOfItemOffered>10</MinNoOfItemOffered>
+      <ClubID>0 - כלל הלקוחות</ClubID>
+      <IsGiftItem />
+      <AdditionalIsCoupon>0</AdditionalIsCoupon>
+      <AdditionalRestrictions />
+      <Remarks />
+      <Groups>
+        <Group>
+          <GroupID>1</GroupID>
+          <MinPurchaseAmount></MinPurchaseAmount>
+          <DiscountType></DiscountType>
+          <PromotionItems>
+            <PromotionItem>
+              <ItemCode>7296073748342</ItemCode>
+              <ItemType>1</ItemType>
+              <RewardType>1</RewardType>
+              <MinQty>2.00</MinQty>
+              <MaxQty></MaxQty>
+              <DiscountRate>38</DiscountRate>
+              <DiscountedPrice>16.00</DiscountedPrice>
+              <DiscountedPricePerMida>8.00</DiscountedPricePerMida>
+              <bIsWeighted>0</bIsWeighted>
+            </PromotionItem>
+          </PromotionItems>
+        </Group>
+      </Groups>
+    </Promotion>
+  </Promotions>
+</Root>
