@@ -90,4 +90,4 @@ Inspection completed, no changes made. Results folded into the sections above.
 
 ## Next session (SU10M-2)
 
-Once the read-only inspection above comes back: finalize v1 scope (confirm/deny the 500m feature), then scaffold `xxl-super-mobile` (new repo, `npx create-expo-app`, Expo Skills + MCP server + official Claude Code plugin install, NativeWind setup, port shared TS types from `web/src`). No scaffolding before that inspection.
+Inspection is done (see SU10M-1 corrections). v1 scope is settled: 500m feature is out, everything else stands. Next: scaffold `xxl-super-mobile` (new repo, `npx create-expo-app`, Expo Skills + MCP server + official Claude Code plugin install, NativeWind setup, port shared TS types from `web/src`). Scaffolding is unblocked.
