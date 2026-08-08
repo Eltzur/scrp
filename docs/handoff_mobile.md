@@ -1,13 +1,15 @@
 # SU10M — Mobile Apps Handoff (super.xxl.co.il)
 
 > New sub-series. Paste at the start of each SU10M chat, alongside `docs/super/handoff_super.md` (shared backend/vision context still applies).
-> Last updated: August 8, 2026 (end of session SU10M-1)
+> Last updated: August 8, 2026 (end of session SU10M-1, post-inspection)
 
 ---
 
 ## Vision (mobile-specific, inherited from handoff_super.md)
 
-Native iOS + Android client for super.xxl.co.il. Medium-term differentiator per the product vision: barcode scanner (scan in-store → prices nearby) and GPS "cheapest within 500m," powered by store GPS coordinates from StoresFull XMLs. Build ON the existing FastAPI backend and Supabase auth — the app is a client, not a rebuild.
+Native iOS + Android client for super.xxl.co.il. Medium-term differentiator per the product vision: barcode scanner (scan in-store → prices nearby) and GPS "cheapest within 500m." Build ON the existing FastAPI backend and Supabase auth — the app is a client, not a rebuild.
+
+**Correction (SU10M-1 inspection, Aug 8 2026):** the "powered by store GPS coordinates from StoresFull XMLs" premise above does not hold. `stores` has no coordinate column (9 columns total: id, chain_id, sub_chain_id, store_id, store_name, city, city_norm, address, city_canonical); no coordinate column exists anywhere in `public.*` or `gs1.*`; PostGIS is not installed. Checked all 34 store XMLs on disk: 33 carry no coordinate tag at all, and the one that does (StoresFull7290455000004) emits `<Latitude />`/`<Longitude />` as empty self-closing tags. The 500m feature's real path is geocoding from `address` + `city_canonical`, not extraction from the feeds. Sample dated 2026-05-31 — worth a live re-pull before committing engineering time, but don't carry the old premise into SU10M-2.
 
 ---
 
@@ -44,9 +46,7 @@ Native iOS + Android client for super.xxl.co.il. Medium-term differentiator per 
 - City/geo selection (manual + coarse IP/device-location city detect, matching web UX)
 - **Barcode scanner → search by scanned code.** Low complexity: GTIN *is* item_code, so a scan is just a direct hit against the existing search/detail endpoint. High-value native differentiator, in scope for v1.
 
-**Conditional on DB inspection (see below) — GPS "cheapest within 500m":**
-- If `stores` already carries usable lat/lon: in scope for v1, straightforward distance filter over the existing store list.
-- If not populated: push to v1.1 — becomes a backend geocoding sub-project (parse StoresFull XML fields properly, or geocode addresses), non-trivial, shouldn't block v1 ship.
+**GPS "cheapest within 500m" — CONFIRMED OUT of v1, pushed to v1.1.** SU10M-1 inspection (Aug 8 2026): no lat/lon exists anywhere in the DB, and the source XMLs don't carry usable coordinates either (see Vision correction above). This is now a backend geocoding sub-project (address + city_canonical → coordinates, likely via a geocoding API), not a simple distance filter. Scope and vendor choice for that sub-project are open for a future session; does not block v1 ship.
 
 **Deferred to v1.1+:** favorites, recent searches, saved baskets sync UI polish (all exist server-side already, just need native screens) — not differentiators, lower priority than the scanner/geo work.
 
@@ -69,14 +69,14 @@ Native iOS + Android client for super.xxl.co.il. Medium-term differentiator per 
 
 - **CORS: non-issue for React Native.** Native networking (`fetch`/native modules) doesn't run in a browser context, so browser-CORS enforcement doesn't apply — no backend CORS changes needed for RN. (This would NOT have been true for Capacitor, whose WebView-based requests are CORS-checked on some platforms — one more point in RN's favor.)
 - **Auth:** backend already verifies Supabase JWTs; mobile just needs `@supabase/supabase-js` + a session-storage adapter (`expo-secure-store`) — no backend change expected.
-- **Store GPS coordinates — UNCONFIRMED, gates the 500m feature.** Vision doc says StoresFull XMLs carry coordinates, but no evidence yet that a `stores` column is populated (or exists) in production. **Needs a direct DB inspection — see CC prompt below.**
-- **Pagination on search/compare/promos endpoints — UNCONFIRMED.** Needs a direct code inspection — see CC prompt below.
+- **Store GPS coordinates — CONFIRMED ABSENT.** No coordinate column on `stores` or anywhere else in the DB; source XMLs don't carry usable coordinates either. See Vision correction and v1 scope above.
+- **Pagination on search/compare/promos endpoints — CONFIRMED, offset-based.** `/search` and `/compare`: `limit`/`offset`, default limit=30, cap le=100. `/promos/grouped`: default limit=500, cap le=5000. All three: offset uncapped, no cursor param, search/compare return `total` + computed `has_more`. **Caveat for mobile infinite-scroll:** an existing code comment at `search.py:51` notes one branch orders items arbitrarily, so offset pages can overlap between requests — more visible in a mobile feed than in web pagination. Worth a stable sort key before building infinite-scroll on top of this.
 
 ---
 
-### First concrete step (read-only inspection, no code/scope decisions implied)
+### First concrete step — ✅ DONE (Aug 8, 2026)
 
-Paste the CC prompt below to confirm the two open API-readiness items. This is inspection only — report back, no edits, no commits. Stack/scope approval can happen in parallel; this doesn't need to wait.
+Inspection completed, no changes made. Results folded into the sections above.
 
 ---
 
@@ -86,7 +86,7 @@ Paste the CC prompt below to confirm the two open API-readiness items. This is i
 2. ~~Approve `xxl-super-mobile` as a new sibling repo.~~ ✅ Approved Aug 8, 2026.
 3. **Personal vs. organization Google Play account** — affects whether the 12-tester/14-day closed testing gate applies.
 4. **Mac's current macOS version** — not a blocker (EAS Build doesn't need it), but worth knowing for future local-Xcode/Simulator debugging. Xcode 26.x wants macOS 15.6+ (Sequoia) or Tahoe 26.2 depending on patch version; hardware (Apple Silicon) is not a constraint.
-5. Pending DB/code inspection results (GPS coords, pagination) may reshape v1 scope for the 500m feature specifically — run the CC inspection prompt from this session before scaffolding.
+5. ~~Pending DB/code inspection results (GPS coords, pagination) may reshape v1 scope for the 500m feature specifically.~~ ✅ Done Aug 8, 2026 — see corrections above. GPS coords confirmed absent; pagination confirmed offset-based and adequate.
 
 ## Next session (SU10M-2)
 
