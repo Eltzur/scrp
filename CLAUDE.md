@@ -11,6 +11,14 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 5. **One CC prompt per task** — batch all related changes into one prompt. No incremental back-and-forth on simple tasks.
 6. **Always push after commit** — CC must run `git push origin main` after every commit. Never leave commits only in local repo.
 
+## Repo layout policy (established SU10M-2)
+- **C:\scrp is the root for the entire XXL codebase family**, not just the supermarket vertical. Every XXL-related repo lives as a subfolder under it.
+- **Each vertical is its own independent git repo nested inside C:\scrp** (own .git, own GitHub remote) — never merged into scrp's git history as a monorepo subfolder. scrp's own .gitignore excludes each nested vertical's folder by name, so scrp's git never sees their contents as untracked/stray files to accidentally sweep into a commit.
+- Current verticals: C:\scrp itself (github.com/Eltzur/scrp — scraper, FastAPI backend, web frontend), C:\scrp\xxl-flights (flights), C:\scrp\xxl-super-mobile (mobile, added SU10M-2, github.com/Eltzur/xxl-super-mobile).
+- New verticals follow the same pattern: create the repo, nest it under C:\scrp, add its folder name to scrp's .gitignore, verify `git -C C:\scrp status` stays clean afterward before doing anything else in it.
+- Handoff docs for every vertical stay centralized at C:\scrp\docs\ regardless of which nested repo the vertical's code lives in (e.g. docs/super/handoff_super.md, docs/handoff_mobile.md).
+- **"scrp" is a legacy codename, not being renamed.** It predates the multi-vertical structure but is now load-bearing across the GitHub remote, the server directory (~/scrp), and several systemd unit/DB role names (scrp-api, scrp-cron, scrp-backup, scrp_app, scrp-prod-il). Renaming any of that on a live production system would be pure cosmetics for real risk — considered and rejected in SU10M-2.
+
 ## Rules of engagement (chat architect -> operator -> CC)
 The chat assistant is lead architect and plans; the operator executes verbatim; CC edits/commits. These govern how every instruction is delivered:
 1. **Monoblock prompts.** One unified, copy-paste code block per CC task — never split a task across multiple snippets. The architect designs; the operator is the executioner.
