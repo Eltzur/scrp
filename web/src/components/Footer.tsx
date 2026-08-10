@@ -12,6 +12,8 @@ export default function Footer() {
         <span className="text-gray-300">|</span>
         <a href="mailto:info@xxl.co.il" className="hover:text-emerald-600 transition-colors">צור קשר</a>
         <span className="text-gray-300">|</span>
+        <Link to="/accessibility" className="hover:text-emerald-600 transition-colors">נגישות</Link>
+        <span className="text-gray-300">|</span>
         {/* Re-entry to the consent choice from every page, since a declined
             visitor otherwise has no route back to the banner. */}
         <button
