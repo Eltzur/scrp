@@ -36,6 +36,8 @@ Native iOS + Android client for super.xxl.co.il. Medium-term differentiator per 
 
 ### v1 scope proposal
 
+**Reprioritized (Dude, Aug 10 2026): barcode scan leads, not just "in scope."** It's the one v1 feature that's actually native-only — everything else in this list is parity with what the web app already does. Build order changes accordingly: once the app can bundle/render at all (see NativeWind/lightningcss status above), the scan flow is the first screen built, and it's likely the app's landing experience rather than a secondary tab. Flow stays as scoped: scan → barcode is the GTIN → GTIN is the item_code → same product/search endpoint the web app already calls. Testing note: real camera testing needs a device (EAS development build or Expo Go), not just a browser/simulator preview.
+
 **In v1 (parity + the one differentiator that's cheap because barcode = GTIN = item_code already):**
 - Search (reuse ranking/relevance logic via existing API)
 - Compare (`/compare`)
