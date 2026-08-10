@@ -19,6 +19,16 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 - Handoff docs for every vertical stay centralized at C:\scrp\docs\ regardless of which nested repo the vertical's code lives in (e.g. docs/super/handoff_super.md, docs/handoff_mobile.md).
 - **"scrp" is a legacy codename, not being renamed.** It predates the multi-vertical structure but is now load-bearing across the GitHub remote, the server directory (~/scrp), and several systemd unit/DB role names (scrp-api, scrp-cron, scrp-backup, scrp_app, scrp-prod-il). Renaming any of that on a live production system would be pure cosmetics for real risk — considered and rejected in SU10M-2.
 
+## Accessibility baseline (IS 5568 / WCAG 2.0 AA — adopted proactively, not yet legally required)
+Currently exempt (no revenue, <500 users), but build web/ components to this baseline by default rather than retrofitting later:
+- Semantic HTML: real `<button>`/`<nav>`/`<main>` elements, not div+onClick.
+- All interactive elements keyboard-operable, visible focus indicators never suppressed via CSS.
+- Color contrast ≥4.5:1 for normal text, ≥3:1 for large text/UI components — check the XXL brand green/orange against white/light backgrounds specifically.
+- Meaningful alt text on product images (GS1 product name is already available data — use it, don't leave alt empty).
+- Form inputs (search, filters, quantity) have associated labels, not placeholder-only.
+- Never convey information by color alone (promo badges already pair color with text — keep that pattern).
+- RTL Hebrew handling (already correct per the SEVERE warning elsewhere in this file) is a genuine accessibility asset here — don't regress it.
+
 ## Rules of engagement (chat architect -> operator -> CC)
 The chat assistant is lead architect and plans; the operator executes verbatim; CC edits/commits. These govern how every instruction is delivered:
 1. **Monoblock prompts.** One unified, copy-paste code block per CC task — never split a task across multiple snippets. The architect designs; the operator is the executioner.
