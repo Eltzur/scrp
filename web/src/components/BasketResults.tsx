@@ -13,7 +13,7 @@ export default function BasketResults({ result, basketItems }: Props) {
   const { chains, winner_chain_id } = result;
 
   if (chains.length === 0) {
-    return <p className="p-6 text-sm text-gray-400 text-center">לא נמצאו מחירים לפריטי הסל</p>;
+    return <p className="p-6 text-sm text-gray-500 text-center">לא נמצאו מחירים לפריטי הסל</p>;
   }
 
   // Build lookup: chain_id → (item_code → breakdown)
@@ -60,7 +60,7 @@ export default function BasketResults({ result, basketItems }: Props) {
                 >
                   {c.chain_id === winner_chain_id && <span className="block text-base leading-none mb-0.5">🏆</span>}
                   <span>{c.chain_name ?? c.chain_id}</span>
-                  <span className="block text-gray-400 font-normal mt-0.5">
+                  <span className="block text-gray-500 font-normal mt-0.5">
                     {c.items_found}/{basketItems.length}
                   </span>
                 </th>
@@ -80,10 +80,10 @@ export default function BasketResults({ result, basketItems }: Props) {
                       {item.item_name || item.item_code}
                     </p>
                     {item.is_weighted && (
-                      <p className="text-gray-400 font-mono" dir="ltr">{item.quantity}g</p>
+                      <p className="text-gray-500 font-mono" dir="ltr">{item.quantity}g</p>
                     )}
                     {!item.is_weighted && item.quantity > 1 && (
-                      <p className="text-gray-400">×{item.quantity}</p>
+                      <p className="text-gray-500">×{item.quantity}</p>
                     )}
                   </td>
                   {chains.map(c => {
@@ -94,7 +94,7 @@ export default function BasketResults({ result, basketItems }: Props) {
                         key={c.chain_id}
                         className={`py-2 px-3 text-center
                           ${isCheapest ? 'bg-emerald-50 text-emerald-700 font-semibold' : ''}
-                          ${!b?.found ? 'text-gray-300' : 'text-gray-800'}`}
+                          ${!b?.found ? 'text-gray-500' : 'text-gray-800'}`}
                         dir="ltr"
                       >
                         {b?.found && b.subtotal != null ? fmt(b.subtotal) : '—'}
@@ -121,7 +121,7 @@ export default function BasketResults({ result, basketItems }: Props) {
                 >
                   {fmt(c.total_price)}
                   {c.items_missing > 0 && (
-                    <span className="block text-gray-400 font-normal text-xs mt-0.5">
+                    <span className="block text-gray-500 font-normal text-xs mt-0.5">
                       ({c.items_missing} חסרים)
                     </span>
                   )}
@@ -133,7 +133,7 @@ export default function BasketResults({ result, basketItems }: Props) {
       </div>
 
       {chains.some(c => c.items_missing > 0) && (
-        <p className="text-xs text-gray-400 text-center">— = פריט לא נמצא ברשת זו</p>
+        <p className="text-xs text-gray-500 text-center">— = פריט לא נמצא ברשת זו</p>
       )}
     </div>
   );

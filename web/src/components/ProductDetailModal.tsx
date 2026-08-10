@@ -133,14 +133,14 @@ export default function ProductDetailModal({ item, onClose }: Props) {
               {displayName}
             </h3>
             {(details?.brand || product.manufacturer) && (
-              <p className="text-xs text-gray-400 mt-0.5" dir="auto">
+              <p className="text-xs text-gray-500 mt-0.5" dir="auto">
                 {details?.brand || product.manufacturer}
               </p>
             )}
           </div>
           <button
             onClick={onClose}
-            className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            className="shrink-0 p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
             aria-label={t('product_modal.close')}
           >
             <X size={18} />
@@ -153,7 +153,7 @@ export default function ProductDetailModal({ item, onClose }: Props) {
           <div className="flex justify-center">
             {loading ? (
               <div className="w-40 h-40 rounded-xl bg-gray-50 flex items-center justify-center">
-                <Loader2 size={22} className="animate-spin text-gray-300" />
+                <Loader2 size={22} className="animate-spin text-gray-500" />
               </div>
             ) : hasImage ? (
               <img
@@ -164,9 +164,9 @@ export default function ProductDetailModal({ item, onClose }: Props) {
                 className="w-40 h-40 object-contain rounded-xl bg-white border border-gray-100"
               />
             ) : (
-              <div className="w-40 h-40 rounded-xl bg-gray-50 border border-dashed border-gray-200 flex flex-col items-center justify-center gap-1.5 text-gray-300">
+              <div className="w-40 h-40 rounded-xl bg-gray-50 border border-dashed border-gray-200 flex flex-col items-center justify-center gap-1.5 text-gray-500">
                 <ImageOff size={26} />
-                <span className="text-[11px] text-gray-400">{t('product_modal.no_image')}</span>
+                <span className="text-[11px] text-gray-500">{t('product_modal.no_image')}</span>
               </div>
             )}
           </div>
@@ -185,11 +185,11 @@ export default function ProductDetailModal({ item, onClose }: Props) {
                     )}
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
-                      {isCheapest && <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />}
+                      {isCheapest && <CheckCircle2 size={12} className="text-emerald-700 shrink-0" />}
                       <span className={clsx('font-medium truncate', isCheapest ? 'text-emerald-800' : 'text-gray-700')}>
                         {q.chain_name ?? q.chain_id}
                       </span>
-                      {q.city && <span className="text-gray-400 text-xs truncate" dir="auto">· {q.city}</span>}
+                      {q.city && <span className="text-gray-500 text-xs truncate" dir="auto">· {q.city}</span>}
                     </div>
                     <span
                       className={clsx('font-semibold shrink-0 ms-2', isCheapest ? 'text-emerald-700' : 'text-gray-800')}
@@ -205,7 +205,7 @@ export default function ProductDetailModal({ item, onClose }: Props) {
 
           {loading && (
             <div className="flex justify-center py-2">
-              <Loader2 size={18} className="animate-spin text-gray-300" />
+              <Loader2 size={18} className="animate-spin text-gray-500" />
             </div>
           )}
 
@@ -285,12 +285,12 @@ export default function ProductDetailModal({ item, onClose }: Props) {
           {/* No GS1 data: a quiet note, never an error. This is the majority
               case (~92% of items), so it must not read as something broken. */}
           {!loading && !details?.has_gs1_data && (
-            <p className="text-xs text-gray-400 text-center pt-1" dir="auto">
+            <p className="text-xs text-gray-500 text-center pt-1" dir="auto">
               {t('product_modal.no_extra_info')}
             </p>
           )}
 
-          <p className="text-[11px] text-gray-300 font-mono text-center pt-1" dir="ltr">
+          <p className="text-[11px] text-gray-500 font-mono text-center pt-1" dir="ltr">
             {barcode}
           </p>
         </div>

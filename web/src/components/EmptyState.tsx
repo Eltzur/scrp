@@ -12,16 +12,16 @@ export default function EmptyState({ query }: Props) {
 
   return (
     <div className="flex flex-col items-center py-20 text-center">
-      <Search size={40} className="text-gray-300 mb-4" />
+      <Search size={40} className="text-gray-500 mb-4" />
       {hasQuery ? (
         <>
           <p className="text-gray-600 font-medium">{t('empty.no_results', { query })}</p>
-          <p className="text-gray-400 text-sm mt-1">{t('empty.no_results_hint')}</p>
+          <p className="text-gray-500 text-sm mt-1">{t('empty.no_results_hint')}</p>
         </>
       ) : (
         <>
           <p className="text-gray-600 font-medium">{t('empty.title')}</p>
-          <p className="text-gray-400 text-sm mt-1">{t('empty.try')}</p>
+          <p className="text-gray-500 text-sm mt-1">{t('empty.try')}</p>
           <div className="flex flex-wrap gap-2 justify-center mt-3">
             {suggestions.map(s => (
               <span

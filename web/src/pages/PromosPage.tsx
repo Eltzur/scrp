@@ -99,7 +99,7 @@ function Chip({
       className={clsx(
         'text-xs font-medium px-2.5 py-1 rounded-full border transition-colors whitespace-nowrap',
         active
-          ? 'bg-emerald-600 text-white border-emerald-600'
+          ? 'bg-emerald-700 text-white border-emerald-600'
           : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-400',
       )}
     >
@@ -136,7 +136,7 @@ function BasketCard({ item }: { item: GroupedPromoItem }) {
           <p className="text-[11px] text-gray-500 mt-0.5" dir="auto">{item.product_name}</p>
         )}
         {item.promo_end && (
-          <p className="text-[11px] text-gray-400 mt-1">{fmtDate(item.promo_end)}</p>
+          <p className="text-[11px] text-gray-500 mt-1">{fmtDate(item.promo_end)}</p>
         )}
       </div>
       <div className="flex flex-col items-end gap-1 shrink-0">
@@ -184,7 +184,7 @@ function PromoRow({ item }: { item: GroupedPromoItem }) {
           <p className="text-[11px] text-gray-500 mt-1" dir="auto">{item.promo_description}</p>
         )}
         {item.promo_end && (
-          <p className="text-[11px] text-gray-400 mt-1">{fmtDate(item.promo_end)}</p>
+          <p className="text-[11px] text-gray-500 mt-1">{fmtDate(item.promo_end)}</p>
         )}
       </div>
 
@@ -202,7 +202,7 @@ function PromoRow({ item }: { item: GroupedPromoItem }) {
           {item.shelf_price != null && (
             <span className={clsx(
               'text-xs',
-              isFreebie ? 'text-gray-500' : 'text-gray-400 line-through',
+              isFreebie ? 'text-gray-500' : 'text-gray-500 line-through',
             )}>
               {fmtPrice(item.shelf_price)}
             </span>
@@ -241,12 +241,12 @@ function Collapsible({
             level === 'city'   && 'font-semibold text-gray-700 text-sm',
             level === 'branch' && 'font-medium text-gray-600 text-sm',
           )} dir="auto">{title}</span>
-          {subtitle && <span className="text-xs text-gray-400 truncate" dir="auto">{subtitle}</span>}
-          {count != null && <span className="text-xs text-gray-400 shrink-0">({count})</span>}
+          {subtitle && <span className="text-xs text-gray-500 truncate" dir="auto">{subtitle}</span>}
+          {count != null && <span className="text-xs text-gray-500 shrink-0">({count})</span>}
         </span>
         <ChevronDown
           size={16}
-          className={clsx('text-gray-400 shrink-0 transition-transform', !open && '-rotate-90')}
+          className={clsx('text-gray-500 shrink-0 transition-transform', !open && '-rotate-90')}
         />
       </button>
       {open && <div>{children}</div>}
@@ -423,7 +423,7 @@ export default function PromosPage() {
 
       {/* Row 2 — discount bands */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-xs text-gray-400 ms-1">הנחה:</span>
+        <span className="text-xs text-gray-500 ms-1">הנחה:</span>
         {BANDS.map(b => (
           <Chip
             key={b.value}
@@ -436,7 +436,7 @@ export default function PromosPage() {
 
       {/* Row 3 — promo shape + ending soon */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-xs text-gray-400 ms-1">סוג:</span>
+        <span className="text-xs text-gray-500 ms-1">סוג:</span>
         {PROMO_TYPES.map(t => (
           <Chip
             key={t.value}
@@ -454,7 +454,7 @@ export default function PromosPage() {
         {activeCount > 0 && (
           <button
             onClick={clearAll}
-            className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-rose-500 transition-colors px-2"
+            className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-rose-600 transition-colors px-2"
           >
             <X size={12} /> נקה סינון
           </button>
@@ -473,14 +473,14 @@ export default function PromosPage() {
 
         {/* Search — always visible, above the filter panel */}
         <div className="relative mb-3">
-          <Search size={15} className="absolute top-1/2 -translate-y-1/2 end-3 text-gray-400 pointer-events-none" />
+          <Search size={15} className="absolute top-1/2 -translate-y-1/2 end-3 text-gray-500 pointer-events-none" />
           <input
             type="text"
             value={qInput}
             onChange={e => setQInput(e.target.value)}
             placeholder="חיפוש מוצר במבצעים"
             className="w-full ps-3 pe-9 py-2 border border-gray-300 rounded-lg text-sm text-gray-700
-                       placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                       placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             dir="rtl"
             aria-label="חיפוש מוצר במבצעים"
           />
@@ -493,15 +493,15 @@ export default function PromosPage() {
                      border border-gray-300 rounded-lg bg-white text-sm text-gray-700"
         >
           <span className="flex items-center gap-2">
-            <SlidersHorizontal size={14} className="text-gray-400" />
+            <SlidersHorizontal size={14} className="text-gray-500" />
             סינון ומיון
             {activeCount > 0 && (
-              <span className="text-[11px] font-bold px-1.5 rounded-full bg-emerald-600 text-white">
+              <span className="text-[11px] font-bold px-1.5 rounded-full bg-emerald-700 text-white">
                 {activeCount}
               </span>
             )}
           </span>
-          <ChevronDown size={15} className={clsx('text-gray-400 transition-transform', !filtersOpen && '-rotate-90')} />
+          <ChevronDown size={15} className={clsx('text-gray-500 transition-transform', !filtersOpen && '-rotate-90')} />
         </button>
         <div className={clsx('mb-6', filtersOpen ? 'block' : 'hidden sm:block')}>{filterBar}</div>
 
@@ -510,19 +510,19 @@ export default function PromosPage() {
             <Loader2 size={32} className="animate-spin text-emerald-500" />
           </div>
         ) : error ? (
-          <div className="flex flex-col items-center gap-2 py-24 text-gray-400">
+          <div className="flex flex-col items-center gap-2 py-24 text-gray-500">
             <AlertCircle size={28} className="text-rose-400" />
             <p className="text-sm">שגיאה בטעינת המבצעים</p>
           </div>
         ) : rows.length === 0 ? (
-          <p className="text-center text-gray-400 py-24" dir="auto">
+          <p className="text-center text-gray-500 py-24" dir="auto">
             {activeCount > 0
               ? 'אין מבצעים תואמים'
               : city ? `אין מבצעים ב${city} כרגע` : 'אין מבצעים זמינים כרגע'}
           </p>
         ) : (
           <>
-            <p className="text-xs text-gray-400 mb-3">{rows.length} מבצעים</p>
+            <p className="text-xs text-gray-500 mb-3">{rows.length} מבצעים</p>
             <div className="flex flex-col gap-4">
               {grouped.map(cg => (
                 <Collapsible key={cg.chain} title={cg.chain} count={cg.count} level="chain">

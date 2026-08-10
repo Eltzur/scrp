@@ -95,12 +95,12 @@ export default function ResultsList({
   return (
     <div className={isFetching && !isLoadingMore ? 'opacity-70 transition-opacity' : ''}>
       <div className="flex items-center gap-2 mb-3">
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-gray-500">
           {t('search.results_count', { count: result.total_matches })}
           {result.comparable_count > 0 && ` · ${t('search.comparable_count', { count: result.comparable_count })}`}
         </p>
         {promosLoading && (
-          <span className="flex items-center gap-1 text-xs text-gray-300">
+          <span className="flex items-center gap-1 text-xs text-gray-500">
             <Loader2 size={10} className="animate-spin" />
             טוען מבצעים…
           </span>
@@ -122,7 +122,7 @@ export default function ResultsList({
             disabled={isLoadingMore}
             className="flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-300
                        text-gray-700 rounded-lg text-sm font-medium hover:border-emerald-500
-                       hover:text-emerald-600 transition-colors disabled:opacity-50"
+                       hover:text-emerald-700 transition-colors disabled:opacity-50"
           >
             {isLoadingMore ? (
               <>

@@ -47,7 +47,7 @@ export default function SearchBar({ onSearch, initialValue = '' }: Props) {
     <div className="relative">
       <Search
         size={18}
-        className="absolute start-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+        className="absolute start-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none"
       />
       <input
         ref={inputRef}
@@ -64,7 +64,7 @@ export default function SearchBar({ onSearch, initialValue = '' }: Props) {
         onBlur={handleBlur}
         placeholder={t('search.placeholder')}
         className="w-full ps-10 pe-10 py-3 border border-gray-300 rounded-xl text-gray-900
-                   placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500
+                   placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500
                    focus:border-transparent text-sm bg-white shadow-sm"
         autoFocus
         dir="auto"
@@ -72,7 +72,7 @@ export default function SearchBar({ onSearch, initialValue = '' }: Props) {
       {value && (
         <button
           onClick={() => { setValue(''); onSearch(''); }}
-          className="absolute end-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          className="absolute end-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-600"
           aria-label={t('search.clear')}
         >
           <X size={16} />
@@ -87,11 +87,11 @@ export default function SearchBar({ onSearch, initialValue = '' }: Props) {
           dir="rtl"
         >
           <div className="px-4 py-2 border-b border-gray-100 flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-400">החיפושים האחרונים שלי</span>
+            <span className="text-xs font-medium text-gray-500">החיפושים האחרונים שלי</span>
             <button
               onMouseDown={e => e.preventDefault()} // keep dropdown open
               onClick={clearAll}
-              className="text-xs text-gray-400 hover:text-rose-500 transition-colors"
+              className="text-xs text-gray-500 hover:text-rose-600 transition-colors"
             >
               נקה הכל
             </button>
@@ -106,13 +106,13 @@ export default function SearchBar({ onSearch, initialValue = '' }: Props) {
                   onClick={() => handleSelect(q)}
                   className="flex items-center gap-2 flex-1 text-start text-sm text-gray-700"
                 >
-                  <Clock size={13} className="text-gray-300 shrink-0" />
+                  <Clock size={13} className="text-gray-500 shrink-0" />
                   <span dir="auto">{q}</span>
                 </button>
                 <button
                   onMouseDown={e => e.preventDefault()}
                   onClick={() => removeSearch(q)}
-                  className="p-1 text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100
+                  className="p-1 text-gray-500 hover:text-gray-500 opacity-0 group-hover:opacity-100
                              transition-opacity"
                   aria-label="הסר חיפוש"
                 >

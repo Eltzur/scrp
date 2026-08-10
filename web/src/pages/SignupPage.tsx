@@ -65,8 +65,8 @@ export default function SignupPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold
-                       hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            className="w-full py-2.5 bg-emerald-700 text-white rounded-xl text-sm font-semibold
+                       hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
           >
             {loading ? 'נרשם…' : 'להרשמה'}
           </button>
@@ -74,7 +74,7 @@ export default function SignupPage() {
 
         <p className="mt-5 text-center text-sm text-gray-500">
           כבר יש לך חשבון?{' '}
-          <Link to="/login" className="text-emerald-600 font-semibold hover:text-emerald-700">
+          <Link to="/login" className="text-emerald-700 font-semibold hover:text-emerald-700">
             להתחברות
           </Link>
         </p>

@@ -66,7 +66,7 @@ export default function MyBasketsPage() {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-400 text-sm">טוען…</p>
+        <p className="text-gray-500 text-sm">טוען…</p>
       </div>
     );
   }
@@ -86,13 +86,13 @@ export default function MyBasketsPage() {
           <div className="text-center py-16">
             <ShoppingCart size={40} className="text-gray-200 mx-auto mb-3" />
             <p className="text-gray-500 font-medium">אין סלים שמורים</p>
-            <p className="text-gray-400 text-sm mt-1 mb-4">
+            <p className="text-gray-500 text-sm mt-1 mb-4">
               הוסיפו מוצרים לסל ולחצו "שמור סל" כדי לשמור
             </p>
             <button
               onClick={() => navigate('/')}
-              className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium
-                         hover:bg-emerald-700 transition-colors"
+              className="px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm font-medium
+                         hover:bg-emerald-800 transition-colors"
             >
               לחיפוש מוצרים
             </button>
@@ -107,7 +107,7 @@ export default function MyBasketsPage() {
               >
                 <div className="min-w-0">
                   <p className="font-semibold text-gray-900 truncate">{b.name}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs text-gray-500 mt-0.5">
                     {b.item_count} פריטים · עודכן {fmtDate(b.updated_at)}
                   </p>
                 </div>

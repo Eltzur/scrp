@@ -155,7 +155,7 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
       </main>
 
       <footer className="max-w-6xl mx-auto px-4 py-6 border-t border-gray-200 mt-8">
-        <p className="text-xs text-gray-400 text-center">
+        <p className="text-xs text-gray-500 text-center">
           {t('footer.attribution')}
         </p>
       </footer>

@@ -93,30 +93,30 @@ export default function BasketDrawer() {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 shrink-0">
           <div className="flex items-center gap-2">
-            <ShoppingCart size={18} className="text-emerald-600" />
+            <ShoppingCart size={18} className="text-emerald-700" />
             <span className="font-semibold text-gray-900 text-sm">
               {view === 'results' ? 'תוצאות השוואה' : 'הסל שלי'}
             </span>
             {view === 'basket' && items.length > 0 && (
-              <span className="text-xs text-gray-400">{items.length} מוצרים</span>
+              <span className="text-xs text-gray-500">{items.length} מוצרים</span>
             )}
           </div>
           <div className="flex items-center gap-3">
             {view === 'results' && (
               <button
                 onClick={() => setView('basket')}
-                className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-800 font-medium"
+                className="flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-800 font-medium"
               >
                 <ArrowRight size={13} />
                 חזור לסל
               </button>
             )}
             {view === 'basket' && items.length > 0 && (
-              <button onClick={clearBasket} className="text-xs text-gray-400 hover:text-rose-500 transition-colors">
+              <button onClick={clearBasket} className="text-xs text-gray-500 hover:text-rose-600 transition-colors">
                 נקה
               </button>
             )}
-            <button onClick={handleClose} className="p-1 text-gray-400 hover:text-gray-600">
+            <button onClick={handleClose} className="p-1 text-gray-500 hover:text-gray-600">
               <X size={18} />
             </button>
           </div>
@@ -138,7 +138,7 @@ export default function BasketDrawer() {
               ) : (
                 <span
                   title="התחברו כדי לשמור סלים"
-                  className="flex items-center gap-1.5 text-xs font-medium text-gray-300 cursor-not-allowed select-none"
+                  className="flex items-center gap-1.5 text-xs font-medium text-gray-500 cursor-not-allowed select-none"
                 >
                   <Save size={13} />
                   שמור סל
@@ -159,14 +159,14 @@ export default function BasketDrawer() {
                 <button
                   onClick={handleSave}
                   disabled={isSaving || !basketName.trim()}
-                  className="text-xs px-3 py-1 bg-emerald-600 text-white rounded-lg
-                             hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                  className="text-xs px-3 py-1 bg-emerald-700 text-white rounded-lg
+                             hover:bg-emerald-800 disabled:opacity-50 transition-colors"
                 >
                   {isSaving ? '…' : 'שמור'}
                 </button>
                 <button
                   onClick={() => { setSavePromptOpen(false); setBasketName(''); }}
-                  className="text-xs text-gray-400 hover:text-gray-600"
+                  className="text-xs text-gray-500 hover:text-gray-600"
                 >
                   <X size={14} />
                 </button>
@@ -182,8 +182,8 @@ export default function BasketDrawer() {
               {items.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-center px-4">
                   <ShoppingCart size={36} className="text-gray-200 mb-3" />
-                  <p className="text-sm text-gray-400 font-medium">הסל ריק</p>
-                  <p className="text-xs text-gray-300 mt-1">הוסיפו מוצרים מתוצאות החיפוש</p>
+                  <p className="text-sm text-gray-500 font-medium">הסל ריק</p>
+                  <p className="text-xs text-gray-500 mt-1">הוסיפו מוצרים מתוצאות החיפוש</p>
                 </div>
               ) : (
                 <ul className="px-4 py-2 space-y-1">
@@ -194,7 +194,7 @@ export default function BasketDrawer() {
                         <p className="text-sm text-gray-800 truncate leading-snug" dir="auto">
                           {item.item_name || item.item_code}
                         </p>
-                        <p className="text-xs text-gray-300 font-mono">{item.item_code}</p>
+                        <p className="text-xs text-gray-500 font-mono">{item.item_code}</p>
                       </div>
                       {/* Quantity controls */}
                       <div className="flex items-center gap-1 shrink-0" dir="ltr">
@@ -218,7 +218,7 @@ export default function BasketDrawer() {
                       </div>
                       <button
                         onClick={() => removeItem(item.item_code)}
-                        className="p-1 text-gray-300 hover:text-rose-500 transition-colors shrink-0"
+                        className="p-1 text-gray-500 hover:text-rose-600 transition-colors shrink-0"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -236,7 +236,7 @@ export default function BasketDrawer() {
                   <p className="text-xs font-medium text-gray-500 mb-1.5">
                     רשתות
                     {selectedChains.length === 0 && (
-                      <span className="text-gray-300 font-normal"> · כל הרשתות</span>
+                      <span className="text-gray-500 font-normal"> · כל הרשתות</span>
                     )}
                   </p>
                   <div className="flex flex-wrap gap-1.5">
@@ -246,7 +246,7 @@ export default function BasketDrawer() {
                         onClick={() => toggleChain(c.chain_id)}
                         className={`px-2.5 py-0.5 rounded-full text-xs border transition-colors
                           ${selectedChains.includes(c.chain_id)
-                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            ? 'bg-emerald-700 text-white border-emerald-600'
                             : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-400'}`}
                       >
                         {c.name}
@@ -260,7 +260,7 @@ export default function BasketDrawer() {
                   <p className="text-xs font-medium text-gray-500 mb-1.5">
                     עיר
                     {selectedCities.length === 0 && (
-                      <span className="text-gray-300 font-normal"> · כל הערים</span>
+                      <span className="text-gray-500 font-normal"> · כל הערים</span>
                     )}
                   </p>
                   <div className="flex gap-2 items-start">
@@ -283,7 +283,7 @@ export default function BasketDrawer() {
                     {selectedCities.length > 0 && (
                       <button
                         onClick={() => setSelectedCities([])}
-                        className="text-xs text-gray-400 hover:text-rose-500 mt-1"
+                        className="text-xs text-gray-500 hover:text-rose-600 mt-1"
                       >
                         נקה
                       </button>
@@ -300,8 +300,8 @@ export default function BasketDrawer() {
                 <button
                   onClick={handleCompare}
                   disabled={isComparing}
-                  className="w-full py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold
-                             hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed
+                  className="w-full py-2.5 bg-emerald-700 text-white rounded-xl text-sm font-semibold
+                             hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed
                              transition-colors flex items-center justify-center gap-2"
                 >
                   {isComparing ? (

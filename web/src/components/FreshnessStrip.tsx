@@ -27,7 +27,7 @@ export default function FreshnessStrip() {
   if (!data) return null;
 
   return (
-    <div className="text-xs text-gray-400">
+    <div className="text-xs text-gray-500">
       <button
         onClick={() => setExpanded(e => !e)}
         className="flex items-center gap-1 hover:text-gray-500 transition-colors"

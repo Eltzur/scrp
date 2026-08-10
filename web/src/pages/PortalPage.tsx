@@ -53,7 +53,7 @@ export default function PortalPage() {
             <a href="/login"  className="text-sm text-gray-500 hover:text-gray-700 transition-colors px-2 py-1">
               התחברות
             </a>
-            <a href="/signup" className="text-sm font-medium text-emerald-600 hover:text-emerald-700 transition-colors px-3 py-1.5 rounded-lg border border-emerald-600 hover:bg-emerald-50">
+            <a href="/signup" className="text-sm font-medium text-emerald-700 hover:text-emerald-700 transition-colors px-3 py-1.5 rounded-lg border border-emerald-600 hover:bg-emerald-50">
               הרשמה
             </a>
           </div>
@@ -74,7 +74,7 @@ export default function PortalPage() {
       <section>
         <div className="max-w-2xl mx-auto px-4">
           <div className="flex items-center gap-2 bg-white border-2 border-emerald-600 rounded-2xl shadow-sm p-2 md:p-3">
-            <Search size={20} className="text-emerald-600 shrink-0" />
+            <Search size={20} className="text-emerald-700 shrink-0" />
             <input
               ref={inputRef}
               type="text"
@@ -82,18 +82,18 @@ export default function PortalPage() {
               onChange={e => { setQuery(e.target.value); setErrorHint(''); }}
               onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
               placeholder={PLACEHOLDERS[placeholderIdx]}
-              className="flex-1 bg-transparent outline-none text-right text-base md:text-lg py-2 text-gray-800 placeholder-gray-400"
+              className="flex-1 bg-transparent outline-none text-right text-base md:text-lg py-2 text-gray-800 placeholder-gray-500"
               dir="rtl"
             />
             <button
               onClick={handleSubmit}
-              className="bg-emerald-600 text-white font-medium rounded-xl px-4 py-2 hover:bg-emerald-700 transition-colors shrink-0"
+              className="bg-emerald-700 text-white font-medium rounded-xl px-4 py-2 hover:bg-emerald-800 transition-colors shrink-0"
             >
               חיפוש
             </button>
           </div>
           {errorHint && (
-            <p className="text-sm text-orange-600 mt-2 text-right pr-2">{errorHint}</p>
+            <p className="text-sm text-orange-700 mt-2 text-right pr-2">{errorHint}</p>
           )}
         </div>
       </section>
@@ -107,10 +107,10 @@ export default function PortalPage() {
             onClick={() => { window.location.href = 'https://super.xxl.co.il'; }}
             className="bg-white border-2 border-emerald-600 rounded-2xl p-6 text-center hover:shadow-lg hover:-translate-y-1 transition-all relative cursor-pointer"
           >
-            <span className="absolute top-3 left-3 bg-emerald-600 text-white text-xs font-medium px-2 py-1 rounded">
+            <span className="absolute top-3 left-3 bg-emerald-700 text-white text-xs font-medium px-2 py-1 rounded">
               LIVE
             </span>
-            <ShoppingCart size={40} className="text-emerald-600 mx-auto" />
+            <ShoppingCart size={40} className="text-emerald-700 mx-auto" />
             <p className="text-lg font-semibold text-[#022C22] mt-3">מצרכים</p>
             <p className="text-sm text-gray-600 mt-1">השוואת מחירי סופר</p>
           </button>
@@ -120,10 +120,10 @@ export default function PortalPage() {
             onClick={() => { window.location.href = 'https://fly.xxl.co.il'; }}
             className="bg-white border-2 border-emerald-600 rounded-2xl p-6 text-center hover:shadow-lg hover:-translate-y-1 transition-all relative cursor-pointer"
           >
-            <span className="absolute top-3 left-3 bg-emerald-600 text-white text-xs font-medium px-2 py-1 rounded">
+            <span className="absolute top-3 left-3 bg-emerald-700 text-white text-xs font-medium px-2 py-1 rounded">
               LIVE
             </span>
-            <Sun size={40} className="text-orange-600 mx-auto" />
+            <Sun size={40} className="text-orange-700 mx-auto" />
             <p className="text-lg font-semibold text-[#022C22] mt-3">טיסות</p>
             <p className="text-sm text-gray-600 mt-1">טיסות</p>
           </button>
@@ -133,7 +133,7 @@ export default function PortalPage() {
             onClick={() => navigate('/fashion')}
             className="bg-white border border-gray-200 rounded-2xl p-6 text-center hover:shadow-lg hover:-translate-y-1 transition-all relative cursor-pointer opacity-90"
           >
-            <span className="absolute top-3 left-3 bg-orange-600 text-white text-xs font-medium px-2 py-1 rounded">
+            <span className="absolute top-3 left-3 bg-orange-700 text-white text-xs font-medium px-2 py-1 rounded">
               בקרוב
             </span>
             <Shirt size={40} className="text-purple-600 mx-auto" />
@@ -147,17 +147,17 @@ export default function PortalPage() {
       <section className="max-w-4xl mx-auto px-4 mt-16 pb-12 border-t border-gray-200 pt-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
           <div>
-            <Gift size={24} className="text-emerald-600 mx-auto" />
+            <Gift size={24} className="text-emerald-700 mx-auto" />
             <p className="font-medium text-[#022C22] mt-2">חינם לחלוטין</p>
             <p className="text-sm text-gray-600 mt-1">ההשוואה תמיד חינם</p>
           </div>
           <div>
-            <Clock size={24} className="text-emerald-600 mx-auto" />
+            <Clock size={24} className="text-emerald-700 mx-auto" />
             <p className="font-medium text-[#022C22] mt-2">מחירים בזמן אמת</p>
             <p className="text-sm text-gray-600 mt-1">מתעדכנים מדי יום</p>
           </div>
           <div>
-            <Sparkles size={24} className="text-emerald-600 mx-auto" />
+            <Sparkles size={24} className="text-emerald-700 mx-auto" />
             <p className="font-medium text-[#022C22] mt-2">חכם וישראלי</p>
             <p className="text-sm text-gray-600 mt-1">AI שמבין מה אתם מחפשים</p>
           </div>

@@ -48,7 +48,7 @@ export default function FavoritesPage() {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-400 text-sm">טוען…</p>
+        <p className="text-gray-500 text-sm">טוען…</p>
       </div>
     );
   }
@@ -68,13 +68,13 @@ export default function FavoritesPage() {
           <div className="text-center py-16">
             <Star size={40} className="text-gray-200 mx-auto mb-3" />
             <p className="text-gray-500 font-medium">עדיין לא סימנת מוצרים מועדפים.</p>
-            <p className="text-gray-400 text-sm mt-1 mb-4">
+            <p className="text-gray-500 text-sm mt-1 mb-4">
               לחצו על הכוכב ליד כל מוצר בחיפוש
             </p>
             <button
               onClick={() => navigate('/')}
-              className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium
-                         hover:bg-emerald-700 transition-colors"
+              className="px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm font-medium
+                         hover:bg-emerald-800 transition-colors"
             >
               לחיפוש מוצרים
             </button>

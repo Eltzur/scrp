@@ -12,7 +12,7 @@ export default function DisclaimerPage() {
           <Link to="/">
             <XxlLogo variant="header" lang="he" className="h-10" />
           </Link>
-          <Link to="/" className="text-sm text-emerald-600 hover:underline">
+          <Link to="/" className="text-sm text-emerald-700 hover:underline">
             ← חזרה לדף הבית
           </Link>
         </div>
@@ -62,13 +62,13 @@ export default function DisclaimerPage() {
 
             <section>
               <h2 className="text-xl font-semibold text-[#022C22] mb-3">7. יצירת קשר</h2>
-              <p>שאלות בנוגע לתנאים אלו: <a href="mailto:info@xxl.co.il" className="text-emerald-600 hover:underline">info@xxl.co.il</a>.</p>
+              <p>שאלות בנוגע לתנאים אלו: <a href="mailto:info@xxl.co.il" className="text-emerald-700 hover:underline">info@xxl.co.il</a>.</p>
             </section>
 
           </div>
 
           <div className="mt-10">
-            <Link to="/" className="text-sm text-emerald-600 hover:underline">← חזרה לדף הבית</Link>
+            <Link to="/" className="text-sm text-emerald-700 hover:underline">← חזרה לדף הבית</Link>
           </div>
         </div>
       </main>

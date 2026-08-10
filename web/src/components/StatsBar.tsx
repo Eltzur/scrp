@@ -9,7 +9,7 @@ export default function StatsBar() {
   const fmt = (n: number) => n.toLocaleString(i18n.language);
 
   return (
-    <p className="text-xs text-gray-400">
+    <p className="text-xs text-gray-500">
       {t('stats.summary', {
         chains: data.chains_count,
         stores: fmt(data.stores_count),

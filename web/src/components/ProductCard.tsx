@@ -168,8 +168,8 @@ export default function ProductCard({ item, promosByStore }: Props) {
             className={clsx(
               'transition-colors',
               favorited
-                ? 'fill-orange-600 text-orange-600'
-                : 'fill-none text-gray-300 hover:text-orange-500',
+                ? 'fill-orange-700 text-orange-700'
+                : 'fill-none text-gray-500 hover:text-orange-700',
             )}
           />
         </button>
@@ -179,7 +179,7 @@ export default function ProductCard({ item, promosByStore }: Props) {
       <div>
         <h3 className="text-gray-900 font-semibold text-sm leading-snug" dir="auto">{displayName}</h3>
         {product.manufacturer && (
-          <p className="text-gray-400 text-xs mt-0.5" dir="auto">{product.manufacturer}</p>
+          <p className="text-gray-500 text-xs mt-0.5" dir="auto">{product.manufacturer}</p>
         )}
       </div>
 
@@ -188,11 +188,11 @@ export default function ProductCard({ item, promosByStore }: Props) {
           accessible name rather than two buttons doing the same thing. */}
       <button
         onClick={() => setDetailsOpen(true)}
-        className="self-start inline-flex items-center gap-1.5 text-xs font-medium text-orange-600
+        className="self-start inline-flex items-center gap-1.5 text-xs font-medium text-orange-700
                    hover:text-orange-700 hover:bg-orange-50 rounded-lg px-2 py-1 -ms-2 transition-colors"
       >
         <span>{t('product_card.more_info')}</span>
-        <Plus size={13} strokeWidth={2.5} className="rounded-full bg-orange-100 text-orange-600 p-[1px]" />
+        <Plus size={13} strokeWidth={2.5} className="rounded-full bg-orange-100 text-orange-700 p-[1px]" />
       </button>
 
       {/* Price rows */}
@@ -231,7 +231,7 @@ export default function ProductCard({ item, promosByStore }: Props) {
                     {/* Struck shelf price, so the promo price is never mistaken
                         for the ordinary one. */}
                     {q.is_promo && q.shelf_price != null && (
-                      <span className="text-xs text-gray-400 line-through">{fmtPrice(q.shelf_price)}</span>
+                      <span className="text-xs text-gray-500 line-through">{fmtPrice(q.shelf_price)}</span>
                     )}
                     <span className={clsx('font-semibold', isCheapest ? 'text-emerald-700' : 'text-gray-800')}>
                       {fmtPrice(q.price)}
@@ -248,13 +248,13 @@ export default function ProductCard({ item, promosByStore }: Props) {
                     </span>
                   )}
                   {isCheapest && (
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 uppercase tracking-wide">
-                      <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 uppercase tracking-wide">
+                      <CheckCircle2 size={12} className="text-emerald-700 shrink-0" />
                       {t('product_card.cheapest')}
                     </span>
                   )}
                   {isComparable && !isCheapest && q.delta_from_cheapest > 0 && (
-                    <span className="text-xs text-rose-500 font-medium" dir="ltr">
+                    <span className="text-xs text-rose-600 font-medium" dir="ltr">
                       +{fmtPrice(q.delta_from_cheapest)}
                     </span>
                   )}
@@ -318,13 +318,13 @@ export default function ProductCard({ item, promosByStore }: Props) {
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 shrink-0">
                   {isCheapest && (
-                    <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
+                    <CheckCircle2 size={12} className="text-emerald-700 shrink-0" />
                   )}
                   <span className={clsx('font-medium', isCheapest ? 'text-emerald-800' : 'text-gray-700')}>
                     {q.chain_name ?? q.chain_id}
                   </span>
                   {q.city && (
-                    <span className="text-gray-400 text-xs hidden sm:inline" dir="auto">· {q.city}</span>
+                    <span className="text-gray-500 text-xs hidden sm:inline" dir="auto">· {q.city}</span>
                   )}
                 </div>
 
@@ -333,12 +333,12 @@ export default function ProductCard({ item, promosByStore }: Props) {
                     {fmtPrice(q.price)}
                   </span>
                   {isComparable && !isCheapest && q.delta_from_cheapest > 0 && (
-                    <span className="text-xs text-rose-500 font-medium">
+                    <span className="text-xs text-rose-600 font-medium">
                       +{fmtPrice(q.delta_from_cheapest)}
                     </span>
                   )}
                   {isCheapest && (
-                    <span className="text-xs font-semibold text-emerald-600 uppercase tracking-wide hidden sm:inline">
+                    <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wide hidden sm:inline">
                       {t('product_card.cheapest')}
                     </span>
                   )}
@@ -354,14 +354,14 @@ export default function ProductCard({ item, promosByStore }: Props) {
       <div className="flex items-end justify-between mt-auto gap-2">
         <div className="flex flex-col gap-1 min-w-0">
           {savings > 0.005 && (
-            <p className="text-xs text-emerald-600 font-medium" dir="auto">
+            <p className="text-xs text-emerald-700 font-medium" dir="auto">
               {t('product_card.save', {
                 amount: fmtPrice(savings),
                 pct: savingsPct.toFixed(0),
               })}
             </p>
           )}
-          <p className="text-xs text-gray-300 font-mono" dir="ltr">
+          <p className="text-xs text-gray-500 font-mono" dir="ltr">
             {t('product_card.barcode', { code: product.item_code })}
           </p>
         </div>

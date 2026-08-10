@@ -14,7 +14,7 @@ export default function PrivacyPolicyPage() {
           <Link to="/">
             <XxlLogo variant="header" lang="he" className="h-10" />
           </Link>
-          <Link to="/" className="text-sm text-emerald-600 hover:underline">
+          <Link to="/" className="text-sm text-emerald-700 hover:underline">
             ← חזרה לדף הבית
           </Link>
         </div>
@@ -99,7 +99,7 @@ export default function PrivacyPolicyPage() {
 
             <section>
               <h2 className="text-xl font-semibold text-[#022C22] mb-3">10. יצירת קשר</h2>
-              <p>לשאלות בנוגע למדיניות זו או למימוש זכויותיכם, ניתן לפנות אלינו בכתובת <a href="mailto:info@xxl.co.il" className="text-emerald-600 hover:underline">info@xxl.co.il</a>.</p>
+              <p>לשאלות בנוגע למדיניות זו או למימוש זכויותיכם, ניתן לפנות אלינו בכתובת <a href="mailto:info@xxl.co.il" className="text-emerald-700 hover:underline">info@xxl.co.il</a>.</p>
             </section>
 
             <section>
@@ -110,7 +110,7 @@ export default function PrivacyPolicyPage() {
           </div>
 
           <div className="mt-10">
-            <Link to="/" className="text-sm text-emerald-600 hover:underline">← חזרה לדף הבית</Link>
+            <Link to="/" className="text-sm text-emerald-700 hover:underline">← חזרה לדף הבית</Link>
           </div>
         </div>
       </main>

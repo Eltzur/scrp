@@ -39,7 +39,7 @@ export default function CookieBanner() {
       <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
         <p className="text-sm text-gray-700">
           אנו משתמשים בעוגיות ניתוח (Google Analytics) כדי לשפר את השירות. עוגיות אלו יופעלו רק באישורכם.{' '}
-          <a href="/privacy#cookies" className="text-emerald-600 hover:underline">מידע נוסף</a>
+          <a href="/privacy#cookies" className="text-emerald-700 hover:underline">מידע נוסף</a>
         </p>
         <div className="flex items-center gap-2 shrink-0">
           <button
@@ -50,7 +50,7 @@ export default function CookieBanner() {
           </button>
           <button
             onClick={handleAccept}
-            className="px-4 py-1.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
+            className="px-4 py-1.5 text-sm font-medium text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors"
           >
             אישור
           </button>

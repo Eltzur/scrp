@@ -12,7 +12,7 @@ export default function AccessibilityPage() {
           <Link to="/">
             <XxlLogo variant="header" lang="he" className="h-10" />
           </Link>
-          <Link to="/" className="text-sm text-emerald-600 hover:underline">
+          <Link to="/" className="text-sm text-emerald-700 hover:underline">
             ← חזרה לדף הבית
           </Link>
         </div>
@@ -42,7 +42,7 @@ export default function AccessibilityPage() {
           </div>
 
           <div className="mt-10">
-            <Link to="/" className="text-sm text-emerald-600 hover:underline">← חזרה לדף הבית</Link>
+            <Link to="/" className="text-sm text-emerald-700 hover:underline">← חזרה לדף הבית</Link>
           </div>
         </div>
       </main>

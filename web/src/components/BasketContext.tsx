@@ -63,12 +63,12 @@ export function BasketProvider({ children }: { children: ReactNode }) {
               onClick: () => navigate('/signup'),
             },
             style: {
-              background: '#059669',
+              background: '#047857',
               color: '#ffffff',
             },
             actionButtonStyle: {
               background: '#ffffff',
-              color: '#059669',
+              color: '#047857',
               fontWeight: '600',
             },
           },
@@ -79,7 +79,7 @@ export function BasketProvider({ children }: { children: ReactNode }) {
           icon: '⚠️',
           duration: 4000,
           style: {
-            background: '#EA580C',
+            background: '#C2410C',
             color: '#ffffff',
           },
         });

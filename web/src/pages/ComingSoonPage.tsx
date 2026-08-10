@@ -55,7 +55,7 @@ export default function ComingSoonPage({ vertical, icon, headline, subline }: Co
             <a href="/login"  className="text-sm text-gray-500 hover:text-gray-700 transition-colors px-2 py-1">
               התחברות
             </a>
-            <a href="/signup" className="text-sm font-medium text-emerald-600 hover:text-emerald-700 transition-colors px-3 py-1.5 rounded-lg border border-emerald-600 hover:bg-emerald-50">
+            <a href="/signup" className="text-sm font-medium text-emerald-700 hover:text-emerald-700 transition-colors px-3 py-1.5 rounded-lg border border-emerald-600 hover:bg-emerald-50">
               הרשמה
             </a>
           </div>
@@ -94,7 +94,7 @@ export default function ComingSoonPage({ vertical, icon, headline, subline }: Co
               )}
               <button
                 type="submit"
-                className="w-full bg-emerald-600 text-white font-medium rounded-lg py-3 mt-3 hover:bg-emerald-700 transition-colors"
+                className="w-full bg-emerald-700 text-white font-medium rounded-lg py-3 mt-3 hover:bg-emerald-800 transition-colors"
               >
                 עדכנו אותי כשתעלה
               </button>
@@ -108,7 +108,7 @@ export default function ComingSoonPage({ vertical, icon, headline, subline }: Co
 
       {/* Back link */}
       <div className="mt-8 text-center">
-        <Link to="/portal-preview" className="text-sm text-emerald-600 hover:underline">
+        <Link to="/portal-preview" className="text-sm text-emerald-700 hover:underline">
           ← חזרה לדף הבית
         </Link>
       </div>

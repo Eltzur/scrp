@@ -69,7 +69,7 @@ function MultiSelect({ options, selected, onChange, placeholder, disabled = fals
                      : 'hover:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer'}`}
       >
         <span>{buttonLabel}</span>
-        <ChevronDown size={13} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={13} className={`text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
@@ -86,7 +86,7 @@ function MultiSelect({ options, selected, onChange, placeholder, disabled = fals
               onChange={e => setQuery(e.target.value)}
               placeholder={t('filters.search_placeholder')}
               className="w-full px-2 py-1 border border-gray-300 rounded-lg text-sm text-gray-700
-                         placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                         placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
           <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 shrink-0">
@@ -99,14 +99,14 @@ function MultiSelect({ options, selected, onChange, placeholder, disabled = fals
                 const merged = Array.from(new Set([...sel, ...filtered.map(o => o.value)]));
                 onChange(merged.length ? merged : null);
               }}
-              className="text-xs text-emerald-600 hover:text-emerald-800 font-medium"
+              className="text-xs text-emerald-700 hover:text-emerald-800 font-medium"
             >
               בחר הכל
             </button>
             <button
               onMouseDown={e => e.preventDefault()}
               onClick={() => onChange(null)}
-              className="text-xs text-gray-400 hover:text-rose-500"
+              className="text-xs text-gray-500 hover:text-rose-600"
             >
               נקה הכל
             </button>
@@ -126,7 +126,7 @@ function MultiSelect({ options, selected, onChange, placeholder, disabled = fals
               </li>
             ))}
             {filtered.length === 0 && (
-              <li className="px-3 py-2 text-sm text-gray-400">
+              <li className="px-3 py-2 text-sm text-gray-500">
                 {t('filters.no_results')}
               </li>
             )}
@@ -170,7 +170,7 @@ export default function Filters({ filters, onChange, cities }: Props) {
           onClick={() => onChange({ ...filters, compareMode: !filters.compareMode })}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors
             ${filters.compareMode
-              ? 'bg-emerald-600 text-white border-emerald-600'
+              ? 'bg-emerald-700 text-white border-emerald-600'
               : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-400'}`}
         >
           <BarChart2 size={14} />
