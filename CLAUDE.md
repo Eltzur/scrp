@@ -10,6 +10,7 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 4. **Read-and-report-STOP** — on any code change touching scrapers or city resolution, show findings and stop before writing fixes.
 5. **One CC prompt per task** — batch all related changes into one prompt. No incremental back-and-forth on simple tasks.
 6. **Always push after commit** — CC must run `git push origin main` after every commit. Never leave commits only in local repo.
+7. **Plain-text questions only.** The chat assistant must never use interactive question widgets/tool-based question boxes to ask Dude something — they don't render reliably in this environment. Ask clarifying questions as plain text in the chat message itself.
 
 ## Repo layout policy (established SU10M-2)
 - **C:\scrp is the root for the entire XXL codebase family**, not just the supermarket vertical. Every XXL-related repo lives as a subfolder under it.
