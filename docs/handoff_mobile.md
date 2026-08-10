@@ -1,7 +1,7 @@
 # SU10M — Mobile Apps Handoff (super.xxl.co.il)
 
 > New sub-series. Paste at the start of each SU10M chat, alongside `docs/super/handoff_super.md` (shared backend/vision context still applies).
-> Last updated: August 10, 2026 (SU10M-2 checkpoint — paused for the SU10A-8 production incident)
+> Last updated: August 10, 2026 (SU10M-2 checkpoint — NativeWind unblocked; paused for the SU10A-8 production incident)
 
 ---
 
@@ -36,7 +36,7 @@ Native iOS + Android client for super.xxl.co.il. Medium-term differentiator per 
 
 ### v1 scope proposal
 
-**Reprioritized (Dude, Aug 10 2026): barcode scan leads, not just "in scope."** It's the one v1 feature that's actually native-only — everything else in this list is parity with what the web app already does. Build order changes accordingly: once the app can bundle/render at all (see NativeWind/lightningcss status above), the scan flow is the first screen built, and it's likely the app's landing experience rather than a secondary tab. Flow stays as scoped: scan → barcode is the GTIN → GTIN is the item_code → same product/search endpoint the web app already calls. Testing note: real camera testing needs a device (EAS development build or Expo Go), not just a browser/simulator preview.
+**Reprioritized (Dude, Aug 10 2026): barcode scan leads, not just "in scope."** It's the one v1 feature that's actually native-only — everything else in this list is parity with what the web app already does. Build order changes accordingly: once the app can bundle/render at all (see the SU10M-2 section for NativeWind/lightningcss status — resolved Aug 10), the scan flow is the first screen built, and it's likely the app's landing experience rather than a secondary tab. Flow stays as scoped: scan → barcode is the GTIN → GTIN is the item_code → same product/search endpoint the web app already calls. Testing note: real camera testing needs a device (EAS development build or Expo Go), not just a browser/simulator preview.
 
 **In v1 (parity + the one differentiator that's cheap because barcode = GTIN = item_code already):**
 - Search (reuse ranking/relevance logic via existing API)
@@ -96,7 +96,7 @@ Inspection is done (see SU10M-1 corrections). v1 scope is settled: 500m feature 
 
 ---
 
-## Session SU10M-2 checkpoint (August 9-10, 2026) — scaffold + EAS + MCP done; NativeWind BLOCKED; mobile paused for the SU10A incident
+## Session SU10M-2 checkpoint (August 9-10, 2026) — scaffold + EAS + MCP done; NativeWind unblocked (lightningcss pinned); mobile paused for the SU10A incident
 
 **Status: paused mid-session, not abandoned.** Work stopped because the supermarket vertical hit a production incident (three consecutive OOM-killed cron runs) that took priority — see `docs/super/handoff_super.md` § SU10A-8. Nothing here is broken by that; it is simply parked.
 
@@ -107,29 +107,31 @@ Inspection is done (see SU10M-1 corrections). v1 scope is settled: 500m feature 
 - **`expo-env.d.ts` confirmed generated** on first `expo start` and already gitignored. `expo start` additionally creates `nativewind-env.d.ts` and edits `tsconfig.json`; the former is now gitignored, the latter committed (`3677d02`).
 - **Typecheck 7 → 5 errors.** The 2 template errors cleared once `expo-env.d.ts` existed. The 5 remaining are all `src/tw/` type-complexity (`TS2589`/`TS2590`) — not runtime-blocking, deliberately untouched.
 
-**BLOCKED — NativeWind/Tailwind cannot bundle. This is the one thing to fix first next session.**
+**NativeWind/Tailwind — WAS blocked, now RESOLVED (`98846fa`, xxl-super-mobile repo). Nothing is gated on it.**
 
-Metro starts fine and the CSS transformer is definitely wired, but the bundle **fails**:
+Every Metro bundle used to die in the CSS transformer with `failed to deserialize; expected an object-like struct named Specifier, found ()`. **Fixed by pinning `lightningcss` to `1.30.1`** via a `package.json` `overrides` block — an override rather than a plain install, because npm would otherwise re-resolve upward on the next install.
 
-```
-iOS Bundling failed 39879ms node_modules\expo-router\entry.js (1684 modules)
- ERROR  Error: failed to deserialize; expected an object-like struct named Specifier, found ()
-    at node_modules\lightningcss\node\index.js:56:14
-    at compile (node_modules\react-native-css\dist\commonjs\compiler\compiler.js:109:7)
-    at Object.transform (node_modules\react-native-css\dist\commonjs\metro\metro-transformer.js:23:43)
-```
+**Root cause: a breaking AST change in lightningcss `1.30.2` that `react-native-css@3.0.7` was never built against.** `react-native-css` declares `"lightningcss": ">=1.27.0"` with no upper bound, so npm resolved **1.33.0**. It drives lightningcss through the **visitor API**, which round-trips the stylesheet AST between JS and Rust via serde; 1.30.2 changed AST representations, so optional fields that previously serialized as unit no longer deserialize. Two distinct symptoms, one cause — `Specifier` (dashed-ident `var()` origin, `@expo/log-box`) and `SupportsCondition` (`@import … layer()`, our own `src/global.css`).
 
-**Root cause: an unbounded peer range.** `react-native-css@3.0.7` declares `"lightningcss": ">=1.27.0"` with no upper bound, so npm resolved **1.33.0**, whose Rust-side options struct no longer matches what react-native-css serialises. JS and native binding are both 1.33.0, so this is **not** a binding-version skew — it is an API break between the two packages.
+**Bisected, not guessed — and the break is a PATCH bump:**
 
-```
-react-native-css@3.0.7   └── lightningcss@1.33.0   ← incompatible pair
-@tailwindcss/postcss@4.3.3 └── lightningcss@1.32.0
-```
+| Version | Result |
+|---|---|
+| 1.33.0 / 1.32.0 / 1.31.1 / 1.31.0 / 1.30.2 | FAIL |
+| **1.30.1** | **OK** |
 
-Scope note for whoever picks this up: it died on the **first** `.css` Metro reached — `@expo/log-box/.../CodeFrame.module.css` — which is *before* `src/global.css`. So the transformer is confirmed active on CSS, but **`global.css` compiling cleanly is not yet proven**; it never got there. **Suggested fix: pin `lightningcss` via a package.json `overrides` block to the last version `react-native-css@3.0.7` works against, then re-run a forced bundle and confirm both that Metro compiles and that `global.css` itself passes. Bisect rather than guess — the exact break point is undocumented.**
+Why 1.30.1 is the correct pin rather than merely a working one: **`react-native-css@3.0.0` shipped 2025-09-25, four days before `1.30.2` landed on 2025-09-29**, so the whole 3.x line was developed against 1.30.1 and its own lockfile kept it there — no later patch was ever exercised. The pin also **dedupes the tree**: `@tailwindcss/node` and `@expo/metro-config` now share the single 1.30.1 copy instead of a 1.32.0/1.33.0 split.
+
+**Verified, not assumed:**
+- **iOS bundle succeeds** — `iOS Bundled 19142ms … (1684 modules)`, HTTP 200, forced via `curl` against `/.expo/.virtual-metro-entry.bundle`; zero `deserialize`/`Specifier`/`SupportsCondition` matches in the Metro log.
+- **`src/global.css` itself compiles** — this was previously *unproven*, since the old failure hit `@expo/log-box`'s CSS before ever reaching it. Proven now by its distinctive `@media ios` / `@media android` blocks landing in the native stylesheet as platform-conditional vars: `["font-rounded", [["ui-rounded", [["=","platform","ios"]]], ["normal", [["=","platform","android"]]], …]]`, likewise `font-mono` / `font-serif` / `font-sans`. Nothing else in the tree emits those.
+- **Tailwind classes actually apply at runtime, on both platforms.** Native stylesheet registry: `p-4 → padding 14`, `text-2xl → fontSize 21`, `rounded-lg → borderRadius 7`, `font-bold → fontWeight 700`, `text-white → color #fff`, `bg-red-500 → var(color-red-500)` defined as `#fb2c36`. Web `getComputedStyle`: `padding 16px`, `fontSize 24px`, `borderRadius 8px`, `fontWeight 700`, `color rgb(255,255,255)`, background resolving to **`#fb2c36`** — matching native exactly. The 14/16 and 21/24 split is correct, not a discrepancy: rem base is 14 on native and 16 on web.
+- **Typecheck unchanged at 5** (`src/tw/` `TS2589`/`TS2590`) — unaffected by this fix.
+
+> **`className` only works through the `src/tw/` wrappers.** `metro.config.js` sets `globalClassNamePolyfill: false` ("We add className support manually"), so putting `className` on a raw `react-native` `View` **silently no-ops** — no error, no style. This cost real time during verification. Import from `@/tw`, not `react-native`.
 
 **Environment gotchas worth not rediscovering:**
 - `expo start` alone does **not** bundle; it waits for a client. Force one with a `curl` against the dev server (`/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true&…`) or you will conclude everything is fine when it is not.
 - Git Bash's MSYS path conversion silently rewrites an env var like `VITE_API_URL=/apiproxy` into `C:/Program Files/Git/apiproxy`. Use `MSYS_NO_PATHCONV=1` or an absolute URL. This cost real time on the web side the same day and will bite here too.
 
-**Next session (SU10M-3):** unblock lightningcss first (nothing else can be validated until Metro bundles), then confirm `global.css` compiles, then resume the v1 screens against the live API.
+**Next session (SU10M-3): the barcode scan flow is unblocked and starts immediately — it is not gated on anything.** The toolchain question that used to sit in front of it is closed: Metro bundles, `global.css` compiles, and NativeWind classes apply at runtime. Per the v1 reprioritization, scan is the first screen built and likely the landing experience. Remaining prerequisite is hardware, not code — **real camera testing needs a physical device (EAS development build or Expo Go); a browser or simulator preview will not exercise it.**
