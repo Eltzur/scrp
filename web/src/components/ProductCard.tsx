@@ -203,21 +203,26 @@ export default function ProductCard({ item, promosByStore }: Props) {
               )}
             >
             <div className="flex items-center justify-between">
-              {/* Chain + city */}
-              <div className="flex items-center gap-1.5 min-w-0">
+              {/* Chain + city. Sized to content and NEVER compressed: this row
+                  is the only place a shopper learns which branch a price belongs
+                  to, so it has to survive however many promo badges the
+                  right-hand side happens to carry. */}
+              <div className="flex items-center gap-1.5 shrink-0">
                 {isCheapest && (
                   <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
                 )}
-                <span className={clsx('font-medium truncate', isCheapest ? 'text-emerald-800' : 'text-gray-700')}>
+                <span className={clsx('font-medium', isCheapest ? 'text-emerald-800' : 'text-gray-700')}>
                   {q.chain_name ?? q.chain_id}
                 </span>
                 {q.city && (
-                  <span className="text-gray-400 text-xs truncate hidden sm:inline" dir="auto">· {q.city}</span>
+                  <span className="text-gray-400 text-xs hidden sm:inline" dir="auto">· {q.city}</span>
                 )}
               </div>
 
-              {/* Price + delta + promo badges — always LTR for numerals */}
-              <div className="flex items-center gap-1.5 shrink-0 ms-2" dir="ltr">
+              {/* Price + delta + promo badges — always LTR for numerals. Wraps to
+                  a second line when crowded instead of squeezing chain/city,
+                  which previously absorbed all of the pressure. */}
+              <div className="flex flex-wrap items-center justify-end gap-1.5 min-w-0 ms-2" dir="ltr">
                 {/* Struck shelf price, so the promo price is never mistaken for
                     the ordinary one. */}
                 {q.is_promo && q.shelf_price != null && (
@@ -256,25 +261,13 @@ export default function ProductCard({ item, promosByStore }: Props) {
                     1+1
                   </span>
                 )}
-                {promoDesc != null && (
-                  // Bounded + truncated: this is freeform chain text of any
-                  // length, and inside a shrink-0 row an unbounded string
-                  // pushes the PRICE out of view entirely — measured on the
-                  // promo-only TV card (scrollWidth 351 vs clientWidth 303).
-                  <span
-                    className="text-xs font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 max-w-[7rem] truncate"
-                    title={promoDesc}
-                  >
-                    {promoDesc}
-                  </span>
-                )}
               </div>
             </div>
 
             {/* Promo condition + branch. A promo is store-local, unlike the
                 chain-level shelf quotes, so the branch must be named or the
                 price is not actionable. */}
-            {q.is_promo && (
+            {(q.is_promo || promoDesc != null) && (
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1" dir="auto">
                 {cond && (
                   <span
@@ -287,7 +280,18 @@ export default function ProductCard({ item, promosByStore }: Props) {
                     </span>
                   </span>
                 )}
-                {q.store_name && (
+                {/* Freeform chain text of any length. It lives here, on a row
+                    that wraps, rather than in the price row where it needed a
+                    7rem cap and still crowded out the chain name. */}
+                {promoDesc != null && (
+                  <span
+                    className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 max-w-full break-words"
+                    title={promoDesc}
+                  >
+                    {promoDesc}
+                  </span>
+                )}
+                {q.is_promo && q.store_name && (
                   <span className="text-[11px] text-gray-500 truncate" dir="auto">
                     {t('product_card.promo_at_branch', { branch: q.store_name })}
                   </span>
