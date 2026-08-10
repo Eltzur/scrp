@@ -29,7 +29,7 @@ function getPromoBadges(
   q: PriceQuote,
   itemCode: string,
   promosByStore: PromoMap | undefined,
-): { discountPct: number | null; bundleLabel: string | null; buyOneGetOne: boolean; promoDesc: string | null } {
+): { discountPct: number | null; bundleLabel: string | null; promoDesc: string | null } {
   const storePromos = promosByStore?.[`${q.chain_id}/${q.store_id}`] ?? [];
   const itemPromos = storePromos.filter((p: PromoItem) => p.item_code === itemCode);
 
@@ -52,18 +52,25 @@ function getPromoBadges(
     ? Math.round(discountPromo.discount_pct)
     : null;
 
-  // 1+1: buy-one-get-one (reward_type=1, min_qty=2).
-  const buyOneGetOne = itemPromos.some(
-    (p: PromoItem) => p.reward_type === 1 && p.min_qty != null && Math.round(p.min_qty) === 2,
-  );
+  // A "1+1" badge used to be inferred here from reward_type===1 && min_qty===2.
+  // It was WRONG, and removed deliberately — do not reintroduce it. Across
+  // 80,461 active rows in 13 chains that combination is an "N for ₪M" bundle
+  // ("פיירי סבון 2 ב 18", "דובדבנים 250 גר 2 ב 35", "מרכך בדין 2 ב 30"), never
+  // buy-one-get-one: discount_price is the bundle TOTAL for min_qty units, so
+  // 2 × ₪9.00 = ₪18.00 against a ₪13.10 shelf price. reward_type is
+  // chain-specific and must never be read as a quantity on its own — Victory
+  // encodes 1+1 as reward_type=10, not 1. The honest signal is gift_count
+  // (IsGiftItem, added in SU10A-7), which /promos/bulk does not return today.
+  // Nothing is lost by dropping it: bundleCondition() below already states the
+  // deal exactly, as "2 יח' ב-₪18.00 · ₪9.00 ליח'".
 
   // Fallback: show promo_description for any matched promo not covered above.
   const promoDesc =
-    bundleLabel == null && discountPct == null && !buyOneGetOne && itemPromos.length > 0
+    bundleLabel == null && discountPct == null && itemPromos.length > 0
       ? (itemPromos[0].promo_description ?? null)
       : null;
 
-  return { discountPct, bundleLabel, buyOneGetOne, promoDesc };
+  return { discountPct, bundleLabel, promoDesc };
 }
 
 function fmtBundlePrice(price: number): string {
@@ -192,7 +199,7 @@ export default function ProductCard({ item, promosByStore }: Props) {
       <div className="divide-y divide-gray-100 rounded-lg border border-gray-100 overflow-hidden">
         {quotes.map((q, i) => {
           const isCheapest = i === 0 && isComparable;
-          const { discountPct, bundleLabel, buyOneGetOne, promoDesc } = getPromoBadges(q, product.item_code, promosByStore);
+          const { discountPct, bundleLabel, promoDesc } = getPromoBadges(q, product.item_code, promosByStore);
           const cond = q.is_promo ? bundleCondition(q) : null;
           return (
             <div
@@ -257,11 +264,6 @@ export default function ProductCard({ item, promosByStore }: Props) {
                 {discountPct != null && (
                   <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
                     -{discountPct}%
-                  </span>
-                )}
-                {buyOneGetOne && (
-                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
-                    1+1
                   </span>
                 )}
               </div>
