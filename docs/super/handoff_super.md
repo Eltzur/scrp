@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: August 6, 2026 (end of session SU10A-7)
+> Last updated: August 10, 2026 (end of session SU10A-8)
 
 ---
 
@@ -84,7 +84,7 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 
 ## 📊 Current Production State
 
-**Last updated: August 6, 2026 (end of session SU10A-7)**
+**Last updated: August 10, 2026 (end of session SU10A-8)**
 
 - **14 chains** in registry: Shufersal, Rami Levy, Osher Ad, Victory, Yochananof, Keshet, Carrefour, Tiv Taam, King Store, Shefa Birkat Hashem, Shuk Hayir, Fresh Market, Super Yuda, חצי חינם / Hazi Hinam (added 9d-9)
 - **~1,200 stores** in active_stores.yaml (post 9d-9 additions: Rami Levy +72→98, Yochananof +35→50, Keshet +12→22, Osher Ad +11→23, Hazi Hinam +1→12; Paz + Dor Alon removed in 9d-8)
@@ -140,6 +140,74 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 **Carried forward (open):** promo-only items in search (~86% gap); King Store 68% catalog match (~1,200 promoted item_codes not in items → bare barcode); fresh food / weighted goods (min_qty<1) into search; parser adds owed (club-only, max-qty, gift-count for "3 for 2").
 
 > **Superseded by SU10A-6 (measured):** the real figure is 60,275 orphaned promoted item_codes for King Store — 68.7% of its 87,771 promoted codes have no items row, ~50× the "~1,200" and ~27× the "~2,250" recorded here. Earlier figures likely used a different denominator (search-reachable items, not all promoted codes); not reconstructable from the note. 96.8% of sampled 13-digit codes are checksum-valid EAN-13 — real products King Store promotes but never publishes a shelf price for, not junk data. King Store alone is ~93% of all orphaned promoted codes across the 14 chains. **Also superseded in this same list: "fresh food / weighted goods (min_qty<1) into search" — measured 84.2% already searchable (17,461 of 20,730 weighted items), so that item is effectively done and its `min_qty<1` framing was wrong; see SU10A-6 carried-forward items (11) and (12).**
+
+---
+
+### Session SU10A-8 (August 9-10, 2026) — OOM recurred for three runs and was cured by CAPACITY not code; "6 stale chains" split 3 cosmetic / 3 real; the idle-backend lever measured and spent; ProductCard promo row rebuilt across four fixes
+
+**The OOM came back, and the delta migration did NOT hold.** SU10A-7 closed this as "fix CONFIRMED over two clean runs" and said *"Nothing here reopens the diagnosis — do not re-run it."* It broke on the very next run and stayed broken for three consecutive days. Read that as the lesson: **two clean runs was not enough evidence to close a capacity problem**, and the caveat SU10A-7 itself recorded — that a shorter run cannot re-trigger a late-run ceiling — was the correct read all along.
+
+| Day | Start | Died / finished | Duration | Result | `ok` | `running` | no row |
+|---|---|---|---|---|---|---|---|
+| Aug 5 | 10:00:02 | 12:59:09 | **10,747s** | `Cron finished. Errors: none` | 14 | 0 | 0 |
+| Aug 6 | 10:00:01 | 12:47:10 | **10,029s** | `Cron finished. Errors: none` | 14 | 0 | 0 |
+| Aug 7 | 10:00:15 | 11:22:12 | ~1h22m | **SIGKILL** | 5 | **4** | 5 |
+| Aug 8 | 10:00:14 | 11:47:54 | ~1h48m | **SIGKILL** | 2 | **4** | 8 |
+| Aug 9 | 10:00:11 | 12:57:15 | ~2h57m | **SIGKILL** | 8 | **4** | 2 |
+| Aug 10 | 10:00:xx | 11:19:28 | **4,765s** | `Cron finished. Errors: none` | **14** | 0 | 0 |
+
+**KERNEL CONFIRMATION WAS NOT OBTAINED THIS SESSION — record that as a gap, not a fact.** Unlike SU10A-6, which quoted `Out of memory: Killed process …` from `journalctl -k`, **no kernel log line was captured for Aug 7/8/9.** `dude` is in groups `dude,sudo` only — not `adm`, not `systemd-journal` — so `journalctl -k` returns `-- No entries --`, `dmesg` returns `Operation not permitted`, `/var/log/kern.log` is `syslog:adm 0640` and unreadable, and `sudo -n` requires a password (the passwordless whitelist covers only `xxl-restart.sh` / `xxl-deploy-webroot.sh`). What IS confirmed is systemd's own record, readable without sudo: `Result=signal`, `ExecMainCode=2` (CLD_KILLED), `ExecMainStatus=9`, `NRestarts=0`, with `TimeoutStartUSec=infinity` and `MemoryMax=infinity` ruling out both a systemd timeout and a cgroup limit. OOM is therefore inference by elimination (the only other SIGKILL source is a manual `kill -9`), not kernel-proven. **To close it properly, run:** `sudo journalctl -k --since "2026-08-07" | grep -i "killed process"`.
+
+**The "6 stale chains" were NOT 6 broken chains — and the SU10A-6 signature applied exactly, once you account for parallelism.** `cron_main.py:257` is `ThreadPoolExecutor(max_workers=4)`, so at any instant four chains are in flight. A SIGKILL leaves precisely those four at `status='running'` with 0/0/0 (the row is INSERTed upfront at `base.py:292-296` and only UPDATEd to its final status at `base.py:317-318`, so there is no `error` transition on a kill), and everything still queued gets no row at all. **Exactly 4 chains sat at `running` on each of the three killed days — that is the worker count, not a coincidence.**
+
+> **CORRECTION TO THIS DOC:** the Current Production State section says `cron_main.py ThreadPoolExecutor(max_workers=6)`. **The code is 4.** The distinction is load-bearing for this diagnosis — 4 stuck rows = 4 occupied slots.
+
+**Genuine vs cosmetic, per chain — 3 of the 6 had already landed Aug 9 data:**
+
+| Chain | fetch_runs | Aug 9 stores loaded | max `price_update_date` | Verdict |
+|---|---|---|---|---|
+| קרפור Carrefour | `running` 0/0/0 | 76 + 3 no_file, 409,927 items | **2026-08-09** | cosmetic |
+| טיב טעם Tiv Taam | `running` 0/0/0 | 25, 253,159 items | **2026-08-09** | cosmetic |
+| שוק העיר Shuk Hayir | `running` 0/0/0 | 16 + 1 no_file, 15,736 items | **2026-08-09** | cosmetic |
+| פרש מרקט Fresh Market | `running` 0/0/0 | 4, 10,743 items | 2026-08-06 | **genuinely stale** |
+| סופר יודה Super Yuda | **no row** | none (zero journal mentions) | 2026-08-06 | **genuinely stale** |
+| חצי חינם Hazi Hinam | **no row** | none (zero journal mentions) | 2026-08-06 | **genuinely stale** |
+
+**WARNING — `price_update_date` is the SUPPLIER FEED's timestamp, not our ingest time, and must never be used as a staleness metric.** Keshet read `2026-08-08 19:57` while being fully `ok` on Aug 9 with 22 stores and 247,588 items. Use `fetch_runs.status` — it is the only authoritative signal.
+
+**The idle-Postgres-backend lever is now MEASURED AND SPENT — and an earlier claim made during this session was wrong.** Mid-session this handoff's author reported the 21 idle `scrp_app` backends as a leak, *"up 4× from the 5 observed in SU10A-6"*, citing *"six idle backends at 472-581 MB RSS."* **That framing was wrong and is retracted.** 19 of the 21 were a healthy API connection pool actively recycling — every one showed SQLAlchemy's pool-reset `ROLLBACK` with `state_change` inside the last 21-38 minutes. Only **2** were true orphans, and they did not come from the Aug 7/8/9 kills at all: `backend_start 2026-08-03 18:59`, four days earlier, with an 8-second `active_window` and then nothing for 5d20h (no keepalive rhythm, so not legitimate long-lived connections), a distinct `ROLLBACK;` query text, and **RSS of 1,960 kB each — not hundreds of MB.** Terminating both took idle 21→19 and moved memory by nothing measurable: available 912→911 MiB, swap 883→879 MiB. **Conclusion: SU10A-7's "trim idle backends first" lever was worth ~3.8 MB. It is closed. Do not re-run it.** The ~500 MB RSS figures belong to the *live* pool backends and are inflated by `shared_buffers` double-counting exactly as SU10A-7 warned; PSS via `smaps_rollup` remains unmeasurable without sudo.
+
+**RAM BUMP SHIPPED — this is what actually fixed it. 1.9 GiB → 3.8 GiB.**
+
+| | Before (Aug 9, idle, post-kill) | After reboot (Aug 10, idle) | After today's successful cron |
+|---|---|---|---|
+| Mem free | 238 MiB | 3.0 GiB | 1.3 GiB |
+| Mem available | 912 MiB | 3.2 GiB | 2.6 GiB |
+| Swap used | **883 MiB** | **0 B** | 602 MiB |
+
+**Today's cron is verified clean and dramatically faster: `status=0/SUCCESS`, `Cron finished in 4765s. Errors: none`, `TOTAL: 866/943 stores loaded (91.8%), 77 no_file, 0 errors`, and all 14 chains `ok` in `fetch_runs`.** 4,765s against 10,029-10,747s for the pre-bump successful runs is a **2.1× cut with no code change** — consistent with the box no longer swap-thrashing rather than with anything having got algorithmically faster. All 6 previously-stale chains are current. Zero failed units on the box.
+
+**Postgres was NOT retuned for the new RAM — FLAGGED, NOT FIXED.** Live settings are still sized for the 1.9 GiB box: `shared_buffers` 512 MB (65536×8kB), `effective_cache_size` **1 GB** (131072×8kB), `work_mem` 16 MB, `max_connections` 100. Nothing is broken — they are merely conservative now, so the new headroom shows up as free RAM rather than as database cache. `effective_cache_size` at 1 GB on a 3.8 GiB box understates what the planner can assume. **Decide deliberately next session; do not treat this as done.**
+
+**GS1 — nightly sweep CONFIRMED running; the WEEKLY FULL sweep is the open item.** Checked directly against `gs1.sync_runs`: **id 15, 2026-08-10 11:19:27→11:19:28, `status=ok`, 172 rows** — it fired at the tail of today's cron. **There are no runs at all on Aug 8 or Aug 9**, confirming SU10A-7's warning that a killed cron silently skips GS1 (the sweep sits at the end of `cron_main`). id 14 (Aug 7 16:42, 22,971 rows) was the manual `--full` backfill, not a scheduled run. **STILL OPEN: the first-ever weekly FULL sweep was scheduled for Sunday 2026-08-09** (`run_gs1_catalog()` passes `full=True` when `weekday()==6`) **and was skipped by that day's SIGKILL. Next opportunity is Sunday 2026-08-16 — verify it actually lands, and do not assume the weekly-full mechanism works until one has been observed.** Today's 172 rows is an incremental, not a full (a full reads ~23K).
+
+**ProductCard promo-row rendering — FOUR separate fixes, all live. This is one row that broke four different ways; read the whole sequence before touching it again.**
+
+1. **Chain name rendered at ZERO pixels wide (`61910bf`).** The price row is a two-segment flex: chain+city was `min-w-0` with `truncate` children, the price/badge side was `shrink-0`. So the badge side never yielded and every extra promo badge came straight out of the chain name. Measured on a 3-across card: `scrollWidth 101, clientWidth 0` — not ellipsised, *gone*. Fix: chain/city `shrink-0` with no `truncate`, badge side `flex-wrap … min-w-0`, and the freeform `promo_description` badge moved down to the wrapping detail row (it had needed a `max-w-[7rem]` cap in the price row).
+2. **Gap regression, self-inflicted (`eb5ef45`).** Letting the badge side wrap meant it could grow to fill the row, so `justify-between` no longer guaranteed any space — measured **0 px** between city and the wrapped `הכי זול` badge on live promo rows. The `ms-2` that looked like it should help did not: that element is `dir="ltr"` inside an RTL parent, so `margin-inline-start` resolved to the far edge. Fix: `gap-2` on the wrapper (direction-agnostic), `ms-2` dropped.
+3. **The "1+1" badge was FACTUALLY WRONG and has been removed (`dcd0b36`) — do not reintroduce it.** It was inferred from `reward_type === 1 && min_qty === 2`. **Across 80,461 active promo rows in 13 chains, that combination is always an "N for ₪M" bundle and never buy-one-get-one** (`פיירי סבון 2 ב 18`, `דובדבנים 250 גר 2 ב 35`, `מרכך בדין 2 ב 30`, `בירה 2 ב 15`): `discount_price` is the bundle **total** for `min_qty` units, so 2 × ₪9.00 = ₪18.00 against a ₪13.10 shelf price — which is exactly where the co-displayed `-31%` came from. **This is the trap CLAUDE.md marks SEVERE and SU10A-7 says bit three times: `reward_type` is chain-specific and must never be read as a quantity** (Victory encodes 1+1 as `reward_type=10`, not 1). Note `PromosPage.tsx:165` already did this correctly by matching the description text — **ProductCard was the outlier.** The honest structural signal is `gift_count` (`IsGiftItem`, added SU10A-7), which **`/promos/bulk` does not currently return** — exposing it is the prerequisite for any future genuine 1+1 badge. Nothing was lost by removal: `bundleCondition()` already renders the deal exactly, as `2 יח' ב-₪18.00 · ₪9.00 ליח׳`.
+4. **Promo rows restructured to a fixed 3-row layout (`9c0e3a8`).** Row 1 = chain + price only; row 2 = promo detail (badge, cheapest, discount %, bundle condition / description); row 3 = branch + city. **Plain promo-free rows deliberately left as the single line they already were.** Also dedupes the city on row 3 — several chains bake it into `store_name` (Shefa's `23 כהנמן בני ברק`), which rendered `… בני ברק · בני ברק`; the city is now appended only when `store_name` does not already contain it, verified working both ways.
+
+> **Diagnostic note worth keeping: none of the four were found by looking.** Each was caught by DOM measurement against live data — `scrollWidth` vs `clientWidth` for clipping, `getBoundingClientRect()` deltas for the gap, and a record-count query against `/promos/bulk` for the badge. The zero-width and 0px-gap defects both looked *plausible* in a screenshot. **Measure this row; do not eyeball it.**
+
+**Carried forward (open):**
+1. **Kernel OOM confirmation for Aug 7/8/9 — never captured.** Needs one sudo command (above). Until then the cause is inference, not proof.
+2. **Weekly GS1 full sweep unproven** — first one was skipped by the Aug 9 kill; watch Sunday 2026-08-16.
+3. **Postgres not retuned for 3.8 GiB** — `shared_buffers` / `effective_cache_size` still at 1.9 GiB-era values. Flagged, not fixed.
+4. **`gift_count` not exposed on `/promos/bulk`** — blocks any correct 1+1 / "N for M" badge.
+5. **Idle-backend trimming is CLOSED as a memory lever** (worth ~3.8 MB, measured). Do not revisit; the RAM bump was the real fix.
+6. **`max_workers` doc drift** — this handoff said 6, code says 4. Corrected above; check the doc against `cron_main.py` before relying on it.
+7. All SU10A-7 carried-forward items not listed here stand unchanged.
 
 ---
 
