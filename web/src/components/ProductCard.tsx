@@ -202,7 +202,10 @@ export default function ProductCard({ item, promosByStore }: Props) {
                 isCheapest ? 'bg-emerald-50' : 'bg-white',
               )}
             >
-            <div className="flex items-center justify-between">
+            {/* gap-2 is load-bearing: once the badge side is allowed to wrap it
+                can grow to fill the row, and justify-between alone no longer
+                guarantees any space between the two segments. */}
+            <div className="flex items-center justify-between gap-2">
               {/* Chain + city. Sized to content and NEVER compressed: this row
                   is the only place a shopper learns which branch a price belongs
                   to, so it has to survive however many promo badges the
@@ -222,7 +225,7 @@ export default function ProductCard({ item, promosByStore }: Props) {
               {/* Price + delta + promo badges — always LTR for numerals. Wraps to
                   a second line when crowded instead of squeezing chain/city,
                   which previously absorbed all of the pressure. */}
-              <div className="flex flex-wrap items-center justify-end gap-1.5 min-w-0 ms-2" dir="ltr">
+              <div className="flex flex-wrap items-center justify-end gap-1.5 min-w-0" dir="ltr">
                 {/* Struck shelf price, so the promo price is never mistaken for
                     the ordinary one. */}
                 {q.is_promo && q.shelf_price != null && (
