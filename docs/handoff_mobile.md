@@ -1,7 +1,7 @@
 # SU10M — Mobile Apps Handoff (super.xxl.co.il)
 
 > New sub-series. Paste at the start of each SU10M chat, alongside `docs/super/handoff_super.md` (shared backend/vision context still applies).
-> Last updated: August 8, 2026 (end of session SU10M-1, post-inspection)
+> Last updated: August 10, 2026 (SU10M-2 checkpoint — paused for the SU10A-8 production incident)
 
 ---
 
@@ -91,3 +91,43 @@ Inspection completed, no changes made. Results folded into the sections above.
 ## Next session (SU10M-2)
 
 Inspection is done (see SU10M-1 corrections). v1 scope is settled: 500m feature is out, everything else stands. Next: scaffold `xxl-super-mobile` (new repo, `npx create-expo-app`, Expo Skills + MCP server + official Claude Code plugin install, NativeWind setup, port shared TS types from `web/src`). Scaffolding is unblocked.
+
+---
+
+## Session SU10M-2 checkpoint (August 9-10, 2026) — scaffold + EAS + MCP done; NativeWind BLOCKED; mobile paused for the SU10A incident
+
+**Status: paused mid-session, not abandoned.** Work stopped because the supermarket vertical hit a production incident (three consecutive OOM-killed cron runs) that took priority — see `docs/super/handoff_super.md` § SU10A-8. Nothing here is broken by that; it is simply parked.
+
+**DONE:**
+- **Repo scaffolded** — `npx create-expo-app`, SDK 57 default template, Expo Router, React Compiler enabled (`6c7e091`). Nested under `C:\scrp` per the repo-layout policy; `github.com/Eltzur/xxl-super-mobile`.
+- **Expo Skills + MCP server + Claude Code plugin installed**, NativeWind wired, shared API types ported from `web/src` (`908d859`), plus a `TouchableHighlight` `underlayColor` typing fix (`429678b`).
+- **EAS project linked** (`4f8b7ac`) — `projectId 91289426-105a-4901-a515-a2159388f5ee`. **Note `eas init` also silently rewrote two other fields:** `slug` `xxl-super-mobile` → **`xxl`**, and added `owner: xxlcoils-team`. Both are load-bearing for update channels and store submission — confirm they are what you want before the first build. **No `eas.json` was created**; only `app.json` changed.
+- **`expo-env.d.ts` confirmed generated** on first `expo start` and already gitignored. `expo start` additionally creates `nativewind-env.d.ts` and edits `tsconfig.json`; the former is now gitignored, the latter committed (`3677d02`).
+- **Typecheck 7 → 5 errors.** The 2 template errors cleared once `expo-env.d.ts` existed. The 5 remaining are all `src/tw/` type-complexity (`TS2589`/`TS2590`) — not runtime-blocking, deliberately untouched.
+
+**BLOCKED — NativeWind/Tailwind cannot bundle. This is the one thing to fix first next session.**
+
+Metro starts fine and the CSS transformer is definitely wired, but the bundle **fails**:
+
+```
+iOS Bundling failed 39879ms node_modules\expo-router\entry.js (1684 modules)
+ ERROR  Error: failed to deserialize; expected an object-like struct named Specifier, found ()
+    at node_modules\lightningcss\node\index.js:56:14
+    at compile (node_modules\react-native-css\dist\commonjs\compiler\compiler.js:109:7)
+    at Object.transform (node_modules\react-native-css\dist\commonjs\metro\metro-transformer.js:23:43)
+```
+
+**Root cause: an unbounded peer range.** `react-native-css@3.0.7` declares `"lightningcss": ">=1.27.0"` with no upper bound, so npm resolved **1.33.0**, whose Rust-side options struct no longer matches what react-native-css serialises. JS and native binding are both 1.33.0, so this is **not** a binding-version skew — it is an API break between the two packages.
+
+```
+react-native-css@3.0.7   └── lightningcss@1.33.0   ← incompatible pair
+@tailwindcss/postcss@4.3.3 └── lightningcss@1.32.0
+```
+
+Scope note for whoever picks this up: it died on the **first** `.css` Metro reached — `@expo/log-box/.../CodeFrame.module.css` — which is *before* `src/global.css`. So the transformer is confirmed active on CSS, but **`global.css` compiling cleanly is not yet proven**; it never got there. **Suggested fix: pin `lightningcss` via a package.json `overrides` block to the last version `react-native-css@3.0.7` works against, then re-run a forced bundle and confirm both that Metro compiles and that `global.css` itself passes. Bisect rather than guess — the exact break point is undocumented.**
+
+**Environment gotchas worth not rediscovering:**
+- `expo start` alone does **not** bundle; it waits for a client. Force one with a `curl` against the dev server (`/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true&…`) or you will conclude everything is fine when it is not.
+- Git Bash's MSYS path conversion silently rewrites an env var like `VITE_API_URL=/apiproxy` into `C:/Program Files/Git/apiproxy`. Use `MSYS_NO_PATHCONV=1` or an absolute URL. This cost real time on the web side the same day and will bite here too.
+
+**Next session (SU10M-3):** unblock lightningcss first (nothing else can be validated until Metro bundles), then confirm `global.css` compiles, then resume the v1 screens against the live API.
