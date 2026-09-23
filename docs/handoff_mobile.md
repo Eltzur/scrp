@@ -1,7 +1,7 @@
 # SU10M — Mobile Apps Handoff (super.xxl.co.il)
 
 > New sub-series. Paste at the start of each SU10M chat, alongside `docs/super/handoff_super.md` (shared backend/vision context still applies).
-> Last updated: August 10, 2026 (SU10M-2 checkpoint — NativeWind unblocked; paused for the SU10A-8 production incident)
+> Last updated: September 23, 2026 (SU10M-2 continued — full UI wrap shipped, icon/branding done, EAS versioning bug fixed)
 
 ---
 
@@ -135,3 +135,35 @@ Why 1.30.1 is the correct pin rather than merely a working one: **`react-native-
 - Git Bash's MSYS path conversion silently rewrites an env var like `VITE_API_URL=/apiproxy` into `C:/Program Files/Git/apiproxy`. Use `MSYS_NO_PATHCONV=1` or an absolute URL. This cost real time on the web side the same day and will bite here too.
 
 **Next session (SU10M-3): the barcode scan flow is unblocked and starts immediately — it is not gated on anything.** The toolchain question that used to sit in front of it is closed: Metro bundles, `global.css` compiles, and NativeWind classes apply at runtime. Per the v1 reprioritization, scan is the first screen built and likely the landing experience. Remaining prerequisite is hardware, not code — **real camera testing needs a physical device (EAS development build or Expo Go); a browser or simulator preview will not exercise it.**
+
+---
+
+## Session SU10M-2 (continued) — Full UI wrap shipped, icon/branding done, versioning fixed
+
+**Navigation shell**: expo-router tabs (Scan default / Search / Basket / Settings), Search and Basket are placeholder "coming soon" screens — real functionality not yet built, this is the largest remaining gap.
+
+**Scan screen**: framing overlay, torch toggle, manual barcode entry fallback, Hebrew camera-permission-denial screen with Linking.openSettings().
+
+**Result screen**: ported web's 3-row ProductCard layout (chain+price / promo / branch+city). Two rounds of spacing bugs fixed — first a text-duplication bug in the city picker, then a real layout bug where `flex-1` on the chain-name element (not `justify-between`, which was the initial guess) consumed all spare row width and pushed price/chain apart; fixed by matching web's `shrink` + `px-3 py-2` padding exactly. Column price-alignment was a trade-off of that fix — flagged, not yet resolved which way to land.
+
+**Settings**: GPS requested first with manual city/chain/branch fallback, "use my location" always available to re-enable. City picker got a search/autocomplete filter. Account/auth: native in-app Sign In/Sign Up/Forgot Password using Supabase directly (the previous "browser redirect" turned out to be the unmodified Expo template's Explore tab, not a real auth bug — nothing to fix there). Session persistence via expo-secure-store with a chunked adapter (Android's 2KB SecureStore value cap otherwise silently drops Supabase's JWT+refresh token pair and logs the user out every cold start).
+
+**Icon/branding**: app renamed "SUPER XXL" everywhere. Icon/splash regenerated from `brand/favicon.svg` (XXL wordmark, two-tone green) on a #FF9335 orange background across all 7 icon references (app icon, Android adaptive foreground/background/monochrome, favicon, splash). `expo.ios.icon` removed so iOS falls back to the main icon instead of Expo's own placeholder branding.
+
+**Versioning bug found and fixed**: `autoIncrement` was only set on the production EAS profile, not development — meaning two different builds (Aug 11, Sep 22) both reported version 1.0.0/versionCode 1, so Android silently failed to recognize the newer build as an update on install. Fixed: `autoIncrement: true` added to all profiles, version bumped to 1.1.0. Settings screen now shows both the native (baked-into-APK) and JS-bundle version numbers with a Hebrew warning banner if they diverge — directly addresses the failure mode that caused this bug in the first place.
+
+**Drawer menu** (hamburger + XXL icon header, custom slide-in panel — not expo-router's Drawer navigator, to avoid restructuring the native tab bar around a JS navigator still marked unstable): Account (primary sign-in/up entry point, Settings keeps a secondary link), Favorites (placeholder), Lists (placeholder), My Scan History (real — AsyncStorage, capped at 50, re-scanning moves an item to the top rather than duplicating), Help (static Hebrew tips + contact), Terms of Use / Privacy Policy (draft placeholder text with a visible amber "draft" banner — real legal text is a separate, non-dev task), Rate us/Share (native Share API, placeholder store link since unpublished), Dark Mode (real working theme via `Appearance.setColorScheme()` + NativeWind's existing `dark:` classes — not stubbed), Recommendations (preference toggle only, no logic behind it yet).
+
+**Permission priming**: Hebrew explainer screens shown once, immediately before the native camera/GPS permission dialogs fire (skipped if already granted or permanently denied).
+
+**Hebrew**: full Hebrew UI throughout. A few strings (build-number label, some of the newest additions) still want a native-speaker confirmation pass — not yet done.
+
+**Build/distribution learning**: all builds so far are the `development` EAS profile, which requires Metro (`npx expo start`) running on the PC and the phone on the same network — this is why testing has required the QR-connect dance each time. Next step for a standalone, PC-independent app: cut a `preview` profile build instead (already configured in eas.json, unused so far) — it bundles the JS into the APK at build time; the API calls already go straight to the live backend regardless of build type.
+
+## Carried forward / open decisions
+
+1. Search and Basket tabs — currently placeholders. Backend already supports both (search/compare/promos live on web, `saved_baskets` table exists) — this is mobile-side wiring, not new backend work. Largest remaining feature gap.
+2. Favorites/Lists — placeholders, no backend built yet.
+3. iOS — `ios.bundleIdentifier` still unset (blocks any iOS build), device registration (`eas device:create`) queued but not run, no iOS build attempted yet.
+4. Store submission — Google Play Console account setup (lad.co.il org account mentioned, not confirmed done), real privacy policy/terms text (legal task), store listing assets (screenshots, descriptions) — none done yet.
+5. Price-comparison row alignment — resolve the justify-between/column-alignment trade-off noted above: column-aligned prices (scannable down the list) vs. the tighter chain/price pairing shipped now. Open, needs a decision.

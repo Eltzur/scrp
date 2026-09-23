@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: August 10, 2026 (end of session SU10A-8)
+> Last updated: September 23, 2026 (GS1 catalog-value measurement + "What's Good for Europe" reform assessment; both read-only)
 
 ---
 
@@ -2003,3 +2003,23 @@ GS1 Israel can license canonical item data: names, images, barcodes, nutrition, 
 - Terminal RTL display of Hebrew is EXPECTED and normal — it does not indicate a bug, no verification needed for display mangling. Only verify logic when a Hebrew string comparison is load-bearing (use repr() / JSON.stringify, or open the file in VS Code).
 - CC cannot reliably surface file contents back to the operator — its file reads collapse ("Read 1 file / ctrl+o to expand") and don't paste through. Workaround: for any code review, the operator opens the file in VS Code and pastes it directly.
 - PowerShell → ssh → bash quoting mangles Hebrew, special characters, and long strings (JWTs). For ad-hoc DB queries with Hebrew: SSH in interactively first, run the query at the server bash prompt. To get a file/credential onto the server: build it locally and scp it — never interpolate it into an ssh "..." command string.
+---
+
+## GS1 catalog value assessment (September 23, 2026 — measured, decision pending)
+
+Triggered by a business question: is GS1 integration worth its cost given thin coverage. Measured, not estimated:
+
+- Catalog total: 165,414 items.
+- `name_source='gs1'`: 16,161 items (9.77%) — handoff's earlier 10,585 figure was stale.
+- `name_source` has exactly two values: `chain` (90.23%) and `gs1` (9.77%), no NULLs, no third source. The weighted token-voting majority-vote algorithm (scraper/canonical.py) is NOT a separate name_source — its output is stored under `chain`. So canonical naming is ~90% solved by that algorithm alone, independent of GS1; GS1 only supplements the remaining ~10%.
+- GS1 detail data (kashrut/nutrition/ingredients/images) actively served to users: 11,222 items (6.78% of catalog) — the active-GS1-row-filtered figure, which is what the API actually serves; 11,496 rows carry `full_content` before that filter.
+- No usage/analytics tracking exists in the database at all (3 users, 1 favorite, 1 saved basket) — so whether GS1-matched items skew toward popular products, which would materially change the value calculus, is currently unanswerable from any data we hold. Flagged as a gap worth closing independent of the GS1 decision.
+- Open and blocking a real decision: actual GS1 subscription/access cost (business fact, not in the codebase) and a manual quality comparison of GS1 names vs. the chain/token-voting names for the ~10% overlap (not yet done).
+
+## "What's Good for Europe" GS1 reform (September 23, 2026 — rollout 12.10.2026, transition through 1.1.2028)
+
+Read-only investigation complete, doc fixed. New retailer-outbound JSON fields (importer/distributor, marketing messages, 4-column nutrition table, additional nutrition table, image-deletion indicators) land intact in the already-stored raw `full_content` JSONB for any product we've detail-fetched — nothing breaks, nutrition parsing just truncates to column 1 silently (works today, would misreport `basis` if GS1 ever reorders columns). The cron-path `content` field was investigated and confirmed always empty (9,350 rows sampled across a quarter of the catalog) — safe to keep ignoring. `docs/gs1_integration.md` was stale (said Phase 2 wasn't built when it is) — fixed, along with a supplier-count correction (77→107, both figures kept with dates).
+
+Two real, pre-existing gaps this surfaced, independent of the Oct 12 date, still awaiting Dude's go-ahead since they touch scraper-adjacent code:
+1. No image-deletion handling anywhere — a product whose image is deleted upstream keeps serving the stale cached JPEG indefinitely, to web and mobile both.
+2. Serving layer only reads 3 of the ~11 available `product_info` branches from `full_content` — most GS1 detail data (including all the new European-reform fields) is stored but never surfaced.
