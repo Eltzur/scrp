@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: September 23, 2026 (GS1 catalog-value measurement + "What's Good for Europe" reform assessment; both read-only)
+> Last updated: September 24, 2026 (mobile /search latency investigation, read-only, parked; also Sept 23: GS1 catalog-value measurement + "What's Good for Europe" reform assessment)
 
 ---
 
