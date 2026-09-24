@@ -2023,3 +2023,21 @@ Read-only investigation complete, doc fixed. New retailer-outbound JSON fields (
 Two real, pre-existing gaps this surfaced, independent of the Oct 12 date, still awaiting Dude's go-ahead since they touch scraper-adjacent code:
 1. No image-deletion handling anywhere — a product whose image is deleted upstream keeps serving the stale cached JPEG indefinitely, to web and mobile both.
 2. Serving layer only reads 3 of the ~11 available `product_info` branches from `full_content` — most GS1 detail data (including all the new European-reform fields) is stored but never surfaced.
+
+---
+
+## Mobile /search latency investigation (September 24, 2026 — read-only, no fix applied)
+
+Triggered by the mobile Search tab timing out (see docs/handoff_mobile.md). Read-only EXPLAIN ANALYZE investigation on production, nothing created or modified.
+
+Corrects a standing assumption from SU10A-3 ("no trigram index exists, so the LIKE was already a full seq scan over 139K items" — noted there as performance-neutral). It is not neutral at current data volume, but it is also NOT the bottleneck: for query "חל", find_barcodes_with_relevance's seq scan on items (165,547 rows, 35 MB heap, fully cached) costs 0.15s of a ~27s request — under 1%. pg_trgm is already installed (v1.6, confirmed), so a trigram index is cheap to add, but would only recover that ~0.15s.
+
+The real cost (99% of the ~27s) is fetch_prices: for "חל", 7,543 matching barcodes resolve to 390,325 price rows fetched, sorted, and grouped in Python — before the API slices 30 for the page. Pagination happens AFTER the expensive work, so offset=0 costs the same as offset=300. The _PRICE_SQL plan shows a full parallel seq scan of prices (~7.7M row-visits across 3 workers) plus a disk-spilling sort (ORDER BY p.item_price exceeding work_mem — external merge, ~40 MB/worker, 15,453 temp blocks written) plus 122,139 real (non-cache) buffer reads.
+
+Table sizes at measurement time: items 165,547 rows/58MB total; item_chain_names 348,248 rows/325MB; prices 7,686,194 rows/3,749MB. Existing indexes on items/item_chain_names name columns are plain btrees — none can serve a leading-wildcard LIKE, which is why the planner ignores them regardless.
+
+**Implication for a future fix session:** a trigram index alone would NOT meaningfully fix this — don't ship one expecting it to. The real lever is architectural: push LIMIT/OFFSET before the price fetch so only the ~30 barcodes actually shown get their prices pulled, not all matches. This touches _PRICE_SQL, which SU10A-5 already flags as hot-path-with-regression-history (the enable_nestloop collision) — treat with the same caution.
+
+**Related, free, not yet done:** SU10A-8 flagged Postgres config (shared_buffers, effective_cache_size, work_mem) as still sized for the pre-RAM-bump 1.9 GiB box, "flagged, not fixed... decide deliberately next session" — that session never happened. Retuning for the current 3.8 GiB box is free capacity already paid for, would likely reduce both the disk-spill and the real buffer reads measured here, and should probably happen as part of whichever session tackles this properly.
+
+**Status: parked, not a current priority** (per Dude, Sept 24 2026). This entry is scoping for whenever it's picked back up, not a task in progress.
