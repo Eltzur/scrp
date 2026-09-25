@@ -249,6 +249,59 @@ def get_ratings(item_code: str, conn: Connection = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
+# The caller's own ratings
+# ---------------------------------------------------------------------------
+
+class MyRatingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    item_code: str
+    item_name: str | None = Field(None, description="From items; null when the code is not in the catalog")
+    rating: int
+    comment: str | None
+    status: str
+    created_at: str
+    updated_at: str
+
+
+@router.get("/me/ratings", response_model=list[MyRatingOut],
+            summary="Every rating the caller has written, any status")
+def my_ratings(user=Depends(get_current_user), conn: Connection = Depends(get_db)):
+    """All of the caller's own ratings, INCLUDING hidden and pending ones.
+
+    Deliberately not filtered by status, unlike the public
+    GET /items/{item_code}/ratings. Someone must be able to see and edit their
+    own review even while it is held for moderation — hiding it from its own
+    author would make the review look deleted and invite a duplicate.
+
+    Exposing a hidden row to its author is not a leak: they wrote it. What the
+    response does NOT say is WHY it is hidden, so a blacklist match still does
+    not teach an author which word tripped the filter.
+
+    The items join is an index lookup on the primary key, a handful of rows per
+    user, so item_name is cheap enough to include. LEFT, not INNER: item_code
+    is intentionally not an FK (see the migration), so a rating can outlive its
+    catalog row and must still be returned — with a null name rather than
+    vanishing.
+    """
+    rows = conn.execute(text("""
+        SELECT r.id,
+               r.item_code,
+               i.item_name,
+               r.rating,
+               r.comment,
+               r.status,
+               to_char(r.created_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS created_at,
+               to_char(r.updated_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS updated_at
+        FROM ratings r
+        LEFT JOIN items i ON i.item_code = r.item_code
+        WHERE r.user_id = :uid
+        ORDER BY r.updated_at DESC
+    """), {"uid": user["id"]}).mappings().all()
+    return [MyRatingOut(**r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
 # Moderation queue (read-only)
 # ---------------------------------------------------------------------------
 
