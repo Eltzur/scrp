@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -87,20 +88,42 @@ class SubmitResponse(BaseModel):
 def _blacklist_hit(conn: Connection, comment: str | None) -> str | None:
     """Return the first blacklisted term found in `comment`, else None.
 
-    Matching is case-insensitive whole-substring. The list is read per request
-    rather than cached: it is tiny, it must take effect the moment a term is
-    added, and a stale cache here means abusive text goes live.
+    WHOLE-WORD matching, not substring. Substring matching was the original
+    implementation and was wrong: "זבל" would have fired inside "מזבלה" (a
+    rubbish dump) and inside its own plural, hiding innocent text.
+
+    \\b works correctly on Hebrew — verified empirically, not assumed. Python's
+    re is Unicode-aware, Hebrew letters are \\w, so a boundary falls at spaces
+    and punctuation exactly as it does for Latin. Confirmed matching for a bare
+    term, a term mid-sentence, and a term against punctuation or parentheses;
+    confirmed NOT matching "זבלים" or "מזבלה".
+
+    KNOWN GAP — Hebrew inseparable prefixes. ה/ו/ב/כ/ל/מ/ש attach with no
+    space, so "הזבל" is the same word with a definite article and does NOT
+    match here. Allowing an optional prefix was tested and REJECTED: the
+    pattern \\b[ובכלמהש]{0,2}TERM\\b flags "הזין את הנתונים" — "entered the
+    data", one of the most ordinary phrases in Hebrew software text — because
+    it contains the slang term זין. Hiding legitimate reviews is worse than
+    missing a prefixed insult, especially since this filter sits in front of a
+    human moderation queue and anything it misses can still be user-reported.
+
+    The list is read per request rather than cached: it is tiny, it must take
+    effect the moment a term is added, and a stale cache means abusive text
+    goes live.
     """
     if not comment or not comment.strip():
         return None
     terms = [r[0] for r in conn.execute(text("SELECT term FROM rating_blacklist")).all()]
     if not terms:
         return None
-    haystack = comment.casefold()
     for term in terms:
-        t = (term or "").strip().casefold()
+        t = (term or "").strip()
         # Guard against an empty/whitespace row matching everything.
-        if t and t in haystack:
+        if not t:
+            continue
+        # IGNORECASE is a no-op for Hebrew, which is caseless, but the list is
+        # not required to stay Hebrew-only.
+        if re.search(rf"\b{re.escape(t)}\b", comment, flags=re.IGNORECASE):
             return term
     return None
 
