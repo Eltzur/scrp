@@ -2184,3 +2184,49 @@ Sampled **260 active products across 65 distinct supplier GLNs** (4 per GLN, new
 
 No code was changed for Task B and nothing was committed from it.
 
+
+---
+
+## Session SU10S-2 (September 26, 2026) — GS1 warning labels + unit-price basis served
+
+Two of the 14 unread `product_info` branches from SU10S-1 are now served end to end. Everything else in that recon stays unread by design.
+
+Backend + web: `9c370cd`. Mobile (separate repo): `dd77034`.
+
+### The shape was confirmed before the parser was written
+
+- `Food_Symbol_Red` is a coded list, so it reuses the existing `_coded_values` convention.
+- `Price_Comparison_Content` is **not** — it is a single `{UOM, text, value}` dict, so `_first_value()` does not apply and it gets its own reader. That reader takes `text`, the supplier's own rendering, because it is the only field that survives a non-numeric basis such as a bare `יחידה` (144 occurrences), and because UOM is dirty in production — 135 nulls and a `גרם\n` with a trailing newline across 4,000 sampled active products.
+
+### One finding changed the spec: FSR5 is not a warning
+
+`Food_Symbol_Red` is a **closed five-code set**, counted over 4,000 active products:
+
+| Code | Value | Count | |
+|---|---|---|---|
+| FSR1 | `ללא סימון` | 2463 | absence sentinel |
+| FSR2 | `נתרן בכמות גבוהה` | 517 | warning |
+| FSR3 | `סוכר בכמות גבוהה` | 743 | warning |
+| FSR4 | `שומן רווי בכמות גבוהה` | 825 | warning |
+| FSR5 | `סמל ירוק` | 119 | **the GREEN label — a positive health marker** |
+
+The brief anticipated filtering only FSR1. **FSR5 is filtered too**: it is Israel's green label, awarded to products meeting healthy-nutrition criteria, and rendering it among red warning badges would tell a user that a healthy product carries a warning. Since this field is typed and labelled as warnings, FSR5 is held rather than shown — surfacing it properly needs its own field and its own copy, deliberately out of scope here. **That data is in hand and unshown; it is the obvious next increment if a green-label badge is ever wanted.**
+
+Filtering is by **code**, not by Hebrew string, wherever a code is present — codes are stable identifiers and the display values are free text already observed carrying stray whitespace in this payload; the value set is a fallback for the rare entry with no code. An all-filtered result collapses to `None` rather than `[]`, matching how `kashrut` already handles an all-blank block, so both clients branch on presence alone.
+
+### Verification
+
+17 unit cases on the two parsers pass, covering every code in the set, the blank sentinel, a missing code, duplicates, whitespace and wrong types.
+
+Live against production after the API restart:
+
+- Warning products return the real warnings — e.g. `7290000363424` → `["נתרן בכמות גבוהה","שומן רווי בכמות גבוהה"]`.
+- FSR1 products return `null`.
+- **Four green-label (FSR5) products return `null`**, confirming the deviation holds in production and not just in the unit test.
+
+Browser-verified on super.xxl.co.il: on a warning product the פרטי מוצר tab renders all six sections in order — כשרות, ערכים תזונתיים, רכיבים, אלרגנים, **סימון אזהרה**, **בסיס להשוואת מחיר** — with no sentinel leakage; on a no-warning product (`7290000057132`) the warning section is **absent from the DOM** while the basis line still renders. Deploy confirmed by file hash against the live bundle, not by the deploy script's "Done!".
+
+### Note for whoever regenerates mobile types
+
+`xxl-super-mobile/src/types/api.ts` was regenerated from the live OpenAPI schema rather than hand-edited. The diff was **+350 lines, purely additive** — the file had gone stale and predated the ratings endpoints, so that regeneration also pulled those in. Worth knowing that this file drifts silently: nothing fails until something reads a field the stale copy lacks.
+

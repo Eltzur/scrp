@@ -296,3 +296,17 @@ Web's keyboard tab navigation (roving `tabIndex`, Arrow/Home/End) was **not** po
 
 **Round 2 — this 3-tab / GS1 / condensed-search pass.** Confirmed working by Dude via screenshots showing correct tab isolation, correct kashrut and nutrition rendering, the condensed Search list, and correct default-tab landing from each entry point.
 
+---
+
+## Session SU10S-2 (September 26, 2026) — GS1 warning labels + unit-price basis
+
+Two sections added to the Product Info tab, in the same order as web and with the Hebrew ported from web's `he.json` rather than re-invented: **סימון אזהרה** (Israel's mandated front-of-pack warnings) and **בסיס להשוואת מחיר** (the declared unit-price basis). Both self-hide when absent, like every other GS1 block here. Commit `dd77034`; the backend and web half is SU10S-2 in `docs/super/handoff_super.md`.
+
+Warning badges reuse the existing rose `Chip` tone already used for the "contains" allergen list, so severity reads consistently within the tab.
+
+**The client does not decide what counts as a warning.** The backend filters both the "no marking" sentinel and — less obviously — the positive green label FSR5 (`סמל ירוק`), which is a *healthy* marker and would be actively misleading as a red badge. Anything in `warning_labels` is already a real warning. Do not re-derive this client-side from raw values, and do not add the green label to this section if it is ever surfaced; it needs its own field and its own copy.
+
+`src/types/api.ts` was regenerated from the live schema rather than hand-edited, per that file's own instruction. +350 lines, purely additive — it had gone stale and predated the ratings endpoints.
+
+**NOT device-verified** — no device attached and `adb` unavailable, the same caveat as every other mobile change this session. Typecheck adds no new errors (the five pre-existing `src/tw` NativeWind errors are unchanged), the Metro export is clean, and both new headings are present in the Hermes bundle with no warning *values* hardcoded — those arrive from the API.
+
