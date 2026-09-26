@@ -162,6 +162,8 @@ Why 1.30.1 is the correct pin rather than merely a working one: **`react-native-
 
 ## Carried forward / open decisions
 
+→ See [docs/roadmap.md](roadmap.md) for the current prioritized list.
+
 1. ~~Search and Basket tabs — placeholders.~~ **Both shipped in SU10M-3 (see below).** Search is text-only, no city/chain filters; Basket has quantity, compare, registered-user sync and caps.
 2. Favorites/Lists — placeholders, no backend built yet.
 3. iOS — `ios.bundleIdentifier` still unset (blocks any iOS build), device registration (`eas device:create`) queued but not run, no iOS build attempted yet.
