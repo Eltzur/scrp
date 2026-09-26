@@ -279,6 +279,9 @@ export interface ProductDetails {
    *  the positive green label are filtered server-side, so a non-null list
    *  always means real warnings. */
   warning_labels: string[] | null;
+  /** Health Ministry GREEN label — a POSITIVE marker, never a warning. Kept
+   *  out of warning_labels on purpose; render it in its own positive block. */
+  green_label: boolean;
   /** Declared basis for unit pricing, e.g. "100 גרם". */
   unit_price_basis: string | null;
 }

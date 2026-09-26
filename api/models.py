@@ -236,6 +236,15 @@ class ProductDetails(BaseModel):
             "out, so a present list always means real warnings."
         ),
     )
+    green_label: bool              = Field(
+        False,
+        description=(
+            "True when the Health Ministry GREEN label (FSR5) is declared — a "
+            "POSITIVE marker for a product meeting nutrition recommendations, "
+            "deliberately separate from warning_labels rather than an entry in "
+            "it. Never appears alongside a warning in current data."
+        ),
+    )
     unit_price_basis: str | None   = Field(
         None, description='Declared basis for unit pricing, e.g. "100 גרם"')
 

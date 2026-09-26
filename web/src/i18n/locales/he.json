@@ -50,6 +50,8 @@
     "allergens_contains": "מכיל",
     "allergens_may_contain": "עלול להכיל",
     "warnings": "סימון אזהרה",
+    "green_label": "הסימון הירוק",
+    "green_label_help": "סימון משרד הבריאות למוצר העומד בהמלצות התזונה",
     "unit_price_basis": "בסיס להשוואת מחיר",
     "no_image": "אין תמונה",
     "no_extra_info": "אין מידע נוסף על מוצר זה"

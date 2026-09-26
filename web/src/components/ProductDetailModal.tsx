@@ -390,6 +390,34 @@ export default function ProductDetailModal({ item, onClose, initialTab = 'prices
               </Section>
             )}
 
+            {/* Health Ministry green label — a POSITIVE marker, so it gets its
+                own block rather than a slot in the warnings list above. Text
+                carries the meaning; the colour only reinforces it, and the
+                check icon is a neutral glyph — the official ministry graphic is
+                a government mark and is deliberately not reproduced.
+                Contrast measured: emerald-800 on emerald-50 is 7.29:1, well
+                over the 4.5:1 the IS 5568 / WCAG AA baseline requires. */}
+            {!loading && details?.green_label && (
+              <Section title={t('product_modal.green_label')}>
+                <div className="flex flex-col gap-1.5">
+                  <span
+                    className="inline-flex items-center gap-1.5 self-start rounded-full
+                               bg-emerald-50 border border-emerald-200 px-3 py-1"
+                    role="img"
+                    aria-label={`${t('product_modal.green_label')}. ${t('product_modal.green_label_help')}`}
+                  >
+                    <CheckCircle2 size={14} className="text-emerald-800 shrink-0" aria-hidden="true" />
+                    <span className="text-sm font-semibold text-emerald-800">
+                      {t('product_modal.green_label')}
+                    </span>
+                  </span>
+                  <p className="text-xs text-gray-500" dir="auto">
+                    {t('product_modal.green_label_help')}
+                  </p>
+                </div>
+              </Section>
+            )}
+
             {/* Unit-price basis — one line, no heading furniture. */}
             {!loading && details?.unit_price_basis && (
               <Section title={t('product_modal.unit_price_basis')}>

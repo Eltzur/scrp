@@ -50,6 +50,8 @@
     "allergens_contains": "Contains",
     "allergens_may_contain": "May contain",
     "warnings": "Warning labels",
+    "green_label": "The green label",
+    "green_label_help": "Health Ministry marking for a product meeting nutrition recommendations",
     "unit_price_basis": "Unit price basis",
     "no_image": "No image",
     "no_extra_info": "No additional information for this product"

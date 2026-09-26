@@ -852,7 +852,8 @@ def _first_value(node) -> str | None:
 # tell a user a healthy product carries a warning. Surfacing it properly needs
 # its own field and its own copy — deliberately out of scope for SU10S-2, and
 # noted in the handoff as available data we hold and do not show.
-_FOOD_SYMBOL_NON_WARNING = {"FSR1", "FSR5"}
+_FOOD_SYMBOL_GREEN = "FSR5"
+_FOOD_SYMBOL_NON_WARNING = {"FSR1", _FOOD_SYMBOL_GREEN}
 _FOOD_SYMBOL_NON_WARNING_VALUES = {"ללא סימון", "סמל ירוק"}
 
 
@@ -884,6 +885,38 @@ def _warning_labels(node) -> list[str] | None:
         if value not in out:
             out.append(value)
     return out or None
+
+
+def _green_label(node) -> bool:
+    """True when the Health Ministry GREEN label (FSR5) is declared.
+
+    Its own field rather than an entry in warning_labels, because it is the
+    OPPOSITE of a warning: it marks a product meeting the ministry's nutrition
+    recommendations. SU10S-2 filtered it out of the warning list for exactly
+    that reason; this surfaces it properly.
+
+    Measured over all 16,204 served rows (SU10S-4): 422 products carry FSR5 and
+    it NEVER co-occurs with FSR1 or with any of the FSR2/3/4 warnings — it is
+    always the sole entry. So green and warnings are mutually exclusive in the
+    data today. This function does not enforce that: it reports what the field
+    says, and the UI renders both sections independently, so a future product
+    carrying both would display both rather than silently hiding one.
+
+    Matched on the CODE, like _warning_labels — the Hebrew display strings are
+    free text and have been observed carrying stray whitespace in this payload.
+    """
+    if not isinstance(node, list):
+        return False
+    for entry in node:
+        if not isinstance(entry, dict):
+            continue
+        if (entry.get("code") or "").strip() == _FOOD_SYMBOL_GREEN:
+            return True
+        # Fallback for the rare entry with no code at all.
+        if not (entry.get("code") or "").strip() and \
+           (entry.get("value") or "").strip() == "סמל ירוק":
+            return True
+    return False
 
 
 def _unit_price_basis(node) -> str | None:
@@ -955,6 +988,7 @@ def _empty_gs1_details(item_code: str) -> dict:
         "ingredients":  None,
         "allergens":    None,
         "warning_labels":   None,
+        "green_label":      False,
         "unit_price_basis": None,
     }
 
@@ -1028,6 +1062,8 @@ def fetch_gs1_details(conn: Connection, item_code: str, has_image: bool = False)
         "ingredients":  ingredients,
         "allergens":    allergens,
         "warning_labels":   _warning_labels(
+            (info.get("Additional_Information") or {}).get("Food_Symbol_Red")),
+        "green_label":      _green_label(
             (info.get("Additional_Information") or {}).get("Food_Symbol_Red")),
         "unit_price_basis": _unit_price_basis(
             (info.get("Product_Dimensions") or {}).get("Price_Comparison_Content")),
