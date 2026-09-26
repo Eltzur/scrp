@@ -1,0 +1,35 @@
+[Unit]
+Description=XXL — weekly GS1 detail + image fetch (new GTINs only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=dude
+Group=dude
+WorkingDirectory=/home/dude/scrp
+# Same mechanism scrp-cron uses. NOTE: sourcing .env in a shell does not reach
+# python3 subprocesses (CLAUDE.md), but systemd's EnvironmentFile sets the
+# process environment directly, so this does work.
+EnvironmentFile=/home/dude/scrp/.env
+
+# Detail first: new GTINs get their full_content before we look for imagery.
+# The leading "-" means a detail failure does NOT stop the image fetch — the
+# two endpoints are independent and one being unhappy should not cost us the
+# other's run.
+ExecStart=-/home/dude/scrp/venv/bin/python3 -m scraper.gs1_fetch_detail
+
+# --limit 1500 is load-bearing, not a round number. SU10S-3 measured the media
+# endpoint blocking after roughly 1,800 requests in one sitting at 2 req/s;
+# 1,500 stays under that with margin. NEVER add --refresh: that would re-fetch
+# all ~16k images every week and get us blocked immediately.
+# No "-" here on purpose: gs1_fetch_images exits non-zero when its circuit
+# breaker trips, and that should surface as a failed unit in the journal.
+ExecStart=/home/dude/scrp/venv/bin/python3 -m scraper.gs1_fetch_images --limit 1500
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=scrp-gs1-fetch
+
+[Install]
+WantedBy=multi-user.target

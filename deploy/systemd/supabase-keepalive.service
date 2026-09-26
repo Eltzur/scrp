@@ -1,0 +1,16 @@
+[Unit]
+Description=Supabase keep-alive ping
+
+[Service]
+Type=oneshot
+User=dude
+WorkingDirectory=/home/dude/scrp
+EnvironmentFile=/home/dude/scrp/.env
+ExecStart=/home/dude/scrp/venv/bin/python3 -c "
+import os, requests
+url = os.environ.get('SUPABASE_URL','').rstrip('/') + '/rest/v1/stores?select=id&limit=1'
+key = os.environ.get('SUPABASE_ANON_KEY','')
+if url and key:
+    r = requests.get(url, headers={'apikey': key, 'Authorization': 'Bearer ' + key}, timeout=10)
+    print(f'Supabase ping {r.status_code}')
+"

@@ -1,0 +1,17 @@
+[Unit]
+Description=XXL — weekly GS1 fetch timer (Sunday afternoon, after the catalog FULL sweep)
+
+[Timer]
+# Sunday 14:00 Israel time. The daily cron starts at 10:00 and its GS1 catalog
+# FULL sweep (Sundays only) is its last step — observed finishing between
+# 11:21 and 11:42 across four Sundays, so this leaves over two hours of margin.
+OnCalendar=Sun *-*-* 14:00:00
+TimeZone=Asia/Jerusalem
+# Deliberately NOT Persistent: a missed week simply waits for the next Sunday.
+# Catching up would fire a second fetch right after a boot, and two runs close
+# together is exactly what gets us rate-limited.
+Persistent=false
+Unit=scrp-gs1-fetch.service
+
+[Install]
+WantedBy=timers.target

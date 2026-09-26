@@ -1,0 +1,23 @@
+[Unit]
+Description=XXL — offsite backup of GS1 product images to B2
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Runs as root because the B2 credentials live in root's rclone config.
+# scrp-backup.sh already runs as root for the same reason.
+User=root
+
+# COPY, never sync. A stale local image deleted by gs1_fetch_images (the
+# SU10S-1 upstream-deletion path) must remain in the backup: the point of this
+# copy is to survive losing the local disk, and `sync` would faithfully
+# propagate every local deletion into the only other copy we have.
+ExecStart=/usr/bin/rclone copy /home/dude/gs1_images b2:xxl-scrp-backups/gs1-images/current/ --config /root/.config/rclone/rclone.conf --no-traverse
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=scrp-gs1-images-backup
+
+[Install]
+WantedBy=multi-user.target

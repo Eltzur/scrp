@@ -1,1 +1,5 @@
 *.py text eol=lf
+
+# systemd unit files must be LF — CRLF in a unit file is not reliably parsed,
+# and these are authored on Windows and consumed on Linux.
+deploy/systemd/* text eol=lf

@@ -18,6 +18,12 @@ wasted 2.8 MB download.
 RESUMABLE: an existing output file is skipped, so an interrupted run can simply
 be relaunched. --refresh forces a re-fetch.
 
+RATE LIMITS: the media endpoint blocks after roughly 1,800 requests in one
+sitting (SU10S-3) and answers HTTP 400 until it clears. The run aborts after
+10 consecutive 400s and exits non-zero rather than burning the rest of the
+batch. Keep --limit well under that threshold when scheduling; the weekly
+timer uses 1500.
+
 STALE-CACHE NOTE: when GS1 answers 200 with no "file", the imagery was removed
 upstream and any local copy is deleted (see _fetch_and_resize). Because the
 default run SKIPS GTINs that already have a file, that check only happens under
@@ -63,6 +69,16 @@ _DEFAULT_RPS = 2.0
 _HTTP_TIMEOUT = 120
 _ACTIVE_STATUS = "פעיל"
 
+# Consecutive HTTP 400s from the media endpoint before we stop the run.
+#
+# SU10S-3 measured the failure mode: after roughly 1,800 requests in one
+# sitting at 2 req/s the endpoint starts answering 400 with a Hebrew body
+# ("נחסמת בעקבות…" — "you have been blocked due to…") and does not recover
+# within the run. Every request after that point is wasted and may well be
+# extending the block. Ten in a row is far past any plausible run of
+# per-product 400s, so it identifies the block without firing on noise.
+_BLOCK_STREAK_LIMIT = 10
+
 _TARGET_SQL = """
     WITH ranked AS (
         SELECT p.gtin,
@@ -83,7 +99,7 @@ _TARGET_SQL = """
 
 def _fetch_and_resize(session: requests.Session, gtin: str, out_path: str,
                       dry_run: bool) -> tuple[int, int] | str | None:
-    """Return (raw_bytes, written_bytes), "no_image", or None on failure.
+    """Return (raw_bytes, written_bytes), "no_image", "blocked", or None.
 
     The three outcomes are NOT interchangeable. "no_image" means GS1 answered
     200 and told us this GTIN has no imagery — an authoritative statement that
@@ -91,12 +107,18 @@ def _fetch_and_resize(session: requests.Session, gtin: str, out_path: str,
     (HTTP error, timeout, decode failure), which says nothing about whether the
     image still exists upstream. Only the first may be allowed to delete a file;
     conflating them would make one bad afternoon of 5xx responses wipe the
-    cache. Raw bytes stay in memory.
+    cache. "blocked" is an HTTP 400, the endpoint's rate-limit response — a
+    failure like None, split out only so the caller can detect a streak of
+    them and stop the run. Raw bytes stay in memory.
     """
     resp = session.get(_MEDIA_URL.format(gtin=gtin), timeout=_HTTP_TIMEOUT)
     if resp.status_code != 200:
         log.warning("%s: HTTP %s %s", gtin, resp.status_code, resp.text[:80])
-        return None
+        # 400 is how the endpoint reports a rate-limit block. Distinguished
+        # from other failures ONLY so run() can count a streak of them and
+        # stop; it is still a plain failure, and like every other error path
+        # it must never reach the delete branch.
+        return "blocked" if resp.status_code == 400 else None
     b64 = (resp.json() or {}).get("file")
     if not b64:
         log.info("%s: no image available", gtin)
@@ -131,6 +153,8 @@ def run(out_dir: str = _DEFAULT_OUT, dry_run: bool = False, limit: int | None = 
     # Split out of "failed": an upstream deletion is a successful answer, not a
     # fetch error, and lumping the two together is what hid the stale-cache bug.
     deleted = no_image = 0
+    block_streak = 0
+    aborted_blocked = False
     raw_total = out_total = 0
     try:
         gtins = [r["gtin"] for r in
@@ -162,6 +186,23 @@ def run(out_dir: str = _DEFAULT_OUT, dry_run: bool = False, limit: int | None = 
                 log.warning("%s: %s: %s", gtin, type(exc).__name__, str(exc)[:100])
                 res = None
 
+            if res == "blocked":
+                # Rate-limited. Counts as a failure exactly like any other,
+                # and touches nothing on disk.
+                failed += 1
+                block_streak += 1
+                if block_streak >= _BLOCK_STREAK_LIMIT:
+                    remaining = len(gtins) - n
+                    log.warning(
+                        "media endpoint blocking — aborting run, %s remain for next run",
+                        f"{remaining:,}")
+                    aborted_blocked = True
+                    break
+                continue
+            # Any answer that is not a block clears the streak: the limit is
+            # about a sustained block, not a 400 here and there.
+            block_streak = 0
+
             if res is None:
                 # Transient — leave whatever is on disk alone.
                 failed += 1
@@ -192,13 +233,15 @@ def run(out_dir: str = _DEFAULT_OUT, dry_run: bool = False, limit: int | None = 
 
         el = time.monotonic() - t0
         avg = out_total / fetched if fetched else 0
-        log.info("DONE — fetched=%s failed=%s skipped=%s deleted=%s no_image=%s in %.0fs",
+        log.info("DONE — fetched=%s failed=%s skipped=%s deleted=%s no_image=%s in %.0fs%s",
                  f"{fetched:,}", f"{failed:,}", f"{skipped:,}",
-                 f"{deleted:,}", f"{no_image:,}", el)
+                 f"{deleted:,}", f"{no_image:,}", el,
+                 "  [ABORTED — endpoint blocking]" if aborted_blocked else "")
         log.info("  raw downloaded : %.2f GB (never written to disk)", raw_total / 1024**3)
         log.info("  written        : %.2f GB   avg %.1f KB/image", out_total / 1024**3, avg / 1024)
         return {"fetched": fetched, "failed": failed, "skipped": skipped,
                 "deleted": deleted, "no_image": no_image,
+                "aborted_blocked": aborted_blocked,
                 "raw_bytes": raw_total, "out_bytes": out_total, "seconds": el}
     finally:
         conn.close()
@@ -217,8 +260,12 @@ def main():
     ap.add_argument("--rps", type=float, default=_DEFAULT_RPS,
                     help=f"requests per second (default {_DEFAULT_RPS})")
     args = ap.parse_args()
-    run(out_dir=args.out, dry_run=args.dry_run, limit=args.limit,
-        refresh=args.refresh, rps=args.rps)
+    stats = run(out_dir=args.out, dry_run=args.dry_run, limit=args.limit,
+                refresh=args.refresh, rps=args.rps)
+    # Non-zero so a blocked run is obvious in `systemctl status` and the
+    # journal rather than looking like a clean finish with few images.
+    if stats.get("aborted_blocked"):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,9 @@
+[Unit]
+Description=Run Supabase keep-alive every 4 hours
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=4h
+
+[Install]
+WantedBy=timers.target

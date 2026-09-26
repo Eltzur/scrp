@@ -1,0 +1,14 @@
+[Unit]
+Description=XXL — weekly GS1 image backup timer (Sunday, after the weekly fetch)
+
+[Timer]
+# Three hours after scrp-gs1-fetch starts, so it always captures that week's
+# newly fetched images. The fetch itself is ~15 minutes at --limit 1500; the
+# gap is margin, not a duration estimate.
+OnCalendar=Sun *-*-* 17:00:00
+TimeZone=Asia/Jerusalem
+Persistent=false
+Unit=scrp-gs1-images-backup.service
+
+[Install]
+WantedBy=timers.target

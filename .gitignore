@@ -254,7 +254,8 @@ vrd.py
 # Temp data folders
 Store_XML/
 city matcher files/
-deploy/
+deploy/*
+!deploy/systemd/
 king_files/
 kingDL/
 screenshots/
