@@ -90,6 +90,8 @@ For all other commands, select "Yes" (one-time approval) unless the command look
 - Start scraper manually: python3 -m scripts.run_one <chain_id>
 - Check API service: sudo systemctl status scrp-api
 - Check cron: sudo journalctl -u scrp-cron -n 20 --no-pager
+- Check weekly GS1 fetch (Sun 14:00 IDT, detail + up to 1500 images): `journalctl -u scrp-gs1-fetch -n 50 --no-pager` — a failed unit with "media endpoint blocking" is the circuit breaker working, not a bug; the next Sunday resumes.
+- Check GS1 image offsite backup (Sun 17:00 IDT, rclone copy to b2:xxl-scrp-backups/gs1-images/current/): `journalctl -u scrp-gs1-images-backup -n 30 --no-pager`
 - Get flights test-user token: `ssh dude@185.229.226.190 "~/xxl-flights/scripts/kamatera/get_test_token.sh"` — prints only the access_token to stdout; raw Supabase response to stderr + exit 1 on failure. See docs/flights/handoff_flights.md § Test user.
 - Set flights test-user tier: `ssh dude@185.229.226.190 "~/xxl-flights/scripts/kamatera/set_test_tier.sh <free|paid>"` — interactive sudo password (not in the passwordless xxl-ops whitelist)
 

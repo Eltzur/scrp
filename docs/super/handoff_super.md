@@ -2357,3 +2357,76 @@ The `fields[0]`-only limitation is nonetheless real and now has a concrete examp
 
 Web's `מידע נוסף` button already renders **above** the price rows in `ProductCard.tsx`, so it never had mobile's below-the-fold problem. **Web deliberately unchanged.**
 
+
+---
+
+## Session SU10S-5 (September 26, 2026) — weekly GS1 fetch timer, offsite image backup, block circuit breaker
+
+Commits `2d48b40` + `439aa17`. **Units are committed, NOT installed** — installation needs root and is Dude's single paste-in step (printed at the end of the session, and reproduced below).
+
+### Circuit breaker in `gs1_fetch_images.py`
+
+HTTP 400 — the block response measured in SU10S-3 — now returns a distinct `"blocked"` sentinel. It is still counted as a plain failure, but a streak of them is tracked: **10 consecutive aborts the run**, logs how many remain for next week, and exits non-zero so a blocked run shows as a failed unit rather than a clean finish with suspiciously few images. Any non-400 answer resets the streak, so isolated 400s cannot trip it.
+
+**A block never reaches the delete path.** Only a confirmed 200 with no `"file"` may delete (SU10S-1); that is unchanged and is covered by a test that fills a directory with files, runs 12 blocks against it, and asserts nothing was removed.
+
+Verified on the server with stubbed responses: 400→`"blocked"`, 500/404→`None`; 10×400 aborts at exactly 10 of 30; 9×400 then a 200 continues; 30×500 never aborts; `SystemExit(1)` on abort and none on a clean run.
+
+### The two units
+
+| | `scrp-gs1-fetch` | `scrp-gs1-images-backup` |
+|---|---|---|
+| when | Sunday 14:00 IDT | Sunday 17:00 IDT |
+| as | `dude` | `root` (B2 creds are root's) |
+| does | `gs1_fetch_detail` then `gs1_fetch_images --limit 1500` | `rclone copy ~dude/gs1_images → b2:xxl-scrp-backups/gs1-images/current/` |
+
+**14:00 was chosen against data, not by feel.** The Sunday catalog FULL sweep is the daily cron's last step and finished between **11:21 and 11:42** across four observed Sundays (the sweep itself takes ~30s; the cron around it runs 81-101 min from its 10:00 start). 14:00 leaves over two hours of margin.
+
+**`--limit 1500` is load-bearing.** The media endpoint blocked after roughly 1,800 requests in one sitting at 2 req/s; 1,500 stays under that with margin. The remaining **3,348-image backlog drains in about three weekly runs**, after which each run is only the week's new GTINs (tens to low hundreds) and takes minutes.
+
+**Never add `--refresh`** — it would re-fetch all ~16k images every week and get us blocked immediately.
+
+Other deliberate choices: the detail step carries a leading `-` so a detail failure does not cost us the image run, while the image step does **not**, so its non-zero exit surfaces. `Persistent=false` on both timers, because catching up a missed week would fire a run right after boot and two runs close together is exactly what triggers a block.
+
+**`rclone copy`, never `sync`.** A stale image deleted locally by the SU10S-1 upstream-deletion path must remain in the backup — the point of an offsite copy is surviving the loss of the local disk, and `sync` would faithfully propagate every local deletion into the only other copy.
+
+Expected peak memory is small: the image job holds one decoded JPEG at a time (a 4800×4800 original is ~69 MB decoded) on top of a ~50 MB interpreter, so a couple of hundred MB against 2.4 GB available — and it runs at 14:00, entirely outside the 10:00-11:45 cron window. This was the main reason for a separate timer rather than appending to `cron_main.py`; SU10A-8's OOM history makes the cron path the wrong place to add anything.
+
+### Two findings about the EXISTING units
+
+1. **`TimeZone=` is not a systemd timer option.** `systemd-analyze verify` reports it as an unknown key and ignores it — on my first draft, and on the installed `scrp-cron.timer` and `scrp-backup.timer`. Those two fire at the intended Israel times **only because the server's own timezone is Asia/Jerusalem**; the line that looks like an explicit guarantee is decorative, and a host timezone change would silently shift both. The new timers use the inline `OnCalendar=Sun *-*-* 14:00:00 Asia/Jerusalem` form, which systemd 255 supports and `systemd-analyze calendar` resolves correctly. **The two installed timers were not touched** — they are root-owned and the fix is Dude's call, but it is a one-line change in each if wanted.
+2. **`supabase-keepalive.service` has a fatal parse error** — `Unbalanced quoting … unit will not be started`, from the multi-line inline `python3 -c` in its `ExecStart`. It was never enabled (still listed as an open item from 9d-4), so nothing regressed; it simply would not have worked if it had been. Now that it is tracked it is at least visible.
+
+### Repo layout change
+
+`deploy/` was gitignored outright, so `deploy/systemd/` was **never actually committable** and the supabase-keepalive units existed only in one working tree. Narrowed to `deploy/*` plus a `!deploy/systemd/` negation, since units that cannot be pulled on the server defeat their own purpose. Added `deploy/systemd/* text eol=lf` to `.gitattributes` — authored on Windows, parsed by systemd on Linux, and CRLF in a unit file is not reliably handled. Verified 0 CR bytes in all four files after the server pull.
+
+No wrapper `.sh` was needed — systemd's multiple `ExecStart` lines cover the two-step run — so there is no exec bit to set and the `core.fileMode` caveat does not apply here.
+
+### Install (Dude, one paste after `ssh dude@185.229.226.190`)
+
+```bash
+cd ~/scrp && git pull origin main
+sudo cp deploy/systemd/scrp-gs1-fetch.service \
+        deploy/systemd/scrp-gs1-fetch.timer \
+        deploy/systemd/scrp-gs1-images-backup.service \
+        deploy/systemd/scrp-gs1-images-backup.timer /etc/systemd/system/ && \
+sudo systemctl daemon-reload && \
+sudo systemctl enable --now scrp-gs1-fetch.timer scrp-gs1-images-backup.timer && \
+systemctl list-timers "scrp-gs1*" --no-pager && \
+sudo systemctl start scrp-gs1-images-backup.service && \
+sudo journalctl -u scrp-gs1-images-backup -n 30 --no-pager
+```
+
+The fetch unit is deliberately **not** test-run by that block. (A 3-request probe at the end of this session came back clean, so the earlier block has cleared and the first Sunday run should proceed normally.)
+
+### Checking a run
+
+```bash
+journalctl -u scrp-gs1-fetch -n 50 --no-pager      # last weekly fetch
+journalctl -u scrp-gs1-images-backup -n 30 --no-pager
+systemctl list-timers "scrp-gs1*" --no-pager       # next run times
+```
+
+A healthy fetch ends with a `DONE — fetched=… failed=… skipped=…` line and an active-exited unit. A blocked one ends with `media endpoint blocking — aborting run, N remain for next run` and a **failed** unit — that is working as designed, not a regression; the next Sunday picks up where it stopped.
+
