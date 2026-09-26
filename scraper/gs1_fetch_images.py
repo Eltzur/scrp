@@ -18,6 +18,12 @@ wasted 2.8 MB download.
 RESUMABLE: an existing output file is skipped, so an interrupted run can simply
 be relaunched. --refresh forces a re-fetch.
 
+STALE-CACHE NOTE: when GS1 answers 200 with no "file", the imagery was removed
+upstream and any local copy is deleted (see _fetch_and_resize). Because the
+default run SKIPS GTINs that already have a file, that check only happens under
+--refresh — which is exactly the population that can hold a stale image. A plain
+run will never delete anything.
+
 NOT web-served: the default output directory is outside any nginx root. Wiring
 it up for serving is a separate, deliberate step.
 
@@ -76,8 +82,17 @@ _TARGET_SQL = """
 
 
 def _fetch_and_resize(session: requests.Session, gtin: str, out_path: str,
-                      dry_run: bool) -> tuple[int, int] | None:
-    """Return (raw_bytes, written_bytes) or None on failure. Raw stays in memory."""
+                      dry_run: bool) -> tuple[int, int] | str | None:
+    """Return (raw_bytes, written_bytes), "no_image", or None on failure.
+
+    The three outcomes are NOT interchangeable. "no_image" means GS1 answered
+    200 and told us this GTIN has no imagery — an authoritative statement that
+    any local copy is now stale. None means we could not get an answer at all
+    (HTTP error, timeout, decode failure), which says nothing about whether the
+    image still exists upstream. Only the first may be allowed to delete a file;
+    conflating them would make one bad afternoon of 5xx responses wipe the
+    cache. Raw bytes stay in memory.
+    """
     resp = session.get(_MEDIA_URL.format(gtin=gtin), timeout=_HTTP_TIMEOUT)
     if resp.status_code != 200:
         log.warning("%s: HTTP %s %s", gtin, resp.status_code, resp.text[:80])
@@ -85,7 +100,7 @@ def _fetch_and_resize(session: requests.Session, gtin: str, out_path: str,
     b64 = (resp.json() or {}).get("file")
     if not b64:
         log.info("%s: no image available", gtin)
-        return None
+        return "no_image"
 
     raw = base64.b64decode(b64)
     im = Image.open(io.BytesIO(raw))
@@ -113,6 +128,9 @@ def run(out_dir: str = _DEFAULT_OUT, dry_run: bool = False, limit: int | None = 
     conn = connect()
     t0 = time.monotonic()
     fetched = failed = skipped = 0
+    # Split out of "failed": an upstream deletion is a successful answer, not a
+    # fetch error, and lumping the two together is what hid the stale-cache bug.
+    deleted = no_image = 0
     raw_total = out_total = 0
     try:
         gtins = [r["gtin"] for r in
@@ -136,6 +154,8 @@ def run(out_dir: str = _DEFAULT_OUT, dry_run: bool = False, limit: int | None = 
                 time.sleep(next_at - now)
             next_at = time.monotonic() + min_interval
 
+            existed_before = os.path.exists(path)
+
             try:
                 res = _fetch_and_resize(session, gtin, path, dry_run)
             except Exception as exc:
@@ -143,7 +163,20 @@ def run(out_dir: str = _DEFAULT_OUT, dry_run: bool = False, limit: int | None = 
                 res = None
 
             if res is None:
+                # Transient — leave whatever is on disk alone.
                 failed += 1
+            elif res == "no_image":
+                # GS1 confirmed there is no imagery for this GTIN. If we are
+                # holding a copy, it is stale and must go: api/routers/product.py
+                # ::_image_path() is a bare is_file() check with no upstream
+                # cross-reference, so an orphaned JPEG is served indefinitely —
+                # and under a 7-day immutable Cache-Control header at that.
+                if existed_before and not dry_run:
+                    os.remove(path)
+                    log.info("%s: image removed upstream — deleted stale local cache", gtin)
+                    deleted += 1
+                else:
+                    no_image += 1
             else:
                 fetched += 1
                 raw_total += res[0]
@@ -151,17 +184,21 @@ def run(out_dir: str = _DEFAULT_OUT, dry_run: bool = False, limit: int | None = 
 
             if n % 200 == 0 or n == len(gtins):
                 el = max(time.monotonic() - t0, 0.001)
-                log.info("  %s/%s  ok=%s failed=%s skipped=%s  (%.1f/s, %.2f GB written)",
+                log.info("  %s/%s  ok=%s failed=%s skipped=%s deleted=%s no_image=%s"
+                         "  (%.1f/s, %.2f GB written)",
                          f"{n:,}", f"{len(gtins):,}", f"{fetched:,}", f"{failed:,}",
-                         f"{skipped:,}", n / el, out_total / 1024**3)
+                         f"{skipped:,}", f"{deleted:,}", f"{no_image:,}",
+                         n / el, out_total / 1024**3)
 
         el = time.monotonic() - t0
         avg = out_total / fetched if fetched else 0
-        log.info("DONE — fetched=%s failed=%s skipped=%s in %.0fs",
-                 f"{fetched:,}", f"{failed:,}", f"{skipped:,}", el)
+        log.info("DONE — fetched=%s failed=%s skipped=%s deleted=%s no_image=%s in %.0fs",
+                 f"{fetched:,}", f"{failed:,}", f"{skipped:,}",
+                 f"{deleted:,}", f"{no_image:,}", el)
         log.info("  raw downloaded : %.2f GB (never written to disk)", raw_total / 1024**3)
         log.info("  written        : %.2f GB   avg %.1f KB/image", out_total / 1024**3, avg / 1024)
         return {"fetched": fetched, "failed": failed, "skipped": skipped,
+                "deleted": deleted, "no_image": no_image,
                 "raw_bytes": raw_total, "out_bytes": out_total, "seconds": el}
     finally:
         conn.close()
