@@ -1,7 +1,7 @@
 # SU10M — Mobile Apps Handoff (super.xxl.co.il)
 
 > New sub-series. Paste at the start of each SU10M chat, alongside `docs/super/handoff_super.md` (shared backend/vision context still applies).
-> Last updated: September 23, 2026 (SU10M-2 continued — full UI wrap shipped, icon/branding done, EAS versioning bug fixed)
+> Last updated: September 26, 2026 (SU10R — ratings/reviews shipped; see the "DO NOT SURFACE `blocked`" warning; also Sept 23: SU10M-2 continued UI wrap, icon/branding, EAS versioning)
 
 ---
 
@@ -167,3 +167,31 @@ Why 1.30.1 is the correct pin rather than merely a working one: **`react-native-
 3. iOS — `ios.bundleIdentifier` still unset (blocks any iOS build), device registration (`eas device:create`) queued but not run, no iOS build attempted yet.
 4. Store submission — Google Play Console account setup (lad.co.il org account mentioned, not confirmed done), real privacy policy/terms text (legal task), store listing assets (screenshots, descriptions) — none done yet.
 5. Price-comparison row alignment — resolve the justify-between/column-alignment trade-off noted above: column-aligned prices (scannable down the list) vs. the tighter chain/price pairing shipped now. Open, needs a decision.
+
+---
+
+## Session SU10R (September 25-26, 2026) — Ratings/reviews shipped; one invariant that must not be broken
+
+Item ratings on a 1-3 scale (X / XX / XXX), shown as a percentage computed at read time. Mobile surfaces: a rating summary on the shared product card (Search + scan-result, collapsed and expanded), a new product-detail screen with the submission form and public comments, per-comment reporting, and a My Ratings screen listing the user's own reviews including ones held for moderation.
+
+### ⚠️ DO NOT SURFACE `blocked` IN THE UI
+
+`POST /items/{code}/rating` returns `{id, status, blocked}`. **`blocked: true` means the blacklist filter auto-hid the submission.** The mobile app receives this field on every submit and deliberately ignores it — `product-detail.tsx` treats any 200 as a plain success and shows the same `הדירוג נשמר` confirmation either way.
+
+**That silence is the feature, not an oversight.** The whole point of hiding a flagged comment without telling its author is that an abusive user cannot learn *that* they were filtered, and therefore cannot binary-search their way to *which word* tripped it and rephrase around it. Telling them "your review was hidden" hands them the feedback loop the filter exists to deny.
+
+So: if any future change makes this field visible — an error toast, a red status chip, a "pending review" banner on submit, a disabled button, anything that renders differently when `blocked` is true — **it silently breaks the moderation model**, and it will look like a helpful UX improvement while doing so. The server-side comment in `api/routers/ratings.py` says the same thing from the other end. Do not "fix" the fact that nothing happens.
+
+Note the asymmetry that makes this safe today: `blocked` is the ONLY channel through which an author's own client learns the outcome, and it is consumed and discarded in exactly one place (`onSubmit` in `product-detail.tsx`). That is the single line to watch in review.
+
+### Verified live: no reason leak to the author
+
+The blacklist match reason IS recorded server-side — `rating_reports.reason` holds e.g. `blacklist term matched: זבל`, naming the term — but it is reachable only through `GET /admin/ratings/pending`, which is gated on an `ADMIN_USER_EMAILS` allowlist.
+
+Confirmed by submitting a real blacklist-tripping comment against production and inspecting every surface the author can reach, not by reading the code:
+
+- `GET /me/ratings` returns the author's own hidden row so they can edit it, carrying `status: "hidden"` and **no** `reason` key, no `blacklist`, no `term matched`.
+- Public `GET /items/{code}/ratings` excludes the hidden row entirely — **including from its own author** — so it never appears in the comments list either.
+- Nothing in mobile `src/` reads a server-side report reason or calls the admin queue. Every `reason` in the client is either the HTTP error discriminant or the *outgoing* reason a user types when reporting someone else's comment.
+
+The author sees only the neutral `בבדיקה` ("under review") tag on My Ratings, which says a review is held and never why.
