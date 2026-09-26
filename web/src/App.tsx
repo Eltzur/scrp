@@ -10,6 +10,7 @@ import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import MyBasketsPage from './pages/MyBasketsPage';
 import FavoritesPage from './pages/FavoritesPage';
+import MyRatingsPage from './pages/MyRatingsPage';
 import PromosPage from './pages/PromosPage';
 // Portal routes — rendered without the supermarket app shell
 import PortalPage from './pages/PortalPage';
@@ -47,6 +48,7 @@ function AppShell() {
           <Route path="/signup"    element={<SignupPage />} />
           <Route path="/baskets"   element={<MyBasketsPage />} />
           <Route path="/favorites" element={<FavoritesPage />} />
+          <Route path="/my-ratings" element={<MyRatingsPage />} />
           <Route path="/promos"    element={<PromosPage />} />
         </Routes>
         <Footer />

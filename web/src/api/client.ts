@@ -355,3 +355,73 @@ export const getGroupedPromos = (opts: GroupedPromoOpts = {}): Promise<GroupedPr
       offset: opts.offset ?? 0,
     },
   }).then(r => r.data);
+
+// ---------------------------------------------------------------------------
+// Ratings & reviews (SU10R)
+// ---------------------------------------------------------------------------
+//
+// Shapes read off the LIVE /openapi.json, not assumed. The axios interceptor
+// above attaches the Supabase bearer token automatically, so the authenticated
+// calls here need no special handling.
+
+export interface RatingOut {
+  id:         number;
+  rating:     number;
+  comment:    string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RatingsResponse {
+  item_code:    string;
+  count:        number;
+  /** avg(rating)/3*100, computed server-side at read time. null when count=0. */
+  average_pct:  number | null;
+  average_raw:  number | null;
+  ratings:      RatingOut[];
+}
+
+/** One row of GET /me/ratings — includes hidden/pending, unlike the public GET. */
+export interface MyRatingRow {
+  id:         number;
+  item_code:  string;
+  item_name:  string | null;
+  rating:     number;
+  comment:    string | null;
+  status:     string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SubmitRatingResponse {
+  id:      number;
+  status:  string;
+  /**
+   * True when the blacklist filter auto-hid the submission.
+   *
+   * MUST NEVER BE SURFACED TO THE SUBMITTING USER — no toast, no icon, no
+   * differing copy. A flagged author who learns they were filtered can work
+   * out which word tripped it and rephrase around it, which is exactly what
+   * the filter exists to prevent. Mobile discards it identically; see the
+   * "DO NOT SURFACE blocked" warning in docs/handoff_mobile.md.
+   */
+  blocked: boolean;
+}
+
+export const getRatings = (itemCode: string): Promise<RatingsResponse> =>
+  http.get<RatingsResponse>(`/items/${encodeURIComponent(itemCode)}/ratings`).then(r => r.data);
+
+export const submitRating = (
+  itemCode: string,
+  body: { rating: number; comment?: string | null },
+): Promise<SubmitRatingResponse> =>
+  http.post<SubmitRatingResponse>(
+    `/items/${encodeURIComponent(itemCode)}/rating`,
+    { rating: body.rating, comment: body.comment ?? null },
+  ).then(r => r.data);
+
+export const reportRating = (ratingId: number, reason?: string | null): Promise<void> =>
+  http.post(`/ratings/${ratingId}/report`, { reason: reason ?? null }).then(() => undefined);
+
+export const getMyRatings = (): Promise<MyRatingRow[]> =>
+  http.get<MyRatingRow[]>('/me/ratings').then(r => r.data);

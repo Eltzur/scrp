@@ -8,6 +8,8 @@ import type { ProductWithPrices, PriceQuote, PromoItem } from '../api/client';
 import type { PromoMap } from './ResultsList';
 import BasketButton from './BasketButton';
 import ProductDetailModal from './ProductDetailModal';
+import type { ModalTab } from './ProductDetailModal';
+import RatingBadge from './RatingBadge';
 import { useAuth } from './AuthContext';
 import { useFavorites } from './FavoritesContext';
 
@@ -103,6 +105,12 @@ export default function ProductCard({ item, promosByStore }: Props) {
   const { user }      = useAuth();
   const { isFavorited, toggleFavorite } = useFavorites();
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // Which tab the modal opens on. "מידע נוסף" keeps the existing Info default;
+  // the rating badge opens the same modal straight onto Reviews. This is cheap
+  // here because ProductCard owns BOTH the badge and the modal instance — no
+  // routing or cross-component state involved.
+  const [detailsTab, setDetailsTab] = useState<ModalTab>('info');
+  const openDetails = (tab: ModalTab) => { setDetailsTab(tab); setDetailsOpen(true); };
 
   const { product, cheapest_price, most_expensive_price, chains_count } = item;
   const quotes       = cheapestPerChain(item.quotes);
@@ -186,14 +194,17 @@ export default function ProductCard({ item, promosByStore }: Props) {
       {/* More-info trigger. Two visual affordances, ONE control: the label and
           the + share a single <button>, so there is one tab stop and one
           accessible name rather than two buttons doing the same thing. */}
-      <button
-        onClick={() => setDetailsOpen(true)}
-        className="self-start inline-flex items-center gap-1.5 text-xs font-medium text-orange-700
-                   hover:text-orange-700 hover:bg-orange-50 rounded-lg px-2 py-1 -ms-2 transition-colors"
-      >
-        <span>{t('product_card.more_info')}</span>
-        <Plus size={13} strokeWidth={2.5} className="rounded-full bg-orange-100 text-orange-700 p-[1px]" />
-      </button>
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          onClick={() => openDetails('info')}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-orange-700
+                     hover:text-orange-700 hover:bg-orange-50 rounded-lg px-2 py-1 -ms-2 transition-colors"
+        >
+          <span>{t('product_card.more_info')}</span>
+          <Plus size={13} strokeWidth={2.5} className="rounded-full bg-orange-100 text-orange-700 p-[1px]" />
+        </button>
+        <RatingBadge itemCode={product.item_code} onOpen={() => openDetails('reviews')} />
+      </div>
 
       {/* Price rows */}
       <div className="divide-y divide-gray-100 rounded-lg border border-gray-100 overflow-hidden">
@@ -373,7 +384,7 @@ export default function ProductCard({ item, promosByStore }: Props) {
       </div>
 
       {detailsOpen && (
-        <ProductDetailModal item={item} onClose={() => setDetailsOpen(false)} />
+        <ProductDetailModal item={item} initialTab={detailsTab} onClose={() => setDetailsOpen(false)} />
       )}
     </div>
   );

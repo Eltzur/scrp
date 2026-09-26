@@ -1,14 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ImageOff, Loader2, CheckCircle2 } from 'lucide-react';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import { getProductDetails, productImageUrl } from '../api/client';
+import ReviewsPanel from './ReviewsPanel';
 import type { ProductWithPrices, PriceQuote, ProductDetails } from '../api/client';
 
 interface Props {
   item: ProductWithPrices;
   onClose: () => void;
+  /** Which tab to open on. Defaults to the product info tab. */
+  initialTab?: 'info' | 'reviews';
 }
 
 function cheapestPerChain(quotes: PriceQuote[]): PriceQuote[] {
@@ -49,7 +52,30 @@ function Chip({ label, tone = 'gray' }: { label: string; tone?: 'gray' | 'amber'
   );
 }
 
-export default function ProductDetailModal({ item, onClose }: Props) {
+export type ModalTab = 'info' | 'reviews';
+
+export default function ProductDetailModal({ item, onClose, initialTab = 'info' }: Props) {
+  const [tab, setTab] = useState<ModalTab>(initialTab);
+  // Roving focus for the tablist: ArrowLeft/Right move between tabs and move
+  // focus with the selection, per the WAI-ARIA tabs pattern. RTL is handled by
+  // treating the arrows as "previous/next" rather than literal directions.
+  const tabRefs = useRef<Record<ModalTab, HTMLButtonElement | null>>({ info: null, reviews: null });
+  const ORDER: ModalTab[] = ['info', 'reviews'];
+  const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft' && e.key !== 'Home' && e.key !== 'End') return;
+    e.preventDefault();
+    const i = ORDER.indexOf(tab);
+    let next: ModalTab;
+    if (e.key === 'Home') next = ORDER[0];
+    else if (e.key === 'End') next = ORDER[ORDER.length - 1];
+    else {
+      // In RTL, ArrowLeft advances visually forward; ArrowRight goes back.
+      const delta = e.key === 'ArrowLeft' ? 1 : -1;
+      next = ORDER[(i + delta + ORDER.length) % ORDER.length];
+    }
+    setTab(next);
+    tabRefs.current[next]?.focus();
+  };
   const { t, i18n } = useTranslation();
   const [details, setDetails] = useState<ProductDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -147,8 +173,61 @@ export default function ProductDetailModal({ item, onClose }: Props) {
           </button>
         </div>
 
+        {/* Tabs */}
+        <div
+          role="tablist"
+          aria-label={t('ratings.title')}
+          className="flex border-b border-gray-100 px-2"
+        >
+          {ORDER.map(id => {
+            const selected = tab === id;
+            return (
+              <button
+                key={id}
+                ref={el => { tabRefs.current[id] = el; }}
+                role="tab"
+                id={`tab-${id}`}
+                aria-selected={selected}
+                aria-controls={`panel-${id}`}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => setTab(id)}
+                onKeyDown={onTabKeyDown}
+                className={clsx(
+                  'px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors',
+                  'focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-inset rounded-t',
+                  selected
+                    ? 'border-emerald-700 text-emerald-700'
+                    : 'border-transparent text-gray-500 hover:text-gray-700',
+                )}
+              >
+                {id === 'info' ? t('ratings.tab_info') : t('ratings.tab_reviews')}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Reviews panel */}
+        {tab === 'reviews' && (
+          <div
+            role="tabpanel"
+            id="panel-reviews"
+            aria-labelledby="tab-reviews"
+            tabIndex={0}
+            className="overflow-y-auto p-4"
+          >
+            <ReviewsPanel itemCode={product.item_code} />
+          </div>
+        )}
+
         {/* Scrollable body */}
-        <div className="overflow-y-auto p-4 flex flex-col gap-4">
+        <div
+          role="tabpanel"
+          id="panel-info"
+          aria-labelledby="tab-info"
+          tabIndex={0}
+          hidden={tab !== 'info'}
+          className="overflow-y-auto p-4 flex flex-col gap-4"
+        >
           {/* Image or placeholder */}
           <div className="flex justify-center">
             {loading ? (
