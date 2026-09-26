@@ -3,8 +3,7 @@
 A living, priority-ordered list of pending work across all verticals. Unlike docs/super/handoff_super.md and docs/handoff_mobile.md (chronological session history), this file is forward-looking and gets reordered/edited in place as priorities shift. Update this file directly rather than appending dated entries.
 
 ## In Progress
-- Web: product-detail modal 3-tab restructure (מחירים / פרטי מוצר / ביקורות ודירוגים) — fixing pricing/GS1 content bleeding outside tab panels.
-- Mobile: queued next — condensed Search results list (name + manufacturer only, no image/price/rating on the row), matching 3-tab product-detail restructure, first-time GS1 wiring into mobile (currently unwired), new "מידע נוסף" entry point from scan-result.
+_Nothing currently in progress._ The web 3-tab product-detail restructure and the mobile condensed-Search / 3-tab / first-time-GS1 pass both shipped and were device-verified on September 26, 2026 — written up as SU10R-2 in docs/super/handoff_super.md and "SU10R (continued)" in docs/handoff_mobile.md respectively.
 
 ## Next (agreed priority, ready to schedule)
 - iOS build — after Android mobile app is fully wrapped up (per standing "Android first, then iOS" decision). Blocked on: ios.bundleIdentifier still unset, no Apple Developer account confirmed yet.

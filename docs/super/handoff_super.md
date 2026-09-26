@@ -2044,3 +2044,87 @@ Table sizes at measurement time: items 165,547 rows/58MB total; item_chain_names
 **Related, free, not yet done:** SU10A-8 flagged Postgres config (shared_buffers, effective_cache_size, work_mem) as still sized for the pre-RAM-bump 1.9 GiB box, "flagged, not fixed... decide deliberately next session" — that session never happened. Retuning for the current 3.8 GiB box is free capacity already paid for, would likely reduce both the disk-spill and the real buffer reads measured here, and should probably happen as part of whichever session tackles this properly.
 
 **Status: parked, not a current priority** (per Dude, Sept 24 2026). This entry is scoping for whenever it's picked back up, not a task in progress.
+
+---
+
+## Session SU10R-1 (September 25-26, 2026) — Ratings & reviews backend
+
+Item ratings on a 1-3 scale with optional comments, plus reporting and a blacklist-driven moderation path. The mobile and web surfaces are SU10R-2 and the mobile handoff; this entry is the backend.
+
+### Schema (`db/migrations/su10r1_ratings.sql`)
+
+Three new tables: `ratings`, `rating_reports`, `rating_blacklist`.
+
+**`item_code` is deliberately NOT a foreign key to `items`.** Catalog churn is routine here — the scraper re-ingests constantly and products get delisted — and no amount of it may be able to destroy user-authored content. A rating has to outlive the catalog row it points at. Reads therefore LEFT JOIN `items` and tolerate a null name; confirmed working against a code with no catalog row.
+
+Applied as `scrp_app` because `sudo -u postgres` is not passwordless on this box. That is **not a new precedent** — every existing table in this database was created ad-hoc the same way via `init_db()`, and `scrp_app` already owns all of them.
+
+### Endpoints (`api/routers/ratings.py`)
+
+| Endpoint | Auth | Notes |
+|---|---|---|
+| `POST /items/{code}/rating` | required | Upsert on `(user_id, item_code)` — re-submitting **edits in place**, no history kept. |
+| `GET /items/{code}/ratings` | public | `status='active'` only. |
+| `POST /ratings/{id}/report` | required | Flags for review; **never** auto-hides. |
+| `GET /admin/ratings/pending` | allowlist | Gated on an `ADMIN_USER_EMAILS` env var. |
+| `GET /me/ratings` | required | The caller's own ratings **including hidden/pending**, with `item_name` via a cheap LEFT join. |
+
+There is no RBAC system in this application, so `ADMIN_USER_EMAILS` is the deliberately scrappy equivalent rather than a designed permission model. It **fails closed**, and returns **404 rather than 403** to a signed-in non-admin, so the endpoint's existence is not confirmable by probing it.
+
+`GET /me/ratings` was a follow-up within the same session. It replaced a client-side AsyncStorage workaround on mobile that existed only because no such endpoint did — that workaround is gone, not left dormant.
+
+### Blacklist moderation — one real bug, one deliberate gap
+
+On a match the submission is auto-hidden and a system report is auto-filed, case-insensitively.
+
+**Bug found and fixed mid-session:** the first implementation matched by substring (`if t in haystack`). A short term such as `לבז` then false-positived **inside unrelated words** — e.g. within `הלבזמ` ("rubbish dump"). Fixed to word-boundary matching, `re.search(rf"\b{term}\b", ...)`; verified that Python's `\w` is Unicode-aware, so `\b` behaves correctly on Hebrew.
+
+**Deliberate, tested tradeoff — do not "fix" this later without re-reading it.** Hebrew's inseparable prefixes (ש/מ/ל/כ/ב/ו/ה) mean a prefixed insult will **not** be caught by strict word-boundary matching. Prefix-inclusive matching was implemented, tested and **rejected**: it false-positived on innocent, common words — e.g. `ניזה` ("fed [the baby]" / "entered [data]"), which merely contains a slang term as a substring. The rationale is asymmetric cost: missing a prefixed insult is acceptable because it remains user-reportable; hiding a legitimate review is not.
+
+16 initial terms seeded, supplied directly by Dude rather than generated. The table is live and empty-by-default until terms exist.
+
+### Moderation email — confirmed absent, deferred
+
+A full-repo search confirmed **no email-sending infrastructure exists anywhere in this project**: no `smtplib`, no SendGrid or equivalent, no `SMTP_*` env vars, no mail library in `requirements.txt`. The portal's own 9i contact-form notification was scoped once and never built either, so there was nothing to reuse.
+
+`_notify_moderation()` therefore only logs at WARNING today. A real send is deferred pending a provider decision — **SendGrid recommended**: it unifies with the flights vertical's already-floated choice and needs only one API key, since `requests` is already a dependency. Tracked in `docs/roadmap.md`, not scheduled.
+
+### Design principle, verified live rather than merely designed
+
+A blacklist-hidden submission returns a real `blocked: true` to the submitting client, and **nothing in either frontend surfaces it**. This was confirmed by submitting a genuine blacklist-tripping comment against production and inspecting every author-reachable surface — `GET /me/ratings`, the public `GET`, and both mobile and web source — for any trace of the match reason. None found.
+
+The actual reason (`blacklist term matched: X`) exists **only** in `rating_reports`, reachable only through the admin allowlist endpoint. The mobile handoff's SU10R section carries the full do-not-surface invariant; do not weaken it from this end either.
+
+---
+
+## Session SU10R-2 (September 26, 2026) — Web ratings UI + product-detail restructured to three tabs
+
+### Initial ship
+
+- **Rating badge on `ProductCard`** — percentage + count, with a neutral "no ratings yet" state at zero. It never renders a literal 0%, which would read as a unanimously terrible product rather than an unrated one. A failed fetch degrades to that same neutral state, so ratings can never take the price card down with them.
+- **`ProductDetailModal` gained a ratings tab** — aggregate, an X/XX/XXX submission form, the public comment list and a report action. The form uses **native radio inputs** rather than styled buttons, so arrow-key navigation between options comes for free and matches what a screen-reader user expects.
+- **Full WAI-ARIA tabs pattern** — `tablist`/`tab`/`tabpanel`, roving `tabIndex`, Arrow/Home/End keys, with **RTL-inverted arrow direction**, per this project's IS 5568 / WCAG 2.0 AA baseline.
+- **`/my-ratings` page** — cloned from `FavoritesPage`'s auth-redirect pattern rather than inventing a second gating mechanism.
+
+### Real bug: `hidden` was set correctly and did nothing
+
+The modal's non-reviews panels toggled visibility with the HTML `hidden` attribute while **also** carrying Tailwind's `flex` class. `.flex { display: flex }` is a class selector, which outranks the UA stylesheet's `[hidden] { display: none }` on specificity — so `hidden` was being set on every tab change with **literally zero visual effect**, and price rows plus every GS1 section rendered on every tab.
+
+The reviews panel only looked correct because it happened to use conditional rendering (`{tab === 'reviews' && ...}`) instead.
+
+Fixed by switching **all** panels to conditional rendering, which makes the bug **structurally impossible to reintroduce** rather than merely patched for this instance — there is no longer a `hidden` attribute for a CSS rule to outrank.
+
+### Restructured from two tabs to three
+
+Follow-up direction from Dude in the same session: **מחירים** (the chain-by-chain price rows, previously unscoped content bleeding below the tabs) / **פרטי מוצר** (GS1 kashrut, nutrition, ingredients, allergens) / **ביקורות ודירוגים** (unchanged).
+
+Verified by a **DOM audit per tab**, confirming exactly one `tabpanel` mounted at a time — run against both a full-GS1 product and a no-GS1 product (the ~92% case).
+
+### Deploys verified by hash, not by the script's own output
+
+Every deploy this session was confirmed by comparing file hashes between the local build output and the live served bundle. `deploy_frontend.ps1` prints "Done!" regardless, and this project has a documented history of that message being unreliable — do not trust it on its own.
+
+### Device/browser verification
+
+Verified by Dude across the full checklist — badge display, tab switching, submission, editing via My Ratings, blacklist silent-hide plus the "under review" tag, signed-out gating, and keyboard tab navigation. All confirmed working.
+

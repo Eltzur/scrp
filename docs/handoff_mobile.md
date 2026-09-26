@@ -253,3 +253,46 @@ Confirmed by submitting a real blacklist-tripping comment against production and
 - Nothing in mobile `src/` reads a server-side report reason or calls the admin queue. Every `reason` in the client is either the HTTP error discriminant or the *outgoing* reason a user types when reporting someone else's comment.
 
 The author sees only the neutral `בבדיקה` ("under review") tag on My Ratings, which says a review is held and never why.
+
+---
+
+## Session SU10R (continued, September 26, 2026) — product-detail split into three tabs, GS1 wired for the first time, Search condensed
+
+Everything below follows the ratings ship recorded above, in the same calendar session.
+
+### Product-detail: ratings-only → three tabs, and GS1 finally reaches mobile
+
+The screen now carries the same three tabs as web — **מחירים** / **פרטי מוצר** / **ביקורות ודירוגים**. The reviews tab keeps its logic untouched, including the `blocked` invariant above. Prices reuse scan-result's own `QuoteRow` rather than a second copy of it.
+
+**`פרטי מוצר` is the first time this app consumes GS1 data at all.** It was previously completely unwired — confirmed two ways before building: the screen's own prior header comment said so outright, and no details-fetcher existed anywhere in the API client. Kashrut, nutrition, ingredients and allergens now render from `GET /product/{barcode}/details` and `GET /product/{barcode}/image`, porting web's section order and Hebrew copy so the two cannot drift. Every section self-hides when empty, and the ~92% of products with no GS1 match degrade to a quiet "no additional info" line — **not** an error and not a blank screen. The fetch is lazy, firing only when the tab is first opened.
+
+### Search condensed — and this reverses SU10M-3
+
+Search results are now a minimal list: **item name plus manufacturer name in parentheses, nothing else** — no image, no price, no rating badge on the row, and therefore no per-row network request. Tapping a row opens product-detail.
+
+> **This deliberately reverses the "Collapsible results" decision recorded in SU10M-3 above**, per further product direction from Dude. That entry stands as the record of why the collapsible card was built; this is the record of it being replaced. Note also that SU10R's opening paragraph describes the rating summary as appearing on the shared product card "(Search + scan-result, collapsed and expanded)" — that is now true of scan-result only.
+
+The `collapsible` prop was **confirmed dead** once Search stopped using it — Search was its only consumer, scan-result never passed it — so the prop, its expand state, the chevron, the collapsed price summary, two orphaned imports and four now-unreferenced `he.ts` strings were removed outright rather than left dormant. Each string was grepped to zero references before deletion.
+
+### Manufacturer dedup — built from real data, not a guessed rule
+
+The obvious rule ("hide the manufacturer when the name already contains it") is wrong here, and measuring said so. Across **788 sampled catalog rows**, most values in the manufacturer field are not duplicated brand names at all but placeholder junk — `לא ידוע`, a bare comma, `---`, `כללי`, `הפריט בפיקוח` (a price-control notice) — enough that the naive rule would have printed something useless on roughly a third of rows.
+
+The shipped rule in `src/lib/product-name.ts` strips corporate boilerplate (`מחלבת`, `בע"מ`) from both sides, filters the known placeholders, rejects any value containing no letters, and only then suppresses genuine duplicates. Result: shown on ~43-47% of products, suppressed on the rest. The measurements are recorded in that file so the placeholder list can be extended from data rather than guesswork.
+
+### Navigation
+
+- **Search row tap** → product-detail, landing on **Pricing**.
+- **Scan-result keeps its always-expanded inline price display, unchanged** — only Search's list was condensed. A new **מידע נוסף** entry point was added there, landing on **Product Info**. That button is how GS1 data became reachable from the scan flow for the first time; before it there was no path to it at all.
+- **The existing rating-badge tap still lands on Reviews**, unchanged.
+
+### Deliberate accessibility divergence from web
+
+Web's keyboard tab navigation (roving `tabIndex`, Arrow/Home/End) was **not** ported, and that is intentional rather than an oversight: there is no keyboard focus model on a touch device. `accessibilityRole`/`accessibilityState` plus screen-reader swipe navigation is the correct mobile equivalent. The reasoning is written into `components/segmented-tabs.tsx` itself so nobody later "restores" dead key handling.
+
+### Device verification — two rounds this session
+
+**Round 1 — the Search + Basket completion pass.** Confirmed working on device by Dude: quantity controls, compare, guest/registered sync, silent merge-on-login, the tiered cap toasts, the corrected `המומלץ` winner label, and the tab-bar icon alignment fix. **The technical detail for all of these is already written up in SU10M-3 above and is not repeated here** — what this adds is only that the pass was device-verified.
+
+**Round 2 — this 3-tab / GS1 / condensed-search pass.** Confirmed working by Dude via screenshots showing correct tab isolation, correct kashrut and nutrition rendering, the condensed Search list, and correct default-tab landing from each entry point.
+
