@@ -344,3 +344,60 @@ Web was checked and **not** changed: its equivalent button already sits above th
 
 **NOT device-verified** — typecheck adds no new errors (the five pre-existing `src/tw` NativeWind errors are unchanged), Metro export is clean, and all four new/moved strings are present in the Hermes bundle.
 
+---
+
+## Session SU10S-6 (September 26, 2026) — dark mode rendered text black-on-black
+
+Commit `06cfcf6`.
+
+### Root cause
+
+The `@/tw` `Text` wrapper was a bare `useCssElement(RNText, …)` with **no default colour**. Text carrying no colour class fell through to React Native's own default — opaque black — which does not follow `Appearance.setColorScheme()`. In dark mode that is black on a black panel.
+
+The drawer was only where it was noticed. **141 of the 185 `Text`/`TextInput` elements in `src/` carry no colour of their own**, across essentially every screen — settings (22), product-detail (14), product-info (11), basket-compare (10), product-card (10), and so on. The drawer accounts for 5 of them. Fixed once in the wrapper, not screen by screen.
+
+### Why the default is a resolved colour and not a `dark:` class
+
+Both mechanisms are reactive here — react-native-css initialises its colour-scheme observable from `Appearance.getColorScheme()` **and** subscribes to `Appearance.addChangeListener`, so its `dark:` variants do follow the app's toggle. That was checked rather than assumed, and it is also why every existing `dark:bg-*` in the app works.
+
+The deciding factor was **override order**. react-native-css merges as `style = [classNameStyle, inlineStyle]` (`native/styles/index.js`, `deepMergeConfig`) and React Native gives the **last** array entry precedence — so **an inline style beats className**. A default passed down as `style={{ color }}` would have overridden every explicit `text-white` button label, `text-emerald-700` price and `dark:text-rose-200` allergen chip in the app: the exact opposite of a default. And a default expressed as a *class* would have to win or lose against the caller's classes by CSS source order, which a component cannot control.
+
+So the wrapper inspects the resolved style **after** the interop has run and fills the colour in only when it is still absent, placing it first in the array. Anything the caller set — class or style — is left untouched. Verified across seven cases: no colour, `text-white`, `text-emerald-700`, a resolved `dark:` variant, an inline colour, inline-beats-className, and an opacity-only class.
+
+`TextInput` gets the same treatment for its text, **plus `placeholderTextColor`** — that is a prop, not a style, so no className can ever reach it. Three of the app's five `TextInput`s had neither a text colour nor a placeholder colour.
+
+### Contrast (IS 5568 / WCAG AA, ≥4.5:1)
+
+| | light | dark |
+|---|---|---|
+| default text on background | 21:1 | 21:1 |
+| `opacity-60` | 5.74:1 | 7.37:1 |
+| `opacity-50` (before) | **3.95:1 FAIL** | 5.32:1 |
+| `theme.textSecondary` | 5.94:1 | 10.08:1 |
+
+Note the failing case is **light** mode, not dark as expected — `opacity-50` on text is 3.95:1 against white. Bumped to `opacity-60` across 9 files, which passes in both modes. This was a pre-existing light-mode defect, unrelated to the dark-mode bug, found only because the contrast was measured.
+
+### Note for new components
+
+This sits alongside the existing warning that `className` only works through the `src/tw/` wrappers: **text colour now has a theme-aware default, so do not reintroduce a hardcoded black** — no `color: "#000"`, no `text-black` without a `dark:` counterpart. Text that should follow the theme needs no colour at all. And if the wrapper is ever refactored, preserve the "only fill in when absent" rule: setting the colour unconditionally silently breaks every explicitly-coloured label in the app.
+
+### Verification status
+
+Typecheck adds no new errors (the same five pre-existing `src/tw` TS2589/TS2590, at shifted line numbers) and the Metro export is clean.
+
+**A web preview would not prove this fix and is deliberately not offered as evidence** — web resolves text colour through CSS, while the bug is React Native's *native* default. Only a device can confirm it.
+
+### Device checklist — for Dude
+
+Dark mode ON, then check each:
+
+1. Drawer: every label and section header readable.
+2. Scan tab: camera-permission screen text, manual entry field (typed text + placeholder).
+3. Scan result: product name, chain names, prices, branch lines, "מידע נוסף" and "בסל" buttons.
+4. Product detail, all 3 tabs — incl. the green badge on `7290003726615` and warning chips on `7290107944366`.
+5. Search: input + results list. Basket: items, quantity controls, compare results.
+6. Settings, Account (sign-in form), My Ratings, Scan History, Help, Terms/Privacy.
+7. Switch back to light mode — nothing that was fine has changed.
+
+Item 7 is the one that matters most: the fix only *adds* a colour where none existed, so light mode should be pixel-identical apart from the `opacity-50` → `opacity-60` change making some secondary text slightly darker.
+
