@@ -1,7 +1,7 @@
 # SU10M — Mobile Apps Handoff (super.xxl.co.il)
 
 > New sub-series. Paste at the start of each SU10M chat, alongside `docs/super/handoff_super.md` (shared backend/vision context still applies).
-> Last updated: September 26, 2026 (SU10R — ratings/reviews shipped; see the "DO NOT SURFACE `blocked`" warning; also Sept 23: SU10M-2 continued UI wrap, icon/branding, EAS versioning)
+> Last updated: September 26, 2026 (SU10M-3 Search + Basket + preview build; SU10R ratings/reviews — see the "DO NOT SURFACE blocked" warning)
 
 ---
 
@@ -162,11 +162,67 @@ Why 1.30.1 is the correct pin rather than merely a working one: **`react-native-
 
 ## Carried forward / open decisions
 
-1. Search and Basket tabs — currently placeholders. Backend already supports both (search/compare/promos live on web, `saved_baskets` table exists) — this is mobile-side wiring, not new backend work. Largest remaining feature gap.
+1. ~~Search and Basket tabs — placeholders.~~ **Both shipped in SU10M-3 (see below).** Search is text-only, no city/chain filters; Basket has quantity, compare, registered-user sync and caps.
 2. Favorites/Lists — placeholders, no backend built yet.
 3. iOS — `ios.bundleIdentifier` still unset (blocks any iOS build), device registration (`eas device:create`) queued but not run, no iOS build attempted yet.
 4. Store submission — Google Play Console account setup (lad.co.il org account mentioned, not confirmed done), real privacy policy/terms text (legal task), store listing assets (screenshots, descriptions) — none done yet.
 5. Price-comparison row alignment — resolve the justify-between/column-alignment trade-off noted above: column-aligned prices (scannable down the list) vs. the tighter chain/price pairing shipped now. Open, needs a decision.
+
+---
+
+## Session SU10M-3 (September 23-25, 2026) — Search and Basket shipped, first standalone build, four bugs fixed
+
+The two placeholder tabs became real features, and the app ran without a PC attached for the first time. Four bugs were found and fixed along the way; three of the four were misdiagnosed on first attempt, and the corrections are recorded below because the wrong explanations were plausible.
+
+### Preview EAS build — the app finally runs standalone
+
+An Android `preview`-profile build was cut and verified working on device. This is the first build that does **not** need Metro running on the PC and the phone on the same network: `preview` bundles the JS into the APK at build time, whereas every previous build used the `development` profile and required the QR-connect dance each session. API calls already went straight to the live backend regardless of profile, so nothing else had to change.
+
+### Search tab
+
+Debounced text search (300ms, matching web's `SearchBar`), `PAGE_SIZE` 30 (matching web's `HomePage`), infinite scroll on `onEndReached`, and states for idle / loading / no-results / error in Hebrew reusing web's wording.
+
+**Shared card extracted.** `/search` returns `items` as `ProductWithPrices` — the same shape a barcode lookup returns — so the scan card renders them untranslated. Rather than copy it, the card was lifted out of `scan-result.tsx` into `components/product-card.tsx`, and both screens now use it. Its quote rows became a plain `View` stack with scrolling owned by the caller, because the previous nested `ScrollView` would have broken the `FlatList`.
+
+**Defensive dedup on pagination.** `/search` is offset-paginated and one backend code path orders ties arbitrarily, so a product can land in two consecutive pages. Incoming pages are filtered by `item_code` before appending. A subtlety worth not rediscovering: the request offset is tracked **separately** from `items.length`, because dedup drops rows and using the rendered count as the offset would re-request a window already held, discard it as duplicates, and leave the list apparently stuck. Web never hits this because web does not dedup.
+
+**Timeout bug — the client was aborting its own requests.** Search failed on every query with a Hebrew "cannot reach the server", which looked like a network fault; the same device could scan barcodes and browse super.xxl.co.il fine. It was neither the base URL nor the client: `searchProducts` reused `TIMEOUT_MS = 15s`, sized for `/product/{barcode}` (6 KB, 0.24s). Measured against production, `/search` takes far longer and scales with how broad the query is — `q=קו` 90.4s, `q=חל` 27.1s, `q=חלב` 18-25s, `q=במבה` 1.7s. Worse, `MIN_QUERY_LEN` was 2, so with a 300ms debounce the **first** request fired for any word was its two-character prefix — the broadest and slowest query possible. Fixed with a dedicated search timeout (45s, later tuned to 30s) and `MIN_QUERY_LEN` raised 2 to 3. The browser was unaffected because web's axios instance sets no `timeout` at all and simply waits.
+
+Two dead ends checked first and ruled out, so nobody repeats them: `URLSearchParams` **is** polyfilled as a global in RN (`setUpXHR.js`) and its `toString()` output is byte-identical to Node's for Hebrew, Latin and multi-word input.
+
+**The backend is the real constraint.** A read-only `EXPLAIN ANALYZE` investigation found the `items` seq scan is 0.15s of a ~27s request — under 1% — and `pg_trgm` is already installed, so **a trigram index alone would not meaningfully fix this**. 99% of the time is `fetch_prices` pulling every price row for every matching barcode (390,325 rows for 7,543 barcodes on `q=חל`) and paginating only afterwards, so `offset=0` costs the same as `offset=300`. Full plan, table sizes and the architectural recommendation are in `docs/super/handoff_super.md` under "Mobile /search latency investigation" — **parked, not a current priority.**
+
+**Collapsible results (later change).** A page of 30 fully-expanded cards, each with up to a dozen chain rows, was thousands of pixels before the second result. `ProductCard` gained a `collapsible` prop defaulting to **false**, so scan-result keeps opening straight to the price comparison without passing anything; Search opts in. Only the quote rows collapse — the header and add-to-basket stay, and a collapsed card still shows `cheapest_price` + `chains_count` so a price-comparison list never shows a row with no price.
+
+### Basket tab — completed over two passes
+
+**Pass 1 (foundation):** list + remove, add-to-basket on the shared product-card (so it appeared on Search and scan-result from one definition), and AsyncStorage guest persistence under `basket_items`, matching web's localStorage key.
+
+**Pass 2 (completion):**
+
+- **Quantity controls** — `updateQuantity` matching web (`qty <= 0` removes, so minus doubles as delete), stepping 1 for normal items and 100g for weighted. Also fixed `addItem`, which previously **no-opped** when the item was already present; web increments, and the old behaviour made a second tap look broken.
+- **Compare** — `POST /basket/compare`, filters null (no city/chain in v1, same scope call as Search). The server does all pricing and returns `winner_chain_id`; nothing is re-priced client-side. The results screen **deliberately does not copy web's products x chains matrix** — that needs horizontal room a phone does not have. Same data, re-laid-out one card per chain, cheapest first, breakdown inside.
+- **Registered-user sync** — local-first, backend as durable mirror. AsyncStorage stays the source of truth for rendering (guests have no backend at all, and reading from the network first would leave the basket empty until a round trip finishes and unusable offline — in an app people open inside a supermarket). Uses **`PUT /baskets/{id}`**, which exists on the backend but web's client never exposed, so the row updates in place instead of accumulating one per change. `/baskets` is a collection of *named* baskets rather than a single "current basket" slot, so the working basket maps onto one reserved row named `__xxl_mobile_basket__` — no endpoint invented.
+- **Guest-to-registered merge on login** — silent, no dialog, union by `item_code` with the local entry winning and the higher quantity of the two, capped at 150, once per sign-in (guarded by user id so a token refresh does not re-run it).
+- **Cap enforcement** — 25 guest / 150 registered, matching web exactly and gating only *new* items (bumping one already in the basket is always allowed). Hand-rolled toast, since RN has no toast primitive and there is no `sonner`: emerald `#047857` + lock + "להרשמה" CTA for guests, amber `#C2410C` + warning + no CTA for registered — both colours and both Hebrew strings taken verbatim from web.
+
+**Known lossy edge:** the saved-basket wire shape is `{barcode, name, qty}` and carries no `is_weighted`, so an item pulled from the server that is not already known locally comes back non-weighted. Local always wins on merge, so this only bites for an item added on another device. It is deliberately **not** inferred from qty — "100 units" and "100g" are indistinguishable.
+
+**"Cheapest" mislabeling — mobile-only, now fixed.** The compare screen labelled the server's winner `הזול ביותר` ("the cheapest"). It is not: `api/routers/basket.py` sorts by `(items_found desc, total_price asc)`, so the top chain is the most **complete** basket and price is only a tiebreaker among equals — intentional and documented there. Confirmed false on production: a 6-item basket ranked רמי לוי first at 30.00 while אושר עד sat further down at 24.50 with 5 of 6 items, i.e. two chains were strictly cheaper than the one labelled cheapest. **Web never made this claim** — it marks the winner with a trophy and no words (`BasketResults.tsx`) and shows the coverage fraction underneath. Mobile now matches: trophy plus the claim-free `המומלץ`, with the coverage line already present on every chain card.
+
+### Two bugs fixed, both misdiagnosed first
+
+**Camera permission priming removed.** The "נדרשת גישה למצלמה" screen already carries the explanation, so the extra priming modal was a second screen restating it before the same OS dialog. Removed from the camera flow only — four touchpoints in `(tabs)/index.tsx`. `components/permission-primer.tsx` is a **stateless presentational Modal** with no permission logic of its own; every flow supplies its own state, copy and handler, so the component and `settings.tsx` are untouched and **GPS keeps its primer** (that toggle has no explanatory screen in front of it, so there the primer is the only thing explaining the request).
+
+**Tab bar icon misalignment — not a per-tab style at all.** One icon sat visibly higher than the other three. There is no margin, padding, transform or style override anywhere in `app-tabs.tsx`, and no per-screen tab options in any of the four tab files. The cause is Android's `NavigationBar` default, **`LABEL_VISIBILITY_AUTO`**: it shows every label only while there are 3 or fewer items, and at 4+ shows the label for the **selected** item alone. With exactly four tabs we sit one past that threshold, so the selected item renders icon + label and its icon lifts to make room while the other three render icon-only and centre in the full height. That is why the "broken" tab appeared to move between reports — it was always simply the *selected* tab (Settings while Settings was open, Scan on launch). Fixed with `labelVisibilityMode="labeled"`.
+
+> This also corrects an earlier diagnosis in this file's SU10M-2 section: the labels were never wrapping — three of them were not being rendered at all. Pinning `labelStyle` `fontSize` was harmless but did not address it.
+
+### Known gaps — investigated, not started
+
+- **Weighted-item barcode scanning is structural, not a bug.** Israeli in-store scale-printed barcodes (prefix 2, price or weight embedded in the later digits) have no fixed base product to resolve to — every label is a different code. They pass client validation (13 digits) and then 404, because the catalog holds only 95 such codes in total. Resolving them needs backend parsing and per-chain mapping of the embedded fields. **Roadmap item, not started.**
+- **~11,119 catalog items are unreachable by any barcode path.** 6.7% of `items` have codes shorter than 8 digits — and 8,472 of those are `is_weighted=1`. Examples: `2627` (גבינה קשה), `244644` (פילה סלמון). The client rejects them via `isPlausibleBarcode` (8-14 digits), but so does the API itself — verified **HTTP 400**, so this is not a mobile-side restriction to relax. Affects web equally. **Known, unaddressed.**
+- **Basket compare savings banner is arithmetically loose — on both platforms.** `savings` is `maxTotal - winner.total_price`, and `maxTotal` is taken across all chains regardless of coverage. If the most expensive chain covers fewer items, the figure compares two different baskets. **Pre-existing on web** (`BasketResults.tsx`) and copied to mobile from it, so this is not mobile-introduced. Not fixed anywhere yet.
 
 ---
 
