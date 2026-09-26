@@ -5,8 +5,12 @@ Description=XXL — weekly GS1 fetch timer (Sunday afternoon, after the catalog 
 # Sunday 14:00 Israel time. The daily cron starts at 10:00 and its GS1 catalog
 # FULL sweep (Sundays only) is its last step — observed finishing between
 # 11:21 and 11:42 across four Sundays, so this leaves over two hours of margin.
-OnCalendar=Sun *-*-* 14:00:00
-TimeZone=Asia/Jerusalem
+# The timezone is the INLINE suffix, not a TimeZone= key: systemd has no
+# such timer option and silently ignores it (verified with
+# `systemd-analyze verify` — the installed scrp-cron.timer and
+# scrp-backup.timer both carry the ignored key and work only because the
+# server's own timezone happens to be Asia/Jerusalem).
+OnCalendar=Sun *-*-* 14:00:00 Asia/Jerusalem
 # Deliberately NOT Persistent: a missed week simply waits for the next Sunday.
 # Catching up would fire a second fetch right after a boot, and two runs close
 # together is exactly what gets us rate-limited.
