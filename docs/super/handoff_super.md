@@ -2318,3 +2318,42 @@ Suggested shape, for Dude to approve rather than to be taken as done:
 - Expected steady-state load: a few hundred detail calls (~2 min) plus the image cap (~12 min at 2 req/s), once a week, entirely outside the daily cron's process and memory.
 - Same failure policy as the existing GS1 steps: log, never raise, never block anything else.
 
+
+---
+
+## Session SU10S-4 (September 26, 2026) — Health Ministry green label surfaced; two data findings
+
+Backend + web `397ac84`; mobile `bd1f7a3`.
+
+### `green_label` — FSR5 as its own positive field
+
+SU10S-2 held FSR5 out of `warning_labels` so it could not render as a red warning. It is now its own boolean, matched on the **code** like `warning_labels`; that field is unchanged and still excludes FSR5.
+
+Measured across all 16,204 served rows: **422 products carry FSR5, and it never co-occurs with FSR1 or with any FSR2/3/4 warning** — it is always the sole entry. Green and warnings are therefore mutually exclusive in today's data. The code deliberately does **not** enforce that: it reports what the field says and the two sections render independently, so a product that ever carried both would show both rather than silently hiding one. A unit case covers that hypothetical alongside the ten real ones.
+
+Display is text plus a neutral check glyph. **The official ministry graphic is a government mark and is not reproduced.** Meaning is carried by the text, not by colour.
+
+Contrast measured per the IS 5568 baseline rather than assumed — and the measurement earned its keep: the first mobile draft hardcoded an emerald-800 icon tint that scores **7.29:1 on the light badge but only 1.97:1 on the dark one**. It is now emerald-600, the single value clearing 3:1 on both (3.58 / 4.02). The text label was already theme-aware: 7.29:1 light, 11.81:1 dark.
+
+### Finding 1 — GS1 disagrees with the physical carton
+
+**`7290000056845` (Tnuva 3% milk 1.5L) does NOT carry FSR5 in GS1.** Its `Food_Symbol_Red` is `[{"code":"FSR1","value":"ללא סימון"}]` — "no marking" — even though Dude has the physical carton bearing the green label. Same for `7290004131074`. Both have `has_gs1_data: true`, so this is not a missing-record problem: the supplier published a positive statement that the product is unmarked, and it is wrong.
+
+Consequence worth carrying forward: **absence of a marking in GS1 is not evidence of absence on the package.** We render what suppliers publish, which is the only defensible thing to do, but the 422 green-label products are a floor rather than a count. If green-label coverage is ever quoted to anyone, quote it as "declared in GS1", not as "products bearing the label".
+
+### Finding 2 — the nutrition basis is the supplier's, not our bug (read-only, no fix)
+
+For `7290004131074` the app shows nutrition "ל-100 גרם" while the unit-price basis says "100 מל". Checked the raw payload: `col_label` on `fields[0]` **is literally `ל-100 גרם`**, entered by the supplier, for a product whose `Net_Content` is `1 ליטר`. So the grams-for-a-liquid mismatch is **the supplier's own inconsistency, faithfully displayed** — not an artefact of `_parse_nutrition` reading `fields[0]`.
+
+The `fields[0]`-only limitation is nonetheless real and now has a concrete example: this product's table has **two** columns — `ל-100 גרם` and `למנה` (per serving, with its own values: 60 vs 120 calories) — and the second is silently discarded. `table` also carries `colLabels`, `numberOfCols` and `numberOfRows`, none of which are read. Filed under known bugs in `docs/roadmap.md`; **no fix this session, by instruction.**
+
+### Verification
+
+- Parser: 10 unit cases pass, including FSR5-only, FSR5+FSR1, the no-code value fallback, and the hypothetical FSR5+warning. Invariant asserted directly: FSR5 never lands in `warning_labels`.
+- Live API: three FSR5 products return `green_label: true` with `warning_labels: null`; a warning product returns `false` with both warnings; the no-GS1 empty shape carries `green_label: false` as a present key, not a missing one.
+- Browser on super.xxl.co.il: green product shows the badge, helper line and the aria-label `"הסימון הירוק. סימון משרד הבריאות…"`, with no warnings section; a warning product shows warnings and no badge; a GS1 product with neither marking shows neither section. Deploy hash-verified (`8078860e…`).
+
+### Web placement check (Step 3)
+
+Web's `מידע נוסף` button already renders **above** the price rows in `ProductCard.tsx`, so it never had mobile's below-the-fold problem. **Web deliberately unchanged.**
+

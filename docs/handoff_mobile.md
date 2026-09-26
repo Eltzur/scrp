@@ -310,3 +310,37 @@ Warning badges reuse the existing rose `Chip` tone already used for the "contain
 
 **NOT device-verified** — no device attached and `adb` unavailable, the same caveat as every other mobile change this session. Typecheck adds no new errors (the five pre-existing `src/tw` NativeWind errors are unchanged), the Metro export is clean, and both new headings are present in the Hermes bundle with no warning *values* hardcoded — those arrive from the API.
 
+---
+
+## Session SU10S-4 (September 26, 2026) — green label + "מידע נוסף" moved above the prices
+
+Commit `bd1f7a3`. Backend and web half is SU10S-4 in `docs/super/handoff_super.md`.
+
+### Green label
+
+The Product Info tab renders the Health Ministry green label as its own positive block beside the warnings section — same Hebrew, same position as web. Text plus a neutral check glyph; **the official ministry graphic is a government mark and is deliberately not reproduced.**
+
+The client does not decide what qualifies: it renders `green_label`, which the backend derives from code FSR5. Do not re-derive it here, and do not merge it into the warnings section — it is the opposite of a warning.
+
+Contrast was measured, and it caught a real defect in the first draft: a hardcoded `emerald-800` icon tint is 7.29:1 on the light badge but **1.97:1 on the dark one**. It is now `emerald-600` — 3.58:1 light, 4.02:1 dark, over the 3:1 bar for non-text UI on both. If that tint is ever changed, re-measure against **both** grounds; a single hardcoded colour sitting on two backgrounds is exactly where this goes wrong.
+
+### "מידע נוסף" moved above the price list
+
+It previously rendered after the whole card and was below the fold on any product carried by 7+ chains — found undiscoverable on device. It now sits beside the basket button in an actions row **ahead of** the chain price rows, because the price list is the long part of this screen.
+
+The entry point moved **into** `ProductCard` behind `showMoreInfo`, defaulting **off**. `scan-result` is currently the only consumer of `ProductCard` at all (Search has its own minimal row and reaches product-detail directly), so nothing else could regress — the prop keeps that true by construction rather than by luck. Behaviour unchanged: opens product-detail on `tab=info`. Touch target stays Platform-aware 48dp/44pt, and the basket button's flat 44 was folded into the same constant, raising it to 48 on Android.
+
+Web was checked and **not** changed: its equivalent button already sits above the price rows.
+
+### Device checklist — for Dude to run
+
+1. Scan `7290000056845` → "מידע נוסף" visible without scrolling → opens Product Info tab.
+2. Green-label badge shown with helper text; no red warning for it.
+3. A product with a sugar/sodium/sat-fat warning → warnings shown, no green badge.
+4. A no-GS1 product → only the quiet "אין מידע נוסף" line.
+5. Dark mode: badge still legible.
+
+> **Heads-up on step 2.** `7290000056845` will **not** show the green badge. GS1 publishes `FSR1` ("ללא סימון") for that GTIN even though the physical carton carries the label — verified in the raw payload, and it has `has_gs1_data: true`, so this is bad supplier data rather than a missing record. Step 1 (discoverability) is still valid on that barcode. For step 2 use a GTIN that actually declares FSR5, e.g. `7290003726615` (טופו ויילר 300 גרם, 3 chains) or `7290003726141` (גבינת טופו משק גאיה).
+
+**NOT device-verified** — typecheck adds no new errors (the five pre-existing `src/tw` NativeWind errors are unchanged), Metro export is clean, and all four new/moved strings are present in the Hermes bundle.
+
