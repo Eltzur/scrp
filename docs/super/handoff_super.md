@@ -2128,3 +2128,59 @@ Every deploy this session was confirmed by comparing file hashes between the loc
 
 Verified by Dude across the full checklist — badge display, tab switching, submission, editing via My Ratings, blacklist silent-hide plus the "under review" tag, signed-out gating, and keyboard tab navigation. All confirmed working.
 
+
+---
+
+## Session SU10S-1 (September 26, 2026) — stale GS1 image cache fixed; serving-layer recon
+
+### Shipped: stale cached images are now deleted (`fd324c5`)
+
+`scraper/gs1_fetch_images.py`. `_fetch_and_resize()` returned `None` both when the media endpoint answered 200 with no `"file"` and when the fetch failed, so `run()` counted them identically as "failed" and never touched the local JPEG. Since `api/routers/product.py::_image_path()` is a bare `is_file()` check with no upstream cross-reference, a product whose imagery was withdrawn kept serving its stale copy indefinitely — under a 7-day immutable Cache-Control header.
+
+The two cases are now distinct. A 200 with no `"file"` returns the sentinel `"no_image"` and any local copy is deleted; HTTP errors and the exception path still return `None` and touch nothing. **That distinction is the whole point** — conflating them would let one afternoon of 5xx responses wipe the cache. Deletion is additionally gated on `not dry_run`. New `deleted` / `no_image` counters appear in the progress line, the DONE summary and `run()`'s return dict.
+
+Verified on the server: `--dry-run --limit 15` and `--limit 250` both exit 0 with the new counters, and a stubbed-response test confirms the safety property directly — 200-with-no-file, `file: null` and `file: ""` all return `"no_image"`, while 500 and 404 both return `None`.
+
+**Two limits worth knowing before relying on this:**
+
+1. **It only runs under `--refresh`.** A default run skips any GTIN that already has a file, which is exactly the population that can hold a stale image. A plain run will never delete anything. Recorded in the module docstring.
+2. **It does not reach orphans.** `run()` iterates the target set (active GS1 row ∩ `items`), so a GTIN that drops out of that set is never visited again. Measured: **262 of the 11,450 JPEGs on disk are no longer in the target set** and will be served forever regardless of this fix. A sweep comparing the directory against the target set is a separate, still-unbuilt job.
+
+Also measured, and it corrects an assumption: 16,204 GTINs are now in the target set but only 11,188 have a local file. Spot-checking six of the 5,016 without one found **all six still have imagery upstream** — so that gap is unfetched backlog from catalog growth since the last full image pull, not withdrawn imagery.
+
+### Task B recon (read-only): what `fetch_gs1_details()` never reads
+
+Sampled **260 active products across 65 distinct supplier GLNs** (4 per GLN, newest first) rather than the newest 5 overall, which all turned out to be one supplier.
+
+**The structure is completely stable** — all 17 `product_info` branches are present on 100% of sampled products, so this is a fixed schema and not a per-supplier grab-bag. That is a materially different risk class from the promo `reward_type`/`min_qty` problem: there is no per-chain variance to verify here. 14 branches are unread; how many actually carry data varies a lot:
+
+| Unread branch | Has data |
+|---|---|
+| `Main_Fields`, `General_Information`, `Additional_Information`, `Product_Dimensions`, `Internal_System_Fields`, `Case_or_Carton_Dimensions`, `System_Features`, both `Logistics_*` | 100% |
+| `Marketing_Information` | 62% |
+| `Additional_Features` | 60% |
+| `Pallet_or_Logistic_Unit_Dimensions` | 34% |
+| `Tray_Dimensions` | 4% |
+| `Promotional_Product_Information` | **0%** — present on every product, populated on none |
+
+**Leaf field names + fill rates for the consumer-facing branches** (this is what the follow-up needs in order to stop guessing):
+
+- `Main_Fields` — `BrandName`, `Sub_Brand_Name`, `Net_Content` {value, UOM, text}, `Country_of_Origin`, `Short_Description`, `Trade_Item_Description`, `GPC_Category_Code` — all 100%; `functionalName` 78%, `Variant` 67%.
+- `General_Information` — `Manufacturer_Name` 79%, `Manufacturer_Address` 75%, `Search_Words` 74%, `Additional_Trade_Item_Description_1` 72%, `Product_Description_English` 45%.
+- `Additional_Information` — `Food_Symbol_Red` **100%**, `Consumer_Storage_Instructions` 46%, `Hazard_Precautionary_Statement` 25%, `Serving_Suggestion` 24%, `Forbidden_Under_the_Age_of_18` 3%.
+- `Product_Dimensions` — `Price_Comparison_Content` **100%**, `Product_Gross_Weight` 100%, `Net_Weight` 84%.
+- `Marketing_Information` — `Trade_Item_Marketing_Message` 61%, then _2 26%, _3 16%, tailing to _7 at 0%.
+
+**Two findings worth surfacing above the rest:**
+
+- `Food_Symbol_Red` is Israel's mandated front-of-pack warning label and is present on **every** sampled product. Values are a closed set: `ללא סימון` (131), `סוכר בכמות גבוהה` (68), `שומן רווי בכמות גבוהה` (64), `נתרן בכמות גבוהה` (48), `סמל ירוק` (6) — note products carry more than one. This is high-value, regulator-defined consumer data we already hold and have never shown.
+- `Price_Comparison_Content` (100%) is the declared unit-price basis, e.g. `100 גרם` — directly relevant to a price-comparison product, and currently unread.
+
+**Shape corrections for whoever scopes the build** — the recon query assumed dicts:
+
+- `media_assets` is a **list of dicts**, not a dict. Every sampled product has at least one entry, averaging 2.8. Keys are uniform at 100%: `filename`, `file_size`, `width`/`height` (2560x2560 typical), `image_type` (`S` 510 / `E` 210), `default_image`, `hidden`, `publish_file`, `show_in_gallery`, `modification_timestamp`. **This is the missing half of the image-staleness story**: it names the assets a GTIN should have, so a future sweep could reconcile the image directory against it instead of re-fetching to find out.
+- `private_data` and `multi_pack` are **empty lists** on every sampled product — nothing to serve, do not scope work against them.
+- `gs1.products` has no `supplier_gln` column; the supplier column is `gln`.
+
+No code was changed for Task B and nothing was committed from it.
+

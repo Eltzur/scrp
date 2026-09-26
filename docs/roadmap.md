@@ -11,7 +11,7 @@ _Nothing currently in progress._ The web 3-tab product-detail restructure and th
 
 ## Needs a decision from Dude before scoping
 - GS1 catalog subscription cost — measured coverage numbers are in handoff_super.md's Sept 23 entry; blocked on an actual subscription cost figure (business fact, not in the codebase) before deciding whether to trim or keep the GS1 integration.
-- Two flagged scraper-adjacent fixes, awaiting go/no-go: (a) image-deletion handling (a product whose GS1 image is deleted upstream currently keeps serving the stale cached JPEG indefinitely), (b) GS1 serving-layer gaps (only ~3 of ~11 available product_info branches from full_content are currently surfaced anywhere).
+- GS1 serving-layer gaps — only 3 of the 17 `product_info` branches in `full_content` are read by `fetch_gs1_details()`. **No longer waiting on a decision: SU10S-1 recon confirmed the real field names and fill rates** (see handoff_super.md), so this is ready to scope as a build. Image-deletion handling, previously bundled with this item, shipped in SU10S-1 (`fd324c5`).
 - Google Play Console account type — Organization account requires a DUNS number (applied for, pending, ~3-5 business days as of Sept 26 2026); Personal account has no DUNS requirement but gates production release behind a 12-tester/14-day closed testing period. Revisit once DUNS resolves either way.
 
 ## Scoped but deliberately deferred
