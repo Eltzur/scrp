@@ -2230,3 +2230,91 @@ Browser-verified on super.xxl.co.il: on a warning product the פרטי מוצר 
 
 `xxl-super-mobile/src/types/api.ts` was regenerated from the live OpenAPI schema rather than hand-edited. The diff was **+350 lines, purely additive** — the file had gone stale and predated the ratings endpoints, so that regeneration also pulled those in. Worth knowing that this file drifts silently: nothing fails until something reads a field the stale copy lacks.
 
+
+---
+
+## Session SU10S-3 (September 26, 2026) — GS1 backlog backfilled, durable archive created
+
+No code changed. Two operational outcomes: the GS1 detail backlog is now **fully cleared**, and there is a verified, restorable archive of everything GS1 we hold.
+
+### Coverage, before → after
+
+| | before | after |
+|---|---|---|
+| detail targets with `full_content` | 11,221 / 16,204 | **16,204 / 16,204 (100%)** |
+| images present | 11,188 / 16,204 | 12,856 / 16,204 |
+| `gs1.products` rows with `full_content` | 11,496 | 16,479 |
+| detail coverage of the 166,453-item catalog | 6.74% | **9.73%** |
+| image coverage of the catalog | 6.72% | 7.72% |
+
+Detail ran clean: **4,983 fetched, 0 failed** in 2,216s at ~2.3 req/s.
+
+### The image run was stopped early — GS1 rate-limited us
+
+Images reached `ok=1,668 failed=163 skipped=4,369` of 16,204 and were **deliberately stopped**, not left to finish. At 19:18:58 the media endpoint began returning **HTTP 400 `נחסמת בעקבות כ…`** ("you have been blocked due to …", truncated at 80 chars by `resp.text[:80]`). Failures went 26 → 163 in four minutes; 254 such responses in total.
+
+Stopping was the right call and costs nothing: the fetcher **skips GTINs that already have a file**, so re-running later resumes at exactly the 3,348 still missing. Nothing was half-written — deletion only happens under `--refresh`, which was not used.
+
+**Operational lesson for whoever schedules this:** the detail endpoint tolerated 4,983 sequential calls at 2.3/s without complaint, but the media endpoint blocked after roughly 1,800 calls in one sitting at 2.0/s. They do not share a budget. Any weekly job must cap images per run, or expect to be blocked. The two other error classes seen were `UnidentifiedImageError` (33 — GS1 returned a payload that is not a decodable image) and one HTTP 404.
+
+### Archive — `~/gs1_archive/2026-09-26/` (716 MB)
+
+| artifact | size | contents |
+|---|---|---|
+| `gs1_schema.dump` | 18 MB | `pg_dump -Fc -n gs1` — products, sync_runs, indexes |
+| `gs1_full_content.jsonl.gz` | 12 MB | 16,204 rows, one JSON line per GTIN, Postgres not required to read it |
+| `gs1_images.tar.gz` | 686 MB | 13,118 JPEGs |
+| `MANIFEST.txt` | — | date, row/file counts, sha256 of each artifact, scrp commit `9c370cd` |
+
+The JSONL uses the **same active-row ranking `fetch_gs1_details()` serves from** (`_GS1_RANKED_CTE`, `rn = 1`), so it is the payload users actually see, not a raw table dump.
+
+**Verified restorable, not merely present:** `pg_restore --list` succeeds and lists `gs1.products`; the tar holds 13,118 `.jpg` entries, matching the live directory exactly; all three sha256 sums re-verify against MANIFEST on both copies.
+
+#### Restore instructions
+
+```bash
+# Schema (into an existing database; drops and recreates the gs1 schema)
+pg_restore -d xxl_super --clean --if-exists -n gs1 gs1_schema.dump
+
+# Portable alternative, no Postgres needed
+zcat gs1_full_content.jsonl.gz | head -1 | python3 -m json.tool
+
+# Images — MUST land at ~/gs1_images on the API host.
+# api/routers/product.py::_image_path() resolves {gtin}.jpg under that
+# directory and does a bare is_file() check, so the path is load-bearing.
+tar -xzf gs1_images.tar.gz -C ~
+```
+
+### Copies
+
+- **Copy 2 (Dude's Windows machine): DONE** — `C:\xxl-archive\gs1\2026-09-26\`. Deliberately outside `C:\scrp`; confirmed not inside any git repository, so 716 MB cannot reach a commit. All three sha256 re-verified after transfer, and the tar reads back 13,118 entries.
+- **Copy 1 (offsite B2): NOT DONE — blocked on credentials, not on effort.** `dude` has **no rclone config** (0 remotes); the B2 credentials live in `/root/.config/rclone/rclone.conf`, unreadable to `dude`; and while `dude` has `(ALL : ALL) ALL` in sudoers it is **password-required** — NOPASSWD covers only five specific `xxl-*` scripts. The archive exists and is verified on the server and on Windows, so nothing is lost; only the third, offsite copy is outstanding.
+
+### Backup scope — the gap is images, not the schema
+
+Determined from `/usr/local/bin/scrp-backup.sh` (world-readable) plus the DB layout; the dump files and the B2 listing are root-only, so this is established from the command the script runs, not from inspecting a dump.
+
+- **The gs1 schema IS backed up.** The script runs `sudo -u postgres pg_dump -Fc xxl_super` — a whole-database dump with no `-n` filter, and `gs1` is a schema inside `xxl_super` (the app's own `DATABASE_URL` points there). All schemas are therefore included.
+- **`~/gs1_images` is NOT backed up.** The script touches only the dump; the image directory appears nowhere in it. Those 13,118 files (754 MB) exist on exactly one disk, which is what this session's archive now mitigates.
+- Remote: `b2:xxl-scrp-backups`, path `daily/`. Retention prunes **local** files only (>6 days, keeping Sundays 28d and 1st-of-month 180d); nothing in the script prunes B2.
+
+**Not changed this session, by instruction.** The minimal fix would be one line in `scrp-backup.sh` — `rclone copy ~dude/gs1_images "${BUCKET}/gs1-images/" --no-traverse` — but it is infra that has run cleanly and the change is Dude's call. Note it would add ~750 MB to each run unless made incremental (`rclone sync` would, at the cost of mirroring deletions).
+
+### Cron proposal (STEP 3 — proposal only, nothing implemented)
+
+Today `cron_main.py` already runs two GS1 steps at the end of the daily 10:00 IDT job: `run_gs1_catalog()` (incremental, FULL on Sundays) then `run_gs1_enrichment()`. Both are lazily imported, exception-wrapped and never raise, so a GS1 failure cannot fail the supermarket scrape. `gs1_fetch_detail` and `gs1_fetch_images` are **not** in the cron at all — the backlog this session cleared had simply accumulated since the last manual run.
+
+**Recommendation: a separate systemd timer, not inside `cron_main.py`.** Three reasons.
+
+1. **Memory.** SU10A-8's OOM history is the binding constraint on the cron path. The box is now 3.8 GB (up from the 1.9 GB of that incident) with 2.4 GB available, so this is no longer acute — but the daily cron already peaks with 4 chain workers, and appending a 45-minute image job to the same process raises peak RSS for no scheduling benefit. A separate timer costs nothing and keeps the OOM-sensitive path exactly as it is.
+2. **Rate limits.** The media endpoint blocked us after ~1,800 calls in one sitting. That has to be handled with a per-run cap and a retry the following week, which is natural for a standalone job and awkward inside a run whose failure policy is "log and continue".
+3. **Duration.** At a steady state of a few hundred new GTINs a week the job is minutes, but the first catch-up run after any gap is hours. That must not sit inside the daily scrape.
+
+Suggested shape, for Dude to approve rather than to be taken as done:
+
+- `scrp-gs1-fetch.timer`, weekly, **Sunday ~14:00 IDT** — after the 10:00 scrape has finished and after `run_gs1_catalog()`'s Sunday FULL sweep, so the week's new GTINs are already in `gs1.products` before this runs.
+- `ExecStart`: `gs1_fetch_detail` then `gs1_fetch_images --limit 1500`. **Never `--refresh`** — new GTINs only.
+- The `--limit 1500` is the load-bearing part: it keeps each run under the observed block threshold. A backlog then drains over a few weeks instead of triggering a block on week one.
+- Expected steady-state load: a few hundred detail calls (~2 min) plus the image cap (~12 min at 2 req/s), once a week, entirely outside the daily cron's process and memory.
+- Same failure policy as the existing GS1 steps: log, never raise, never block anything else.
+
