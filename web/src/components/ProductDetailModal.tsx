@@ -378,6 +378,25 @@ export default function ProductDetailModal({ item, onClose, initialTab = 'prices
               </Section>
             )}
 
+            {/* Warning labels — Israel's mandated front-of-pack marking.
+                The server filters the "no marking" sentinel and the positive
+                green label, so anything present here is a real warning and is
+                safe to render in a warning tone. Self-hides otherwise. */}
+            {!loading && details?.warning_labels && details.warning_labels.length > 0 && (
+              <Section title={t('product_modal.warnings')}>
+                <div className="flex flex-wrap gap-1.5">
+                  {details.warning_labels.map(w => <Chip key={w} label={w} tone="rose" />)}
+                </div>
+              </Section>
+            )}
+
+            {/* Unit-price basis — one line, no heading furniture. */}
+            {!loading && details?.unit_price_basis && (
+              <Section title={t('product_modal.unit_price_basis')}>
+                <p className="text-sm text-gray-700" dir="auto">{details.unit_price_basis}</p>
+              </Section>
+            )}
+
             {/* No GS1 data: a quiet note, never an error. This is the majority
                 case (~92% of items), so it must not read as something broken. */}
             {!loading && !details?.has_gs1_data && (

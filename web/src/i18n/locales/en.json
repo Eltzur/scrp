@@ -49,6 +49,8 @@
     "allergens": "Allergens",
     "allergens_contains": "Contains",
     "allergens_may_contain": "May contain",
+    "warnings": "Warning labels",
+    "unit_price_basis": "Unit price basis",
     "no_image": "No image",
     "no_extra_info": "No additional information for this product"
   },

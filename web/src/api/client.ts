@@ -275,6 +275,12 @@ export interface ProductDetails {
   nutrition: NutritionTable | null;
   ingredients: string | null;
   allergens: AllergenInfo | null;
+  /** Israel's mandated front-of-pack warnings. The "no marking" sentinel and
+   *  the positive green label are filtered server-side, so a non-null list
+   *  always means real warnings. */
+  warning_labels: string[] | null;
+  /** Declared basis for unit pricing, e.g. "100 גרם". */
+  unit_price_basis: string | null;
 }
 
 export const getProductDetails = (itemCode: string): Promise<ProductDetails> =>

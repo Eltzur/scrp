@@ -49,6 +49,8 @@
     "allergens": "אלרגנים",
     "allergens_contains": "מכיל",
     "allergens_may_contain": "עלול להכיל",
+    "warnings": "סימון אזהרה",
+    "unit_price_basis": "בסיס להשוואת מחיר",
     "no_image": "אין תמונה",
     "no_extra_info": "אין מידע נוסף על מוצר זה"
   },

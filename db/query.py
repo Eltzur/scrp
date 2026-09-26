@@ -838,6 +838,68 @@ def _first_value(node) -> str | None:
     return vals[0] if vals else None
 
 
+# Food_Symbol_Red is a CLOSED code set, verified over 4,000 active products
+# (SU10S-2). Two of its five codes are not warnings and must never render as
+# one:
+#     FSR1  ללא סימון              2463  "no marking" — the absence sentinel
+#     FSR2  נתרן בכמות גבוהה        517  warning: high sodium
+#     FSR3  סוכר בכמות גבוהה        743  warning: high sugar
+#     FSR4  שומן רווי בכמות גבוהה   825  warning: high saturated fat
+#     FSR5  סמל ירוק                119  the GREEN label — a positive health
+#                                        marker, the OPPOSITE of a warning
+# FSR5 is dropped here rather than surfaced, because this field is typed and
+# labelled as warnings; showing "green label" among red warning badges would
+# tell a user a healthy product carries a warning. Surfacing it properly needs
+# its own field and its own copy — deliberately out of scope for SU10S-2, and
+# noted in the handoff as available data we hold and do not show.
+_FOOD_SYMBOL_NON_WARNING = {"FSR1", "FSR5"}
+_FOOD_SYMBOL_NON_WARNING_VALUES = {"ללא סימון", "סמל ירוק"}
+
+
+def _warning_labels(node) -> list[str] | None:
+    """Israel's mandated front-of-pack warnings, or None when there are none.
+
+    Filters on the CODE rather than the Hebrew string wherever one is present:
+    the codes are stable identifiers, the display values are free text that has
+    already been observed carrying stray whitespace elsewhere in this payload.
+    The value set is the fallback for the rare entry with no code.
+
+    Returns None rather than [] when nothing survives, matching how 'kashrut'
+    collapses an all-blank block — the client branches on presence alone.
+    """
+    if not isinstance(node, list):
+        return None
+    out: list[str] = []
+    for entry in node:
+        if not isinstance(entry, dict):
+            continue
+        code = (entry.get("code") or "").strip()
+        value = (entry.get("value") or "").strip()
+        if not value:
+            continue
+        if code in _FOOD_SYMBOL_NON_WARNING:
+            continue
+        if not code and value in _FOOD_SYMBOL_NON_WARNING_VALUES:
+            continue
+        if value not in out:
+            out.append(value)
+    return out or None
+
+
+def _unit_price_basis(node) -> str | None:
+    """Declared basis for unit pricing, e.g. "100 גרם".
+
+    NOT a coded list, so _first_value() does not apply — it is a single
+    {UOM, text, value} dict. 'text' is the supplier's own rendering and is the
+    only field that survives a non-numeric basis such as a bare "יחידה"; UOM is
+    also dirty in production (135 nulls and a "גרם\n" with a trailing newline
+    across 4,000 sampled products), so it is not recombined here.
+    """
+    if not isinstance(node, dict):
+        return None
+    return (node.get("text") or "").strip() or None
+
+
 def _parse_nutrition(section: dict) -> dict | None:
     """Flatten Nutritional_Values.table into label/value/uom rows.
 
@@ -892,6 +954,8 @@ def _empty_gs1_details(item_code: str) -> dict:
         "nutrition":    None,
         "ingredients":  None,
         "allergens":    None,
+        "warning_labels":   None,
+        "unit_price_basis": None,
     }
 
 
@@ -963,6 +1027,10 @@ def fetch_gs1_details(conn: Connection, item_code: str, has_image: bool = False)
         "nutrition":    _parse_nutrition(info.get("Nutritional_Values")),
         "ingredients":  ingredients,
         "allergens":    allergens,
+        "warning_labels":   _warning_labels(
+            (info.get("Additional_Information") or {}).get("Food_Symbol_Red")),
+        "unit_price_basis": _unit_price_basis(
+            (info.get("Product_Dimensions") or {}).get("Price_Comparison_Content")),
     }
 
 

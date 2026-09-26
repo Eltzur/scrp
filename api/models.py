@@ -227,6 +227,17 @@ class ProductDetails(BaseModel):
     nutrition: NutritionTable | None = None
     ingredients: str | None        = Field(None, description="Full ingredient string, incl. percentages")
     allergens: AllergenInfo | None = None
+    warning_labels: list[str] | None = Field(
+        None,
+        description=(
+            "Israel's mandated front-of-pack warnings (high sodium / sugar / "
+            "saturated fat). None when the product carries none — the 'no "
+            "marking' sentinel and the positive green label are both filtered "
+            "out, so a present list always means real warnings."
+        ),
+    )
+    unit_price_basis: str | None   = Field(
+        None, description='Declared basis for unit pricing, e.g. "100 גרם"')
 
 
 class GroupedPromoItem(BaseModel):
