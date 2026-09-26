@@ -10,8 +10,8 @@ import type { ProductWithPrices, PriceQuote, ProductDetails } from '../api/clien
 interface Props {
   item: ProductWithPrices;
   onClose: () => void;
-  /** Which tab to open on. Defaults to the product info tab. */
-  initialTab?: 'info' | 'reviews';
+  /** Which tab to open on. Defaults to prices. */
+  initialTab?: 'prices' | 'info' | 'reviews';
 }
 
 function cheapestPerChain(quotes: PriceQuote[]): PriceQuote[] {
@@ -52,15 +52,23 @@ function Chip({ label, tone = 'gray' }: { label: string; tone?: 'gray' | 'amber'
   );
 }
 
-export type ModalTab = 'info' | 'reviews';
+export type ModalTab = 'prices' | 'info' | 'reviews';
 
-export default function ProductDetailModal({ item, onClose, initialTab = 'info' }: Props) {
+// 'מחירים' already exists as product_modal.prices — reused rather than adding
+// a duplicate key that could drift from it.
+const TAB_LABEL_KEY: Record<ModalTab, string> = {
+  prices:  'product_modal.prices',
+  info:    'ratings.tab_info',
+  reviews: 'ratings.tab_reviews',
+};
+
+export default function ProductDetailModal({ item, onClose, initialTab = 'prices' }: Props) {
   const [tab, setTab] = useState<ModalTab>(initialTab);
   // Roving focus for the tablist: ArrowLeft/Right move between tabs and move
   // focus with the selection, per the WAI-ARIA tabs pattern. RTL is handled by
   // treating the arrows as "previous/next" rather than literal directions.
-  const tabRefs = useRef<Record<ModalTab, HTMLButtonElement | null>>({ info: null, reviews: null });
-  const ORDER: ModalTab[] = ['info', 'reviews'];
+  const tabRefs = useRef<Record<ModalTab, HTMLButtonElement | null>>({ prices: null, info: null, reviews: null });
+  const ORDER: ModalTab[] = ['prices', 'info', 'reviews'];
   const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft' && e.key !== 'Home' && e.key !== 'End') return;
     e.preventDefault();
@@ -173,6 +181,35 @@ export default function ProductDetailModal({ item, onClose, initialTab = 'info' 
           </button>
         </div>
 
+        {/* Shared context: identifies the product on every tab, so it is
+            deliberately OUTSIDE all three tabpanels. */}
+        <div className="px-4 pt-4 flex flex-col gap-2">
+          {/* Image or placeholder */}
+          <div className="flex justify-center">
+            {loading ? (
+              <div className="w-40 h-40 rounded-xl bg-gray-50 flex items-center justify-center">
+                <Loader2 size={22} className="animate-spin text-gray-500" />
+              </div>
+            ) : hasImage ? (
+              <img
+                src={productImageUrl(barcode)}
+                alt={displayName}
+                loading="lazy"
+                onError={() => setImageBroken(true)}
+                className="w-40 h-40 object-contain rounded-xl bg-white border border-gray-100"
+              />
+            ) : (
+              <div className="w-40 h-40 rounded-xl bg-gray-50 border border-dashed border-gray-200 flex flex-col items-center justify-center gap-1.5 text-gray-500">
+                <ImageOff size={26} />
+                <span className="text-[11px] text-gray-500">{t('product_modal.no_image')}</span>
+              </div>
+            )}
+          </div>
+          <p className="text-[11px] text-gray-500 font-mono text-center pt-1" dir="ltr">
+            {barcode}
+          </p>
+        </div>
+
         {/* Tabs */}
         <div
           role="tablist"
@@ -200,58 +237,29 @@ export default function ProductDetailModal({ item, onClose, initialTab = 'info' 
                     : 'border-transparent text-gray-500 hover:text-gray-700',
                 )}
               >
-                {id === 'info' ? t('ratings.tab_info') : t('ratings.tab_reviews')}
+                {t(TAB_LABEL_KEY[id])}
               </button>
             );
           })}
         </div>
 
-        {/* Reviews panel */}
-        {tab === 'reviews' && (
+        {/* Exactly one panel is mounted at a time.
+            Conditional rendering, NOT hidden={tab !== id}: the previous version
+            used the attribute on a panel whose className included `flex`, and
+            Tailwind's `.flex { display: flex }` is a class selector, so it beat
+            the UA stylesheet's `[hidden] { display: none }`. The attribute was
+            set and did nothing, which is why prices and GS1 data showed on every
+            tab. Unmounting cannot be overridden by CSS. */}
+        {tab === 'prices' && (
           <div
             role="tabpanel"
-            id="panel-reviews"
-            aria-labelledby="tab-reviews"
+            id="panel-prices"
+            aria-labelledby="tab-prices"
             tabIndex={0}
-            className="overflow-y-auto p-4"
+            className="overflow-y-auto p-4 flex flex-col gap-4"
           >
-            <ReviewsPanel itemCode={product.item_code} />
-          </div>
-        )}
-
-        {/* Scrollable body */}
-        <div
-          role="tabpanel"
-          id="panel-info"
-          aria-labelledby="tab-info"
-          tabIndex={0}
-          hidden={tab !== 'info'}
-          className="overflow-y-auto p-4 flex flex-col gap-4"
-        >
-          {/* Image or placeholder */}
-          <div className="flex justify-center">
-            {loading ? (
-              <div className="w-40 h-40 rounded-xl bg-gray-50 flex items-center justify-center">
-                <Loader2 size={22} className="animate-spin text-gray-500" />
-              </div>
-            ) : hasImage ? (
-              <img
-                src={productImageUrl(barcode)}
-                alt={displayName}
-                loading="lazy"
-                onError={() => setImageBroken(true)}
-                className="w-40 h-40 object-contain rounded-xl bg-white border border-gray-100"
-              />
-            ) : (
-              <div className="w-40 h-40 rounded-xl bg-gray-50 border border-dashed border-gray-200 flex flex-col items-center justify-center gap-1.5 text-gray-500">
-                <ImageOff size={26} />
-                <span className="text-[11px] text-gray-500">{t('product_modal.no_image')}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Prices — always present, the reason the modal is useful without GS1 */}
-          <Section title={t('product_modal.prices')}>
+            {/* Prices — the reason the modal is useful for the ~92% of items
+                with no GS1 record at all. No Section heading: the tab is the heading. */}
             <div className="divide-y divide-gray-100 rounded-lg border border-gray-100 overflow-hidden">
               {quotes.map((q, i) => {
                 const isCheapest = i === 0 && quotes.length > 1;
@@ -280,99 +288,117 @@ export default function ProductDetailModal({ item, onClose, initialTab = 'info' 
                 );
               })}
             </div>
-          </Section>
+          </div>
+        )}
 
-          {loading && (
-            <div className="flex justify-center py-2">
-              <Loader2 size={18} className="animate-spin text-gray-500" />
-            </div>
-          )}
-
-          {/* Kashrut */}
-          {!loading && kashrutChips.length > 0 && (
-            <Section title={t('product_modal.kashrut')}>
-              <div className="flex flex-wrap gap-1.5">
-                {kashrutChips.map((v, idx) => <Chip key={`${v}-${idx}`} label={v} />)}
+        {tab === 'info' && (
+          <div
+            role="tabpanel"
+            id="panel-info"
+            aria-labelledby="tab-info"
+            tabIndex={0}
+            className="overflow-y-auto p-4 flex flex-col gap-4"
+          >
+            {loading && (
+              <div className="flex justify-center py-2">
+                <Loader2 size={18} className="animate-spin text-gray-500" />
               </div>
-              {k?.passover_remark && (
-                <p className="text-xs text-gray-500 mt-2" dir="auto">{k.passover_remark}</p>
-              )}
-            </Section>
-          )}
+            )}
 
-          {/* Nutrition */}
-          {!loading && details?.nutrition && details.nutrition.rows.length > 0 && (
-            <Section
-              title={
-                details.nutrition.basis
-                  ? `${t('product_modal.nutrition')} · ${details.nutrition.basis}`
-                  : t('product_modal.nutrition')
-              }
-            >
-              <div className="rounded-lg border border-gray-100 overflow-hidden">
-                {details.nutrition.rows.map((r, idx) => (
-                  <div
-                    key={`${r.label}-${idx}`}
-                    className={clsx(
-                      'flex items-center justify-between gap-3 px-3 py-1.5 text-sm',
-                      idx % 2 ? 'bg-white' : 'bg-gray-50/60',
-                    )}
-                  >
-                    <span className="text-gray-600 min-w-0" dir="auto">{r.label}</span>
-                    <span className="font-medium text-gray-900 shrink-0" dir="auto">
-                      {/* `text` first: it is the only field that renders GS1's
-                          non-numeric declarations correctly. */}
-                      {r.text ?? [r.value, r.uom].filter(Boolean).join(' ')}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {/* Ingredients */}
-          {!loading && details?.ingredients && (
-            <Section title={t('product_modal.ingredients')}>
-              <p className="text-sm text-gray-700 leading-relaxed" dir="auto">{details.ingredients}</p>
-            </Section>
-          )}
-
-          {/* Allergens */}
-          {!loading && details?.allergens && (
-            <Section title={t('product_modal.allergens')}>
-              <div className="flex flex-col gap-2">
-                {details.allergens.contains.length > 0 && (
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">{t('product_modal.allergens_contains')}</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {details.allergens.contains.map(a => <Chip key={a} label={a} tone="rose" />)}
-                    </div>
-                  </div>
+            {/* Kashrut */}
+            {!loading && kashrutChips.length > 0 && (
+              <Section title={t('product_modal.kashrut')}>
+                <div className="flex flex-wrap gap-1.5">
+                  {kashrutChips.map((v, idx) => <Chip key={`${v}-${idx}`} label={v} />)}
+                </div>
+                {k?.passover_remark && (
+                  <p className="text-xs text-gray-500 mt-2" dir="auto">{k.passover_remark}</p>
                 )}
-                {details.allergens.may_contain.length > 0 && (
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">{t('product_modal.allergens_may_contain')}</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {details.allergens.may_contain.map(a => <Chip key={a} label={a} tone="amber" />)}
+              </Section>
+            )}
+
+            {/* Nutrition */}
+            {!loading && details?.nutrition && details.nutrition.rows.length > 0 && (
+              <Section
+                title={
+                  details.nutrition.basis
+                    ? `${t('product_modal.nutrition')} · ${details.nutrition.basis}`
+                    : t('product_modal.nutrition')
+                }
+              >
+                <div className="rounded-lg border border-gray-100 overflow-hidden">
+                  {details.nutrition.rows.map((r, idx) => (
+                    <div
+                      key={`${r.label}-${idx}`}
+                      className={clsx(
+                        'flex items-center justify-between gap-3 px-3 py-1.5 text-sm',
+                        idx % 2 ? 'bg-white' : 'bg-gray-50/60',
+                      )}
+                    >
+                      <span className="text-gray-600 min-w-0" dir="auto">{r.label}</span>
+                      <span className="font-medium text-gray-900 shrink-0" dir="auto">
+                        {/* `text` first: it is the only field that renders GS1's
+                            non-numeric declarations correctly. */}
+                        {r.text ?? [r.value, r.uom].filter(Boolean).join(' ')}
+                      </span>
                     </div>
-                  </div>
-                )}
-              </div>
-            </Section>
-          )}
+                  ))}
+                </div>
+              </Section>
+            )}
 
-          {/* No GS1 data: a quiet note, never an error. This is the majority
-              case (~92% of items), so it must not read as something broken. */}
-          {!loading && !details?.has_gs1_data && (
-            <p className="text-xs text-gray-500 text-center pt-1" dir="auto">
-              {t('product_modal.no_extra_info')}
-            </p>
-          )}
+            {/* Ingredients */}
+            {!loading && details?.ingredients && (
+              <Section title={t('product_modal.ingredients')}>
+                <p className="text-sm text-gray-700 leading-relaxed" dir="auto">{details.ingredients}</p>
+              </Section>
+            )}
 
-          <p className="text-[11px] text-gray-500 font-mono text-center pt-1" dir="ltr">
-            {barcode}
-          </p>
-        </div>
+            {/* Allergens */}
+            {!loading && details?.allergens && (
+              <Section title={t('product_modal.allergens')}>
+                <div className="flex flex-col gap-2">
+                  {details.allergens.contains.length > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">{t('product_modal.allergens_contains')}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {details.allergens.contains.map(a => <Chip key={a} label={a} tone="rose" />)}
+                      </div>
+                    </div>
+                  )}
+                  {details.allergens.may_contain.length > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">{t('product_modal.allergens_may_contain')}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {details.allergens.may_contain.map(a => <Chip key={a} label={a} tone="amber" />)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Section>
+            )}
+
+            {/* No GS1 data: a quiet note, never an error. This is the majority
+                case (~92% of items), so it must not read as something broken. */}
+            {!loading && !details?.has_gs1_data && (
+              <p className="text-xs text-gray-500 text-center pt-1" dir="auto">
+                {t('product_modal.no_extra_info')}
+              </p>
+            )}
+          </div>
+        )}
+
+        {tab === 'reviews' && (
+          <div
+            role="tabpanel"
+            id="panel-reviews"
+            aria-labelledby="tab-reviews"
+            tabIndex={0}
+            className="overflow-y-auto p-4"
+          >
+            <ReviewsPanel itemCode={product.item_code} />
+          </div>
+        )}
       </div>
     </div>,
     document.body,
