@@ -2382,7 +2382,7 @@ Verified on the server with stubbed responses: 400→`"blocked"`, 500/404→`Non
 
 **14:00 was chosen against data, not by feel.** The Sunday catalog FULL sweep is the daily cron's last step and finished between **11:21 and 11:42** across four observed Sundays (the sweep itself takes ~30s; the cron around it runs 81-101 min from its 10:00 start). 14:00 leaves over two hours of margin.
 
-**`--limit 1500` is load-bearing.** The media endpoint blocked after roughly 1,800 requests in one sitting at 2 req/s; 1,500 stays under that with margin. The remaining **3,348-image backlog drains in about three weekly runs**, after which each run is only the week's new GTINs (tens to low hundreds) and takes minutes.
+**`--limit 1500` is load-bearing.** The media endpoint blocked after roughly 1,800 requests in one sitting at 2 req/s; 1,500 stays under that with margin. The remaining **3,348-image backlog drains in about three weekly runs**, after which each run is only the week's new GTINs (tens to low hundreds) and takes minutes. **CORRECTION (SU10S-13): that estimate only holds from SU10S-13 onward.** As written, `--limit` capped *targets examined* rather than *fetch attempts*, so the first scheduled run reached only GTINs that already had files and fetched nothing — it would have drained the backlog never, not in three weeks.
 
 **Never add `--refresh`** — it would re-fetch all ~16k images every week and get us blocked immediately.
 
