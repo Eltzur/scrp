@@ -3098,3 +3098,81 @@ name or address anywhere and still needs manual entry.
 
 `data/city_canonical_review.csv` has a column named `store_id` that actually holds **`stores.id` (the primary key)**, not the chain's store_id (`build_city_canonical.py` line 152: `"store_id": store_pk`). Joining it on the chain store_id silently produces garbage — and because `(chain_id, store_id)` is not unique for Shufersal (many `sub_chain_id`s), it produces *plausible-looking* garbage: my first attempt showed `תל אביב → חיפה` labelled as an exact match. `apply_city_canonical.py` reads it correctly as a pk; any new consumer must too.
 
+
+---
+
+## Session SU10S-17 (September 27, 2026) — freshness write path, coordinates liveness, targeted city fill; price-read guard STOPPED at its gate
+
+Commits: `c924eb5` (stores/scraper), `2496bb2` (api), `5c2d73a` (city tool). API deployed and curl-verified.
+
+| part | status |
+|---|---|
+| 1 — `stores.last_loaded_at` + scraper write path | **done, live** (next 10:00 cron is the real test) |
+| 2 — guard on the price/promo reads | **STOPPED at the performance gate, not deployed** — design decision needed |
+| 3 — `/stores/coordinates` liveness | **done, live** |
+| 4 — targeted city fill | **done** — exactly the 12 |
+
+### Part 1 — `stores.last_loaded_at`
+
+**Invariant: `last_loaded_at` = `max(run_at::timestamptz)` of the store's `status='loaded'` `fetch_store_runs` rows; NULL = never loaded.**
+
+- Migration `db/migrations/su10s17_stores_last_loaded_at.sql` (owner `scrp_app` confirmed). Backup first: `~/backups/pre-su10s17-stores-20260927T170052.dump` (full `stores`, `pg_restore --list` verified). Backfill **958 stores**; re-run updated **0**; **0 invariant violations** over all 1,197; 239 never-loaded stay NULL (matches the per-chain never-loaded counts exactly).
+- **`fetch_store_runs.run_at` is TEXT** (Python `isoformat()`), not a timestamp — hence the cast. All 108,215 values verified to parse first.
+- **The write path is TWO statements, not one** — the reason for the first STOP this session. `ShufersalScraper` has its own `_process_store_shufersal` with its own `'loaded'` insert; changing only `base.py` would have frozen every Shufersal store at its backfill value. Approved by Dude: the same statement after each `'loaded'` insert, same transaction:
+  ```sql
+  UPDATE stores SET last_loaded_at = GREATEST(last_loaded_at, CAST(:rat AS timestamptz)) WHERE id = :sfk
+  ```
+  `:rat` is the run's own `run_at` (Dude's call; keeps the invariant exact), and `GREATEST` means an overlapping older run can never move it backwards. Dry-tested through SQLAlchemy with an `isoformat()` string on production (rolled back): a newer run advances it, an older run leaves it.
+- Deploy order mattered: migration **before** `git pull`, because the new scraper line fails every store load if the column is missing.
+
+**Check after the next 10:00 cron:**
+
+```bash
+sudo journalctl -u scrp-cron --since today --no-pager | grep -iE "last_loaded_at|does not exist|failed" | head
+psql "$DATABASE_URL" -c "SELECT count(*) FILTER (WHERE last_loaded_at::date = current_date) AS loaded_today,
+  count(*) FILTER (WHERE last_loaded_at IS DISTINCT FROM x.last) AS violations
+  FROM stores s LEFT JOIN (SELECT store_fk, max(run_at::timestamptz) last FROM fetch_store_runs
+  WHERE status='loaded' GROUP BY store_fk) x ON x.store_fk = s.id;"
+```
+
+Expected: no `last_loaded_at` errors in the journal, `loaded_today` ≈ 865 (every chain, שופרסל included), `violations` 0. If Shufersal stores are missing from `loaded_today`, the `shufersal.py` line did not run.
+
+### Part 2 — price-read guard: STOPPED, nothing deployed
+
+The rule is implemented once, as `db/query.py live_store_clause()`: live = `last_loaded_at >= (own chain's max(last_loaded_at) − 3 days)`, NULL excluded, 14 chain cutoffs cached per process for 5 min and inlined as a `CASE` on the stores row. Correctness was fully proven on production (rolled-back transaction): a fake stale store vanished from prices, promos and the coordinates rule while every other store was unchanged, and shifting a **whole chain** 10 days back excluded **nothing** (315 → 315 rows).
+
+**But the gate tripped.** Shape selection first (wall-clock, interleaved, n=40): InitPlan jsonb map +27–31%, joined per-chain derived table worse, cached `CASE` +12–15% — chosen. Then the final code, `EXPLAIN (ANALYZE, BUFFERS)` old vs new on the exact `fetch_prices` statements:
+
+| case | old | new | |
+|---|---|---|---|
+| barcode lookup | 10.18 ms | 14.15 ms | **+38.9%** |
+| basket, 10 items | 4.02 ms | 5.26 ms | **+30.8%** |
+| search `q=חלב` (3,049 codes) | 11,842 ms | 9,768 ms | −17.5% |
+
+Wall-clock the same change is only +6.7% / +12.9%, but the plan itself changed, which is the SU10A-5 class the gate exists for. The planner cannot estimate the `CASE`, **guesses ~400 live stores instead of 865**, and reorders the barcode plan from `prices ⋈ stores` (hash) into a nested loop over 14 `item_chain_names` rows × a materialised prices⋈stores, discarding 11,076 rows in a join filter. `enable_nestloop` was not involved (the city path is untouched, and it was reset between measurements). **Reverted before commit; production never ran it.** The helper's comment says not to paste the predicate into `_PRICE_SQL`.
+
+**Proposal for Dude:** filter in Python instead: `fetch_prices` (and the promo functions) drop rows whose `store_fk` is not in the cached live-store set. Measured: **0.13 ms** per barcode lookup, 90 ms on the 393K-row `חלב` search (~1% of it), **no SQL or plan change at all**. The city path's store-id prefetch is the one place a SQL predicate is free (it runs on `stores` alone).
+
+What the guard would hide today, measured:
+
+- **Prices: only store 145**, קרפור היפר אשדוד צפוני (store 006): no `'loaded'` run since tracking began 2026-05-25, last runs `no_file` in early June, newest `price_update_date` 2026-05-12. **2,420 quotes.** This is SU10S-14's "+1 never loaded"; hiding it is the guard working (Dude, SU10S-17). Barcode `7290004131074`: 853 → 852 quotes.
+- **Promo-only quotes from 7 never-loaded שוק העיר "אונליין" stores** (ids 18849–18858): 0 prices, 75–90 active promos each, some ending **2050**. 8 non-live stores carry 2,239 active promo rows in all. They surface in search today; the guard would remove them.
+- Not a guard effect: the same old promo-only SQL is **non-deterministic run to run**. `DISTINCT ON` ties between equal-priced promos pick an arbitrary `promo_id`, so 4–6 rows differ between identical runs. Pre-existing; worth an explicit tie-break someday.
+
+### Part 3 — `/stores/coordinates`
+
+`live_store_clause` applied: **965 → 846 rows**. 184 and 195 (SU10S-16's dead Carrefour) and 145 are gone. The other 116 removed rows have **never loaded** and hold **zero prices**: ~90 Shufersal BE pharmacies, המפיץ wholesale, pickup points, Keshet קולינריק, some שפע ברכת השם / King Store / Victory 090. No quote can ever reference them, so nothing user-visible changes except 145. Query cost unchanged (1.71 → 1.62 ms). Curl-verified on production after deploy; `/health` 200, product lookup fine.
+
+### Part 4 — targeted city fill
+
+`scripts/apply_city_canonical.py --targeted [--apply]` fills `city_canonical` only where it is NULL **and** the store is serving (holds prices) **and** live. It never changes or blanks a value, ignores DELETE actions, is a dry run unless `--apply`, and its UPDATE re-checks `IS NULL`. The legacy full apply is unchanged. Run against the server's regenerated `data/city_canonical_review.csv` (still uncommitted there, from SU10S-16), read as `stores.id`.
+
+Dry run: **exactly the 12**: 11 חצי חינם (201–210, 217) + שופרסל 844 (id 24093), all L1 exact, raw city = canonical, and all six values already established (10–34 stores each). Applied: **12 filled**; re-run 0. Serving + live stores with no city: **13 → 1**.
+
+**Hazi Hinam 35348** is store_id **219** (not delivery store 103): it loads daily and has 602 prices, the size of the chain's produce-only "תוצרת חקלאית" branches. Dude: physical, so `is_physical` is left as is; it stays NULL for manual review (**SU10S-18**).
+
+Also visible in the CSV, and a reason the full apply stays dangerous: it maps BE "כפר גנים" (a פתח תקווה neighbourhood) to **כפר גלים** (L3 fuzzy 0.875). That's wrong, and untouched here because that store is not serving.
+
+### Found along the way — pre-existing, not fixed
+
+**`/search?q=חלב` takes 17–33 s in production.** 3,049 relevance codes → ~393K price rows; the price SQL alone is ~10 s under EXPLAIN. Nothing in this session caused it: it predates the deploy, and the guard made that query faster. Added to the roadmap as its own item.
