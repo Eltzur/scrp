@@ -2766,3 +2766,59 @@ The basket toggle is the single exception, and it still sends no coordinates —
 
 **No rebuild needed.** `expo-location` was already a dependency, an app.json plugin and in use by Settings, so the native side is unchanged — a JS reload picks this up. The 5-button segmented control instead of a slider was chosen partly for that reason: a native slider would have forced an EAS rebuild before anything could be tested.
 
+
+---
+
+## Session SU10S-12 (September 27, 2026) — no-city stores: diagnosis (READ-ONLY, nothing changed)
+
+No DB writes, no edits to `city_names.py`, `CITY_VARIANTS`, `STORE_CITY_OVERRIDES`, `active_stores.yaml` or any loader. Proposal CSV for Dude at `~/stores_no_city_proposal.csv` and `C:\xxl-archive\stores_no_city_proposal.csv` (sha256 `30f9e248d83a8246…`).
+
+### The city matcher is not broken. It was never run on these rows.
+
+Of the 72 stores that carry a raw city, **69 match a CBS name exactly** and would resolve at Layer 1 with no code change whatsoever. Re-running the existing cascade resolves **71 of 72**:
+
+| layer | count |
+|---|---|
+| L1 exact CBS match | 69 |
+| L3 fuzzy ≥0.85 | 2 |
+| still unresolved | 1 |
+
+The reason is an id boundary, not a matching failure: **every unresolved store has `stores.id` 23275-39280; every resolved store is ≤ 21906.** Zero overlap. These rows were added after the last `build_city_canonical.py` + `apply_city_canonical.py` run (9d-8).
+
+The two fuzzy matches were checked against the SEVERE no-cross-municipality rule and are safe spelling variants, both 0.941 with a clear gap to the runner-up: `קרית אתא` → `קריית אתא` (CBS 6800, next best 0.750) and `נצר סירני` → `נצר סרני` (CBS 435, next best 0.737). No bare `מודיעין` appears anywhere in the set, so that ambiguity is not in play.
+
+The one genuine failure is `ויקטורי` id 23275, raw city `שמוטקין` — a street or person, not a locality (best CBS match 0.57). Needs Dude.
+
+### ⚠️ The 33 "no city" stores are a DIFFERENT and worse problem
+
+**31 of the 33 are not missing a city — they are duplicate store rows.** Each is a 4-digit zero-padded twin of an existing, fully-populated 3-digit row, and **both are serving prices**:
+
+```
+id 39250  store_id 0002  no city   7,250 prices  last 2026-06-29
+id   143  store_id  002  אשקלון   11,991 prices  last 2026-09-23
+```
+
+Chain-wide: Carrefour has **91 four-digit store rows, all with no city**, against 152 three-digit rows. The four-digit set holds **142,622 prices that stopped updating around 2026-06-29 to 07-02** — roughly when the padding fix landed and the loader moved to three digits. They were never retired.
+
+**This is user-visible today.** `db/query.py` has no freshness filter at all — no `INTERVAL`, no `now() -`; `price_update_date` is selected for display only, never to exclude. So the abandoned rows still compete to be a chain's cheapest price, and:
+
+> **7,870 of 22,416 Carrefour items (35.1%) currently take their displayed cheapest price from one of these stale duplicate rows.** The oldest examples carry `price_update_date = 2015-01-01`.
+
+Per-chain quote collapsing means they do not show as duplicate branches — they show as *wrong prices*, which is harder to notice.
+
+This is scraper/store-identity territory and was **not touched**. It wants its own read-and-report session covering: which loader path still emits 4-digit ids, whether the rows should be merged or retired, and whether the read path should gain a staleness guard independently (a dead branch in any chain would have the same effect).
+
+### Recommended fix shape
+
+**For the 71 resolvable: re-run the existing build, do not add overrides.** `CITY_VARIANTS` or `STORE_CITY_OVERRIDES` entries would be dead weight — 69 of them already match CBS exactly, so an override would encode a rule the matcher already knows. The durable fix is to run `build_city_canonical.py` then review `data/city_canonical_review.csv` and apply.
+
+**Durability, stated precisely:** no scraper writes `city_canonical` — all six loaders name only `store_name`/`city`/`city_norm`/`address` in their `ON CONFLICT` (verified SU10S-10). So the nightly cron will **not** overwrite a city fix. What does erase it is a later `apply_city_canonical.py` run whose review CSV was built before the rule existed — which is an argument for fixing by rebuild rather than by hand-editing the DB.
+
+**Knock-on for geocoding:** of the 71, **42 carry a usable address** and would become eligible for street-level geocoding on the next Sunday `scrp-geocode` run; the other 29 would get a city centroid. That closes most of the 107 serving stores currently holding no coordinate at all.
+
+### Proposal CSV
+
+105 rows. By confidence: **69 exact**, **2 variant**, **34 needs Dude** — of which 31 are the duplicate rows (proposed city deliberately left blank, since assigning one would paper over the real bug), 2 have no city/name/address anywhere, and 1 is `שמוטקין`.
+
+One row deserves a look regardless of the duplicate question: `קרפור` id 39226, `"קרפור סיטי גבעת סביון"`, address `78 הגליל`. גבעת סביון is a neighbourhood of יהוד-מונוסון rather than a CBS locality, so it is marked needs-Dude instead of being fuzzy-matched to something adjacent.
+
