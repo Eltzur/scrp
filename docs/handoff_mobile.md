@@ -452,3 +452,51 @@ Commit `87b73fa`. Backend half is SU10S-11 in `docs/super/handoff_super.md` (one
 
 **Not device-verified.** Typecheck adds no new errors (the same five pre-existing `src/tw`), Metro export is clean, and all seven new strings are in the Hermes bundle — but none of that proves the layout or the GPS path on a real phone.
 
+
+---
+
+## Session SU10S-15 (September 27, 2026) — drawer dark-mode text, first-launch location ask, GPS banner
+
+Commit `c88a596` (xxl-super-mobile). JS-only — **a reload is enough, no rebuild** (`app.json`/`package.json` untouched; `expo-location` and `Linking` were already in use).
+
+### Drawer labels invisible in dark mode — root cause (proven, and NOT a Modal issue)
+
+The SU10S-6 default text colour was applied by cloning a `color` onto **the element `useCssElement()` returns**. That element is not always the Text: when any class on it declares a CSS custom property, `useNativeCss` (react-native-css 3.0.7, `native/react/useNativeCss.js`) returns `<VariableContext.Provider>{<Text/>}` instead. Compiling the drawer's classes with react-native-css's own compiler shows `font-medium`/`font-bold` declare `--tw-font-weight` and `text-xs` declares `--__rn-css-em`. So the colour was cloned onto the Provider, never reached the Text, and the Text fell back to React Native's black. Light mode looked fine only because the fallback black happens to be correct there.
+
+The Modal hypothesis was checked and ruled out: the drawer icons (`useTheme()`) and the Text default already read the **same** `useColorScheme()`, so they could not disagree. The bug hits any colourless Text carrying one of those classes, anywhere — the drawer was just where it was most visible (every label is `font-medium`, the header `font-bold`).
+
+**Fix** (`src/tw/index.tsx`): the default now lives in leaf components (`DefaultColorText`, `DefaultColorTextInput`) that the interop renders, so they always receive the final resolved style whatever wraps them, and the colour comes from `useTheme()` — one source of truth with the icons/surfaces. "Fill in only when absent" is preserved.
+
+Other modals audited: permission-primer (title `font-bold` — same bug, now fixed by the same change), product-info, segmented-tabs, product-detail (its comment input sets `theme.text` explicitly — fine). Two **raw RN `TextInput`s with no colour** were found and moved to the `@/tw` TextInput: the Scan manual-entry modal and the Settings city search.
+
+**A web preview cannot prove this** — web resolves text colour through CSS, and the bug was React Native's native default. Only a device confirms it.
+
+### Location: one first-launch ask
+
+`components/location-onboarding.tsx`, mounted in the root layout. Once per install (AsyncStorage `xxl_location_asked`, written **when the primer is shown**, so killing the app mid-dialog never earns a second prompt): the existing primer → OS dialog through `LocationProvider.enableGps()` — no second permission path. Granted → `'gps'`. Denied / "not now" → stays manual, never auto-prompted again. Skipped entirely if already granted or permanently denied. Existing installs have no flag, so their next launch counts as first, once.
+
+**Dialog sequencing:** every OS permission request (camera button on Scan, `enableGps`) goes through `lib/permission-queue.ts`, and the primer only opens while no request is pending and the app is active. While the primer is up it covers the camera button. Two system dialogs cannot be on screen together.
+
+`LocationProvider` now tracks `canAskAgain` and `locationUsable` (gps mode + granted), re-reads permission on every return to foreground, and drops coords if permission is revoked. This supersedes SU10S-11 invariant 4's "reached from Settings" — permission is now reached from onboarding, Settings and the banner, **still through the one `enableGps()`**.
+
+### "Turn on location" banner
+
+`components/location-banner.tsx`, one shared component on Scan (top overlay) and Search (above the search box). Shown when location is not usable, after the first-launch ask, and not within 14 days of ✕ (`xxl_location_banner_dismissed_at`; shared store in `lib/location-prompt-store.ts`, so ✕ on one tab hides both). "הפעלה": granted-but-manual → switch to GPS with no dialog; askable → OS dialog; permanently denied → `Linking.openSettings()`, and on return permission is re-read and GPS switched on if granted. Theme tokens (text on `backgroundElement` ≥15:1 both modes; white on emerald-700 5.5:1), 48dp/44pt targets, `accessibilityRole="button"`, icon + words, not colour alone.
+
+### Verification status
+
+Typecheck: only the 5 pre-existing `src/tw` TS2589/TS2590. Metro Android export clean; the banner strings and new storage keys are in the Hermes bundle. **Not device-verified.**
+
+### Device checklist — for Dude
+
+ 1. Fresh install / cleared data → primer → OS dialog once; allow →
+    nearby works on the next scan; no banner.
+ 2. Clear data, deny → no further auto-prompts; banner on Scan + Search.
+ 3. Banner "הפעלה" after a permanent deny → opens Android app settings;
+    enable there, return → banner gone, nearby works.
+ 4. Banner ✕ → gone, stays gone after relaunch (within 14 days).
+ 5. Manual city chosen with permission granted → banner "הפעלה" switches
+    to GPS without a dialog.
+ 6. Drawer in dark mode: every label + section header readable; light mode
+    unchanged. Other modals readable in dark mode.
+ 7. Camera + location permission dialogs never appear on top of each other.
