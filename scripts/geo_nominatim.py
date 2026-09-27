@@ -29,6 +29,19 @@ ACCEPTANCE RULES, taken from the SU10S-9 pilot rather than invented:
 
     > MAX_CENTROID_KM from the city centroid -> REJECT.
 
+THE ADDRESS IT GEOCODES (SU10S-18) is the EFFECTIVE address,
+    COALESCE(NULLIF(btrim(address_override), ''), address)
+`address` is owned by the nightly store upsert and is overwritten from the
+feed (or blanked to '' by binaprojects) every night; a hand correction lives
+in `address_override`, which no scraper writes.
+
+WHEN A ROW IS RE-GEOCODED. Anything below house level is retried every run
+(the on-disk cache makes that free). A house-level ('address') row is retried
+only when the input changed: its stored geo_input differs from the input this
+run would build - i.e. an override was set, or the feed address moved. Before
+SU10S-18 an 'address' row was never retried at all, so a corrected address
+could not replace a wrong house-level pin.
+
 WHY 25 KM AND NOT SOMETHING TIGHTER. The pilot measured legitimate results
 3-6 km from their city centroid — Jerusalem's Talpiot and Givat Shaul, Tel
 Aviv's northern edge — because big municipalities are simply large. A 5 km
@@ -132,17 +145,42 @@ def classify(hit: dict) -> tuple[str | None, str]:
     return None, f"{cls}/{typ} — unrecognised class"
 
 
-_TARGETS_SQL = """
-    SELECT id, chain_id, store_name, address, city_canonical, lat, lon, geo_precision
+# The effective address (see module doc). Also the only expression the
+# address filters below may test, or override-only stores would be skipped.
+EFFECTIVE_ADDRESS_SQL = "COALESCE(NULLIF(btrim(address_override), ''), address)"
+
+_TARGETS_SQL = f"""
+    SELECT id, chain_id, store_name, {EFFECTIVE_ADDRESS_SQL} AS address,
+           city_canonical, lat, lon, geo_precision, geo_input
     FROM stores
     WHERE is_physical
-      AND address IS NOT NULL AND btrim(address) <> ''
-      AND lower(btrim(address)) NOT IN ('unknown','none','null','n/a','-')
-      AND address ~ '[0-9]'
+      AND {EFFECTIVE_ADDRESS_SQL} IS NOT NULL AND btrim({EFFECTIVE_ADDRESS_SQL}) <> ''
+      AND lower(btrim({EFFECTIVE_ADDRESS_SQL})) NOT IN ('unknown','none','null','n/a','-')
+      AND {EFFECTIVE_ADDRESS_SQL} ~ '[0-9]'
       AND city_canonical IS NOT NULL AND btrim(city_canonical) <> ''
-      AND (geo_precision IS DISTINCT FROM 'address')
     ORDER BY id
 """
+
+
+def build_geo_input(address: str, city_canonical: str) -> tuple[str, str, str]:
+    """(addr, city, geo_input) exactly as geocoded and as stored in geo_input.
+
+    The single definition: the query sent to Nominatim, the value written to
+    stores.geo_input, and the "did the input change?" test all come from here,
+    so they cannot drift apart.
+    """
+    addr = re.sub(r"\s+", " ", address).strip().strip(",")
+    city = city_canonical.strip()
+    return addr, city, f"{addr} | {city}"
+
+
+def select_targets(conn) -> list:
+    """Rows to geocode this run: below house level, or input changed."""
+    return [
+        r for r in conn.execute(text(_TARGETS_SQL)).mappings().all()
+        if r["geo_precision"] != "address"
+        or r["geo_input"] != build_geo_input(r["address"], r["city_canonical"])[2]
+    ]
 
 
 def main() -> None:
@@ -152,7 +190,7 @@ def main() -> None:
     args = ap.parse_args()
 
     conn = connect()
-    rows = conn.execute(text(_TARGETS_SQL)).mappings().all()
+    rows = select_targets(conn)
     if args.limit:
         rows = rows[: args.limit]
     print(f"targets: {len(rows)} stores with a real address\n")
@@ -162,9 +200,7 @@ def main() -> None:
     flagged: list[str] = []
 
     for i, r in enumerate(rows, 1):
-        addr = re.sub(r"\s+", " ", r["address"]).strip().strip(",")
-        city = r["city_canonical"].strip()
-        geo_input = f"{addr} | {city}"
+        addr, city, geo_input = build_geo_input(r["address"], r["city_canonical"])
 
         hits = geo._get({"street": addr, "city": city})
         if not hits:

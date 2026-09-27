@@ -3176,3 +3176,80 @@ Also visible in the CSV, and a reason the full apply stays dangerous: it maps BE
 ### Found along the way — pre-existing, not fixed
 
 **`/search?q=חלב` takes 17–33 s in production.** 3,049 relevance codes → ~393K price rows; the price SQL alone is ~10 s under EXPLAIN. Nothing in this session caused it: it predates the deploy, and the guard made that query faster. Added to the roadmap as its own item.
+
+---
+
+## Session SU10S-18 (September 27, 2026) — address_override survives the cron; branch review export
+
+No price-path changes. One migration, one geocoder change, one read-only export script.
+
+### Part 1a — does the nightly cron overwrite `stores.address`? Yes, for most chains.
+
+Answered **empirically, tonight**, not by waiting for tomorrow's cron: each chain's real `load_stores()` was run against its **live feed** on a connection whose `commit()` was a no-op, a hand value was stamped on a probe store first, and everything was rolled back.
+
+| loader | chains | hand-set `address` after the nightly upsert |
+|---|---|---|
+| Cerberus, PublishPrice | Osher Ad, Carrefour (tested); also Rami Levy, Yochananof, Keshet, Tiv Taam, Fresh Market, Super Yuda | **replaced by the feed's value, every night** (`HAND-SET-TEST 1` → `האיצטדיון 11`, → `הרצל 33`) |
+| binaprojects | King Store (tested); Shefa Birkat, Shuk HaIr | **blanked to `''`, every night** (it passes `"address": ""` unconditionally) |
+| Victory, Shufersal, Hazi Hinam | Victory (tested) | untouched: these upserts never write `address` |
+
+All upserts are `address = COALESCE(excluded.address, stores.address)`: a feed NULL never overwrites, **but `''` does**, and Cerberus/PublishPrice turn a missing `<Address>` into `''`. So **Victory 23275's hand-set address survived only because Victory writes no addresses at all** — a hand edit on most other chains would be gone by 10:05 the next morning. (Rami Levy's feed published no Stores file tonight, so its run upserted nothing; Osher Ad and Carrefour stood in for the Cerberus/PublishPrice family.)
+
+23275 itself had not yet met a cron: its address was set on the afternoon of Sep 27, after that day's 10:00 run.
+
+### Part 1b — `stores.address_override`
+
+`db/migrations/su10s18_stores_address_override.sql`: one nullable `text` column. Backup first: `~/backups/pre-su10s18-stores-20260927T195152.dump` (`pg_restore --list` verified); re-run is a no-op.
+
+**No scraper change was needed and none was made.** Every write to `stores` was read — the 7 INSERT paths (`db.py`, binaprojects, cerberus, hazihinam, publishprice, shufersal, victory) and every UPDATE (scrapers, `geo_*`, `apply_city_canonical`, `ingest_store_xml`, `normalize_store_cities`, the padding fixers). All name their columns explicitly; there is no wildcard, ORM model, `to_sql` or `COPY` into `stores`. Nothing can write `address_override` by accident.
+
+**Effective address, everywhere it is read:** `COALESCE(NULLIF(btrim(address_override), ''), address)`.
+
+### Part 1c — geocoder
+
+`scripts/geo_nominatim.py` now geocodes the effective address (`EFFECTIVE_ADDRESS_SQL`), and one function, `build_geo_input()`, produces the Nominatim query, the stored `geo_input`, and the change test, so they cannot drift.
+
+**The brief assumed a `geo_input` comparison already existed. It did not.** The target filter was only `geo_precision IS DISTINCT FROM 'address'`, so a house-level row was **never re-geocoded**, whatever its address became — a wrong house-level pin would have outlived any correction. Now an `'address'` row is re-targeted when its stored `geo_input` differs from the input built today (compared in Python on the exact string, not a SQL re-implementation of the normalisation).
+
+Measured effect on today's data (DB-only, no Nominatim call): old targets 250, new 251 — **the only difference is 23275**. No house-level row has a changed input, so next Sunday brings no surprise re-geocodes and exactly **one** new Nominatim request.
+
+23275 moved: `address` → NULL, `address_override` = `בנימין שמוטקין 29`. **The geocoder was not run**; Sunday's `scrp-geocode` gives it a city centroid (`geo_centroids`), then tries the street.
+
+**Known limit, for the apply session:** if a re-targeted row's new lookup is rejected or finds nothing, the geocoder `continue`s and the OLD coordinate stays. For a corrected address that means the pin from the wrong address survives. When applying Dude's corrections, reset those rows to their city centroid (or NULL `lat`/`lon` so `geo_centroids` refills them) before the re-geocode.
+
+**Check after the next 10:00 cron (Sep 28):**
+```sql
+SELECT id, address, address_override FROM stores WHERE id = 23275;
+-- expect: address NULL, address_override 'בנימין שמוטקין 29'
+```
+
+### Part 2 — branch review export
+
+`scripts/export_branch_review.py` (read-only). Population = serving + live + physical: **863 stores**.
+
+`~/branch_review.xlsx` and `C:\xxl-archive\branch_review.xlsx`, sha256 `c6c0f2c5d4c36fd5e34601f1b6b7b0d1cf5acd384c7b50fde7f074df5d5aac7f` both sides. Two RTL sheets: **"לבדיקה" 363 rows** (manual), **"Shufersal-bulk" 320 rows** (`BULK — awaiting StoresFull ingestion`). Reviewer columns `correct_address`, `correct_city`, `is_physical` (yes/no dropdown), `notes` are empty and shaded.
+
+**GEOCODE_\* are replayed, not stored.** The geocoder only persists accepted results, so the export replays its own `classify()` + 25 km rule against its on-disk cache and never calls Nominatim. The replay reproduces SU10S-10 exactly — 185 accepted (76 + 109), 99 no-hit, 27 shop, 11 rejected, 4 too far — so the categories are faithful.
+
+Stores per issue (whole population, before the Shufersal split):
+
+| issue | stores |
+|---|---|
+| NO_CITY | 1 (Hazi Hinam 35348) |
+| NO_ADDRESS | 469 (320 Shufersal → bulk sheet) |
+| PLACEHOLDER | 24 (22 Yochananof `unknown`, 2 Rami Levy) |
+| NO_HOUSE_NUMBER | 50 |
+| GEOCODE_REJECTED | 15 (11 class + 4 > 25 km) |
+| GEOCODE_FLAGGED | 26 (27 overall; 1 outside the population) |
+| GEOCODE_NO_MATCH | 99 |
+| MAYBE_ONLINE | 0 |
+
+Manual rows per chain: ויקטורי 68, רמי לוי 46, יוחננוף 44, קרפור 39, פרש מרקט 29, קינג סטור 28, טיב טעם 27, שפע ברכת השם 22, שוק העיר 18, אושר עד 14, חצי חינם 12, קשת 12, סופר יודה 4.
+
+Beyond the brief, flagged as such: an **`issue_detail`** column (the geocode reason, the placeholder text, "address is just the city name"), and a **`GEOCODE_NO_MATCH`** category — no Nominatim result is not a rejection, but it is the same "check this address" signal.
+
+**MAYBE_ONLINE = 0 is real, not a regex miss:** SQL over the whole table finds 23 online-looking names; 19 are already `is_physical = false` and the other 4 have never loaded, so none is in the population.
+
+**Worth deciding before hand entry:** 148 manual rows are NO_ADDRESS from chains whose feeds publish **no address for any branch** — Victory 68, King Store 28, Shefa Birkat 22, Shuk HaIr 18, Hazi Hinam 12. Same shape as Shufersal; if any of them has a StoresFull-style source, those could go bulk too.
+
+**Apply step (later session, once the file is back):** `correct_city` → `STORE_CITY_OVERRIDES` (durable); `correct_address` → `address_override`; `is_physical = no` → `is_physical = false`; reset re-targeted coordinates (see Known limit above); then a targeted re-geocode.
