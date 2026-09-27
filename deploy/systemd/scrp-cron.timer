@@ -1,0 +1,11 @@
+[Unit]
+Description=XXL Scraper — daily cron timer (3am Israel time)
+
+[Timer]
+OnCalendar=*-*-* 10:00:00
+TimeZone=Asia/Jerusalem
+Persistent=true
+Unit=scrp-cron.service
+
+[Install]
+WantedBy=timers.target
