@@ -2493,3 +2493,67 @@ Endpoints, via TestClient with auth stubbed: a clean submit schedules **0** mail
 
 If nothing arrives, `journalctl -u scrp-api | grep -i mail` distinguishes the cases: "mail not configured — missing: …" names the keys, "mail send failed (…)" carries the SMTP error, and "[MODERATION] throttled" means the caps hit.
 
+
+---
+
+## Session SU10S-8 (September 27, 2026) — infra tidy-up: timers, a keep-alive that never worked, stale env copies
+
+Commits `731df8f` (timers captured as-is) + the follow-up fix. **The timer change needs Dude to install it** — block at the end.
+
+### Timers: the Israel-time guarantee is now real
+
+`scrp-cron.timer` and `scrp-backup.timer` have run in production for months but **existed only in `/etc/systemd/system`** — `deploy/` was gitignored until SU10S-5, so they were never committable. They are now tracked, captured byte-for-byte from the server (sha256-verified against the installed copies) and committed **unmodified first**, so the fix is a diff against what actually runs rather than against a reconstruction.
+
+Both carried `TimeZone=Asia/Jerusalem`, which **is not a systemd [Timer] key** — it is reported as unknown and ignored, so the timers fired at Israel time only because the host timezone happens to be Asia/Jerusalem. Changed to the inline `OnCalendar=… Asia/Jerusalem` form.
+
+**The schedule is provably unchanged** — that was the whole risk, so it was measured rather than asserted:
+
+| | before | after |
+|---|---|---|
+| scrp-cron | Mon 2026-09-28 10:00:00 IDT / 07:00 UTC | identical |
+| scrp-backup | Mon 2026-09-28 04:00:00 IDT / 01:00 UTC | identical |
+
+Descriptions were also corrected: they said "3am" and "4am" while the units run at 10:00 and 04:00 — the cron one has been wrong since 9n moved it off 03:00. The 10:00 choice is load-bearing (portals publish 02:09-05:00 UTC) and is now noted in the file itself so it is not "tidied" back.
+
+### The Supabase keep-alive has been failing silently for months
+
+This corrects **two** earlier claims, including one of mine in SU10S-5.
+
+SU10S-5 said `supabase-keepalive.service` had a fatal quoting error and had never been enabled. That was true of the **repo copy** — a stale version with a broken multi-line inline `python3 -c`. The **installed** unit is a different, valid file that runs `scripts/supabase_ping.py` (untracked), and it is enabled and running every 4 hours.
+
+**And every single run returns HTTP 404.** Six times a day, for as far back as the journal goes. The script pings `/rest/v1/stores` — but `stores` lives in the Kamatera Postgres, not in Supabase, so that table does not exist there. The keep-alive has been keeping nothing alive.
+
+What actually works is `cron_main.py`'s `ping_supabase()`, which reads `/rest/v1/keepalive` and logs `ping OK (200) — DB read confirmed` daily. Note its docstring, which is the opposite of the intuitive choice and worth not re-learning: `/auth/v1/health` returns 200 **without touching Postgres**, so it does not count as activity and the project paused anyway (confirmed May 2026). Only a genuine `/rest/v1/` read counts.
+
+All three consumers — scrp's `.env`, the keep-alive unit (which reads that same file), and **the flights backend** — point at the same project, `dwohlwmiejgjlsbuegeu.supabase.co`. So the daily cron ping already covers everything, including flights. **The unit is redundant as well as broken**, and is removed rather than repaired: repairing it would add a second daily request that duplicates a working one.
+
+### Cleanup
+
+Deleted `.env.bak`, `.env.save`, `.env.save.1` from `~/scrp` after confirming, by key NAME comparison only, that none held a key absent from the current `.env`. Kept `.env.bak-su10s7` (the pre-SMTP copy) until mail is confirmed stable — noted in the rotation runbook that it holds the **old** password and should go once that is done.
+
+Deleted the SU10S-7 live-test data: rating 33 and its one blacklist report. The author's other rating (id 17) was confirmed present before and after.
+
+Incidental but worth recording: the five SMTP keys are now present in `.env`, so SU10S-7's remaining step is done.
+
+### Password rotation — runbook written, NOT executed
+
+`docs/runbooks/rotate_scrp_app_password.md`. Every step needs sudo or the value itself, so it is Dude's to run.
+
+The finding that shapes it: **the flights backend shares the `scrp_app` credential** (`~/xxl-flights/backend/.env`, same role), so a rotation that only updates `~/scrp/.env` takes flights down at its next restart rather than immediately — the worst kind of failure to debug later. Conversely `scrp-backup.sh` is **not** affected: it uses `sudo -u postgres pg_dump`, i.e. peer auth, and never sees the password.
+
+The runbook also insists on editing `.env` with an editor rather than `sed`/`echo`, since those put the password into shell history and the process list — the exact exposure (9d-2, printed to a terminal and a transcript) the rotation exists to close.
+
+### Install block (Dude, one paste after `ssh dude@185.229.226.190`)
+
+```bash
+cd ~/scrp && git pull origin main
+sudo cp deploy/systemd/scrp-cron.timer deploy/systemd/scrp-backup.timer /etc/systemd/system/ && \
+sudo systemctl disable --now supabase-keepalive.timer && \
+sudo rm -f /etc/systemd/system/supabase-keepalive.service /etc/systemd/system/supabase-keepalive.timer && \
+rm -f ~/scrp/scripts/supabase_ping.py && \
+sudo systemctl daemon-reload && \
+systemctl list-timers "scrp-*" --no-pager
+```
+
+**What the NEXT column must show:** `scrp-cron` tomorrow at **10:00 IDT**, `scrp-backup` tomorrow at **04:00 IDT**, and the two `scrp-gs1-*` timers on the coming **Sunday** (14:00 and 17:00 IDT). `supabase-keepalive` must be **gone from the list entirely**. If any scrp-cron/backup time moved, the inline-timezone change went wrong — revert by reinstalling the previous commit's copies.
+

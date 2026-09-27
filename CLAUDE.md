@@ -90,6 +90,7 @@ For all other commands, select "Yes" (one-time approval) unless the command look
 - Start scraper manually: python3 -m scripts.run_one <chain_id>
 - Check API service: sudo systemctl status scrp-api
 - Check cron: sudo journalctl -u scrp-cron -n 20 --no-pager
+- **Timer schedules use the inline form `OnCalendar=<schedule> Asia/Jerusalem`. `TimeZone=` is NOT a valid [Timer] key** — systemd reports it as unknown and ignores it, so a unit carrying it fires at Israel time only by accident of the host timezone (found and fixed SU10S-8). Unit files live in `deploy/systemd/`; installing them needs sudo.
 - Check weekly GS1 fetch (Sun 14:00 IDT, detail + up to 1500 images): `journalctl -u scrp-gs1-fetch -n 50 --no-pager` — a failed unit with "media endpoint blocking" is the circuit breaker working, not a bug; the next Sunday resumes.
 - Check GS1 image offsite backup (Sun 17:00 IDT, rclone copy to b2:xxl-scrp-backups/gs1-images/current/): `journalctl -u scrp-gs1-images-backup -n 30 --no-pager`
 - Get flights test-user token: `ssh dude@185.229.226.190 "~/xxl-flights/scripts/kamatera/get_test_token.sh"` — prints only the access_token to stdout; raw Supabase response to stderr + exit 1 on failure. See docs/flights/handoff_flights.md § Test user.

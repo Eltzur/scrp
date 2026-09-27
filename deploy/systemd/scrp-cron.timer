@@ -1,9 +1,14 @@
 [Unit]
-Description=XXL Scraper — daily cron timer (3am Israel time)
+Description=XXL Scraper — daily cron timer (10:00 Israel time)
 
 [Timer]
-OnCalendar=*-*-* 10:00:00
-TimeZone=Asia/Jerusalem
+# Timezone is the INLINE suffix. TimeZone= is NOT a systemd [Timer] key —
+# systemd-analyze verify reports it as unknown and ignores it, so this timer
+# previously fired at Israel time only because the host's own timezone is
+# Asia/Jerusalem. Same schedule, now actually guaranteed.
+# 10:00 is deliberate (session 9n): chain portals publish 02:09-05:00 UTC,
+# and the old 03:00 IDT run fired before they did. Do NOT change it.
+OnCalendar=*-*-* 10:00:00 Asia/Jerusalem
 Persistent=true
 Unit=scrp-cron.service
 

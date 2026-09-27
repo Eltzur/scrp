@@ -1,9 +1,9 @@
 [Unit]
-Description=XXL Scraper — daily Postgres backup timer (4am Israel time)
+Description=XXL Scraper — daily Postgres backup timer (04:00 Israel time)
 
 [Timer]
-OnCalendar=*-*-* 04:00:00
-TimeZone=Asia/Jerusalem
+# Inline timezone — see scrp-cron.timer for why TimeZone= is not used.
+OnCalendar=*-*-* 04:00:00 Asia/Jerusalem
 Persistent=true
 Unit=scrp-backup.service
 
