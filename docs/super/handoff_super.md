@@ -3253,3 +3253,66 @@ Beyond the brief, flagged as such: an **`issue_detail`** column (the geocode rea
 **Worth deciding before hand entry:** 148 manual rows are NO_ADDRESS from chains whose feeds publish **no address for any branch** — Victory 68, King Store 28, Shefa Birkat 22, Shuk HaIr 18, Hazi Hinam 12. Same shape as Shufersal; if any of them has a StoresFull-style source, those could go bulk too.
 
 **Apply step (later session, once the file is back):** `correct_city` → `STORE_CITY_OVERRIDES` (durable); `correct_address` → `address_override`; `is_physical = no` → `is_physical = false`; reset re-targeted coordinates (see Known limit above); then a targeted re-geocode.
+
+---
+
+## Session SU10S-20 (September 27, 2026) — freshness guard on every price and promo read (Python post-filter)
+
+Commit `013ffaf`. API deployed and curl-verified. **Closes SU10S-14 fix B**: the write path (`stores.last_loaded_at`, SU10S-17), `/stores/coordinates` (SU10S-17) and now every user-facing price and promo read apply the same liveness rule.
+
+### Design — no SQL text changed
+
+The SU10S-17 SQL predicate failed the plan gate, so this is the approved alternative: filter rows **in Python, after the query**. The unchanged originals were renamed (`_fetch_prices_all`, `_fetch_grouped_promos_raw`, …) and the public names are wrappers in one section at the end of `db/query.py`, "Liveness filter (SU10S-20)". The diff contains no SQL change; the only new statement is the cache's own `SELECT … FROM stores`.
+
+- **Live set**: per gunicorn worker, **10 min TTL**, built from the SU10S-17 rule (`last_loaded_at >= own chain's max − 3 days`, NULL = not live) via the same `_chain_cutoffs()`. Loaded on its **own connection**, so a failure cannot abort the request's transaction. **Fail open**: on any failure it logs `WARNING db.query: liveness set unavailable, NOT filtering stale stores`, returns unfiltered rows, and retries after 60 s — proven by forcing the load to fail (10,260 rows returned, = unfiltered).
+- **Promo-pick**: needs nothing. The LATERAL attaches a promo to a price row from the SAME store, so it goes wherever its row goes.
+
+| read | how | counts |
+|---|---|---|
+| `fetch_prices` (shelf + promo-only, city and non-city) → /search, /compare, /product, /basket/compare, CLI | drop rows whose `store_fk` is not live | callers group AFTER the filter → `total_matches`, `has_more`, `chains_count`, cheapest all consistent |
+| `fetch_promos` (single store) | `[]` if the store is not live | — |
+| `fetch_promos_bulk` | rows carry `(chain_id, store_id)`, no `store_fk`: drop a key only when **no** live store shares it | today every dead key is unambiguous |
+| `fetch_grouped_promos` | **refill**: materialise the filtered sequence from row 0 up to `offset + limit`, then slice | exact page length and offsets (web pages with `offset = rows.length` and stops on a short page) |
+| `fetch_today_promos` | drop rows whose `(chain_id, store_name)` is dead (no `store_fk` in the row); refill to `limit` | exactly `limit` rows |
+| `fetch_promo_cities` / `fetch_promo_chains` | keep a city/chain only if it has a live store | — |
+
+**Why grouped needed the refill, not a plain filter:** a dead branch's rows are contiguous in grouped order (chain → city → branch). King Store 23595 alone is 1,628 rows, so a plain filter could empty whole pages, and the web client stops at the first short page — hiding every chain after King Store. The refill costs re-reading earlier rows, but measured by depth (one 300-row page) it tracks the old code: offset 0 2.15 → 2.24 s, 3,000 2.13 → 2.23 s, 15,000 16.2 → 13.9 s, 60,000 15.5 → 15.8 s. The SQL already sorted `offset + limit` rows either way.
+
+**Documented residuals (exact, measured):**
+- `fetch_today_promos`: its SQL `DISTINCT ON (item_code, chain_id)` picks one store per item/chain *before* the filter; where a dead store won that pick, a live store with the same deal is not substituted. **Today: 0 such rows** — no dead store appears in /promos/today even unfiltered (23595 has no prices, so none of its promos qualifies as ≥10% off).
+- `fetch_promo_cities` / `fetch_promo_chains`: a city whose only active promos are at a dead store would still be listed. **Today: none** (132 → 132 cities, 14 → 14 chains).
+- Fixing either needs the liveness test inside the SQL, which this design deliberately avoids.
+
+### What it hides today (production, rolled-back proof)
+
+- **Store 145** (קרפור היפר אשדוד צפוני): **2,420 → 0** quotes across all its item codes. `/product/7290004131074` no longer lists it.
+- **7 never-loaded שוק העיר "אונליין" stores** (18849–18858): their promo-only quotes in search **7 → 0**; `/promos/18849` 90 → 0; gone from `/promos/bulk`. (They were already excluded from today/grouped/cities by the online-name filter.)
+- **King Store 23595 "338 דוכאן חי אלוורוד"** — a new find: physical, no city, **never** in `fetch_store_runs`, 0 prices, yet **1,628 active promos** last refreshed 2026-08-02. A one-off load nothing has updated since. **1,628 → 0** in grouped, single-store and bulk.
+- Search `q=חלב`: 199 rows from non-live stores → 0 (SU10S-17's "202" included tie-break noise).
+- Unchanged, byte-identical JSON: barcode `7290003726615` (567 rows) and a 10-item basket (284 rows). A live store's promos: 843 169 → 169.
+
+### Cost (median, interleaved, cache warm)
+
+| | old | new | |
+|---|---|---|---|
+| barcode lookup | 20.71 ms | 21.20 ms | +0.49 ms |
+| basket, 10 items | 12.12 ms | 12.50 ms | +0.38 ms |
+| grouped, first page | 2,083 ms | 2,100 ms | +0.8% |
+| /promos/today (200) | 10,878 ms | 11,091 ms | +2.0% |
+| the filter inside `q=חלב` | | 542 ms of 56.8 s | **0.95%** |
+| cache load | | 12.8 ms | once per worker per 10 min |
+
+The barcode figure is higher than the 0.13 ms filter-only estimate from SU10S-17 because it is end-to-end under load; the filter itself is a set lookup per row.
+
+### Two "not identical" results — both pre-existing, not the filter
+
+- **The promo-only quotes are non-deterministic run to run.** The old code against itself differs by 2 rows on the same 300 codes (`DISTINCT ON` ties pick an arbitrary `promo_id`). Old vs new: every shelf row identical, every promo-only (store, item) pair identical.
+- **⚠️ `/promos/grouped` pagination is broken in production, independent of this change.** Paging King Store 300 at a time exactly as the web does (`offset = rows.length`), the **old** code returns 47,025 rows of which **14,039 are duplicates and 14,039 are missing** — ~30% wrong. Cause: the `ORDER BY` (chain, city, branch, discount…) has no unique tiebreaker, so rows tied on discount within a branch come back in a different order on every query. The new code has the same property (14,777 of 45,397) and never returns a dead row. **Fix: add a unique final sort key (e.g. `p.store_fk, p.item_code, p.promo_id`) — a SQL change, out of this session's scope.** Added to the roadmap.
+
+### Also found — pre-existing, not fixed
+
+**`/promos/{store_fk}` and `/promos/store/{chain_id}/{store_id}` return 500 for any store that has promos.** `PromoItem.discount_pct` is a required field, but the single-store query never selects it (only the bulk query computes it) — `ResponseValidationError: 169 validation errors … discount_pct Field required` for store 843. Unchanged by this session (the wrapped function body is byte-identical, `api/models.py` untouched since SU10S-4). No web or mobile client calls these endpoints. One-line fix: `discount_pct: float | None = None`. Added to the roadmap.
+
+### An operational lesson
+
+A verification script that built JSON for three full copies of store 145's result set was **killed by the kernel OOM killer** on this 3.8 GiB box. Only the script died — Postgres (up 4 days) and the gunicorn workers were untouched, `/health` stayed 200 — but the page cache was flushed and product lookups briefly took ~1.4 s. Run ad-hoc production scripts under `ulimit -v` (the rerun used 1.2 GB) and hash rows instead of holding them as strings.
