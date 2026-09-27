@@ -3071,6 +3071,29 @@ The remaining 138 GAIN rows are dead or non-serving stores, which is the SU10S-1
 
 **Nothing was applied.** A targeted apply — only rows where the current value is blank AND the store is serving AND alive — would do exactly the right 12, but that is a change to `apply_city_canonical.py` and belongs in its own session.
 
+### Follow-up — Victory 23275 resolved (same day)
+
+Dude supplied the fact the data could not: Victory store 094 is at
+**בנימין שמוטקין 29, ראשון לציון**. Its raw `city` holds `שמוטקין` — the *street* —
+which is why every layer of the cascade correctly declined it (best fuzzy 0.57
+against `השומרון`).
+
+Fixed as a `STORE_CITY_OVERRIDES` entry (`dad2b39`), **not** a bare DB edit, so a
+future `build_city_canonical` run resolves it at L2 rather than reverting it to
+NULL. Verified by running the cascade over all 1,197 stores with and without
+the new entry: **exactly one outcome changes** — id 23275, `None → ראשון לציון`,
+CBS 8300. The value string was already proven against CBS by the existing
+Victory 023 entry.
+
+`city_canonical` and `address` were then set on that one row (`rows updated: 1`).
+Address was NULL, so it is now `בנימין שמוטקין 29` — which makes the store
+**street-level eligible** on the next Sunday `scrp-geocode` run rather than
+getting only a city centroid. The geocoder was not run.
+
+Serving stores with no city: **14 → 13**. The 13 remaining are the 12 SU10S-16
+targets (11 חצי חינם + 1 שופרסל) plus חצי חינם id 35348, which has no raw city,
+name or address anywhere and still needs manual entry.
+
 #### A trap in the review CSV, worth knowing before anyone touches this
 
 `data/city_canonical_review.csv` has a column named `store_id` that actually holds **`stores.id` (the primary key)**, not the chain's store_id (`build_city_canonical.py` line 152: `"store_id": store_pk`). Joining it on the chain store_id silently produces garbage — and because `(chain_id, store_id)` is not unique for Shufersal (many `sub_chain_id`s), it produces *plausible-looking* garbage: my first attempt showed `תל אביב → חיפה` labelled as an exact match. `apply_city_canonical.py` reads it correctly as a pk; any new consumer must too.
