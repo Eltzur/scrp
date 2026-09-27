@@ -500,3 +500,37 @@ Typecheck: only the 5 pre-existing `src/tw` TS2589/TS2590. Metro Android export 
  6. Drawer in dark mode: every label + section header readable; light mode
     unchanged. Other modals readable in dark mode.
  7. Camera + location permission dialogs never appear on top of each other.
+
+---
+
+## Session SU10S-19 (September 27, 2026) — theme-aware city picker; a barcode typed in Search opens the product
+
+Commit `5980355` (xxl-super-mobile). JS-only — **a reload is enough, no rebuild** (`app.json`/`package.json` untouched).
+
+### City picker white in dark mode
+
+Settings → "בחרו עיר" is a **non-transparent** `<Modal>`, which Android renders as its own native window with a **white default background, whatever the colour scheme**. Nothing painted over it — the panel is a raw `SafeAreaView` — so the panel stayed white, and so did the search input, which is transparent and shows the panel through. The city rows looked right only because each carries its own `dark:` background.
+
+Fix: the panel and the input take `theme.background` from `useTheme()`, the same source of truth as the SU10S-15 `@/tw` text default (text and placeholder colours already came from there). Light mode is unchanged (still white). Row "separators" are the rows' own `dark:`-aware backgrounds with a gap; nothing to change.
+
+Other pickers: none has this shape. `RadiusPicker` (1–5 km) is an inline segmented control, already checked in dark mode in SU10S-11; there is no chain or branch picker. A sweep for light surfaces with no dark counterpart found only the `#D1D5DB` input borders (a border, readable on dark) and the intentionally white button on the dark basket toast.
+
+### A barcode typed into Search
+
+`/search` matches names only (`q=7290003726615` → 0 matches; `/product/7290003726615` → 200). Now a query that is **only digits, 8–14 long** skips the name search and shows a "ברקוד …" panel with a **"הצגת המוצר"** button; **the keyboard's search key opens it directly**. Mixed text/digits, or digits outside 8–14, stay a normal name search.
+
+It goes through `src/lib/open-barcode.ts`, the **exact path Scan's manual entry uses** — extracted from the Scan screen and now shared by both. So a typed barcode lands on `/scan-result` (found → the product; unknown → the scan flow's own not-found message) and is recorded in scan history like a manual scan. No backend change.
+
+**Deliberately not opened from the 300 ms debounce:** 8 digits is already a valid barcode length, so auto-opening would fire on a pause mid-way through typing a 13-digit code and land on the wrong product (or a false not-found).
+
+### Verification status
+
+Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; the new strings are in the Hermes bundle. **Not device-verified** — and a web preview would not prove the picker fix, which is about Android's native Modal window background.
+
+### Device checklist — for Dude
+
+1. Dark mode → Settings → "בחרו עיר": the panel, the search input (typed text + placeholder) and the city rows are all dark and readable.
+2. Search tab: type `7290003726615`, press the keyboard's search key (or "הצגת המוצר") → the product opens, with the green badge.
+3. Search tab: type a barcode that is not in the catalog (e.g. `7290000000000`) → the scan flow's not-found message.
+4. Search tab: type "חלב" → a normal name search, as before.
+5. Light mode: city picker and Search look exactly as before.
