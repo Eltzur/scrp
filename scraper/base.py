@@ -216,6 +216,12 @@ class ChainScraper(abc.ABC):
                 " VALUES (:frid, :cid, :sfk, :sid, :rat, 1, :ii, 'loaded')"
             ), {"frid": fetch_run_id, "cid": self.CHAIN_ID,
                 "sfk": store_fk, "sid": padded, "rat": run_at, "ii": count})
+            # SU10S-17: stores.last_loaded_at = max(run_at) of 'loaded' runs.
+            # Same transaction as the row above; the read-path guard uses it.
+            wconn.execute(text(
+                "UPDATE stores SET last_loaded_at ="
+                " GREATEST(last_loaded_at, CAST(:rat AS timestamptz)) WHERE id = :sfk"
+            ), {"rat": run_at, "sfk": store_fk})
             wconn.commit()
             log.info(f"    -> {count} items loaded for store {sid}.")
 
