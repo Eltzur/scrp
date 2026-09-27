@@ -2430,3 +2430,66 @@ systemctl list-timers "scrp-gs1*" --no-pager       # next run times
 
 A healthy fetch ends with a `DONE — fetched=… failed=… skipped=…` line and an active-exited unit. A blocked one ends with `media endpoint blocking — aborting run, N remain for next run` and a **failed** unit — that is working as designed, not a regression; the next Sunday picks up where it stopped.
 
+
+---
+
+## Session SU10S-7 (September 27, 2026) — moderation email over SMTP, sent in the background
+
+Commit `9d94fc5`. `_notify_moderation()` is no longer a stub. **Live send is still pending Dude adding the credentials** — see the end of this entry.
+
+### Why SMTP and not SendGrid
+
+SendGrid, floated in SU10R-1 and carried on the roadmap since, **dropped its free plan in 2025**. Every transactional provider then wants DNS records and a sender-verification dance for what is, in the end, one mailbox emailing another inside the same domain.
+
+Sending through the domain's own mailbox provider needs **no DNS change at all**. Verified against live DNS this session: `xxl.co.il` MX is `mx1/mx2.hostinger.com` and its SPF is `v=spf1 include:_spf.mail.hostinger.com ~all` — so mail leaving Hostinger's servers is already authorised, and alignment is inherited rather than configured. Cost zero, new dependencies zero (`smtplib` and `email` are stdlib).
+
+Outbound reachability from Kamatera was checked before building, since VPS hosts commonly block mail ports: **465, 587 and 25 are all open**. The code uses SMTP_SSL on 465 and STARTTLS otherwise.
+
+### The background send is a security property, not tidiness
+
+Only a *blocked* submission sends mail. Sending it inline would make blocked submits measurably slower than clean ones, and **that timing difference is itself a disclosure** — an abusive author could submit, watch the clock, and learn which of their words trip the filter. That is precisely the leak the "DO NOT SURFACE `blocked`" invariant exists to prevent, reached from a direction the original rule did not consider.
+
+So the alert is queued with FastAPI `BackgroundTasks` and runs after the response. Measured with a deliberately slow 300 ms fake SMTP:
+
+| | clean | blocked |
+|---|---|---|
+| handler time (what the client waits for) | 5.3 ms median (2.2-23.7) | 8.9 ms median (4.7-11.7) |
+| background time (never waited on) | 0 ms, 0 tasks | **304 ms**, 1 task |
+
+The whole 304 ms of mail cost is outside the response path. The residual **+3.6 ms** on the blocked path is the extra `rating_reports` INSERT that blocked submits have always done — pre-existing, about 1% of the mail cost, and comfortably inside the noise (the clean runs alone spanned 2.2-23.7 ms).
+
+The same reasoning drove a smaller decision: the alert's product-name lookup runs **inside the background task on its own connection**, not in the request, so the blocked path does no extra query either.
+
+**Do not "simplify" the `background.add_task` call into a direct call.** The call site says so.
+
+### Shape of the thing
+
+`api/mailer.py` is provider-isolated: all transport-specific code is in `_smtp_send`, so swapping providers touches one function. `send_email()` **never raises** into a caller and **never logs a credential** — missing config logs which *keys* are absent by name, and a send failure logs the exception type plus a truncated message.
+
+Throttle: 20/hour and 60/day, in memory. gunicorn runs `--workers 2`, so the effective ceiling is **2x** those numbers since each worker holds its own counter. That is documented in the module rather than engineered around with Redis; it still bounds the failure.
+
+Both paths keep their existing WARNING log line — `journalctl -u scrp-api` stays the fallback surface, and mail is best-effort by design.
+
+### Environment variables (names only — never commit or print values)
+
+`smtp_host`, `smtp_port`, `smtp_user`, `smtp_password`, `moderation_email_to` — lowercase per CLAUDE.md. Sender `notify@xxl.co.il`, recipient `info@xxl.co.il`.
+
+**The API takes its environment from systemd's `EnvironmentFile=/home/dude/scrp/.env`, and there is no `load_dotenv()` anywhere in `api/`.** systemd reads that file when the unit *starts*, so adding the keys does nothing until `scrp-api` is restarted. This is the most likely reason a first attempt appears to do nothing.
+
+### Verification
+
+Mailer, against a fake SMTP: missing config → `False` without raising; `SMTPAuthenticationError` → `False` without raising; the hourly cap trips on exactly the 21st call; a Hebrew subject and body round-trip intact with `charset=utf-8` and `Date` + `Message-ID` set.
+
+Endpoints, via TestClient with auth stubbed: a clean submit schedules **0** mails, a blacklist submit exactly **1**; both return 200 with identical keys (`blocked`, `id`, `status`) differing only in the values that are supposed to differ; a report returns 201 and schedules one. Test rows were deleted afterwards and the borrowed account's four real ratings were confirmed untouched.
+
+**Not done: the live end-to-end send.** All five keys are absent from `.env` (checked by presence count only). Also not done: the 5-vs-5 timing comparison over real HTTP, for two reasons — a Supabase token cannot be minted from here (ES256/JWKS, anon key only, a limitation carried since SU10R), and with SMTP unconfigured `send_email` short-circuits so there would be nothing to measure. The in-process measurement above tests the same property directly and with a worse-case 300 ms round trip.
+
+### To finish (Dude)
+
+1. Add the five keys to `~/scrp/.env`.
+2. `sudo /usr/local/bin/xxl-restart.sh scrp-api` — **required**, see the note above.
+3. Submit a rating containing a blacklist term, and report any rating.
+4. Confirm both mails reach `info@xxl.co.il` — **inbox, not spam** — with readable Hebrew.
+
+If nothing arrives, `journalctl -u scrp-api | grep -i mail` distinguishes the cases: "mail not configured — missing: …" names the keys, "mail send failed (…)" carries the SMTP error, and "[MODERATION] throttled" means the caps hit.
+

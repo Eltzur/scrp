@@ -101,6 +101,7 @@ For all other commands, select "Yes" (one-time approval) unless the command look
 
 ## Environment variable conventions
 - **Default new env var names to lowercase** (e.g. `gs1_username`, not `GS1_USERNAME`), unless matching an existing convention already in the same file. Established in session SU10A-1 after a casing mismatch (`GS1_Username` set in `.env` vs `$GS1_USERNAME` read by scripts) produced identical, misleading 401s from a third-party API for an entire session — bash variable names are case-sensitive and `source` sets a mismatched-case variable with no error, so the bug looked like a server-side auth/IP problem when it was purely local.
+- **Mail (SU10S-7), names only — never commit, print or log the values:** `smtp_host`, `smtp_port`, `smtp_user`, `smtp_password`, `moderation_email_to`. Sender `notify@xxl.co.il` (Hostinger mailbox), recipient `info@xxl.co.il`. **The API reads env from systemd's `EnvironmentFile`, not `load_dotenv()` — adding a key to `.env` does nothing until `sudo /usr/local/bin/xxl-restart.sh scrp-api`.**
 - **Never assume casing — verify it.** Before writing a script that reads any `.env` value, confirm the exact variable name (`cat -A` or `grep` the file) rather than assuming it matches what a previous instruction specified.
 
 ## Commit conventions
