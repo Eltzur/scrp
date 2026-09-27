@@ -25,11 +25,13 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from api.dependencies import get_db
+from db.query import live_store_clause
 
 router = APIRouter(tags=["Stores"])
 
-# One day. Coordinates change only when a store is re-geocoded, which the
-# weekly timer does at most once a week.
+# One day. Coordinates change only when a store is re-geocoded (weekly), and
+# liveness only when the daily cron loads, so a day-old copy is at most one
+# load behind.
 _MAX_AGE = 86_400
 
 
@@ -44,30 +46,35 @@ class StoreCoordinate(BaseModel):
     )
 
 
+# Liveness (SU10S-17) is appended at request time: a branch its chain stopped
+# publishing keeps its coordinates forever, and without this it would still be
+# offered as a nearby store (SU10S-16 found two, ids 184 and 195).
 _SQL = """
-    SELECT id, round(lat::numeric, 5) AS lat, round(lon::numeric, 5) AS lon,
-           geo_precision
-    FROM stores
-    WHERE is_physical AND lat IS NOT NULL AND lon IS NOT NULL
-    ORDER BY id
+    SELECT s.id, round(s.lat::numeric, 5) AS lat, round(s.lon::numeric, 5) AS lon,
+           s.geo_precision
+    FROM stores s
+    WHERE s.is_physical AND s.lat IS NOT NULL AND s.lon IS NOT NULL{live}
+    ORDER BY s.id
 """
 
 
 @router.get("/stores/coordinates", response_model=list[StoreCoordinate],
             summary="Coordinates for every physical store (no input, cacheable)")
 def store_coordinates(response: Response, conn: Connection = Depends(get_db)):
-    """Every physical store that has a coordinate.
+    """Every LIVE physical store that has a coordinate.
 
-    Excludes online/fulfilment rows (`is_physical = false`) — those carry a
-    real city in the data and would otherwise look like ordinary branches the
-    user could walk into.
+    Excludes stores their chain has stopped publishing (db/query.py
+    live_store_clause), and online/fulfilment rows (`is_physical = false`) —
+    those carry a real city in the data and would otherwise look like ordinary
+    branches the user could walk into.
 
     Rounded to 5 decimals: about 1 m, far finer than a city centroid and
     finer than the underlying data justifies, but it keeps the payload small
     without ever being the limiting factor.
     """
     response.headers["Cache-Control"] = f"public, max-age={_MAX_AGE}"
-    rows = conn.execute(text(_SQL)).mappings().all()
+    live_sql, live_params = live_store_clause(conn)
+    rows = conn.execute(text(_SQL.format(live=live_sql)), live_params).mappings().all()
     return [
         StoreCoordinate(store_fk=r["id"], lat=float(r["lat"]), lon=float(r["lon"]),
                         precision=r["geo_precision"])

@@ -6,6 +6,7 @@ No display logic, no HTTP concerns.
 from __future__ import annotations
 
 import re
+import time
 from collections import defaultdict
 from pathlib import Path
 
@@ -15,6 +16,75 @@ from sqlalchemy.engine import Connection
 
 
 _ACTIVE_STORES_YAML = Path(__file__).parent.parent / "scraper" / "active_stores.yaml"
+
+
+# ---------------------------------------------------------------------------
+# Store liveness (SU10S-17)
+# ---------------------------------------------------------------------------
+# A store is LIVE when its last successful load is within 3 days of its OWN
+# CHAIN's latest successful load. base.py only deletes a store's prices when
+# the store publishes again, so a branch the chain stops publishing keeps its
+# last prices forever (SU10S-14: 94 dead Carrefour branches, 412K prices, some
+# dated 2015).
+#
+# Anchored to the chain, NEVER to wall-clock: if the cron fails for a chain (or
+# for everyone), the chain's latest load stays put and the cutoff with it, so
+# nothing is excluded. Healthy chains' intra-chain lag is 0-1 days; dead
+# branches sat 29+ days behind with nothing in between, so 3 days separates
+# them with ~27 days of margin. NULL last_loaded_at (never loaded) fails the
+# comparison and is excluded.
+#
+# USED BY /stores/coordinates ONLY - NOT YET BY THE PRICE READS. Do not paste
+# this predicate into _PRICE_SQL / the promo queries (SU10S-17, measured on
+# production): the planner cannot estimate the CASE, guesses ~400 live stores
+# instead of ~865, and flips the barcode plan to a nested loop over a
+# materialised prices x stores join - EXPLAIN +39% on a barcode lookup, +31% on
+# a 10-item basket. The pending design is a Python post-filter against the
+# live-store set (0.13 ms per barcode lookup), which changes no plan.
+#
+# The cutoffs move only when the daily cron loads, so a process-level cache is
+# safe: a stale cutoff is at most a few minutes EARLIER, i.e. more lenient.
+_LIVE_WINDOW = "3 days"
+_LIVE_CACHE_TTL_S = 300.0
+_live_cutoffs: tuple[float, list] | None = None
+
+
+def _chain_cutoffs(conn: Connection) -> list:
+    global _live_cutoffs
+    cached = _live_cutoffs
+    if cached is not None and time.monotonic() - cached[0] < _LIVE_CACHE_TTL_S:
+        return cached[1]
+    rows = [tuple(r) for r in conn.execute(text(f"""
+        SELECT chain_id, max(last_loaded_at) - interval '{_LIVE_WINDOW}'
+        FROM stores
+        WHERE last_loaded_at IS NOT NULL
+        GROUP BY chain_id
+        ORDER BY chain_id
+    """)).all()]
+    _live_cutoffs = (time.monotonic(), rows)
+    return rows
+
+
+def live_store_clause(conn: Connection, alias: str = "s") -> tuple[str, dict]:
+    """(' AND <alias> is live', params) - append to a WHERE that joins stores.
+
+    Param names are prefixed live_ so they cannot collide with a caller's.
+    A chain with no loaded store at all has no WHEN branch; CASE yields NULL
+    and its stores are excluded, which is correct - none has ever loaded.
+    """
+    cutoffs = _chain_cutoffs(conn)
+    if not cutoffs:
+        # No store has ever loaded (empty/fresh database). Guarding would
+        # blank everything; there is nothing to be stale relative to.
+        return "", {}
+    params: dict = {}
+    whens = []
+    for i, (chain_id, cutoff) in enumerate(cutoffs):
+        params[f"live_c{i}"] = chain_id
+        params[f"live_t{i}"] = cutoff
+        whens.append(f"WHEN :live_c{i} THEN CAST(:live_t{i} AS timestamptz)")
+    return (f" AND {alias}.last_loaded_at >= CASE {alias}.chain_id {' '.join(whens)} END",
+            params)
 
 
 # ---------------------------------------------------------------------------
