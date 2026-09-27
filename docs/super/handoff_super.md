@@ -3004,3 +3004,74 @@ Chain latest is 14 rows and can be a tiny CTE or a cached lookup — the expensi
 
 **Done looks like:** no serving store with a last successful load older than its chain's latest minus 3 days; 0 items taking their chain-cheapest from such a store; and a deliberately un-published test store proving the guard excludes it without a deploy.
 
+
+---
+
+## Session SU10S-16 (September 27, 2026) — dead Carrefour prices removed; city fix STOPPED at the dry run
+
+### Step 1 — fix A applied
+
+The dead set re-derived exactly as SU10S-14 measured it, so no STOP: **93 Carrefour stores, 409,783 prices, 29 promos**, nothing outside Carrefour.
+
+Deleted in one transaction. **Store rows and all fetch_store_runs history kept** — that history is the only evidence of when each store died, and `fetch_store_runs.store_fk` is `ON DELETE NO ACTION` anyway. `is_physical` deliberately untouched.
+
+| | before | after |
+|---|---|---|
+| Carrefour items taking cheapest from a dead store | **7,954** of 22,416 (35.5%) | **0** |
+| prices on dead stores | 409,783 | 0 |
+| dead store rows | 93 | 93 (kept) |
+| their fetch_store_runs rows | 5,970 | 5,970 (kept) |
+| serving Carrefour stores | 181 | 88 |
+| total prices | 7,697,314 | 7,287,531 |
+
+API verified healthy afterwards: `/health` 200, a product lookup still returns 11 quotes across רמי לוי / ויקטורי / קרפור / קשת, `/search?q=חלב` still 2,672 matches.
+
+Spot-checks resolved differently than SU10S-14 implied, and the honest version is worth recording: the two example items (`6806963` challah, `7290008719193` frozen shoulder roast) now have **zero** Carrefour price rows, not a corrected higher price. They were priced *only* at dead branches, so what the fix removed was a phantom price rather than a wrong number. SU10S-14's "actually ₪120" came from a name-matched sibling item_code, not the same row. The aggregate 7,954 → 0 is the real proof.
+
+#### Backup and restore
+
+CSV rather than `pg_dump` for the deleted rows, because `pg_dump` has no row-level filter and the full `prices` table is 3.7 GB. Row counts verified against the delete counts exactly.
+
+```
+~/backups/su10s16_prices_20260927T155851.csv.gz    409,783 rows   5.8 MB
+~/backups/su10s16_promos_20260927T155851.csv.gz         29 rows
+~/backups/su10s16_stores_20260927T155851.csv.gz         93 rows   (reference)
+~/backups/su10s16_stores_20260927T155851.dump        full stores table, pg_restore --list verified
+```
+
+Restore:
+
+```bash
+cd ~/scrp && source venv/bin/activate && set -a && source .env && set +a
+zcat ~/backups/su10s16_prices_20260927T155851.csv.gz \
+  | psql "$DATABASE_URL" -c "\copy prices FROM STDIN WITH CSV HEADER"
+zcat ~/backups/su10s16_promos_20260927T155851.csv.gz \
+  | psql "$DATABASE_URL" -c "\copy promos FROM STDIN WITH CSV HEADER"
+```
+
+#### Two stores DID leak into /stores/coordinates — reported, not hidden
+
+`id 184` (store 121, טמרה) and `id 195` (store 191, חולון) are dead Carrefour branches that already carried a `city_canonical`, so SU10S-10 gave them city centroids. They now hold **0 prices**, so they cannot appear in any price list — but they are still in `/stores/coordinates`, because that endpoint filters on `is_physical AND lat IS NOT NULL` and has **no liveness or serving filter at all**.
+
+Left in place per the brief. The general shape of the gap is the point: a branch that stops publishing keeps its coordinates and would still be offered as a nearby store. Worth folding into the fix-B session rather than patching two ids.
+
+### Step 2 — STOPPED at the dry run
+
+The brief required the rebuild diff to contain **exactly** the 12 live stores. It contains **231**:
+
+| | count | |
+|---|---|---|
+| GAIN (blank → city) | 150 | of which **serving and alive: exactly 12** — the intended targets |
+| **LOSE (city → blank)** | **80** | **would erase curated values** |
+| CHANGE (city → other) | 1 | |
+
+The cascade identifies the 12 correctly (11 חצי חינם + 1 שופרסל, precisely as SU10S-14 predicted). The problem is that `apply_city_canonical.py` would apply the whole CSV, and the other 219 rows include **80 stores that would lose a working city** — among them the SEVERE-sensitive ones: `מודיעין-מכבים-רעות` and `מודיעין עילית` both blanked (raw city is the bare `מודיעין`), plus `קריית גת`, `חצור הגלילית`, `קריית אתא`. Blanking is not merging, so the SEVERE rule is not violated outright — but it destroys exactly the distinctions that rule exists to protect.
+
+The remaining 138 GAIN rows are dead or non-serving stores, which is the SU10S-14 hazard again: giving them a city makes them eligible for the geocoder.
+
+**Nothing was applied.** A targeted apply — only rows where the current value is blank AND the store is serving AND alive — would do exactly the right 12, but that is a change to `apply_city_canonical.py` and belongs in its own session.
+
+#### A trap in the review CSV, worth knowing before anyone touches this
+
+`data/city_canonical_review.csv` has a column named `store_id` that actually holds **`stores.id` (the primary key)**, not the chain's store_id (`build_city_canonical.py` line 152: `"store_id": store_pk`). Joining it on the chain store_id silently produces garbage — and because `(chain_id, store_id)` is not unique for Shufersal (many `sub_chain_id`s), it produces *plausible-looking* garbage: my first attempt showed `תל אביב → חיפה` labelled as an exact match. `apply_city_canonical.py` reads it correctly as a pk; any new consumer must too.
+
