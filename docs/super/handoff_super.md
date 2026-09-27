@@ -2649,3 +2649,85 @@ That last one is the dangerous case: a city-centroid fallback would silently giv
 
 **Honest limit to set expectations on**: with Shufersal, Victory, Yochananof, King Store and Hazi Hinam publishing no addresses, **just over half the network can only ever be placed at its city centre** until a different address source appears. A "stores within 1 km" filter would be misleading for those; the radius UI should probably not offer anything below the city-centroid error, or should mark city-level stores as approximate.
 
+
+---
+
+## Session SU10S-10 (September 27, 2026) — store coordinates: schema, CBS centroids, OSM geocode, /stores/coordinates
+
+Backend half of nearby-stores. **Mobile is next and owes the OSM attribution** (see the end). Timer units are committed but **not installed** — block below.
+
+### Coverage
+
+| precision | all physical (1,171) | serving (959) |
+|---|---|---|
+| `address` (house) | 76 | 74 |
+| `street` (centreline) | 109 | 106 |
+| `city` (CBS centroid) | 780 | 669 |
+| none | 206 | 107 |
+
+**The centroid tier cost zero external requests.** CBS's locality table carries coordinates nobody had used (SU10S-9). 5 cities failed to match because our `city_canonical` holds a short form CBS does not use — `יקנעם` (CBS: יקנעם עילית), `יהוד`, `גוש עציון` (a regional council, not a locality). Small and known.
+
+### Nominatim run
+
+326 targets, **427 calls**, ~11 minutes. Result: 76 address, 109 street, 99 no-hit, 27 shop/* flagged, 11 rejected, 4 too far.
+
+Acceptance rules came from the SU10S-9 pilot, not from intuition:
+
+- `highway/*` → `street`; `place/house` and `building/*` → `address`.
+- **`amenity/*` rejected outright** — Nominatim matches businesses whose names resemble streets. The pilot's two were a dentist and a pharmacy, one of them its worst outlier.
+- **`shop/*` keeps the centroid and is logged** (27 rows). It might be the supermarket itself or a different shop on the same street; not worth guessing either way.
+- **25 km is a coarse WRONG-CITY guard, not an accuracy filter.** The pilot measured legitimate results 3-6 km from their centroid in Jerusalem and Tel Aviv because those municipalities are large, so a tight cap would reject real stores. It caught 4 genuine errors here, at 25.9 / 29.3 / 32.4 / 42.3 km.
+- **A rejected result leaves the centroid in place.** Precision is never downgraded.
+
+All 10 sampled accepted results were hand-verified to land in their stated city (Arad 31.253/35.209, Nesher 32.766/35.052, Begin Rd Tel Aviv 32.079/34.795, …).
+
+### `GET /stores/coordinates` — and why it takes no input
+
+965 rows, **63 KB**, `Cache-Control: public, max-age=86400`. Shape: `[{store_fk, lat, lon, precision}]`, 5-decimal rounding.
+
+**The endpoint accepts no parameters at all, and that is the design.** The client downloads the table once and computes distance on device, so a user's location never leaves the phone. A "stores near me" endpoint is the obvious shape and the wrong one: gunicorn **and** nginx both log full request paths, so a `?lat=…&lon=…` parameter would write user coordinates to disk on every request, in two places, indefinitely. Do not add a radius parameter to this endpoint later — that is the whole point of it.
+
+Verified live: 0 rows outside Israel's bounding box, **0 non-physical stores leaked**, and 18 of 20 sampled `store_fk` values from live `/search` quote rows are present (the 2 misses are stores with no `city_canonical`, i.e. no coordinate at all).
+
+### Schema and the safety check that justified it
+
+`stores` += `lat`, `lon`, `geo_precision`, `geo_source`, `geo_input`, `geocoded_at`, `is_physical`. Additive, idempotent (re-run verified). No PostGIS — 965 rows and an on-device haversine make a geometry type and spatial index pure overhead.
+
+Step 0a checked **every** path that writes `stores`. All six scraper loaders use explicit column lists, and every `ON CONFLICT DO UPDATE SET` names only `store_name`/`city`/`city_norm`/`address` — never a wildcard — so the daily upsert cannot wipe a coordinate. No `DELETE` of store rows is reachable from the cron (the DELETE-bearing scripts are one-off city migrations, referenced nowhere in `cron_main.py` or `registry.py`).
+
+`geo_input` stores exactly what was geocoded, because the scrapers keep `address` fresh via `COALESCE(excluded.address, …)` — an upstream address change would otherwise leave a stale coordinate with nothing to detect it.
+
+### `is_physical` — 26 rows, set by id
+
+Online / fulfilment / pickup rows, excluded by **id** rather than a read-time regex: the wording disagrees across chains (`אונליין`, `אינטרנט`, `ליקוט`, `פיקאפ`, `מרלוג`) and a new chain will spell it a fourth way.
+
+Only **3** serve prices today — the SU10S-9 pilot's three. The other 23 are idle, but **most carry a real `city_canonical`**, so the centroid fill would have scattered them across real cities and they would have entered the feed the moment they started serving. שוק העיר 304 is the clearest: its city is ירושלים, so it would look like an ordinary Jerusalem branch.
+
+**Known gap:** a NEW online store defaults to `is_physical = true` and will get a centroid. There is no signal in the source data to catch that automatically, so it needs a periodic eyeball — deliberately not guessed at with a regex.
+
+### Restore note
+
+Pre-migration dump: `~/backups/stores-2026-09-27.dump` (31 KB, `pg_dump -t stores -Fc`). To roll back the table only:
+
+```bash
+pg_restore -d "$DATABASE_URL" --clean --if-exists -t stores ~/backups/stores-2026-09-27.dump
+```
+
+That restores the pre-coordinate table including its rows, so re-run `geo_centroids` + `geo_nominatim` afterwards (the Nominatim disk cache at `~/.cache/xxl_geocode/` makes the second run cost no requests).
+
+### Install block (Dude, one paste after `ssh dude@185.229.226.190`)
+
+```bash
+cd ~/scrp && git pull origin main
+sudo cp deploy/systemd/scrp-geocode.service deploy/systemd/scrp-geocode.timer /etc/systemd/system/ && \
+sudo systemctl daemon-reload && \
+sudo systemctl enable --now scrp-geocode.timer && \
+systemctl list-timers "scrp-*" --no-pager
+```
+
+**Expect:** `scrp-geocode` next Sunday **15:00 IDT** — between `scrp-gs1-fetch` (14:00) and `scrp-gs1-images-backup` (17:00), so the three weekly jobs never overlap.
+
+### ⚠️ OSM attribution is owed
+
+Street- and house-level coordinates come from OpenStreetMap via Nominatim and are **ODbL-licensed**. Any UI that displays them owes a visible **"© OpenStreetMap contributors"**. City-level rows are CBS and carry no such requirement, but the two are mixed in one endpoint, so the attribution is owed wherever `/stores/coordinates` is consumed. **This is a mobile-session task and is not yet done anywhere.**
+

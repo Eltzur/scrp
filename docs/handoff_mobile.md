@@ -401,3 +401,18 @@ Dark mode ON, then check each:
 
 Item 7 is the one that matters most: the fix only *adds* a colour where none existed, so light mode should be pixel-identical apart from the `opacity-50` → `opacity-60` change making some secondary text slightly darker.
 
+---
+
+## Store coordinates are now available (SU10S-10) — mobile work pending
+
+The backend half of nearby-stores shipped on September 27, 2026. Full detail is SU10S-10 in `docs/super/handoff_super.md`; what matters here:
+
+- **`GET /stores/coordinates`** returns `[{store_fk, lat, lon, precision}]` for 965 physical stores. 63 KB, `max-age=86400`. **It takes no parameters, deliberately** — download it once, cache it, and compute distance on device.
+- **The user's location must never be sent to the server.** gunicorn and nginx both log full request paths, so any lat/lon in a URL is written to disk on every request. Distance is an on-device calculation against the cached table; do not "simplify" this by adding a radius parameter to the API.
+- `store_fk` matches the field already present on every price quote row in `/product/{barcode}` and `/search`, so joining prices to coordinates needs no API change.
+- **`precision` matters for the UI.** 780 of 965 are `'city'` — a municipal centroid, not the shop. Only 185 are street- or house-level. A "stores within 1 km" filter would be actively misleading for the majority, so either do not offer a radius below city-centroid error, or mark city-level results as approximate.
+
+### ⚠️ OSM attribution is owed before this ships
+
+Street/house coordinates are OpenStreetMap data via Nominatim, **ODbL-licensed**. Any screen that shows them — a nearby list, a distance label, a map — owes a visible **"© OpenStreetMap contributors"**. It is not present anywhere in the app yet.
+
