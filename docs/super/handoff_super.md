@@ -2731,3 +2731,38 @@ systemctl list-timers "scrp-*" --no-pager
 
 Street- and house-level coordinates come from OpenStreetMap via Nominatim and are **ODbL-licensed**. Any UI that displays them owes a visible **"© OpenStreetMap contributors"**. City-level rows are CBS and carry no such requirement, but the two are mixed in one endpoint, so the attribution is owed wherever `/stores/coordinates` is consumed. **This is a mobile-session task and is not yet done anywhere.**
 
+
+---
+
+## Session SU10S-11 (September 27, 2026) — nearby stores: on-device distance + basket branch filter
+
+Backend `/basket/compare` gains one optional field; the feature itself is mobile (`87b73fa`). Web unchanged.
+
+### The one backend change
+
+`store_fks: list[int] | None` on the `/basket/compare` **request body**, capped at 300. Absent — the default — is byte-identical to before; present, each chain's total becomes the cheapest among only those branches.
+
+**Body, never a query parameter.** gunicorn and nginx both log full request paths, and a list of branches near someone is a location disclosure by another name. The list is not logged.
+
+Verified live: omitted and explicit `null` produce byte-identical responses (6,914 chars both); a 3-store allow-list narrowed 14 chains to 3 with prices changing accordingly; 301 ids and a non-integer both 422.
+
+### Privacy model — the point of the whole design
+
+The user's position **never reaches the server** for product or scan results. The client downloads `/stores/coordinates` (parameterless, 63 KB, cached 24 h) and computes haversine distance on device.
+
+The basket toggle is the single exception, and it still sends no coordinates — only a list of **store ids** already public in every price response. Nothing about the user is transmitted or stored.
+
+**For the privacy policy draft:** coordinates are read on demand in the foreground only (no background permission, no continuous watch), used on device, and never transmitted. The basket "nearby branches" option sends branch identifiers, not a location, and those are neither stored nor logged.
+
+### Two decisions worth not re-litigating
+
+**Precision changes what we claim, not just what we filter.** `'street'`/`'address'` rows show a number; `'city'` rows filter but show `מיקום משוער` with **no** number, because a municipal centroid cannot honestly be rendered as "2.4 ק״מ". 780 of 965 stores are city-level, so this is the common case rather than an edge one. Stores with no coordinate are never in the nearby set.
+
+**The filtered winner label is `הכי זול באזור`, never plain `הכי זול`.** Calling a local minimum the global one is the same class of error as the basket "cheapest" mislabel corrected in SU10M-3.
+
+### Verification
+
+20 unit cases on the pure geo module, including real city distances (TLV-Jerusalem 53.9 km, TLV-Haifa 81.2, TLV-Beer Sheva 92.6 — all within tolerance of the true values), both sides of the radius boundary and the exact-boundary case, the city-tier no-number rule, and the no-coordinate exclusion.
+
+**No rebuild needed.** `expo-location` was already a dependency, an app.json plugin and in use by Settings, so the native side is unchanged — a JS reload picks this up. The 5-button segmented control instead of a slider was chosen partly for that reason: a native slider would have forced an EAS rebuild before anything could be tested.
+

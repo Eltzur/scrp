@@ -416,3 +416,39 @@ The backend half of nearby-stores shipped on September 27, 2026. Full detail is 
 
 Street/house coordinates are OpenStreetMap data via Nominatim, **ODbL-licensed**. Any screen that shows them — a nearby list, a distance label, a map — owes a visible **"© OpenStreetMap contributors"**. It is not present anywhere in the app yet.
 
+---
+
+## Session SU10S-11 (September 27, 2026) — nearby stores (on-device distance)
+
+Commit `87b73fa`. Backend half is SU10S-11 in `docs/super/handoff_super.md` (one optional field on `/basket/compare`).
+
+### What shipped
+
+- **Scan-result + product-detail Pricing**: a scope chip row `[קרוב אליי · N ק״מ] [הכל]` with a 1-5 km segmented control. Nearby is **ON by default** when a position and the coordinate table are both available; the existing cheapest-first order is preserved, filtering only removes rows.
+- **Basket compare**: `רק סניפים קרובים`, **OFF by default** — a basket comparison is a deliberate "where should I shop" question, and silently scoping it to 5 km would change the answer without being asked. When on, the radius is stated in the results.
+- **Settings**: default radius, shown only in GPS mode since it is meaningless without one.
+- **Help**: a data-sources section carrying the ODbL credit.
+
+### Invariants — do not "simplify" these
+
+1. **The user's position never leaves the device.** There is no "stores near me" endpoint and there must not be one: gunicorn and nginx log full request paths, so a lat/lon in a URL is written to disk on every request, in two places, forever. `src/lib/geo.ts` states this at the top.
+2. **City-precision stores show no distance number.** 780 of 965 stores are located only to their municipal centroid. Rendering "2.4 ק״מ" for one would be a precise-looking claim about an imprecise coordinate. They still filter — a city 30 km away is not near you — but they say `מיקום משוער`.
+3. **On a filtered list the winner is `הכי זול באזור`.** Never plain `הכי זול` — see the SU10M-3 mislabel.
+4. **Permission reuses `LocationProvider`**, reached from Settings. Do not add a second prompt. Note coordinates exist only in `'gps'` mode, so a manually-picked city means no position and the same quiet unavailable state as a denial.
+
+### No rebuild required
+
+`expo-location` was already a dependency, an `app.json` plugin and in use by Settings, so nothing native changed — **a JS reload is enough**. The 5-button segmented control rather than a slider was partly chosen for this: a native slider would have forced an EAS rebuild before anything could be tested.
+
+### Device checklist — for Dude
+
+1. Location allowed: scan a common product at home → nearby list with distances; street/house stores show km, city-level show "מיקום משוער".
+2. Tap 1 km → list narrows; 5 km → widens; setting survives app restart.
+3. "הכל" shows every store; "הכי זול באזור" only appears when filtered.
+4. Deny location in Android settings → nearby hidden, hint shown, app otherwise normal.
+5. Basket: toggle "רק סניפים קרובים" → results + header show the radius; toggle off → identical to before.
+6. Help screen shows the OpenStreetMap credit.
+7. Dark mode: chips, segmented control and labels readable.
+
+**Not device-verified.** Typecheck adds no new errors (the same five pre-existing `src/tw`), Metro export is clean, and all seven new strings are in the Hermes bundle — but none of that proves the layout or the GPS path on a real phone.
+
