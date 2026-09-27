@@ -268,7 +268,10 @@ def run(out_dir: str = _DEFAULT_OUT, dry_run: bool = False, limit: int | None = 
         # So drop the already-present ones BEFORE applying the limit. Under
         # --refresh every target is a real attempt by definition, so the old
         # meaning is correct there and is kept.
-        if not refresh and not dry_run:
+        # Applies under --dry-run too: presence filtering decides WHICH gtins
+        # to attempt, which is exactly what a dry run should rehearse. Only
+        # the writing is suppressed by dry_run, not the target selection.
+        if not refresh:
             present = {f[:-4] for f in os.listdir(out_dir) if f.endswith(".jpg")}
             already = sum(1 for g in gtins if g in present)
             gtins = [g for g in gtins if g not in present]
