@@ -1,0 +1,15 @@
+[Unit]
+Description=XXL — weekly store geocoding timer (Sunday afternoon)
+
+[Timer]
+# Inline timezone — TimeZone= is not a valid [Timer] key (SU10S-8).
+# 15:00 sits after scrp-gs1-fetch (14:00) and before the GS1 image backup
+# (17:00), so the three weekly jobs never overlap.
+OnCalendar=Sun *-*-* 15:00:00 Asia/Jerusalem
+# A missed week just waits. Nothing here is time-critical, and back-to-back
+# runs after a boot would only burn Nominatim quota re-asking cached queries.
+Persistent=false
+Unit=scrp-geocode.service
+
+[Install]
+WantedBy=timers.target

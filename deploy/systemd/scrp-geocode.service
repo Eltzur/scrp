@@ -1,0 +1,30 @@
+[Unit]
+Description=XXL — weekly store geocoding (CBS centroids, then Nominatim upgrade)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=dude
+Group=dude
+WorkingDirectory=/home/dude/scrp
+EnvironmentFile=/home/dude/scrp/.env
+
+# Centroids first and unconditionally: it needs no network, and it guarantees
+# that any store added during the week has SOME coordinate even if the
+# Nominatim step is blocked or fails. The leading "-" keeps a centroid failure
+# from costing us the geocode run.
+ExecStart=-/home/dude/scrp/venv/bin/python3 -m scripts.geo_centroids
+
+# Only touches rows that still lack a street/house result, so a steady week is
+# a handful of stores and a few seconds. Nominatim's 1 req/s limit is enforced
+# inside the script, along with an on-disk cache so a retry costs nothing for
+# anything already asked.
+ExecStart=/home/dude/scrp/venv/bin/python3 -m scripts.geo_nominatim
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=scrp-geocode
+
+[Install]
+WantedBy=multi-user.target
