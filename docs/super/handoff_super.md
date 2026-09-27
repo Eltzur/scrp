@@ -2557,3 +2557,95 @@ systemctl list-timers "scrp-*" --no-pager
 
 **What the NEXT column must show:** `scrp-cron` tomorrow at **10:00 IDT**, `scrp-backup` tomorrow at **04:00 IDT**, and the two `scrp-gs1-*` timers on the coming **Sunday** (14:00 and 17:00 IDT). `supabase-keepalive` must be **gone from the list entirely**. If any scrp-cron/backup time moved, the inline-timezone change went wrong — revert by reinstalling the previous commit's copies.
 
+
+---
+
+## Session SU10S-9 (September 27, 2026) — GPS/nearby-stores inspection + geocoding pilot (read-only, no schema change)
+
+Commits `d645f97` + `8ab3c39` — the pilot script only. **Nothing was written to any production table and no schema was changed.** Pilot output lives at `~/geocode_pilot/<date>.csv` on the server and is deliberately not committed.
+
+### The finding that changes the design: CBS already has city centroids
+
+`data/bycode2024.xlsx` — the workbook `city_canonical` is already built from — carries a `קואורדינטות` column nobody has used: a **12-digit concatenated ITM pair** (EPSG:2039, first 6 Easting, last 6 Northing) for every locality.
+
+So the city-centroid tier needs **zero Nominatim requests** and the wrong-city check gets an authoritative reference instead of a guess. **pyproj is not required** — a closed-form inverse Transverse Mercator with the Israeli grid parameters is enough, verified against known points (Abu Ghosh ITM 210524/634814 → 31.80566, 35.10941, ~10 m from truth).
+
+### Address quality is the real constraint, and it is bimodal
+
+Of **959 serving stores** (have prices; 1,197 rows exist in total):
+
+| | count | |
+|---|---|---|
+| NULL or blank address | 503 | 52% |
+| literal `"unknown"` (Yochananof's sentinel) | 24 | |
+| address containing a digit | **364** | 38% — the street-level candidates |
+| no `city_canonical` at all | 105 | 91 Carrefour + 12 Hazi Hinam |
+
+It splits **by chain, not by store**: שופרסל (321 stores), ויקטורי (69), קינג סטור (28), שפע ברכת השם (22), שוק העיר (19) and חצי חינם (12) publish **no address at all** — 0%. רמי לוי, יוחננוף, טיב טעם, פרש מרקט, סופר יודה and אושר עד are at 100%; קרפור 82%, קשת 95%. **Shufersal alone is a third of the network and has nothing to geocode**, so no amount of provider tuning reaches it — only a city centroid, or a separate source of branch addresses.
+
+### Pilot results — 60 stores, 5 per chain, all 12 serving chains
+
+| tier | n | share |
+|---|---|---|
+| address (house-level) | 7 | 11.7% |
+| street (centreline) | 21 | 35.0% |
+| city centroid (CBS) | 32 | 53.3% |
+| rejected | 0 | 0% |
+
+Zero rejections **only because every sampled store had a city_canonical** — the 105 stores that do not would reject outright. The sample was stratified address-first per chain, so these are best-case rates for the chains that publish addresses and worst-case for those that do not.
+
+Street-or-better by chain: סופר יודה, קרפור, קשת 5/5 · רמי לוי, אושר עד 4/5 · טיב טעם 3/5 · פרש מרקט 2/5 · **שופרסל, ויקטורי, יוחננוף, קינג סטור, חצי חינם 0/5** (city fallback only).
+
+### Two distinct failure modes, and why a flat distance threshold is wrong
+
+Distance from city centroid, geocoded results only (n=28): min 0.06, **p50 2.16**, p90 3.85, max 6.07 km.
+
+**Do not use a flat km threshold.** The spread is driven by city size, not by error: Jerusalem's legitimate results sit at 3.4-4.1 km (Talpiot, Givat Shaul — hand-verified as correct), Tel Aviv's at 1.9-6.1 km. A 5 km cap would reject real Jerusalem stores while passing a wrong match in a small town.
+
+The reliable signal is the **OSM class**, not the distance:
+
+| class | n | meaning |
+|---|---|---|
+| `highway/*` | 18 (64%) | street centreline — legitimate "street" tier |
+| `place/house` | 7 (25%) | house-level — legitimate "address" tier |
+| `amenity/*` | 2 (7%) | **POI name collision — a dentist and a pharmacy**, not addresses |
+| `shop/*` | 1 (4%) | possibly the supermarket itself; treat as a bonus, verify |
+
+Both `amenity` hits are wrong in the way that matters — Nominatim matched a business whose name resembled the street, and one of them is the 6.07 km outlier. **Recommended rule: reject `amenity/*` outright, accept `highway/*` and `place/*`, flag `shop/*` for review, and use distance only as a coarse wrong-city guard at ~25 km** (wider than any Israeli municipality, so it catches "same street name, wrong city" without touching legitimate big-city spread).
+
+### Cost of the full run: about 13 minutes, not hours
+
+The pilot used **52 Nominatim calls for 60 stores** — ~1.86 calls per store that has an address (structured first, free-text on miss), and **zero** for the 32 that fell back to CBS. Extrapolating to the 364 stores with a usable address: **~677 calls ≈ 12-13 minutes** at the mandated 1 req/s. The other 595 stores cost nothing.
+
+That is small enough that provider cost and rate limits are simply not the constraint here — address coverage is.
+
+### Step 0d/0e — does on-device distance work today? Yes, with no API change
+
+**`store_fk` (= `stores.id`) is already on every quote row** — added in the promo work, since a promo is store-local. Verified live: **100% populated** on both `/product/{barcode}` (11/11 quotes) and `/search` (37/37 quote rows). `chain_id` + `store_id` are also always present as a composite fallback.
+
+So the privacy design works as proposed: ship a `store_fk → (lat, lon)` table to the client once (959 rows, a few tens of KB), compute distance on device, and **the server never receives a user coordinate**. That matters concretely here — gunicorn and nginx both log full request paths, so a lat/lon query parameter would be written to disk on every request.
+
+The one new endpoint needed is a static `GET /stores/coordinates` dump. No change to existing payloads.
+
+**`/basket/compare`** accepts `chain_ids` and `cities` today and aggregates per `(chain_id, item_code)` — not per store. A "only these stores" filter is small (`store_fks` on `BasketRequest`, one list comprehension; `fetch_prices` already returns `store_fk`), but it carries a **semantic change worth deciding deliberately**: the per-chain total becomes "cheapest among *your nearby* branches", and `items_found` drops for chains with few nearby stores, which reorders the winner. That is arguably the right answer for a nearby-basket feature, but it is not the same number users see today.
+
+### Non-physical stores: no way to identify them today
+
+Three serving stores are online/fulfilment rows, and **each is detectable a different way** — there is no flag, no column, and `active_stores.yaml` has no exclusion markers at all (it is purely "verified to publish PriceFull", and all three do):
+
+- קרפור id 39248 — `"קרפור אונליין"` in `store_name`, `city_canonical` NULL
+- שופרסל id 6116 — `"ONLINE"` in the name, and `city` is literally `"אונליין"`
+- שוק העיר id 18848 — `"304 אונליין - רמות"`, but `city_canonical` is **ירושלים**, a real city
+
+That last one is the dangerous case: a city-centroid fallback would silently give it Jerusalem's coordinates and it would surface as a "nearby store" that cannot be visited. **Recommendation: an explicit `is_physical` boolean set once by hand, not a regex** — the patterns disagree across chains and a new chain will invent a fourth spelling.
+
+### Recommendation (proposal only — nothing implemented)
+
+**Schema** (`stores`): `lat double precision`, `lon double precision`, `geo_precision text` CHECK IN (`'address','street','city'`), `geo_source text` (`'nominatim'/'cbs'/'manual'`), `geocoded_at timestamptz`, plus `is_physical boolean NOT NULL DEFAULT true`. **PostGIS is not needed**: 959 rows and an on-device haversine make a geometry type and spatial index pure overhead.
+
+**Going forward**: a weekly `scrp-geocode.timer` on the SU10S-5 pattern, geocoding only `WHERE lat IS NULL AND is_physical`. A steady week adds a handful of stores, so runs are seconds; the same `--limit` discipline applies. **Not** a hook inside `cron_main.py` — same reasoning as SU10S-5, the OOM-sensitive daily path should not grow a network job.
+
+**Sequence**: ship the `is_physical` flag and the CBS city centroids first. That alone gives every store with a city a usable coordinate — enough for a 5 km default radius to be useful — with no external requests at all. Street-level geocoding is then an accuracy improvement on 38% of stores, not a prerequisite.
+
+**Honest limit to set expectations on**: with Shufersal, Victory, Yochananof, King Store and Hazi Hinam publishing no addresses, **just over half the network can only ever be placed at its city centre** until a different address source appears. A "stores within 1 km" filter would be misleading for those; the radius UI should probably not offer anything below the city-centroid error, or should mark city-level stores as approximate.
+
