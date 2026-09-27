@@ -21,14 +21,17 @@ from __future__ import annotations
 import logging
 import os
 import re
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from api.auth import get_current_user
 from api.dependencies import get_db
+from api.mailer import send_email
+from db.db import connect
 
 log = logging.getLogger(__name__)
 
@@ -137,6 +140,7 @@ def _blacklist_hit(conn: Connection, comment: str | None) -> str | None:
 def submit_rating(
     item_code: str,
     body: RatingIn,
+    background: BackgroundTasks,
     user=Depends(get_current_user),
     conn: Connection = Depends(get_db),
 ):
@@ -178,8 +182,23 @@ def submit_rating(
     conn.commit()
 
     if blocked:
-        _notify_moderation(rating_id=row["id"], item_code=item_code,
-                           user_email=user.get("email", ""), term=term)
+        # BACKGROUND, NOT INLINE — this is a security property, not tidiness.
+        #
+        # Only a blocked submission sends mail. Sending it inline would make
+        # blocked submits measurably slower than clean ones (an SMTP round
+        # trip is tens to hundreds of ms), and that timing difference is
+        # itself a disclosure: an abusive author could submit, watch the
+        # clock, and learn which of their words trip the filter — the precise
+        # leak the do-not-surface rule exists to prevent. Queued after the
+        # response, both paths return in the same time.
+        #
+        # Do not "simplify" this to a direct call.
+        background.add_task(
+            _notify_moderation,
+            rating_id=row["id"], item_code=item_code,
+            user_email=user.get("email", ""), term=term,
+            rating=body.rating, comment=body.comment,
+        )
 
     return SubmitResponse(id=row["id"], status=row["status"], blocked=blocked)
 
@@ -193,12 +212,13 @@ def submit_rating(
 def report_rating(
     rating_id: int,
     body: ReportIn,
+    background: BackgroundTasks,
     user=Depends(get_current_user),
     conn: Connection = Depends(get_db),
 ):
     exists = conn.execute(
-        text("SELECT 1 FROM ratings WHERE id = :id"), {"id": rating_id}
-    ).fetchone()
+        text("SELECT item_code FROM ratings WHERE id = :id"), {"id": rating_id}
+    ).mappings().first()
     if not exists:
         raise HTTPException(status_code=404, detail="Rating not found")
 
@@ -210,6 +230,14 @@ def report_rating(
         VALUES (:rid, :uid, :reason, 'user')
     """), {"rid": rating_id, "uid": user["id"], "reason": body.reason})
     conn.commit()
+
+    # Background for the same reason as the blacklist alert: the reporter gets
+    # their confirmation without waiting on an SMTP round trip.
+    background.add_task(
+        _notify_report,
+        rating_id=rating_id, item_code=exists["item_code"],
+        reporter_email=user.get("email", ""), reason=body.reason,
+    )
     return {"ok": True}
 
 
@@ -359,25 +387,103 @@ def pending_ratings(_admin=Depends(require_admin), conn: Connection = Depends(ge
 
 
 # ---------------------------------------------------------------------------
-# Moderation notification — NOT IMPLEMENTED
+# Moderation notification
 # ---------------------------------------------------------------------------
 
-def _notify_moderation(*, rating_id: int, item_code: str, user_email: str, term: str) -> None:
-    """Would email info@xxl.co.il on a blacklist auto-hide.
+def _item_name(rating_id: int) -> str | None:
+    """Product name for the alert, on a CONNECTION OF ITS OWN.
 
-    NOT WIRED UP: this repo has no email-sending infrastructure of any kind —
-    no SMTP settings, no transactional-email client, and nothing in
-    requirements.txt that can send mail (verified SU10R-1). Session 9i, which
-    scoped "contact form ... + email notifications", is still listed as pending
-    in docs/super/handoff_super.md, so that remains unbuilt too.
+    Deliberately not the request's connection: these helpers run as background
+    tasks, after the response has been sent and the request-scoped connection
+    is already closed. Doing the lookup inside the request instead would put
+    an extra query on the blocked path only — which is exactly the timing
+    asymmetry the background send exists to avoid.
 
-    Rather than guess at credentials or pick a provider unilaterally, this logs
-    at WARNING so auto-hides are still discoverable via
-    `journalctl -u scrp-api`, and the queue endpoint above is the real
-    interim surface. Wire this once the email approach is decided.
+    LEFT JOIN, so a rating whose catalog row has since disappeared still
+    produces a usable alert rather than nothing (item_code is not an FK to
+    items, by design — see su10r1_ratings.sql).
+    """
+    try:
+        with connect() as conn:
+            row = conn.execute(text("""
+                SELECT i.item_name
+                FROM ratings r
+                LEFT JOIN items i ON i.item_code = r.item_code
+                WHERE r.id = :id
+            """), {"id": rating_id}).mappings().first()
+        return (row or {}).get("item_name")
+    except Exception as exc:
+        log.warning("moderation alert: item lookup failed (%s)", type(exc).__name__)
+        return None
+
+
+def _moderation_body(*, rating_id: int, item_code: str, user_email: str,
+                     rating: int | None, comment: str | None, reason: str) -> str:
+    name = _item_name(rating_id) or "(no catalog name)"
+    text_comment = (comment or "").strip() or "(no comment)"
+    if len(text_comment) > 500:
+        text_comment = text_comment[:500] + "…"
+    return "\n".join([
+        f"rating id:   {rating_id}",
+        f"item:        {item_code} — {name}",
+        f"rating:      {rating if rating is not None else '(unchanged)'}",
+        f"author:      {user_email or '(unknown)'}",
+        f"when:        {datetime.now(timezone.utc).isoformat(timespec='seconds')}",
+        "",
+        "reason:",
+        f"  {reason}",
+        "",
+        "comment:",
+        f"  {text_comment}",
+        "",
+        "Queue: GET /admin/ratings/pending  (ADMIN_USER_EMAILS allowlist)",
+    ])
+
+
+def _notify_moderation(*, rating_id: int, item_code: str, user_email: str,
+                       term: str, rating: int | None = None,
+                       comment: str | None = None) -> None:
+    """Email info@xxl.co.il on a blacklist auto-hide, and always log it.
+
+    Wired to SMTP in SU10S-7 (see api/mailer.py for why plain SMTP rather than
+    a transactional provider). The WARNING log is kept regardless of whether
+    the mail goes out: `journalctl -u scrp-api` stays the fallback surface, and
+    mail is best-effort by design — send_email never raises and returns False
+    when unconfigured, throttled or failing.
+
+    RUN THIS AS A BACKGROUND TASK, never inline. See the call site.
     """
     log.warning(
-        "[MODERATION] blacklist auto-hide — would email info@xxl.co.il: "
-        "rating_id=%s item_code=%s author=%s term=%r",
+        "[MODERATION] blacklist auto-hide: rating_id=%s item_code=%s author=%s term=%r",
         rating_id, item_code, user_email, term,
+    )
+    send_email(
+        subject=f"[XXL] דירוג הוסתר אוטומטית — rating #{rating_id}",
+        body_text=_moderation_body(
+            rating_id=rating_id, item_code=item_code, user_email=user_email,
+            rating=rating, comment=comment,
+            reason=f"blacklist term matched: {term}",
+        ),
+    )
+
+
+def _notify_report(*, rating_id: int, item_code: str, reporter_email: str,
+                   reason: str | None) -> None:
+    """Email on a USER report. Flags only — the row is not hidden.
+
+    Same best-effort contract as _notify_moderation, and likewise a background
+    task: a report is a deliberate user action and the reporter should not wait
+    on an SMTP round trip to get their confirmation.
+    """
+    log.warning(
+        "[MODERATION] user report: rating_id=%s item_code=%s reporter=%s",
+        rating_id, item_code, reporter_email,
+    )
+    send_email(
+        subject=f"[XXL] דיווח משתמש על ביקורת — rating #{rating_id}",
+        body_text=_moderation_body(
+            rating_id=rating_id, item_code=item_code, user_email=reporter_email,
+            rating=None, comment=None,
+            reason=(reason or "").strip() or "(reporter gave no reason)",
+        ),
     )
