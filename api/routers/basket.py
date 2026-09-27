@@ -27,6 +27,19 @@ class BasketRequest(BaseModel):
     items:     list[BasketItem]
     chain_ids: list[str] | None = None  # null = all chains
     cities:    list[str] | None = None  # null = all cities
+    # Restrict pricing to these branches (stores.id). Used by mobile's
+    # "nearby branches only" toggle.
+    #
+    # IN THE BODY, NEVER A QUERY PARAMETER. gunicorn and nginx both log full
+    # request paths, so a store list in the URL would be written to disk on
+    # every request — and a list of branches near someone is a location
+    # disclosure by another name. The body is not logged.
+    #
+    # Absent (the default) means today's behaviour exactly, unchanged.
+    store_fks: list[int] | None = Field(
+        None, max_length=300,
+        description="Optional stores.id allow-list; absent = all branches",
+    )
 
 
 class BasketBreakdownItem(BaseModel):
@@ -82,6 +95,12 @@ def compare_basket(body: BasketRequest, conn: Connection = Depends(get_db)):
     if body.chain_ids:
         chain_set = set(body.chain_ids)
         rows = [r for r in rows if r["chain_id"] in chain_set]
+
+    # Apply branch allow-list. Deliberately before the city filter: it is the
+    # narrowest of the three and cheapest to apply first.
+    if body.store_fks:
+        allowed = set(body.store_fks)
+        rows = [r for r in rows if r.get("store_fk") in allowed]
 
     # Apply city filter (normalise both sides)
     if body.cities:
