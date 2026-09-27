@@ -2891,3 +2891,116 @@ The 17:00 backup timer ships the new images to B2 on its own; to push them immed
 sudo systemctl start scrp-gs1-images-backup.service
 ```
 
+
+---
+
+## Session SU10S-14 (September 27, 2026) — stale stores + price freshness (READ-ONLY, proposal)
+
+No writes, no code changes. Proposal for Dude.
+
+### Scope: this is entirely Carrefour
+
+| | |
+|---|---|
+| duplicate store groups, all chains | **32** — 31 קרפור, 1 שופרסל |
+| Carrefour 4-digit rows | **91** — 31 twinned, **60 orphaned** (no 3-digit counterpart) |
+| serving stores with no successful load in >7 days | **94, all Carrefour** (93 stale + 1 never loaded) |
+| prices on them | **412,203** |
+| any other chain affected | **none** |
+
+The dividing line is exact: every 4-digit row last loaded **2026-07-03**; every 3-digit twin loaded **today**. Nothing 4-digit has loaded in ~3 months, so **no loader still emits them** — the padding fix (`0812bdc`, 2026-05-24) changed which id the loader writes, and the old rows were simply left behind with their prices.
+
+**The 60 orphans matter more than the 31 duplicates.** A twin at least has a live counterpart carrying the real price; an orphan is a branch Carrefour stopped publishing altogether, and its last prices stand unchallenged.
+
+### The freshness distribution is bimodal with a 29-day gap
+
+```
+  0-1 days   865 stores
+  2-30 days    0 stores      <- nothing lives here
+  >30 days    93 stores
+  never         1 store
+```
+
+Per chain, measured against that chain's **own** latest successful run: every chain except Carrefour has a maximum lag of **0-1 days** across all its stores. Carrefour's maximum lag is **110 days**, with 93 stores beyond 3 days.
+
+So a threshold anywhere from 2 to 30 days separates the two populations cleanly. **N = 3 days** is proposed — comfortably clear of normal daily jitter, with 27 days of margin before it could touch a healthy store.
+
+### User impact
+
+**7,673 of 22,416 Carrefour items (34.2%)** take their displayed chain-cheapest from a dead store. Worst cases, shown price vs the real live price:
+
+| item | shown | dated | actually |
+|---|---|---|---|
+| חלה מתוקה קלועה בונז'ור | ₪30.00 | 2024-07-07 | ₪120.00 |
+| צלי כתף קפוא | ₪49.90 | 2025-05-08 | ₪119.90 |
+| פילה בקר טרי | ₪211.00 | 2026-01-05 | ₪249.90 |
+
+On a 4-item test basket Carrefour ranked 2nd at ₪39.56 against a ₪38.60 winner — close enough that stale rows can plausibly flip a basket winner, though I did not find a flipped case in the baskets I tried. The per-item damage above is the firmer finding.
+
+### ⚠️ This corrects SU10S-12's recommendation
+
+SU10S-12 proposed resolving cities for 71 stores. **59 of those are dead Carrefour rows.** Running that rebuild as written would give them a `city_canonical`, which makes them eligible for the Sunday geocoder, which puts them in `/stores/coordinates` — surfacing 59 branches that do not exist as *nearby stores with 3-month-old prices*.
+
+Genuinely resolvable, alive, and safe to fix: **11 חצי חינם + 1 שופרסל = 12**. (The 1 ויקטורי is alive but its raw city is `שמוטקין`, still needs Dude.) **Do the store cleanup before the city rebuild, not after.**
+
+### (A) Retire the dead data — delete PRICES, keep the store rows
+
+FK reality decides this:
+
+```
+prices.store_fk            ON DELETE NO ACTION
+fetch_store_runs.store_fk  ON DELETE NO ACTION   <- the audit trail
+promos.store_fk            ON DELETE CASCADE
+```
+
+**Deleting the store rows is the wrong move**: `fetch_store_runs` references them with NO ACTION, so it would fail unless the run history is destroyed too — and that history is the only evidence of *when* and *why* each store died. Nothing else references `stores.id`; favorites and saved baskets key on barcode, and `ratings.item_code` is deliberately not an FK.
+
+So: **delete the prices, leave the rows.** A store with no price rows disappears from every user-facing query (they all join through `prices`), no new column is needed, and the row plus its history stays for diagnosis.
+
+```
+stores affected     93   (+1 that has never loaded — confirm separately)
+prices to delete    409,783
+promos cascaded     29
+backup first:  pg_dump -t prices -t stores -Fc "$DATABASE_URL" -f ~/backups/pre-su10s14.dump
+```
+
+**Keeping them gone** is the part to get right. Nothing currently re-creates them — the loader no longer emits 4-digit ids, so a re-run will not resurrect them. But the structural cause is still live (9n note): `base.py` only DELETEs a store's prices when that store has an index entry, so *any* store that stops publishing keeps its last prices forever. Cleanup is a one-off; (B) is what stops the next one.
+
+### (B) Read-path guard — and the measurement that rules out the obvious design
+
+Use `fetch_store_runs`, not `price_update_date`. The latter is chain-supplied and demonstrably unreliable: the stale rows carry dates as absurd as **2015-01-01**, and some are NULL.
+
+**Measured on production, 40-item price query, best of several runs:**
+
+| approach | time | |
+|---|---|---|
+| current, no guard | **3.5 ms** | baseline |
+| liveness computed in-query (CTE over `fetch_store_runs`) | **78.5 ms** | **20× — rejected** |
+| predicate on an already-joined `stores` column | **6.1 ms** | 1.7× |
+
+The CTE re-aggregates all 108,215 run rows on every request. **The cost is computing liveness, not filtering by it** — which is exactly the hot-path regression class SU10A-5 warns about, and the reason to not put this in `_PRICE_SQL` as a subquery or join.
+
+**Proposed shape:** a denormalised `stores.last_loaded_at timestamptz`, written by the same code that already writes `fetch_store_runs`. The guard then becomes one predicate on a table `_PRICE_SQL` already joins — no new join, no aggregation:
+
+```sql
+-- in _PRICE_SQL, alongside the existing stores join
+JOIN stores s ON s.id = p.store_fk AND s.chain_id = icn.chain_id
+...
+WHERE icn.item_code IN :codes
+  AND s.last_loaded_at >= (chain_latest.value - interval '3 days')
+```
+
+**Safety rule — anchor to the chain, never to wall-clock.** If the cron fails for everyone, a wall-clock cutoff blanks the entire site. Anchoring each store to *its own chain's* latest successful load means a chain-wide outage moves the cutoff with it and excludes nothing. The data supports this directly: every healthy chain's maximum intra-chain lag is 0-1 days, so a 3-day window against the chain's own latest run never excludes a live store.
+
+Chain latest is 14 rows and can be a tiny CTE or a cached lookup — the expensive part was per-store aggregation, not per-chain.
+
+**Verification before shipping (B):** capture `EXPLAIN (ANALYZE, BUFFERS)` for the current `_PRICE_SQL` on a broad query (`q=חלב` class, the SU10A-3 regression shape) and on a barcode lookup, then the same after, and compare execution time **and** buffer counts. Watch specifically for a nested-loop flip — that is what bit SU10A-5.
+
+### Recommended order
+
+1. **(A) first.** It is reversible with a dump, needs no hot-path change, and removes today's user-visible damage immediately — 34.2% of Carrefour items stop showing 2024 prices the moment the rows go.
+2. **Then the SU10S-12 city rebuild**, which becomes safe once the 59 dead rows hold no prices.
+3. **(B) last**, as the durable guard. It needs a scraper change (writing `last_loaded_at`) plus a hot-path predicate, so it wants its own session with before/after plans.
+
+**Done looks like:** no serving store with a last successful load older than its chain's latest minus 3 days; 0 items taking their chain-cheapest from such a store; and a deliberately un-published test store proving the guard excludes it without a deploy.
+
