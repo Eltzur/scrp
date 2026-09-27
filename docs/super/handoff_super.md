@@ -2822,3 +2822,72 @@ This is scraper/store-identity territory and was **not touched**. It wants its o
 
 One row deserves a look regardless of the duplicate question: `קרפור` id 39226, `"קרפור סיטי גבעת סביון"`, address `78 הגליל`. גבעת סביון is a neighbourhood of יהוד-מונוסון rather than a CBS locality, so it is marked needs-Dude instead of being fuzzy-matched to something adjacent.
 
+
+---
+
+## Session SU10S-13 (September 27, 2026) — the weekly image fetch was a no-op; ZIP payloads recovered
+
+Commits `4a50f78` + the dry-run follow-up. No restart needed — the timer starts a fresh process.
+
+### The first scheduled run did nothing, and would have every week
+
+```
+Sun 27 Sep 14:00  DONE — fetched=0 failed=10 skipped=1,490 deleted=0 no_image=0 in 10s
+```
+
+`--limit` sliced the **sorted target list** before the file-exists check. So `--limit 1500` examined the first 1,500 GTINs, 1,490 of which already had files, and **the 3,348 images actually missing — further down the sorted list — were never reached.** Not a rate-limit problem, not a block: the run simply looked at the wrong 1,500 GTINs, and would have looked at the same wrong 1,500 every Sunday indefinitely.
+
+Fixed by dropping already-present GTINs **before** applying the limit, so the limit counts real download attempts. Under `--refresh` every target is a genuine attempt by definition, so that meaning is unchanged. The presence filter also applies under `--dry-run` now — it decides *which* GTINs to try, and only writing is what a dry run should suppress. Without that, a dry run could not rehearse the very bug being fixed.
+
+### The 10 "unreadable images" were ZIP archives full of perfectly good JPEGs
+
+Sniffing the decoded bytes: all ten start `PK\x03\x04`. GS1's media endpoint sometimes returns **a ZIP of several product shots** rather than a single base64 JPEG, and the contents are ordinary well-formed JPEGs:
+
+```
+4015400824749  6,072,206 bytes  ZIP -> 2 entries, both JPEG (3.2 MB, 3.0 MB)
+41390000058    1,573,559 bytes  ZIP -> 2 entries, both JPEG (754 KB, 1.2 MB)
+```
+
+So they are **extracted, not skip-listed** — which recovers them instead of recording them as permanently dead. Largest readable entry wins: the filenames embed a date in an undocumented layout that is not safely parseable, the image is downscaled to 800 px regardless so more source pixels is never worse, and entries are tried largest-first so a damaged one falls through to the next.
+
+**This is not a rare edge case.** In a 20-GTIN dry run against the real remaining backlog, **7 of 20 were ZIPs** and all extracted cleanly. If that rate holds, roughly a third of the outstanding images were previously destined to fail permanently.
+
+### No skip list, deliberately
+
+The brief allowed for one. Nothing in the sample is actually unreadable, so it would be infrastructure for a problem that does not exist — and now that `--limit` counts real attempts, a handful of repeat failures costs ten requests a week rather than an entire wasted run. What was genuinely missing was **diagnosis**: the WARNING now names the detected format (`format=ZIP`, `format=PDF`, `unknown(0102…)`) instead of printing `<_io.BytesIO object at 0x…>`, which is what sent this investigation looking in the wrong place to begin with.
+
+### Verification
+
+17 stubbed cases pass, including the SU10S-5 regressions (circuit breaker still trips at exactly 10; a block still never deletes a cached file) and the new ones: 1,500 existing + 20 missing with `--limit 10` produces **exactly 10 attempts, all on missing GTINs**, with `skipped` still reporting the 1,500.
+
+Live `--dry-run --limit 20` on the server:
+
+```
+already have images for 12,856 of the target set; 3,348 remain
+DONE — fetched=19 failed=1 skipped=12,856 ...
+```
+
+The single failure is a genuine upstream `HTTP 404 "file is missing on the server"` — correctly a failure, correctly not a deletion. **Zero format failures.**
+
+### Catch-up (Dude)
+
+The Sunday 14:00 slot has passed, so this week's run needs starting by hand:
+
+```bash
+sudo systemctl start --no-block scrp-gs1-fetch.service
+```
+
+Check ~20 minutes later:
+
+```bash
+journalctl -u scrp-gs1-fetch -n 40 --no-pager
+```
+
+**Good looks like** a `DONE` line with **fetched ≈ 1,500**, `skipped=12,856`, and **no** `"media endpoint blocking — aborting run"`. A few `failed` are normal (upstream 404s). If the breaker does trip, that is it working — the next run resumes where it stopped.
+
+The 17:00 backup timer ships the new images to B2 on its own; to push them immediately instead:
+
+```bash
+sudo systemctl start scrp-gs1-images-backup.service
+```
+
