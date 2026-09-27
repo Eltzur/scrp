@@ -18,6 +18,15 @@ wasted 2.8 MB download.
 RESUMABLE: an existing output file is skipped, so an interrupted run can simply
 be relaunched. --refresh forces a re-fetch.
 
+--limit MEANS "MAX FETCH ATTEMPTS", not "max GTINs examined". Without
+--refresh, GTINs that already have a file are removed before the limit is
+applied, so --limit 1500 really does try 1,500 downloads. Under --refresh
+every target is a genuine attempt and the limit applies to the whole list.
+
+ZIP PAYLOADS: the media endpoint sometimes returns a ZIP of several product
+shots instead of a single base64 JPEG. The largest readable entry is used
+(see _image_from_zip). Before SU10S-13 these counted as permanent failures.
+
 RATE LIMITS: the media endpoint blocks after roughly 1,800 requests in one
 sitting (SU10S-3) and answers HTTP 400 until it clears. The run aborts after
 10 consecutive 400s and exits non-zero rather than burning the rest of the
@@ -44,6 +53,7 @@ import io
 import logging
 import os
 import time
+import zipfile
 from pathlib import Path
 
 import requests
@@ -97,6 +107,76 @@ _TARGET_SQL = """
 """
 
 
+# Magic numbers, so a WARNING can name what actually arrived instead of
+# printing a BytesIO repr. The first scheduled run logged ten
+# "cannot identify image file <_io.BytesIO object at 0x…>" lines, which says
+# nothing at all about the cause; they turned out to be ZIP archives.
+_MAGIC: list[tuple[bytes, str]] = [
+    (b"\xff\xd8\xff", "JPEG"),
+    (b"\x89PNG", "PNG"),
+    (b"GIF8", "GIF"),
+    (b"BM", "BMP"),
+    (b"II*\x00", "TIFF"),
+    (b"MM\x00*", "TIFF"),
+    (b"%PDF", "PDF"),
+    (b"PK\x03\x04", "ZIP"),
+    (b"<?xml", "XML"),
+    (b"<svg", "SVG"),
+]
+
+
+def _sniff(raw: bytes) -> str:
+    """Short name for what these bytes actually are."""
+    for sig, name in _MAGIC:
+        if raw.startswith(sig):
+            return name
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return "WEBP"
+    if raw[4:12] == b"ftypavif":
+        return "AVIF"
+    if raw[4:12] in (b"ftypheic", b"ftypheix", b"ftypmif1"):
+        return "HEIF"
+    return f"unknown({raw[:6].hex()})"
+
+
+def _image_from_zip(raw: bytes, gtin: str) -> bytes | None:
+    """Pull the best image out of a ZIP payload, or None if there is none.
+
+    GS1's media endpoint does not always return a single base64 JPEG. For some
+    GTINs it returns a ZIP holding several shots of the product — real JPEGs,
+    correctly encoded, just wrapped. Before SU10S-13 these surfaced as
+    UnidentifiedImageError and were counted as failures forever.
+
+    LARGEST ENTRY WINS. The filenames embed a date
+    ("4015400824749_s1_1503-01-2023_19-00-12.jpg") but in an undocumented
+    layout that is not safely parseable, and the image is downscaled to 800 px
+    regardless — so more source pixels is never worse, and size is a stable
+    proxy that needs no guessing. Entries are tried largest-first and the first
+    one Pillow can actually open is used, so a damaged largest entry falls
+    through to the next rather than failing the GTIN.
+    """
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(raw))
+    except Exception:
+        return None
+    entries = sorted(
+        (i for i in zf.infolist() if not i.is_dir() and i.file_size > 0),
+        key=lambda i: i.file_size,
+        reverse=True,
+    )
+    for info in entries:
+        try:
+            with zf.open(info) as fh:
+                data = fh.read()
+            Image.open(io.BytesIO(data)).verify()   # cheap decodability check
+            log.info("%s: image extracted from ZIP entry %s (%s of %s entries)",
+                     gtin, info.filename, 1 + entries.index(info), len(entries))
+            return data
+        except Exception:
+            continue
+    return None
+
+
 def _fetch_and_resize(session: requests.Session, gtin: str, out_path: str,
                       dry_run: bool) -> tuple[int, int] | str | None:
     """Return (raw_bytes, written_bytes), "no_image", "blocked", or None.
@@ -125,8 +205,24 @@ def _fetch_and_resize(session: requests.Session, gtin: str, out_path: str,
         return "no_image"
 
     raw = base64.b64decode(b64)
-    im = Image.open(io.BytesIO(raw))
-    im.load()
+
+    # Some GTINs come back as a ZIP of several shots rather than one image.
+    if raw.startswith(b"PK\x03\x04"):
+        extracted = _image_from_zip(raw, gtin)
+        if extracted is None:
+            log.warning("%s: ZIP payload with no readable image (%s bytes)", gtin, len(raw))
+            return None
+        raw = extracted
+
+    try:
+        im = Image.open(io.BytesIO(raw))
+        im.load()
+    except Exception as exc:
+        # Name the format. "cannot identify image file <BytesIO object>" is
+        # what sent SU10S-13 looking in the wrong place.
+        log.warning("%s: undecodable payload, format=%s size=%s (%s)",
+                    gtin, _sniff(raw), len(raw), type(exc).__name__)
+        return None
     if im.mode not in ("RGB", "L"):
         im = im.convert("RGB")
     im.thumbnail((_MAX_PX, _MAX_PX), Image.LANCZOS)
@@ -159,6 +255,26 @@ def run(out_dir: str = _DEFAULT_OUT, dry_run: bool = False, limit: int | None = 
     try:
         gtins = [r["gtin"] for r in
                  conn.execute(text(_TARGET_SQL), {"active": _ACTIVE_STATUS}).mappings().all()]
+
+        # --limit CAPS FETCH ATTEMPTS, NOT TARGETS.
+        #
+        # This used to slice the sorted target list first, which made the
+        # weekly job useless: --limit 1500 examined the first 1,500 GTINs,
+        # 1,490 already had files, and the images actually missing — further
+        # down the sorted list — were never reached. The first scheduled run
+        # (SU10S-13) logged "fetched=0 failed=10 skipped=1,490" and would have
+        # done exactly that every week, forever.
+        #
+        # So drop the already-present ones BEFORE applying the limit. Under
+        # --refresh every target is a real attempt by definition, so the old
+        # meaning is correct there and is kept.
+        if not refresh and not dry_run:
+            present = {f[:-4] for f in os.listdir(out_dir) if f.endswith(".jpg")}
+            already = sum(1 for g in gtins if g in present)
+            gtins = [g for g in gtins if g not in present]
+            skipped += already
+            log.info("already have images for %s of the target set; %s remain",
+                     f"{already:,}", f"{len(gtins):,}")
         if limit:
             gtins = gtins[:limit]
         log.info("targets: %s   out: %s   %.1f req/s%s",
