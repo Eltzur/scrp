@@ -5,14 +5,20 @@ No display logic, no HTTP concerns.
 """
 from __future__ import annotations
 
+import logging
 import re
 import time
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 from sqlalchemy import text, bindparam
 from sqlalchemy.engine import Connection
+
+from db.db import connect
+
+log = logging.getLogger(__name__)
 
 
 _ACTIVE_STORES_YAML = Path(__file__).parent.parent / "scraper" / "active_stores.yaml"
@@ -34,13 +40,14 @@ _ACTIVE_STORES_YAML = Path(__file__).parent.parent / "scraper" / "active_stores.
 # them with ~27 days of margin. NULL last_loaded_at (never loaded) fails the
 # comparison and is excluded.
 #
-# USED BY /stores/coordinates ONLY - NOT YET BY THE PRICE READS. Do not paste
-# this predicate into _PRICE_SQL / the promo queries (SU10S-17, measured on
-# production): the planner cannot estimate the CASE, guesses ~400 live stores
-# instead of ~865, and flips the barcode plan to a nested loop over a
-# materialised prices x stores join - EXPLAIN +39% on a barcode lookup, +31% on
-# a 10-item basket. The pending design is a Python post-filter against the
-# live-store set (0.13 ms per barcode lookup), which changes no plan.
+# As SQL, this is used by /stores/coordinates ONLY. Do not paste the predicate
+# into _PRICE_SQL / the promo queries (SU10S-17, measured on production): the
+# planner cannot estimate the CASE, guesses ~400 live stores instead of ~865,
+# and flips the barcode plan to a nested loop over a materialised
+# prices x stores join - EXPLAIN +39% on a barcode lookup, +31% on a 10-item
+# basket. The price and promo reads apply the SAME rule as a Python post-filter
+# instead (see "Liveness filter (SU10S-20)" at the end of this module), which
+# changes no SQL and no plan.
 #
 # The cutoffs move only when the daily cron loads, so a process-level cache is
 # safe: a stale cutoff is at most a few minutes EARLIER, i.e. more lenient.
@@ -478,7 +485,7 @@ def _fetch_promo_only(conn: Connection, sql: str, params: dict) -> list[dict]:
     return [dict(r) for r in conn.execute(text(sql), params).mappings().all()]
 
 
-def fetch_prices(
+def _fetch_prices_all(
     conn: Connection,
     barcodes: list[str],
     city: list[str] | None = None,
@@ -1237,7 +1244,7 @@ def lookup_store_fk(conn: Connection, chain_id: str, store_id: str) -> int | Non
     return row[0] if row else None
 
 
-def fetch_promos(conn: Connection, store_fk: int) -> list[dict]:
+def _fetch_promos_all(conn: Connection, store_fk: int) -> list[dict]:
     """Return active promos for a store (promo_end >= NOW() or no end date)."""
     rows = conn.execute(text("""
         SELECT
@@ -1254,7 +1261,7 @@ def fetch_promos(conn: Connection, store_fk: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def fetch_promos_bulk(
+def _fetch_promos_bulk_all(
     conn: Connection,
     pairs: list[tuple[str, str]],
 ) -> dict[str, list[dict]]:
@@ -1321,7 +1328,7 @@ _ONLINE_STORE_FILTER = """
 """.strip()
 
 
-def fetch_today_promos(
+def _fetch_today_promos_raw(
     conn: Connection,
     limit: int = 200,
     city: str | None = None,
@@ -1395,7 +1402,7 @@ def fetch_today_promos(
     return [dict(r) for r in rows]
 
 
-def fetch_promo_cities(conn: Connection) -> list[str]:
+def _fetch_promo_cities_all(conn: Connection) -> list[str]:
     """Distinct cities that have active qualifying promos."""
     rows = conn.execute(text(f"""
         SELECT DISTINCT s.city_canonical
@@ -1412,7 +1419,7 @@ def fetch_promo_cities(conn: Connection) -> list[str]:
     return [r[0] for r in rows]
 
 
-def fetch_promo_chains(conn: Connection) -> list[dict]:
+def _fetch_promo_chains_all(conn: Connection) -> list[dict]:
     """Distinct chains that have active qualifying promos."""
     rows = conn.execute(text(f"""
         SELECT DISTINCT s.chain_id, c.name
@@ -1512,7 +1519,7 @@ _PROMO_SORTS = {
 }
 
 
-def fetch_grouped_promos(
+def _fetch_grouped_promos_raw(
     conn: Connection,
     chain_id: str | None = None,
     city: str | None = None,
@@ -1710,3 +1717,222 @@ def count_grouped_promos_dropped(conn: Connection) -> dict:
         FROM calc
     """)).mappings().first()
     return dict(row) if row else {}
+
+
+# ---------------------------------------------------------------------------
+# Liveness filter (SU10S-20)
+# ---------------------------------------------------------------------------
+# Every user-facing price and promo read drops rows from stores that are not
+# LIVE - the rule in "Store liveness (SU10S-17)" above: last_loaded_at within
+# 3 days of the store's own chain's latest load; never loaded = not live.
+#
+# WHY IN PYTHON, AFTER THE QUERY: the same rule as a SQL predicate failed the
+# SU10S-17 gate (the planner mis-estimates it and flips the barcode plan). A
+# post-filter changes no SQL text and no plan. Cost measured SU10S-20 - see
+# docs/super/handoff_super.md.
+#
+# The public functions below wrap the unchanged originals (_*_all / _*_raw).
+# The promo-pick LATERAL needs nothing of its own: it attaches a promo to a
+# price row FROM THE SAME STORE, so dropping the row drops its promo.
+#
+# FAIL OPEN. If the live set cannot be loaded, log a WARNING and do not filter:
+# showing a stale price is bad, showing no prices at all is worse. The set is
+# loaded on its OWN connection so a failure cannot abort the caller's
+# transaction, and a failure is retried after _LIVENESS_RETRY_S, not per call.
+#
+# Per gunicorn worker, _LIVENESS_TTL_S. last_loaded_at moves once a day (the
+# 10:00 cron), so minutes of staleness are harmless.
+
+_LIVENESS_TTL_S = 600.0
+_LIVENESS_RETRY_S = 60.0
+
+
+@dataclass(frozen=True)
+class Liveness:
+    live_fks: frozenset
+    # Keys for reads whose rows carry no store_fk. A key is "dead" only when NO
+    # live store shares it, so an ambiguous key is never filtered.
+    dead_pairs: frozenset   # (chain_id, store_id)
+    dead_names: frozenset   # (chain_id, store_name)
+    live_cities: frozenset
+    live_chains: frozenset
+
+
+_liveness: tuple[float, Liveness | None] | None = None
+
+
+def _load_liveness() -> Liveness:
+    conn = connect()
+    try:
+        cutoffs = dict(_chain_cutoffs(conn))
+        rows = conn.execute(text(
+            "SELECT id, chain_id, store_id, store_name, city_canonical, last_loaded_at FROM stores"
+        )).all()
+    finally:
+        conn.rollback()
+        conn.close()
+    live, dead = [], []
+    for r in rows:
+        cut = cutoffs.get(r.chain_id)
+        (live if r.last_loaded_at is not None and cut is not None and r.last_loaded_at >= cut
+         else dead).append(r)
+    live_pairs = {(r.chain_id, r.store_id) for r in live}
+    live_names = {(r.chain_id, r.store_name) for r in live}
+    return Liveness(
+        live_fks=frozenset(r.id for r in live),
+        dead_pairs=frozenset({(r.chain_id, r.store_id) for r in dead} - live_pairs),
+        dead_names=frozenset({(r.chain_id, r.store_name) for r in dead} - live_names),
+        live_cities=frozenset(r.city_canonical for r in live if r.city_canonical),
+        live_chains=frozenset(r.chain_id for r in live),
+    )
+
+
+def get_liveness() -> Liveness | None:
+    """The cached live-store set, or None = fail open (do not filter)."""
+    global _liveness
+    now = time.monotonic()
+    cached = _liveness
+    if cached is not None and now < cached[0]:
+        return cached[1]
+    try:
+        lv = _load_liveness()
+    except Exception as exc:  # noqa: BLE001 - any failure must fail open
+        log.warning("liveness set unavailable, NOT filtering stale stores: %s", exc)
+        _liveness = (now + _LIVENESS_RETRY_S, None)
+        return None
+    _liveness = (now + _LIVENESS_TTL_S, lv)
+    return lv
+
+
+def fetch_prices(
+    conn: Connection,
+    barcodes: list[str],
+    city: list[str] | None = None,
+    chain_id: list[str] | None = None,
+    store_only: str | None = None,
+) -> list[dict]:
+    """Shelf quotes + promo-only quotes, from live stores only.
+
+    Callers (/search, /compare, /product, /basket/compare) group AFTER this,
+    so total_matches, has_more, chains_count and cheapest are all computed on
+    the filtered rows and stay consistent with what is returned.
+    """
+    rows = _fetch_prices_all(conn, barcodes, city=city, chain_id=chain_id, store_only=store_only)
+    lv = get_liveness()
+    if lv is None:
+        return rows
+    return [r for r in rows if r["store_fk"] in lv.live_fks]
+
+
+def fetch_promos(conn: Connection, store_fk: int) -> list[dict]:
+    """Active promos for one store; none if the store is not live."""
+    lv = get_liveness()
+    if lv is not None and store_fk not in lv.live_fks:
+        return []
+    return _fetch_promos_all(conn, store_fk)
+
+
+def fetch_promos_bulk(conn: Connection, pairs: list[tuple[str, str]]) -> dict[str, list[dict]]:
+    """Rows carry (chain_id, store_id), not store_fk: a key is dropped only
+    when no live store shares it (Liveness.dead_pairs)."""
+    result = _fetch_promos_bulk_all(conn, pairs)
+    lv = get_liveness()
+    if lv is None:
+        return result
+    return {k: v for k, v in result.items() if tuple(k.split("/", 1)) not in lv.dead_pairs}
+
+
+def _refill(fetch, want: int, keep, start: int) -> list[dict]:
+    """Fetch from row 0 with a growing limit until `want` rows survive `keep`
+    or the source runs dry. Makes a filtered page exactly as long, and its
+    offsets exactly as positioned, as an unfiltered one would be."""
+    n = start
+    while True:
+        raw = fetch(n)
+        kept = [r for r in raw if keep(r)]
+        if len(kept) >= want or len(raw) < n:
+            return kept
+        n *= 2
+
+
+def fetch_today_promos(
+    conn: Connection,
+    limit: int = 200,
+    city: str | None = None,
+    chain_id: str | None = None,
+) -> list[dict]:
+    """Hot deals from live stores, still exactly `limit` rows when available.
+
+    Rows carry (chain_id, store_name), not store_fk, so a row is dropped when
+    that key is Liveness.dead_names. KNOWN RESIDUAL: the SQL's DISTINCT ON
+    (item_code, chain_id) picks ONE store per item and chain before this
+    filter; where a dead store won that pick, a live store of the same chain
+    with the same deal is not substituted - the item is just absent for that
+    chain. Fixing it needs the liveness test inside the CTE (a SQL change).
+    """
+    lv = get_liveness()
+    if lv is None:
+        return _fetch_today_promos_raw(conn, limit=limit, city=city, chain_id=chain_id)
+    rows = _refill(
+        lambda n: _fetch_today_promos_raw(conn, limit=n, city=city, chain_id=chain_id),
+        limit,
+        lambda r: (r["chain_id"], r["store_name"]) not in lv.dead_names,
+        start=limit * 2,
+    )
+    return rows[:limit]
+
+
+def fetch_promo_cities(conn: Connection) -> list[str]:
+    """Cities with active promos AND at least one live store.
+
+    Residual: a city whose live stores have no active promos but whose dead
+    store does would still be listed. None such today (SU10S-20)."""
+    cities = _fetch_promo_cities_all(conn)
+    lv = get_liveness()
+    return cities if lv is None else [c for c in cities if c in lv.live_cities]
+
+
+def fetch_promo_chains(conn: Connection) -> list[dict]:
+    """Chains with active promos AND at least one live store (same residual
+    shape as fetch_promo_cities; none today)."""
+    chains = _fetch_promo_chains_all(conn)
+    lv = get_liveness()
+    return chains if lv is None else [c for c in chains if c["chain_id"] in lv.live_chains]
+
+
+def fetch_grouped_promos(
+    conn: Connection,
+    chain_id: str | None = None,
+    city: str | None = None,
+    branch: int | None = None,
+    bands: list[str] | None = None,
+    promo_types: list[str] | None = None,
+    q: str | None = None,
+    ending_within_hours: int | None = None,
+    sort: str = "discount",
+    limit: int = 500,
+    offset: int = 0,
+) -> list[dict]:
+    """Per-branch promos from live stores, paginated in the FILTERED sequence.
+
+    Clients page with offset = rows already shown and stop on a short page
+    (web PromosPage: offset: rows.length, hasMore = page full). A plain
+    post-filter would shorten pages and shift every later offset, and a dead
+    branch's rows are contiguous in this ordering (chain -> city -> branch), so
+    a whole page could vanish and end the list early. So the filtered sequence
+    is materialised from row 0 up to offset + limit and sliced: exact pages,
+    exact offsets. Cost: rows before `offset` are re-read on each page.
+    """
+    args = dict(chain_id=chain_id, city=city, branch=branch, bands=bands,
+                promo_types=promo_types, q=q, ending_within_hours=ending_within_hours, sort=sort)
+    lv = get_liveness()
+    if lv is None:
+        return _fetch_grouped_promos_raw(conn, limit=limit, offset=offset, **args)
+    want = offset + limit
+    rows = _refill(
+        lambda n: _fetch_grouped_promos_raw(conn, limit=n, offset=0, **args),
+        want,
+        lambda r: r["store_fk"] in lv.live_fks,
+        start=want + limit,
+    )
+    return rows[offset:want]
