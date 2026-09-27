@@ -110,8 +110,12 @@ def load_city_centroids() -> dict[str, tuple[float, float]]:
         print(f"  WARNING: {CBS_XLSX} missing — city fallback disabled")
         return {}
     z = zipfile.ZipFile(CBS_XLSX)
-    shared = re.findall(r"<t[^>]*>([^<]*)</t>",
-                        z.read("xl/sharedStrings.xml").decode("utf-8", "replace"))
+    # One shared string per <si>, NOT per <t>: a rich-text cell holds several
+    # <t> runs inside a single <si>, and a flat findall over <t> shifts every
+    # index after the first such cell (which is exactly what it did).
+    raw_ss = z.read("xl/sharedStrings.xml").decode("utf-8", "replace")
+    shared = ["".join(re.findall(r"<t[^>]*>([^<]*)</t>", si))
+              for si in re.findall(r"<si>(.*?)</si>", raw_ss, re.S)]
     sheet = z.read("xl/worksheets/sheet1.xml").decode("utf-8", "replace")
 
     def row_cells(chunk: str) -> dict[str, str]:
