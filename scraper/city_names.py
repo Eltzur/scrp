@@ -110,6 +110,10 @@ STORE_CITY_OVERRIDES: dict[tuple[str, str], str] = {
     ("7290055700007", "067"): "חולון",
     # Keshet (chain 7290785400000) — Kulinarik branch override.
     ("7290785400000", "103"): "חיפה",
+    # SU10S-25, verified by Dude (OSM / Google Maps): the feed's city is wrong.
+    ("7290785400000", "005"): "חיפה",       # קשת טעמים, רחוב תל אביב 11, קריית אליעזר — raw city is the STREET name
+    ("7290785400000", "010"): "כרמיאל",     # בציר 46 — feed says גבעת רם
+    ("7290058140886", "064"): "אור עקיבא",  # רמי לוי, הכרמל 1, דוד סנטר — feed says חיפה
 }
 
 

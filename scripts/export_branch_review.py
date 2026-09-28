@@ -10,11 +10,15 @@ PHYSICAL. One row per store; a store can carry several issues:
     NO_ADDRESS         effective address NULL / empty
     PLACEHOLDER        effective address is a placeholder ("unknown", "לא ידוע", "-" ...)
     NO_HOUSE_NUMBER    effective address has no digit
-    GEOCODE_REJECTED   Nominatim answered, geocoder refused it (amenity/*, other
-                       unrecognised class, or > 25 km from the city centroid)
-    GEOCODE_FLAGGED    Nominatim answered shop/* - centroid kept, logged for review
+    GEOCODE_REJECTED   Nominatim answered, but no candidate matched the input
+                       street (+ house number), or the match is > 25 km from the
+                       CBS city centroid
+    GEOCODE_CITY_MISMATCH  the street matched, but Nominatim puts it in another
+                       city than city_canonical - usually a wrong city (SU10S-25)
     GEOCODE_NO_MATCH   Nominatim returned nothing for the address (not in the brief;
                        same "check this address" signal, so surfaced too)
+    NO_COORDINATES     no lat/lon at all, not even a city centroid (the Sunday
+                       geo_centroids / geo_nominatim run has not reached it yet)
     MAYBE_ONLINE       name/address suggests online / delivery / fulfilment
 
 "Effective address" = COALESCE(NULLIF(btrim(address_override), ''), address),
@@ -22,14 +26,16 @@ the same expression scripts/geo_nominatim.py geocodes.
 
 GEOCODE_* ARE REPLAYED, NOT STORED: the geocoder persists only accepted
 results. Every answer it ever got is in its on-disk cache, and its accept rules
-(classify(), MAX_CENTROID_KM) are deterministic, so this replays them against
-the cache. It NEVER calls Nominatim - an uncached query is reported as
-"not geocoded yet" instead.
+(geo_nominatim.evaluate(), SU10S-25) are deterministic, so this replays them
+against the cache. It NEVER calls Nominatim - an uncached query is reported as
+"not geocoded yet" instead. A hand-placed row (geo_source = 'manual') is
+never geocoded, so it never carries a GEOCODE_* issue.
 
 Sheets, in order (Dude's triage, SU10S-18 follow-up):
-    "עדיפות"                   worth manual effort: GEOCODE_REJECTED, GEOCODE_FLAGGED,
-                               NO_CITY. issue_detail says what Nominatim matched -
-                               class/type, the matched name, km from the city centroid.
+    "עדיפות"                   worth manual effort: GEOCODE_REJECTED,
+                               GEOCODE_CITY_MISMATCH, NO_CITY. issue_detail says what
+                               Nominatim matched - reason, road/number/city, km from
+                               the CBS city centroid.
     "לבדיקה"                   optional: everything else (NO_MATCH, NO_HOUSE_NUMBER,
                                PLACEHOLDER, ...).
     "bulk-awaiting-StoresFull" NO_ADDRESS rows of chains that publish NO address for
@@ -63,20 +69,21 @@ from sqlalchemy import text
 
 from db.db import connect
 from db.query import live_store_clause
+from scripts.geo_centroids import load_cbs_centroids
 from scripts.geo_nominatim import (
     CACHE_PATH,
     EFFECTIVE_ADDRESS_SQL,
-    MAX_CENTROID_KM,
+    CityResolver,
     build_geo_input,
-    classify,
-    haversine_km,
+    cache_key,
+    evaluate,
 )
 
 BULK_LABEL = "BULK — awaiting StoresFull ingestion"
 SHEET_PRIORITY = "עדיפות"
 SHEET_OPTIONAL = "לבדיקה"
 SHEET_BULK = "bulk-awaiting-StoresFull"
-PRIORITY_ISSUES = {"GEOCODE_REJECTED", "GEOCODE_FLAGGED", "NO_CITY"}
+PRIORITY_ISSUES = {"GEOCODE_REJECTED", "GEOCODE_CITY_MISMATCH", "NO_CITY"}
 
 # Chains whose feed carries no address for ANY store (see module doc).
 _NO_ADDRESS_CHAINS_SQL = """
@@ -88,7 +95,8 @@ _NO_ADDRESS_CHAINS_SQL = """
 """
 
 ISSUE_ORDER = ["NO_CITY", "NO_ADDRESS", "PLACEHOLDER", "NO_HOUSE_NUMBER",
-               "GEOCODE_REJECTED", "GEOCODE_FLAGGED", "GEOCODE_NO_MATCH", "MAYBE_ONLINE"]
+               "GEOCODE_CITY_MISMATCH", "GEOCODE_REJECTED", "GEOCODE_NO_MATCH",
+               "NO_COORDINATES", "MAYBE_ONLINE"]
 
 _PLACEHOLDERS = {"unknown", "none", "null", "n/a", "na", "-", "--", "---", ".", "0",
                  "לא ידוע", "לא ידועה", "אין", "אין כתובת", "לא קיים", "כללי", "?"}
@@ -108,7 +116,7 @@ REVIEWER_COLS = {"correct_address", "correct_city", "is_physical", "notes"}
 _POP_SQL = """
     SELECT s.id, s.chain_id, c.name AS chain, s.store_id, s.store_name,
            s.city_canonical, s.city, {eff} AS address, s.geo_precision,
-           s.lat, s.lon
+           s.lat, s.lon, s.geo_source
     FROM stores s
     LEFT JOIN chains c ON c.chain_id = s.chain_id
     WHERE s.is_physical
@@ -127,11 +135,21 @@ def load_cache() -> dict:
 
 def _cache_get(cache: dict, params: dict):
     """Exactly the geocoder's cache key; None = never asked."""
-    return cache.get(json.dumps(params, sort_keys=True, ensure_ascii=False))
+    return cache.get(cache_key(params))
 
 
-def replay_geocode(r: dict, cache: dict) -> tuple[str | None, str]:
+class Replay:
+    """What evaluate() needs besides the row: the cache, CBS centroids, cities."""
+
+    def __init__(self) -> None:
+        self.cache = load_cache()
+        self.centroids = load_cbs_centroids()
+        self.cities = CityResolver(list(self.centroids))
+
+
+def replay_geocode(r: dict, rp: Replay) -> tuple[str | None, str]:
     """(issue or None, detail) for a row the geocoder would target."""
+    cache = rp.cache
     addr, city, geo_input = build_geo_input(r["address"], r["city_canonical"])
     hits = _cache_get(cache, {"street": addr, "city": city})
     if hits is None:
@@ -142,21 +160,18 @@ def replay_geocode(r: dict, cache: dict) -> tuple[str | None, str]:
             return None, "not geocoded yet (next scrp-geocode run)"
     if not hits:
         return "GEOCODE_NO_MATCH", f"no Nominatim result for '{geo_input}'"
-    hit = hits[0]
-    precision, reason = classify(hit)
-    # What Nominatim actually matched, for the reviewer: "amenity/dentist
-    # 'מרפאת שיניים' 0.4 km". Distance is from the store's current (centroid)
-    # coordinate - the same reference the geocoder's 25 km guard uses.
-    matched = reason.split(" — ")[0]
-    name = (hit.get("name") or (hit.get("display_name") or "").split(",")[0]).strip()
-    dist = (haversine_km(float(hit["lat"]), float(hit["lon"]), r["lat"], r["lon"])
-            if r["lat"] is not None else None)
-    what = f"{matched}" + (f" '{name}'" if name else "") + (f" {dist:.1f} km" if dist is not None else "")
-    if precision is None:
-        return ("GEOCODE_FLAGGED" if reason.startswith("shop") else "GEOCODE_REJECTED"), what
-    if dist is not None and dist > MAX_CENTROID_KM:
-        return "GEOCODE_REJECTED", f"{what} (>{MAX_CENTROID_KM:.0f} km guard)"
-    return None, ""
+    centroid = rp.centroids.get(city)
+    if centroid is None and r["lat"] is not None:
+        centroid = (r["lat"], r["lon"])
+    res = evaluate(hits, addr, city, centroid, r["chain"], rp.cities)
+    if res["precision"]:
+        return None, ""
+    # What Nominatim matched, for the reviewer: "NO_MATCH: הרצל 12, רמת גן 3.1 km".
+    where = ", ".join(str(v) for v in (" ".join(str(x) for x in (res["road"], res["house_number"]) if x),
+                                       res["city"]) if v)
+    dist = f" {res['dist_km']:.1f} km" if res["dist_km"] is not None else ""
+    what = f"{res['reason']}: {where}{dist}"
+    return ("GEOCODE_CITY_MISMATCH" if res["reason"] == "CITY_MISMATCH" else "GEOCODE_REJECTED"), what
 
 
 def geocodable(address: str | None, city: str | None) -> bool:
@@ -166,7 +181,7 @@ def geocodable(address: str | None, city: str | None) -> bool:
             and bool(re.search(r"[0-9]", a)) and bool((city or "").strip()))
 
 
-def issues_for(r: dict, cache: dict) -> tuple[list[str], list[str]]:
+def issues_for(r: dict, rp: Replay) -> tuple[list[str], list[str]]:
     issues, detail = [], []
     addr = (r["address"] or "").strip()
     if not r["city_canonical"]:
@@ -180,8 +195,10 @@ def issues_for(r: dict, cache: dict) -> tuple[list[str], list[str]]:
         issues.append("NO_HOUSE_NUMBER")
         if addr in {(r["city"] or "").strip(), (r["city_canonical"] or "").strip()}:
             detail.append("address is just the city name")
-    if geocodable(r["address"], r["city_canonical"]):
-        g, why = replay_geocode(r, cache)
+    if r["lat"] is None:
+        issues.append("NO_COORDINATES")
+    if r["geo_source"] != "manual" and geocodable(r["address"], r["city_canonical"]):
+        g, why = replay_geocode(r, rp)
         if g:
             issues.append(g)
         if why:
@@ -244,13 +261,13 @@ def main() -> None:
         conn.rollback()
         conn.close()
 
-    cache = load_cache()
+    rp = Replay()
     sheets: dict[str, list] = {SHEET_PRIORITY: [], SHEET_OPTIONAL: [], SHEET_BULK: []}
     cat = Counter()
     per_sheet_chain: dict[str, Counter] = {k: Counter() for k in sheets}
     per_sheet_issue: dict[str, Counter] = {k: Counter() for k in sheets}
     for r in rows:
-        issues, detail = issues_for(r, cache)
+        issues, detail = issues_for(r, rp)
         for i in issues:
             cat[i] += 1
         if r["chain_id"] in no_addr and "NO_ADDRESS" in issues:
