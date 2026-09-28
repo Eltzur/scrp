@@ -3399,3 +3399,45 @@ The grouped view's `_UNIT_PRICE_SQL` has the same rate branch (with no `min_qty`
 
 - **Weighed-item promos are invisible to search and grouped.** `_PROMO_PICK_SQL` and `_UNIT_PRICE_SQL` both require `min_qty BETWEEN 1 AND 24`, so Rami Levy's `min_qty = 0.01` unit-price promos (e.g. ₪34.90 vs ₪49.90 shelf) are never picked and show as "basket" in grouped.
 - **`/promos/bulk` and `/promos/{store_fk}` now compute `discount_pct` differently** for spend rows, `price = 0` rows and sub-100% rate rows (bulk: no spend guard, `price = 0` → 100%, rates → NULL). Recommend moving bulk to `_PROMO_ITEM_PCT_SQL` — it is web-visible (ProductCard), so it was left for its own change.
+
+---
+
+## Session SU10S-22 (September 28, 2026) — 100% rate promos no longer price items at ₪0
+
+Commit `abae630`. API deployed and verified live. Closes the ⚠️ item found in SU10S-21.
+
+### The bug
+
+`_PROMO_PICK_SQL` — the LATERAL behind /search, /compare, /product and /basket/compare — priced a rate-only, single-unit promo as `shelf × (1 − rate)`. The chains publish **rate = 100** for the free unit of "1+1" / "2+1" deals and for gift coupons (Rami Levy: "מגוון מוצרי חזרה לבית הספר 2+1 הזול מבינ"), so those became **₪0 quotes that won as the product's cheapest**. Live example before the fix: `/product/7290118071310` "בצק משחק -כלב", Rami Levy אילת, shelf ₪11.00 → `cheapest_price 0.0`.
+
+### The fix — one guard
+
+The rate branch now also requires the effective rate to be **< 100%**. A 100% promo no longer sets a price; the quote shows the shelf price, or another genuine promo for that store if one exists. Nothing else in the expression changed.
+
+**Deliberately NOT changed: `_UNIT_PRICE_SQL` (the grouped promos view).** Every rate-≥100 promo has `discount_price = 0` (78,335 single-unit + 11,389 multi-unit rows; none NULL), and grouped classifies those as **`gift`** — which is what the web promos page's "1+1 / מתנה" filter selects, rendered via `reward_type`. Nulling their unit price there would have reclassified them as `basket` and broken that filter. Grouped never produced a ₪0 *cheapest price*; only the search path did.
+
+### Verification (production)
+
+| | before | after |
+|---|---|---|
+| affected (store, item) quotes priced ₪0 | **19,721** over 1,720 items | **0** |
+| quotes ≤ ₪0 anywhere in those items | — | 0 |
+| `/product/7290118071310` cheapest | ₪0.0 | **₪11.0** |
+
+(19,721 is distinct store/item quotes; SU10S-21's "~40,000" counted promo rows, several per quote.)
+
+Old-vs-old baseline in the same run: 0 differences. The first run showed 8 changes outside the affected set while today's cron was finishing (its last chain started 11:03, the proof ran ~11:14–11:22); a full rerun showed **0** outside changes. Cause not pinned to a specific write — recorded as observed.
+
+**EXPLAIN (ANALYZE), exact non-city price statement, interleaved:** barcode −0.7% (n=15), 10-item basket +3.9% (n=15), `q=חלב` −8.5% (n=3); identical nested-loop counts — the plan did not change.
+
+Live after deploy: one affected item from each of the six chains → 0 zero-priced quotes each; `/basket/compare` normal; `/health` 200.
+
+### For Dude — a product question, not a bug
+
+`/product/7290004131074` (חלב 3% קרטון) now shows cheapest **₪0.90**: Rami Levy's **coupon** "קופון חלב תנובה קרטון 1לי ב1שח". It is a genuine published promo, correctly parsed. Whether coupon- or club-conditional deals should rank as a product's plain "cheapest" — or be shown but not win — is a product decision.
+
+### Still open (roadmap)
+
+- Weighed-item promos (`min_qty = 0.01`) are invisible to search and grouped.
+- `/promos/bulk` `discount_pct` should move to `_PROMO_ITEM_PCT_SQL`.
+- Minor, grouped only: Hazi Hinam's multi-unit basis-point rates ("השני ב50%", 5000 bp, `min_qty 2`, `discount_price` NULL — 281 rows) are shown as a flat 50% off, overstating the per-unit saving.
