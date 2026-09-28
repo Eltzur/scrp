@@ -269,10 +269,20 @@ LEFT JOIN LATERAL (
                 -- rate-only: no fixed price published, so derive off this
                 -- store's own shelf price. discount_rate scale is portal
                 -- specific; >100 can only be basis points.
+                --
+                -- ...and only BELOW 100%. A 100% rate is the FREE UNIT of a
+                -- "1+1"/"2+1" or a gift coupon ("2+1 הזול מבינ"), not a free
+                -- product: priced as shelf x (1 - 100%) it became a ₪0 quote
+                -- that won as the product's cheapest - ~40,000 quotes, mostly
+                -- Rami Levy (SU10S-21/22). Such a promo stays visible in the
+                -- grouped promos view (as a gift); it just never sets a price.
                 WHEN (pm.discount_price IS NULL OR pm.discount_price = 0)
                  AND (CASE WHEN pm.discount_rate > 100
                            THEN pm.discount_rate / 100.0
                            ELSE pm.discount_rate END) > 0
+                 AND (CASE WHEN pm.discount_rate > 100
+                           THEN pm.discount_rate / 100.0
+                           ELSE pm.discount_rate END) < 100
                  AND COALESCE(pm.min_qty, 1) <= 1
                     THEN p.item_price * (1 - (CASE WHEN pm.discount_rate > 100
                                                    THEN pm.discount_rate / 100.0
