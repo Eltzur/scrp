@@ -3330,3 +3330,72 @@ The barcode figure is higher than the 0.13 ms filter-only estimate from SU10S-17
 ### An operational lesson
 
 A verification script that built JSON for three full copies of store 145's result set was **killed by the kernel OOM killer** on this 3.8 GiB box. Only the script died — Postgres (up 4 days) and the gunicorn workers were untouched, `/health` stayed 200 — but the page cache was flushed and product lookups briefly took ~1.4 s. Run ad-hoc production scripts under `ulimit -v` (the rerun used 1.2 GB) and hash rows instead of holding them as strings.
+
+---
+
+## Session SU10S-21 (September 28, 2026) — stable promo pagination; /promos/{store_fk} no longer 500s
+
+Commit `ed38bf0`. API deployed, curl-verified, and the web promos page checked in a browser. Both SU10S-20 findings are closed — and a worse one surfaced (below, ⚠️).
+
+### 1. `/promos/grouped` pagination
+
+The `ORDER BY` now ends in `store_fk, item_code, promo_id`. That triple is **UNIQUE** (`promos_store_fk_item_code_promo_id_key`, and `promo_id` is never NULL across 1.4M rows), so the order is **total**. `/promos/grouped` is the only offset-paged promo read; `/promos/today` is a single `LIMIT` with no offset.
+
+**Paging King Store fully, 300 per page, `offset = rows.length` (as the web does):**
+
+| | total | paged | duplicated | missing |
+|---|---|---|---|---|
+| before (production code) | 45,431 | 45,431 | **12,952** | **12,952** |
+| after | 45,431 | 45,431 | **0** | **0** |
+
+Via the live API after deploy: 6 pages of 300 equal one fetch of 1,800 **row for row, in order**; the same page fetched twice is identical. **In a browser** (`super.xxl.co.il/promos`, "טען עוד" ×3): the page requested offsets 0/300/600/900, all 200, and those four pages re-fetched from the page equal a single 1,200-row fetch row for row. No frontend change.
+
+(19 rows in the first 1,800 are identical to another row in every visible field — distinct `promo_id`s the chain published with the same description and dates. Genuine data, not paging.)
+
+**EXPLAIN gate — both measurements, honestly:**
+
+| | sequential (old ×5 then new ×5) | interleaved (random order) |
+|---|---|---|
+| King Store page (300) | +27.8% | **+17.4%** (n=9) |
+| default page (500) | +17.2% | **+9.7%** (n=7) |
+| offset 15,000 (300) | +20.7% | **−9.9%** (n=3) |
+
+The sequential run was order-biased; this box swings widely (the identical old King query measured 688 ms in one run, 1,075 ms in the next). Interleaved, every case is inside the 20% gate, so it shipped. An index cannot help here — the sort is over computed columns (chain → city → branch plus a discount derived from a join). A single-integer `p.id` tiebreak was also measured and is not better (+6.1% / **+23.7%** / −0.8%). Deep pages were already slow before this change (~24–34 s at offset 15,000 — an external merge sort spilling ~50 MB to disk).
+
+### 2. `/promos/{store_fk}` and `/promos/store/{chain}/{store}`
+
+Now select `discount_pct` (`_PROMO_ITEM_PCT_SQL`, read-time, never stored). Verified on production: **0 of 724 rows fail `PromoItem` validation** across Osher Ad 843, Rami Levy 2108, Hazi Hinam 32698; all return 200 live, and a dead store (23595) returns `[]`.
+
+The expression was chosen from the data, not copied — **neither existing formula was right**:
+- `/promos/bulk`'s CASE (same `PromoItem` model, used by the web `ProductCard`) handles weighed items but has no spend guard and gives rate promos nothing.
+- the canonical `_UNIT_PRICE_SQL` (grouped, search promo-pick) handles spend and rates but requires `min_qty BETWEEN 1 AND 24` — so it **misses Rami Levy's weighed-item promos**, whose `min_qty` is **0.01** (a minimum weight).
+
+| promo shape | discount_pct |
+|---|---|
+| `min_qty > 24` (a spend threshold, Rami Levy) | NULL |
+| price, `min_qty ≤ 1` (incl. 0.01 weighed) | (shelf − price) / shelf |
+| price, `min_qty 2–24` (bundle) | (shelf − price/qty) / shelf |
+| rate only, single unit, **rate < 100%** | the rate (bp ÷ 100 above 100) |
+| rate = 100% / multi-unit rate / price = 0 | NULL |
+
+A 100% rate is the **free unit** of a "1+1"/"2+1" or a gift coupon (76K Rami Levy rows read "2+1 הזול מבינ"); every Hazi Hinam rate promo is multi-unit (5000–10000 bp on "1+1" / "השני ב50%"). Claiming 100%, or guessing a per-unit split, would be exactly the per-chain assumption CLAUDE.md forbids. **Where a chain publishes its own DiscountRate, the computed value matches it to rounding** (27.5 vs 27.52, 19.2 vs 19.19, 7.6 vs 7.56, 16.8 vs 16.76). Hazi Hinam "2 ב-25₪" → 26%; its "1+1" 10000 bp → NULL.
+
+### ⚠️ Found — search prices ~40,000 quotes at ₪0 (pre-existing, NOT fixed)
+
+`_PROMO_PICK_SQL` (the hot path behind /search, /compare, /product, /basket/compare) prices a rate-only single-unit promo as `shelf × (1 − rate)`. With the ubiquitous **rate = 100** ("2+1", "1+1", coupons) that is **₪0**, and ₪0 then wins as the product's cheapest price. Live example: `/product/7290118071310` "בצק משחק -כלב", Rami Levy אילת, shelf ₪11.00 → `price 0.0`, `cheapest_price 0.0`, promo "מגוון מוצרי חזרה לבית הספר 2+1 הזול מבינ".
+
+| chain | ₪0 quotes | items |
+|---|---|---|
+| רמי לוי | 38,269 | 1,591 |
+| ויקטורי | 1,357 | 38 |
+| שופרסל | 490 | 15 |
+| קרפור | 195 | 82 |
+| שפע ברכת השם | 9 | 9 |
+| קשת | 5 | 5 |
+
+The grouped view's `_UNIT_PRICE_SQL` has the same rate branch (with no `min_qty` check at all), so it labels these rows "100% off". **Fix:** the same guard `_PROMO_ITEM_PCT_SQL` uses — a rate counts as a plain discount only when it is below 100% on a single unit. It is a change to the hot-path `_PROMO_PICK_SQL`, so it needs its own EXPLAIN-gated session; not slipped in here. Roadmap, top.
+
+### Also found (pre-existing, not fixed)
+
+- **Weighed-item promos are invisible to search and grouped.** `_PROMO_PICK_SQL` and `_UNIT_PRICE_SQL` both require `min_qty BETWEEN 1 AND 24`, so Rami Levy's `min_qty = 0.01` unit-price promos (e.g. ₪34.90 vs ₪49.90 shelf) are never picked and show as "basket" in grouped.
+- **`/promos/bulk` and `/promos/{store_fk}` now compute `discount_pct` differently** for spend rows, `price = 0` rows and sub-100% rate rows (bulk: no spend guard, `price = 0` → 100%, rates → NULL). Recommend moving bulk to `_PROMO_ITEM_PCT_SQL` — it is web-visible (ProductCard), so it was left for its own change.
