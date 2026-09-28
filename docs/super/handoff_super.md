@@ -3436,6 +3436,36 @@ Live after deploy: one affected item from each of the six chains → 0 zero-pric
 
 `/product/7290004131074` (חלב 3% קרטון) now shows cheapest **₪0.90**: Rami Levy's **coupon** "קופון חלב תנובה קרטון 1לי ב1שח". It is a genuine published promo, correctly parsed. Whether coupon- or club-conditional deals should rank as a product's plain "cheapest" — or be shown but not win — is a product decision.
 
+### SU10S-22 — gates run as specified by Dude, and attempt 2 (zero shelf prices)
+
+Dude's gate list arrived after `abae630` was already deployed, so the **"before" count is reconstructed**: the previous code (`abae630^`) run read-only on the same current data. Counts are over **all live price rows**, evaluated in SQL with the real promo-pick (not a sample), plus the zero-shelf rows (`c013a8f`).
+
+**Rows where search returns an effective price ≤ 0, by chain:**
+
+| cause | before | after `abae630` | after `c013a8f` |
+|---|---|---|---|
+| promo priced at 0 (100% rate "2+1"/"1+1") | **19,684** — רמי לוי 18,160 · ויקטורי 1,357 · קרפור 153 · שפע ברכת השם 9 · קשת 5 | 0 | 0 |
+| shelf price published as 0.00 by the feed | **411** — קשת 306 · חצי חינם 101 · רמי לוי 4 | 411 | **0** |
+| **total** | **20,095** | 411 | **0** |
+
+**Effective price above shelf: 0** before and after (the promo-pick only attaches a promo that beats the shelf price, and the effective price is the minimum of the two).
+
+**Attempt 2 (`c013a8f`)** was needed because the gate counts *every* ≤ 0 row, and 411 remained that no promo caused: exact ₪0.00 shelf prices in the Keshet / Hazi Hinam / Rami Levy feeds (rice, produce such as avocado and watermelon — 98 of Hazi Hinam's 101 are priced above 0 elsewhere). `fetch_prices` now drops shelf rows with `item_price <= 0`, in the SU10S-20 post-filter wrapper — **no SQL change** — before and independent of the liveness filter, so it holds even when that fails open. Consequence: ~115 items (mostly Keshet) whose ONLY price anywhere was ₪0.00 now have no quotes, so they leave search results instead of showing ₪0.
+
+**Timings, old vs new, random interleaved order:**
+
+| query | pricing statement (EXPLAIN, `abae630`) | whole `fetch_prices` (`c013a8f`) |
+|---|---|---|
+| `חלב` (3,046 codes) | +3.1% (n=3) | −0.9% (n=3) |
+| `במבה` (short, 85 codes) | +1.7% (n=9) | −1.8% (n=15) |
+| `שוקולד חלב עם אגוזי לוז` (long, 28 codes) | −7.1% (n=9) | +3.9% (n=15) |
+
+**Live spot-checks:** `/product/7290118071310` → cheapest ₪11.00, the Rami Levy אילת quote ₪11.00, 0 zero-priced quotes. `/basket/compare` with that product + 2× milk 7290004131074 → Rami Levy wins at ₪23.40 = ₪11.00 + 2 × ₪6.20, no chain total ≤ 0. (Basket prices from shelf by design, so it was never exposed to the promo ₪0.) One affected item per chain via `/product`: 0 zero-priced quotes each.
+
+**A testing trap worth knowing:** `curl` from Git Bash on Windows sends Hebrew query strings as `???` — `/search?q=חלב` then returns 0 matches and looks like a broken search. The response echoes `query`; check it. Test Hebrew queries from the server, or URL-encode them explicitly.
+
+Commits: `abae630` (promo rule), `c013a8f` (zero shelf prices).
+
 ### Still open (roadmap)
 
 - Weighed-item promos (`min_qty = 0.01`) are invisible to search and grouped.
