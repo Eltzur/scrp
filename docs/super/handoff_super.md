@@ -3471,3 +3471,56 @@ Commits: `abae630` (promo rule), `c013a8f` (zero shelf prices).
 - Weighed-item promos (`min_qty = 0.01`) are invisible to search and grouped.
 - `/promos/bulk` `discount_pct` should move to `_PROMO_ITEM_PCT_SQL`.
 - Minor, grouped only: Hazi Hinam's multi-unit basis-point rates ("השני ב50%", 5000 bp, `min_qty 2`, `discount_price` NULL — 281 rows) are shown as a flat 50% off, overstating the per-unit saving.
+
+---
+
+## Session SU10S-25 (September 28, 2026) — geocodes accepted by address match, not place type; priority review list cleared
+
+Commits: `c795ce3` (geocoder, exporter, city overrides, roadmap), plus this docs commit. Deployed to the server tree (`git pull`); the API is not affected (no module it imports changed), so no restart.
+
+**The bug.** SU10S-10's acceptance judged each Nominatim result by its OSM class — reject `amenity/*`, flag `shop/*` — and only ever looked at the FIRST result (`limit=1`, no `addressdetails`, so nothing could even be compared with the input). Osher Ad 011 (id 849) came back as "Supermarket Osher Ad, 11, HaKishon, Bnei Brak" — an exact hit — and was flagged because OSM tagged it a supermarket.
+
+**The rule now (`scripts/geo_nominatim.py`, `evaluate()`):** `limit=5` + `addressdetails`/`namedetails`/`extratags`; still 1.1 s/request, same User-Agent. A candidate is
+
+| reason | when | result |
+|---|---|---|
+| `ADDRESS_MATCH` | road == input street (after stripping רחוב/רח'/שד'/שדרות/דרך, quotes, punctuation; optional leading ה) AND house number equal (a range 7-9 covers 7..9; a letter must agree only when both sides carry one) AND returned city == `city_canonical` AND ≤ 25 km from the **CBS** centroid | `address` |
+| `STREET_MATCH` | road matches, candidate has **no** house number | `street` |
+| `CITY_MISMATCH` | road matches but Nominatim's city/town/village/municipality differs | never accepted |
+| `>25km` / `NO_MATCH` | — | never accepted |
+
+Place type plays no part in acceptance; among several address matches: a shop whose name/brand holds the chain name, then building/house, then anything. SU10S-10's "any `place/*` → street" leniency is gone. **The 25 km guard now measures from the CBS city centroid**, not the store's current pin (which, for a re-geocoded house-level row, was its old location). City names are compared through the same tables `city_canonical` is built from, after folding dashes: Nominatim writes `תל־אביב–יפו` with a maqaf and an en dash — the first dry run misreported 8 Tel Aviv stores as CITY_MISMATCH until that was folded.
+
+**Cache:** the key now includes `limit`/`addressdetails`/`namedetails`/`extratags`, so SU10S-10's single-result entries are never reused (they stay in the file, harmless). **Consequence: the next Sunday `scrp-geocode` re-asks every target — about 212 stores, ~4 min** — once; after that the cache covers it again.
+
+**Manual pins:** `geo_source = 'manual'` rows are never re-geocoded, by any path (`_TARGETS_SQL` and `needs_geocode()` for `--ids-file`). Verified: `select_targets` over all stores selects 212 rows, **0 of the 5 manual rows**. `--include-overrides` additionally forces house-level rows with an `address_override`; without it they are retried only when their input changed (unchanged behavior).
+
+**Dry run** (216 rows = 42 priority + 174 optional from `~/branch_review.xlsx`; 240 requests; `C:\xxl-archive\geocode_dryrun_su10s25.xlsx`): priority → address 35, street 1, CITY_MISMATCH 1 (993), NO_MATCH 4, not geocodable 1 (35348). Optional → 0 upgrades: NO_MATCH 99 (Nominatim returns **nothing at all** for 99 of them — not a matching problem), not geocodable 75.
+
+**Applied** (backup first: `~/backups/pre-su10s25-stores-20260928T141650.dump`; one transaction, every UPDATE guarded on the row's current precision and input):
+
+| | stores |
+|---|---|
+| priority ADDRESS_MATCH → `address`, `geo_source='nominatim'` | 35 |
+| priority STREET_MATCH → `street` (291, Dude: "good enough") | 1 |
+| Dude's coordinates → `address`, `geo_source='manual'` | 5 — 991, 993, 2164, 2180, 2204 |
+| optional sheet | 0 (skipped by instruction, whatever the result) |
+
+42 priority stores: **before** 41 city + 1 none → **after** 35 address/nominatim + 5 address/manual + 1 street + 1 none (35348). Dude's pins lie 0.8–3.1 km from the corrected city's CBS centroid.
+
+**City fixes** — `STORE_CITY_OVERRIDES` entries AND a direct `city_canonical` set:
+- 991 Keshet 005 → חיפה. Its address "תל אביב 11" is a STREET called Tel Aviv, in Kiryat Eliezer; the feed's city is the street name (same trap as Victory 094).
+- 993 Keshet 010 → כרמיאל (feed: גבעת רם; OSM found בציר only in Sharigim).
+- 2164 Rami Levy 064 → אור עקיבא (feed: חיפה; the store is in David Center, הכרמל 1).
+
+Both chains are Cerberus scrapers, which apply `city_override` to the raw `city` nightly. **Cascade dry evaluation** (`build_city_canonical`'s layers replayed over all 1,197 stores, old vs new override table, `main()` NOT run — it rewrites `data/city_canonical_review.csv`): after tomorrow's nightly scrape writes the overrides into raw `city`, **exactly 991, 993, 2164 change, each to the corrected city; nothing else changes.** Caveat, until the next 10:00 cron only: 2164's raw city is still `חיפה`, an exact CBS name, so Layer 1 wins over the Layer 2 override — a full `build_city_canonical` + apply run before then would put it back to חיפה. Do not run that rebuild before the next cron.
+
+**35348 (Hazi Hinam 219):** `city_canonical = ראשון לציון`, `address_override = הכשרת הישוב 3` (Dude's hand edit in `branch_review.xlsx`). **Coordinates NOT copied: store 201 (id 32697) has no coordinates at all** — `lat`/`lon`/`geo_precision` NULL, no address. Both will be placed by Sunday's run (`geo_centroids` fills any NULL lat that has a city; `geo_nominatim` then tries 35348's street address). 17 live serving physical stores currently have no coordinate (201 and 35348 among them) and are therefore absent from `/stores/coordinates`.
+
+**Verified:** 849 → address/nominatim; 991 → חיפה + manual pin (32.82509, 34.98760), likewise 993/2164/2180/2204 in the API response. `/stores/coordinates` returns **846 = the SQL count** of live physical stores with coordinates (city 626 · street 106 · address 114). Note its `Cache-Control: max-age=86400` — clients may see the old pins for up to a day.
+
+**Review list:** `export_branch_review.py` replays the new rule (new issue `GEOCODE_CITY_MISMATCH`, `GEOCODE_FLAGGED` retired, new `NO_COORDINATES`, manual rows never get a GEOCODE_* issue). Regenerated to a NEW file, **`C:\xxl-archive\branch_review_v2.xlsx`** — Dude's hand-edited `branch_review.xlsx` was not touched (sha256 `55d2ac55…` unchanged). **Priority sheet: 0 rows.** Optional ("לבדיקה"): 189 (GEOCODE_NO_MATCH 99, NO_HOUSE_NUMBER 50, PLACEHOLDER 24, NO_COORDINATES 17, NO_ADDRESS 1); Dude's "מה לעשות" notes carried into `notes` (175 rows). Bulk-awaiting-StoresFull: 467 (35348 left it — it now has an address).
+
+**Roadmap:** under StoresFull — Hazi Hinam and Shufersal scrapers don't apply `STORE_CITY_OVERRIDES`; fix during StoresFull work.
+
+**Known limits:** English street names are matched only for `highway` candidates (via `namedetails`); an address candidate's `road` comes back in Hebrew only. `parse_address` takes the last number in the first comma part that has a street — "שד' 26 באוקטובר 3"-style names with a number inside would mis-parse (none in this set).
