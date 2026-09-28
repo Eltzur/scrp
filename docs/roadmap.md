@@ -2,6 +2,12 @@
 
 A living, priority-ordered list of pending work across all verticals. Unlike docs/super/handoff_super.md and docs/handoff_mobile.md (chronological session history), this file is forward-looking and gets reordered/edited in place as priorities shift. Update this file directly rather than appending dated entries.
 
+## Next mobile build (batch)
+
+Minor mobile fixes accumulate here instead of triggering standalone builds; they ship together in the next preview/production EAS build.
+
+- SU10S-22 first-launch permission order: code merged, dev-verified, ships in the next preview/production build. Bump the version to 1.2.1 / versionCode 5 at build time.
+
 ## In Progress
 - **GPS / nearby stores — SHIPPED, pending device verification (SU10S-10 backend, SU10S-11 mobile).** On-device distance against a cached coordinate table; the user's position never reaches the server. 1-5 km radius, nearby on by default on product screens, off by default on basket compare. OSM attribution is in place on Help and under every nearby list. **Remaining: Dude runs the 7-step device checklist in docs/handoff_mobile.md.** A JS reload is enough — no rebuild.
 

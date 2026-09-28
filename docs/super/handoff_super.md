@@ -924,6 +924,13 @@ Read-and-report-STOP on scraper hot paths. Verify mechanism via read-only script
 before adding to cron. Multi-stage prompts with STOPs between stages. Single
 coherent commit at the end. Worked for both Shufersal and Tiv Taam.
 
+### Store-count escalation rule (Dude, 2026-09-28)
+"if there are issues with 1 or up to 10 specific stores, please flag them for manual review cause running prompts to handle a single store issue is to costly and time consuming. the rule of thumb is that up to 10 - manual only. 10 to 50 flag is and ask if to run a fix or handle manually. over 50, try to fix 2-3 times and if not resolved, consult with me before running another prompt."
+- 1–10 stores: manual only. List them (store_fk, chain, store_id, name, issue) and write no fix prompts.
+- 11–50 stores: flag them with the same list and ask Dude whether to fix by prompt or handle manually. Wait for his answer.
+- More than 50 stores: prompt fixes are allowed, at most 2–3 attempts. If still unresolved, consult Dude before any further prompt.
+- The count is distinct stores affected by one issue, not rows.
+
 ## 🔗 External Data Source Status
 
 - **gov.il price transparency XML** — primary source. Working.
@@ -3524,3 +3531,7 @@ Both chains are Cerberus scrapers, which apply `city_override` to the raw `city`
 **Roadmap:** under StoresFull — Hazi Hinam and Shufersal scrapers don't apply `STORE_CITY_OVERRIDES`; fix during StoresFull work.
 
 **Known limits:** English street names are matched only for `highway` candidates (via `namedetails`); an address candidate's `road` comes back in Hebrew only. `parse_address` takes the last number in the first comma part that has a street — "שד' 26 באוקטובר 3"-style names with a number inside would mis-parse (none in this set).
+
+---
+
+- **2026-09-28 (SU10S-22):** store-count escalation rule added (CLAUDE.md and "Operating patterns Established" above); mobile first-launch permission order fixed (location before camera) — see docs/handoff_mobile.md.

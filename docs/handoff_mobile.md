@@ -5,6 +5,12 @@
 
 ---
 
+## Standing rules
+
+- Store-count escalation rule: see CLAUDE.md
+
+---
+
 ## Vision (mobile-specific, inherited from handoff_super.md)
 
 Native iOS + Android client for super.xxl.co.il. Medium-term differentiator per the product vision: barcode scanner (scan in-store → prices nearby) and GPS "cheapest within 500m." Build ON the existing FastAPI backend and Supabase auth — the app is a client, not a rebuild.
@@ -534,3 +540,7 @@ Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; 
 3. Search tab: type a barcode that is not in the catalog (e.g. `7290000000000`) → the scan flow's not-found message.
 4. Search tab: type "חלב" → a normal name search, as before.
 5. Light mode: city picker and Search look exactly as before.
+
+---
+
+- **2026-09-28 (SU10S-22) first-launch permission order:** root cause — Scan (the initial route) rendered its camera-permission gate at once, while the location primer waited ~1.2 s to settle, so "נדרשת גישה למצלמה" flashed and was then covered (a render, not an OS dialog; the camera dialog is tap-only). Fix — a `resolved` flag in the location prompt store, exposed as `locationOnboardingResolved` on the nearby context; Scan shows a blank theme-background placeholder until the first-launch flow ends in any outcome (true at once when `xxl_location_asked` is already persisted; a 5 s watchdog covers a flow that never starts). Files: src/lib/location-prompt-store.ts, src/components/location-onboarding.tsx, src/lib/nearby-context.tsx, src/app/(tabs)/index.tsx. Not device-verified; typecheck shows only the 5 pre-existing src/tw errors; no ESLint set up in the repo (expo lint would scaffold it). Merged, not yet in a build — see roadmap "Next mobile build (batch)".
