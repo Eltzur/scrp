@@ -14,6 +14,8 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 8. **Ad-hoc production scripts run under `ulimit -v` and stay short** (SU10S-20: an unbounded verification script was OOM-killed on the 3.8 GiB box and flushed the page cache). Hash or count rows instead of holding large result sets as strings.
 9. **Never page through a live production API in bulk** (SU10S-21 kept prod busy 20+ min). Count in the DB; hit the API only for spot checks.
 10. **Before assigning a session ID, grep docs/ and CLAUDE.md for it.** (SU10S-22 was assigned twice; the promo session was renamed SU10S-21b in SU10S-26.)
+11. **Hebrew in API tests from Windows shells is unreliable.** curl from Git Bash (and PowerShell's own encoding) can send Hebrew query strings as `???`, so `/search?q=חלב` returns 0 and looks like a broken search — check the echoed `query`. PowerShell → `ssh "..."` also mangles Hebrew. Test Hebrew from the server (interactive SSH) or URL-encode explicitly.
+12. **Handoff files too large for the Edit tool: patch with a small script and verify with `git diff --stat`.**
 
 ## Store-count escalation rule (Dude, 2026-09-28)
 "if there are issues with 1 or up to 10 specific stores, please flag them for manual review cause running prompts to handle a single store issue is to costly and time consuming. the rule of thumb is that up to 10 - manual only. 10 to 50 flag is and ask if to run a fix or handle manually. over 50, try to fix 2-3 times and if not resolved, consult with me before running another prompt."

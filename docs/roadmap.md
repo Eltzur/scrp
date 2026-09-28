@@ -8,6 +8,7 @@ Minor mobile fixes accumulate here instead of triggering standalone builds; they
 
 - SU10S-22 first-launch permission order: device-verified on the dev build, 2026-09-28 (location before camera, no flash); ships in the next preview/production build. Bump the version to 1.2.1 / versionCode 5 at build time.
 - SU10S-27: Dark-mode TextInput colors; code merged, NOT yet device-verified.
+- Next batch build = 1.2.1 / versionCode 5, preview APK; build when the batch is ready, not per fix.
 
 ## Done (recent — kept here so they are not re-scheduled)
 - **Ratings moderation email — DONE via Hostinger SMTP in SU10S-7** (`9d94fc5`), not SendGrid (its free plan ended in 2025). stdlib smtplib, alerts queued with BackgroundTasks. See handoff_super_archive.md SU10S-7.

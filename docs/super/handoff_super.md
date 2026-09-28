@@ -644,3 +644,25 @@ Every endpoint that could carry a shelf price, and whether a ₪0 could reach th
 (2) Confirm Sunday's geocode run left the 7 manual rows untouched.
 
 Still do NOT run a full `build_city_canonical` rebuild before the next 10:00 cron has written 2164's override into raw `city` (SU10S-25).
+
+---
+
+## Session SU10S-28 (September 28, 2026) — SESSION CLOSE (reconciliation, docs only)
+
+Supersedes SU10S-26's close as the final state of this chat, which ran SU10S-21, 21b, 22, 25, 26, 27 and this entry. No code, no DB writes.
+
+- **SU10S-21 (`ed38bf0`):** promos paging made stable with a unique tiebreak `(store_fk, item_code, promo_id)` (King Store 12,952 dup/missing → 0/0); `/promos/{store_fk}` 500 fixed.
+- **SU10S-21b (`abae630`, `c013a8f`; originally committed as SU10S-22):** 100%-rate promos no longer price items at ₪0; ₪0 shelf prices dropped from price reads. ₪0 prices served: **20,095 → 0**.
+- **SU10S-25 (`c795ce3`):** geocodes are accepted by address match, not place type. **40 of 42 priority stores at address precision** after that session (35 Nominatim + 5 manual), 1 street, 1 none — the none (35348) was pinned in SU10S-26, so it is **41 of 42** now. City fixes for 991, 993 and 2164.
+- **SU10S-26 (`8a1fb6d`, `a84d9c4`):** ₪0 shelf is "no price" on the promo endpoints too (defensive — no active promo sat on a ₪0 shelf pair); `/basket/compare` no longer 500s on a promo-only quote (it counts as missing at that chain). Hazi Hinam 35348/32697 manually pinned; `/stores/coordinates` 846 → 848; manual rows 5 → **7** (991, 993, 2164, 2180, 2204, 32697, 35348). CLAUDE.md operating rules 8–10; handoff archived to `handoff_super_archive.md`.
+- **SU10S-22 (mobile `22a5f78`, scrp `9e5b4d1`):** first-launch permission order (location before camera) — **device-verified on the dev build**; store-count escalation rule added to CLAUDE.md.
+- **SU10S-27 (mobile `17e7ba8`, scrp `1981ba0`):** dark-mode TextInput colours (auth/search/rating inputs use the `@/tw` TextInput). **Committed, NOT yet device-verified.** The mobile typecheck hang under CC was fixed by `npm ci` (node_modules left inconsistent after SU10S-22's `expo lint` revert); after it, only the 5 known `src/tw` errors.
+- CLAUDE.md: added the Hebrew-from-Windows-shells caveat for API tests and the "patch large handoff files with a script" rule (operating rules 11–12).
+
+### FIRST THING NEXT SESSION
+
+(1) After the 10:00 cron, confirm stores 2164, 991 and 993 keep their corrected cities, and 35348/32697 keep their manual pins.
+(2) After Sunday's 15:00 geocode run (`scrp-geocode`), confirm the 7 manual rows are untouched and that ~212 stores were re-queried under the new cache keys.
+(3) GS1 image catch-up runs Sunday Oct 4 and Sunday Oct 11 (`scrp-gs1-fetch`, 14:00 IDT) — check `journalctl -u scrp-gs1-fetch` after each.
+
+Next free session ID: SU10S-29
