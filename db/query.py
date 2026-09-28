@@ -1687,8 +1687,13 @@ def _fetch_grouped_promos_raw(
             JOIN chains c      ON c.chain_id = s.chain_id
             LEFT JOIN items i  ON i.item_code = p.item_code
             -- prices is UNIQUE(store_fk, item_code), so this cannot fan out.
+            -- A ₪0 shelf price joins as NO price (SU10S-26): otherwise a rate
+            -- promo derives a ₪0 unit price from it and savings go negative.
+            -- In the join, not a Python post-filter, because promo_type, the
+            -- bands/type filters and the savings sort are all computed from it.
             LEFT JOIN prices pr ON pr.store_fk = p.store_fk
                                AND pr.item_code = p.item_code
+                               AND pr.item_price > 0
             WHERE (p.promo_end >= NOW() OR p.promo_end IS NULL)
               AND c.name IS NOT NULL
               -- A chain -> city -> branch view is about physical branches, so
@@ -1937,14 +1942,21 @@ def fetch_today_promos(
     """
     lv = get_liveness()
     if lv is None:
-        return _fetch_today_promos_raw(conn, limit=limit, city=city, chain_id=chain_id)
-    rows = _refill(
-        lambda n: _fetch_today_promos_raw(conn, limit=n, city=city, chain_id=chain_id),
-        limit,
-        lambda r: (r["chain_id"], r["store_name"]) not in lv.dead_names,
-        start=limit * 2,
-    )
-    return rows[:limit]
+        rows = _fetch_today_promos_raw(conn, limit=limit, city=city, chain_id=chain_id)
+    else:
+        rows = _refill(
+            lambda n: _fetch_today_promos_raw(conn, limit=n, city=city, chain_id=chain_id),
+            limit,
+            lambda r: (r["chain_id"], r["store_name"]) not in lv.dead_names,
+            start=limit * 2,
+        )[:limit]
+    # A ₪0 shelf price is "no price" (SU10S-26, same rule as fetch_prices). The
+    # SQL already derives no discount_pct from it (item_price > 0 guards); only
+    # the echoed shelf figure needs blanking. The row stays: the promo is real.
+    for r in rows:
+        if r["item_price"] is not None and r["item_price"] <= 0:
+            r["item_price"] = None
+    return rows
 
 
 def fetch_promo_cities(conn: Connection) -> list[str]:

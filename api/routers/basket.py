@@ -117,10 +117,17 @@ def compare_basket(body: BasketRequest, conn: Connection = Depends(get_db)):
 
     for r in rows:
         key = (r["chain_id"], r["item_code"])
+        # The basket prices from the SHELF by design. A promo-only quote has no
+        # shelf price (item_price None) and float(None) was a 500 whenever it
+        # was a chain's only row for an item (SU10S-26); it counts as missing
+        # at that chain. A ₪0 shelf price is "no price" too: fetch_prices already
+        # drops those, and this guard keeps a ₪0 from ever lowering a total.
+        item_names.setdefault(r["item_code"], r.get("item_name"))
+        if r["item_price"] is None or r["item_price"] <= 0:
+            continue
         if key not in best:
             best[key] = r
         chain_meta.setdefault(r["chain_id"], r.get("chain_name"))
-        item_names.setdefault(r["item_code"], r.get("item_name"))
 
     # Build per-chain results
     chain_results: list[BasketChainResult] = []
