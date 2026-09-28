@@ -1245,18 +1245,25 @@ def lookup_store_fk(conn: Connection, chain_id: str, store_id: str) -> int | Non
 
 
 def _fetch_promos_all(conn: Connection, store_fk: int) -> list[dict]:
-    """Return active promos for a store (promo_end >= NOW() or no end date)."""
-    rows = conn.execute(text("""
+    """Return active promos for a store (promo_end >= NOW() or no end date).
+
+    discount_pct is required by PromoItem; it used to be missing here, so every
+    store with promos returned 500 (found SU10S-20, fixed SU10S-21).
+    prices is UNIQUE(store_fk, item_code), so the LEFT JOIN cannot fan out.
+    """
+    rows = conn.execute(text(f"""
         SELECT
-            item_code, promo_id, promo_description, promo_type,
-            allow_multiple_discounts, min_qty, reward_type,
-            discount_rate, discount_price, min_purchase_amount,
-            to_char(promo_start, 'YYYY-MM-DD"T"HH24:MI:SS') AS promo_start,
-            to_char(promo_end,   'YYYY-MM-DD"T"HH24:MI:SS') AS promo_end
-        FROM promos
-        WHERE store_fk = :store_fk
-          AND (promo_end >= NOW() OR promo_end IS NULL)
-        ORDER BY item_code, promo_id
+            p.item_code, p.promo_id, p.promo_description, p.promo_type,
+            p.allow_multiple_discounts, p.min_qty, p.reward_type,
+            p.discount_rate, p.discount_price, p.min_purchase_amount,
+            to_char(p.promo_start, 'YYYY-MM-DD"T"HH24:MI:SS') AS promo_start,
+            to_char(p.promo_end,   'YYYY-MM-DD"T"HH24:MI:SS') AS promo_end,
+            {_PROMO_ITEM_PCT_SQL} AS discount_pct
+        FROM promos p
+        LEFT JOIN prices pr ON pr.store_fk = p.store_fk AND pr.item_code = p.item_code
+        WHERE p.store_fk = :store_fk
+          AND (p.promo_end >= NOW() OR p.promo_end IS NULL)
+        ORDER BY p.item_code, p.promo_id
     """), {"store_fk": store_fk}).mappings().all()
     return [dict(r) for r in rows]
 
@@ -1464,6 +1471,39 @@ _EFFECTIVE_RATE_SQL = """
          ELSE p.discount_rate END
 """
 
+# discount_pct for a PromoItem (SU10S-21). Read-time, never stored, and it only
+# claims a percentage the numbers actually support - measured per chain first:
+#
+#   min_qty > 24     a minimum SPEND, not a count (Rami Levy: 5990 = ₪59.90) -> NULL
+#   price, qty <= 1  a unit price. min_qty < 1 is a WEIGHED item's minimum (Rami
+#                    Levy publishes 0.01 kg) - still a per-unit price, and the
+#                    result matches the chain's own DiscountRate (30.06 for
+#                    ₪34.90 vs ₪49.90).
+#   price, qty 2-24  a bundle total -> per unit = price / qty
+#   rate only        the rate IS the percentage - but only for a single unit and
+#                    below 100%. A 100% rate is the FREE UNIT of a "1+1"/"2+1" or
+#                    a gift coupon (76K Rami Levy rows read "2+1 הזול מבינ"), and
+#                    every Hazi Hinam rate promo is multi-unit ("השני ב50%",
+#                    5000 bp): no per-unit figure is derivable without per-chain
+#                    rules, so those stay NULL rather than a made-up number.
+# discount_price = 0 (a free item / 1+1 half) is NULL too, not "100%".
+_PROMO_ITEM_PCT_SQL = f"""
+    CASE
+        WHEN p.min_qty > 24 THEN NULL
+        WHEN p.discount_price > 0 AND COALESCE(p.min_qty, 1) <= 1
+         AND pr.item_price > 0 AND p.discount_price < pr.item_price
+            THEN ROUND(((pr.item_price - p.discount_price) / pr.item_price * 100)::numeric, 1)
+        WHEN p.discount_price > 0 AND p.min_qty > 1
+         AND pr.item_price > 0 AND (p.discount_price / p.min_qty) < pr.item_price
+            THEN ROUND(((pr.item_price - p.discount_price / p.min_qty) / pr.item_price * 100)::numeric, 1)
+        WHEN (p.discount_price IS NULL OR p.discount_price = 0)
+         AND COALESCE(p.min_qty, 1) <= 1
+         AND ({_EFFECTIVE_RATE_SQL}) > 0 AND ({_EFFECTIVE_RATE_SQL}) < 100
+            THEN ROUND(({_EFFECTIVE_RATE_SQL})::numeric, 1)
+    END
+"""
+
+
 _UNIT_PRICE_SQL = f"""
     CASE
         WHEN p.min_qty BETWEEN 1 AND 24 AND p.discount_price > 0
@@ -1615,6 +1655,8 @@ def _fetch_grouped_promos_raw(
                 -- this endpoint nor /stores exposed stores.id before.
                 p.store_fk,
                 p.item_code,
+                -- Sort key only: (store_fk, item_code, promo_id) is UNIQUE.
+                p.promo_id,
                 i.item_name       AS product_name,
                 pr.item_price     AS shelf_price,
                 p.min_qty,
@@ -1676,7 +1718,13 @@ def _fetch_grouped_promos_raw(
         -- "no shelf price to compare" or a basket row, neither a data error.
         WHERE (discount_pct IS NULL OR discount_pct BETWEEN 0 AND 100)
           {having}
-        ORDER BY chain_name, city NULLS LAST, branch, {order_by}
+        -- The trailing (store_fk, item_code, promo_id) is UNIQUE, which makes
+        -- this a TOTAL order. Without it, rows tied on the sort key came back
+        -- in a different order on every query, so offset paging duplicated
+        -- and skipped them: ~30% of King Store's rows at page size 300
+        -- (SU10S-20). Every offset-paged promo read needs this.
+        ORDER BY chain_name, city NULLS LAST, branch, {order_by},
+                 store_fk, item_code, promo_id
         LIMIT :limit OFFSET :offset
     """), params).mappings().all()
     return [dict(r) for r in rows]
