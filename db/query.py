@@ -1876,6 +1876,13 @@ def fetch_prices(
     the filtered rows and stay consistent with what is returned.
     """
     rows = _fetch_prices_all(conn, barcodes, city=city, chain_id=chain_id, store_only=store_only)
+    # A shelf price of ₪0 is never a real price: some feeds publish 0.00 for an
+    # item they do not currently price (SU10S-22: 411 live rows - Keshet 306,
+    # Hazi Hinam 101, Rami Levy 4 - mostly produce and staples). Shown, it won as
+    # the cheapest. Dropped here, before and independent of the liveness filter,
+    # so it holds even when that fails open. Promo-only quotes have
+    # item_price None and are untouched (their price is dp/qty with dp > 0).
+    rows = [r for r in rows if r["item_price"] is None or r["item_price"] > 0]
     lv = get_liveness()
     if lv is None:
         return rows
