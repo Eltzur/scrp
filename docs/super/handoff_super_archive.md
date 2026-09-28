@@ -1,0 +1,2942 @@
+# SCRP — Supermarket Handoff Archive
+
+> Session entries moved VERBATIM from docs/super/handoff_super.md in SU10S-26 — not rewritten, not summarized. Ordered oldest first by session date (the live file had them out of order). The live handoff keeps the standing rules, current state and the most recent sessions.
+
+### Session 8L (April 29, 2026) — Brand Identity & Animated Logo
+
+**Done:**
+- Brand strategy: chose master `xxl.co.il` brand-first approach (Option B). Bold/energetic personality. Hebrew-native naming.
+- Brand identity finalized:
+  - **Name:** XXL (Latin wordmark)
+  - **Hebrew tagline:** חוסכים בענקקק (with stretched ק's for "saving big" emphasis — tagline arches over the wordmark)
+  - **English tagline:** SAVING **BIG** (2× size ratio between SAVING and BIG)
+  - **Personality:** Fast & Furious — speed lines, hard slam entrance, basketball-team-banner-break energy
+- Color palette codified:
+  - Primary emerald: `#059669` (Tailwind emerald-600)
+  - Shadow emerald: `#064E3B` (Tailwind emerald-900)
+  - Accent orange: `#EA580C` (Tailwind orange-600)
+  - Dark text: `#022C22`
+- Typography: **Rubik** (Hebrew + Latin) at weight 900 italic for the wordmark, weight 900 upright for tagline. Font preloaded from Google Fonts.
+- Animation choreography (1.5s total, plays once per session via `sessionStorage`):
+  - 0.0–0.4s: Speed lines streak in from both sides (orange left, emerald right, staggered)
+  - 0.45–1.45s: XXL slams in from above with 1.85× overshoot, deep squash to 0.78×, hard rebound to 1.18×, settle to 1×. Camera shake on impact (7px range), white flash (95% opacity), shadow layer materializes in sync.
+  - 1.45–2.15s: Tagline appears above with fade + subtle slide-down
+- React component `XxlLogo.tsx` with three variants: `hero` (large animated), `header` (small static), `favicon` (XXL-only stripped down). Accepts `lang` prop for Hebrew/English tagline switch.
+- Hero section added above search bar on homepage.
+- Header text "השוואת מחירים בסופרמרקט" replaced with static XXL header logo. Removed redundant ShoppingCart decorative icon.
+- Custom favicon.svg created (XXL wordmark + shadow, no tagline).
+- Page title updated to `XXL — חוסכים בענקקק`.
+
+**Decisions made:**
+- Master-brand-first strategy (Option B) chosen over per-vertical branding to ensure visual coherence across future xxl.co.il subdomains (fly, hotel, fashion).
+- "Pure slam" animation chosen over "paper banner break" variant — pure version ages better, less visual complexity, more brand-mark-iconic.
+- English tagline kept as 2× size jump (SAVING vs BIG) rather than 3× — clean ratio, avoids verticality issues.
+- Animation runs once per session (via `sessionStorage.getItem('xxl_animated_this_session')`), not per page load — encourages "first impression" feel without becoming annoying on navigation.
+- React `useId()` hook used for unique SVG path IDs (with colon-stripping to ensure XML validity) — prevents id clashes when both header and hero variants are on the same page.
+
+**Outcome:** Site now has a distinctive, ownable brand identity. Animated hero on first session load, static logo in header, custom favicon, browser tab title updated. All brand decisions documented and codified in code (no more loose hex codes scattered through the app).
+
+**Next:** Session 9b — User authentication (signup flow, login, account management). The "הירשמו" CTA button on the basket-limit toast will finally do something real.
+
+### Planning Session (April 30, 2026) — Strategy & Roadmap Refinement
+
+**Done (no code shipped, planning only):**
+- Discussed multi-PC continuation workflow (clone repo + handoff.md = ready to work)
+- Confirmed GitHub backup status — code safe, but Railway DB is single-point-of-failure (mitigation deferred to post-9c)
+- Detailed analysis of "all 700 stores" tradeoff — decided to expand in tiers
+- **Long-term vision clarified:** Premium tier will eventually include cross-chain ordering (~12+ months out), which requires full coverage and chain partnerships. Documented as future direction, not in current scope.
+- Confirmed OpenFoodFacts is **abandoned** (was already in handoff but reinforced) — out of date, nearly empty for Israeli barcodes.
+- Researched Israeli city populations (CBS data via web search): 18 cities >100K, ~45-50 cities >50K
+- Locked the **city expansion plan**:
+
+**City Expansion Plan (Sessions 9d-1 through 9d-N):**
+
+Phase 1 — Session 9d-1 (Option C, geographic diversity):
+- New cities: Tel Aviv-Yafo, Haifa, Be'er Sheva, Rishon LeZion, Ashdod
+- Existing: Jerusalem, Bnei Brak (unchanged)
+- 2 stores per chain per city → ~60 new stores
+- Total post-rollout: ~86 stores across 7 cities
+- Goal: validate scraper performance + Cerberus rate limits before scaling
+
+Phase 2+ — Sessions 9d-2 onward:
+- Expand to remaining 100K+ cities (12 more): Petah Tikva, Netanya, Holon, Ramat Gan, Ashkelon, Rehovot, Bat Yam, Beit Shemesh, Kfar Saba, Herzliya, Modi'in
+- Target end-state for "100K+ tier": 18 cities × 6 chains × 2 stores = ~216 stores
+
+Phase 3+ — Sessions 11+:
+- Expand to 50K+ population cities (~25-30 more)
+- Total target: ~540 stores
+
+**Decisions made:**
+- **Tier-based city expansion** beats "everything at once" — controls risk, gives natural scaling milestones, validates infra at each step
+- **Defer infrastructure migration** — stay on Railway until $20+/mo costs OR DB > 8GB OR scrape > 4hrs OR >1000 active monthly users. Then migrate to AWS/GCP.
+- **9b (user auth) remains the priority** — keystone for 9c (freemium) and unlocks the "save my basket" retention feature. Will be tackled before city expansion phases.
+- **Auth approach for 9b:** Email/password primary + Google OAuth as option (decided yesterday).
+- **OpenFoodFacts:** Will not retry. Code stays in repo for archaeological purposes only.
+- **Premium ordering vision:** Acknowledged as long-term (12+ months), not blocking near-term sessions.
+
+**Outcome:** Roadmap clarified, scope locked, ready to execute. No code changes, but the next session can start immediately with a clear plan.
+
+**Next:** Session 9b — User authentication (email/password + Google OAuth). After 9b, evaluate whether to do 9c (freemium gating) or 9d-1 (city phase 1) next based on energy/mood.
+
+### Session 9b (April 30, 2026) — User Authentication via Supabase + Saved Baskets
+
+**Done:**
+- **Supabase project provisioned** at https://dwohlwmiejgjlsbuegeu.supabase.co (Frankfurt region, free tier, ~50K MAU limit)
+- **Database migration applied to Railway Postgres**: new `users` table (PK = Supabase UUID) and `saved_baskets` table (FK to users with ON DELETE CASCADE, JSONB items column, indexed by user_id). Migration file at `db/migrations/add_users_saved_baskets.sql`.
+- **Backend (FastAPI):**
+  - `api/auth.py` — JWT verification dependency + idempotent user upsert on every authed request
+  - `api/routers/saved_baskets.py` — full CRUD (`POST/GET/GET-by-id/PUT/DELETE`) with ownership enforcement (404 on user_id mismatch, NOT 403, to avoid leaking basket existence)
+  - Endpoints exposed at `/baskets` (no `/api/` prefix — matches existing `/basket/compare` pattern)
+- **Frontend (React + Vite):**
+  - Supabase client at `web/src/lib/supabase.ts` (anon public key in `VITE_SUPABASE_ANON_KEY`)
+  - `AuthContext.tsx` — exposes `useAuth()` with user, signIn, signUp, signOut, accessToken
+  - React Router added with routes `/`, `/login`, `/signup`, `/baskets`
+  - HomePage extracted from old App.tsx into `pages/HomePage.tsx`
+  - LoginPage, SignupPage, MyBasketsPage created (all RTL Hebrew, brand-emerald CTAs)
+  - Header.tsx made auth-aware: logged-out shows "להרשמה" (emerald button) + "התחברות" links; logged-in shows User icon dropdown with email + "הסלים שלי" + "התנתקות"
+  - BasketDrawer.tsx: "שמור סל" button (enabled when logged in, disabled with tooltip when logged out)
+  - BasketContext.tsx: 25-item-limit toast CTA wired to `navigate('/signup')` (was placeholder console.log in 9a)
+  - api/client.ts: axios interceptor automatically attaches `Authorization: Bearer <token>` to all requests when user is logged in
+  - display_name field removed from signup (was being collected but not persisted — UX wart, removed per Eltzur direction)
+
+**Deployment notes:**
+- `.gitignore` had a generic `lib/` rule that accidentally caught `web/src/lib/supabase.ts`. Fixed by adding `!web/src/lib/` and `!web/src/lib/**` whitelist rules.
+- `web/.env.development` and `web/.env.production` both contain `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. Properly gitignored — keys never reach the public repo.
+- Railway env vars: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET` all set on the `web` service.
+- Frontend bundle grew from 402 KB → 665 KB (+260 KB Supabase SDK). Worth code-splitting later but not urgent.
+
+**Decisions made:**
+- **Auth library: Supabase** (Option B from the planning session) — battle-tested, free up to 50K MAU, handles password hashing / sessions / reset emails / OAuth providers. Vendor dependency accepted.
+- **User data stays in Railway Postgres**, not Supabase DB — Supabase is auth-only. Foreign keys to baskets/favorites/etc. all live in Railway. Single source of truth for app data.
+- **Routes over modals** for signup/login — easier to build correctly in RTL, better SEO, easier to deep-link.
+- **Email confirmation: KEPT ENABLED** despite original spec to disable. Reasoning: security best practice, low friction, Supabase enforces it for the first user creation regardless of toggle. Decision: leave it on permanently.
+- **Google OAuth: DEFERRED.** Email/password is working; Google requires a Google Cloud Console OAuth client setup. Will be added in a follow-up session, NOT 9c.
+- **JWT verification migrated to ES256/JWKS** mid-deploy. Supabase recently switched from HS256 (shared secret) to ES256 (asymmetric public-key crypto). Original CC code assumed HS256, which caused all authed requests to 401. Backend rewrite to use `https://{SUPABASE_URL}/auth/v1/.well-known/jwks.json` for verification. Fixed in-session.
+- **404 not 403 on basket ownership mismatch** — security pattern, prevents leaking that a basket exists.
+- **No `/api/` prefix** on basket endpoints — matched existing `/basket/compare` pattern.
+
+**Bugs encountered & resolved:**
+1. ✅ CC's terminal report displayed Hebrew strings reversed character-by-character (RTL/LTR rendering bug). The actual code was correct. Verified via VS Code Find.
+2. ✅ `web/src/lib/supabase.ts` was caught by the catch-all `lib/` rule in `.gitignore`. Whitelisted with `!web/src/lib/`.
+3. ✅ JWT signing algorithm mismatch (Supabase ES256 vs backend HS256) — fixed via JWKS-based public-key verification in api/auth.py.
+4. ✅ Email confirmation flow — Supabase still required email verification for the first signup despite the dashboard toggle. Resolved by clicking the confirmation link in email.
+5. ⚠️ Favicon stale in some browsers — file is correct on Hostinger and source code, but browser cache holds onto the old Vite lightning bolt favicon. Will resolve naturally for new visitors. Local fix: clear site data + reload.
+6. ✅ Database tables disappeared between morning and evening of session 9b (root cause unknown — Railway Postgres may have been reprovisioned, or migration ran on a stale connection). Re-ran migration manually via Railway Query editor — both tables came back, no data loss since tables were never populated. Investigate before next session.
+7. ✅ SQL parameter binding bug in saved_baskets endpoints — original code mixed psycopg2-style `%(name)s` with SQLAlchemy `:name` style, AND used `::jsonb` cast which collided with SQLAlchemy's parameter scanner. Fixed by standardizing on SQLAlchemy `:name` style and using `CAST(:items AS jsonb)` instead of `:items::jsonb`. Both POST and PUT endpoints had the bug; both fixed.
+**Files changed:**
+- New: `api/auth.py`, `api/routers/saved_baskets.py`, `db/migrations/add_users_saved_baskets.sql`, `web/src/components/AuthContext.tsx`, `web/src/lib/supabase.ts`, `web/src/pages/HomePage.tsx`, `web/src/pages/LoginPage.tsx`, `web/src/pages/SignupPage.tsx`, `web/src/pages/MyBasketsPage.tsx`
+- Modified: `api/main.py`, `requirements.txt`, `web/package.json`, `web/package-lock.json`, `web/src/App.tsx`, `web/src/main.tsx`, `web/src/api/client.ts`, `web/src/components/BasketContext.tsx`, `web/src/components/BasketDrawer.tsx`, `web/src/components/Header.tsx`, `.gitignore`
+
+**Outcome:**
+- ✅ Email/password signup + login working in production
+- ✅ User auth state correctly reflected in header (account icon dropdown when logged in)
+- ✅ 25-item toast CTA correctly navigates to /signup
+- ✅ Save-basket: working end-to-end — POST /baskets returns saved basket with id, frontend renders success toast
+- ✅ My-baskets list view: working — basket appears at /baskets with name, item count, last updated date, "טען" and "מחק" buttons
+- ✅ Favicon: confirmed working in incognito after the recent deploy. Hard reload was needed for already-cached browsers; new visitors see XXL favicon by default
+
+**Next:** Once save-basket verified working in production, update the Outcome bullets above. Then move to either:
+- **9c (Freemium gating)** — differentiate free vs paid tier (the 25-item limit currently applies to logged-in users too, which doesn't make sense for paying customers)
+- **9d-1 (City phase 1)** — add 5 new cities × 6 chains × 2 stores = ~60 new stores, brings total to ~86 stores across 7 cities
+- **Google OAuth follow-up** — wire up the option that was deferred from 9b
+
+Recommended order: 9c next (small, completes the auth → freemium picture before building more features). Then either 9d-1 or Google OAuth.
+
+
+### Planning Session (May 2, 2026) — 9c Scope Refinement
+
+**Done (planning + scoping, code coming next):**
+- Reviewed handoff and confirmed 9b shipped successfully (auth + saved baskets all green in production)
+- Reviewed the original 9c plan ("freemium gating, server-side 25-item limit per account") and concluded it was misaligned with the freemium model that was actually decided in session 9a (everything-but-ordering is free)
+- Restructured 9c into two phases:
+  - **Phase 1 (Mini-9c):** Lift 25-item basket cap to 150 for logged-in users. Logged-out users stay at 25 with the existing emerald להרשמה toast. Logged-in users at 150 see a brief amber/orange toast "הסל הגיע למקסימום של 150 פריטים" — no CTA, no signup nudge.
+  - **Phase 2 (Engagement features):** Favorites (server-side, logged-in only) + Recent Searches (localStorage, search-bar dropdown only).
+
+**Scope decisions for Phase 2:**
+- **Favorites:** Logged-in only (cleanest). New `favorites` table (user_id, barcode, created_at, composite PK). Endpoints `POST /favorites/{barcode}`, `GET /favorites`, `DELETE /favorites/{barcode}`. Star icon on ProductCard. New `/favorites` route + page. "המועדפים שלי" link in account dropdown.
+- **Recent Searches:** Client-side only (localStorage, max 10 items, deduped). Dropdown shown when search input is focused and empty. Path 1 from earlier scoping — Path 2 (server-side sync) deferred indefinitely; if users ask for cross-device sync, we add it then.
+
+**Decisions made:**
+- **Logged-in basket cap = 150** — generous enough that no real human will hit it, low enough to prevent runaway client memory in pathological cases.
+- **No server-side enforcement of basket cap** — frontend check is sufficient; we'll add server-side validation only if/when we see abuse.
+- **No CTA button on the 150-cap toast** — different intent from the signup nudge; this is just a "you've hit the ceiling, sorry" message. Orange/amber instead of brand emerald to visually differentiate.
+- **Favorites is server-side from day 1** — unlike recent searches, favorites are about cross-device persistence. Users expect their stars to follow them.
+- **Skipped: Database migration mystery investigation** — Eltzur decided to defer pending future AWS/GCP migration, where this becomes moot.
+
+**Out of scope for 9c (deferred to future sessions):**
+- Multiple named baskets (e.g., "Weekly", "Shabbat") — interesting but no clear user demand yet
+- Saved-basket renaming/duplication — minor polish
+- Basket sharing via public link — interesting but post-monetization
+- Price-drop notifications UI — paid tier feature, comes with the email infrastructure
+- Google OAuth — still deferred from 9b, will tackle separately when we have appetite for Google Cloud Console setup
+- Server-side recent searches sync — only if users ask
+
+**Outcome:** 9c scope locked, two CC prompts ready (Phase 1 surgical, Phase 2 larger). Each phase ships independently — Phase 1 is frontend-only (one file), Phase 2 touches multiple files (backend migration + endpoints + frontend pages).
+
+**Next:** Run Phase 1 → deploy → test → run Phase 2 → deploy → test. Then session 9d-1 (city + chain expansion).
+
+
+### Session 9c (May 2, 2026) — Mini-9c + Favorites + Recent Searches
+
+**Done:**
+- **Phase 1 (Mini-9c)**: Logged-in users now have a 150-item basket cap (vs 25 for logged-out). Logged-in cap-hit fires an amber/orange (#EA580C) Sonner toast "הסל הגיע למקסימום של 150 פריטים" with no CTA. Logged-out 25-item toast with "להרשמה" emerald CTA preserved exactly as before.
+- **Phase 2A (Favorites — server-side, logged-in only)**:
+  - New `favorites` table (composite PK on user_id + barcode, FK to users with ON DELETE CASCADE)
+  - New endpoints: `POST /favorites/{barcode}` (toggle, idempotent), `GET /favorites` (list with item details), `DELETE /favorites/{barcode}` — all auth-required, queries inherently scoped via composite PK
+  - New `FavoritesContext` with optimistic toggle + revert-on-error
+  - Heart icon (lucide-react `Heart`) on every ProductCard, top-right of badge row. Brand orange (#EA580C) when filled, gray-300 outlined when not
+  - Logged-out users clicking heart get a toast "התחברו כדי לסמן מועדפים" with "להתחברות" CTA → /login
+  - New `/favorites` page rendering favorited items as ProductCards (auth-required, redirects to /login if not authed)
+  - "המועדפים שלי" link added to account dropdown in Header
+- **Phase 2B (Recent Searches — client-side, dropdown only)**:
+  - New `useRecentSearches` hook backed by localStorage (key: `xxl_recent_searches`)
+  - Stores up to 10 most recent unique queries (case-insensitive dedup, trims, ignores < 2 char), most recent first
+  - Dropdown appears when search input is FOCUSED + EMPTY + has at least one entry
+  - Each row: query text + × to remove that one. "נקה הכל" link to clear all
+  - Click row → fills input + triggers search. `onMouseDown: e.preventDefault()` on dropdown items prevents blur-before-click race
+- **Cheapest indicator visual fix**: Replaced the in-row star (which collided visually with the favorite star) with `CheckCircle2` (outlined, emerald-600). No more double-star ambiguity.
+
+**Decisions made:**
+- **Logged-in cap = 150**: generous enough no human hits it, low enough to prevent runaway memory in pathological cases.
+- **No server-side enforcement of basket cap**: frontend check sufficient until abuse seen.
+- **Favorites server-side, recent searches client-side**: favorites are about cross-device persistence (users expect stars to follow them); recent searches are ephemeral and per-device. Path 1 (localStorage) for searches kept scope tight.
+- **FavoritesPage uses N+1 fetch pattern** (Promise.allSettled per favorite): acceptable for typical usage (<50 favorites). If users hit much higher counts, build a `/product/batch?barcodes=...` endpoint.
+- **Heart in brand orange (#EA580C), not red**: cohesive with XXL palette (orange already used in logo speed lines + basket-limit toast). Avoids red's "danger" connotation in a savings-positive context.
+- **CheckCircle2 outlined, not filled**: subtler than a filled badge. Lets the row itself (with emerald-50 background) carry the "cheapest" signal; the icon is just confirmation.
+- **Original "freemium gating" 9c framing retired**: no server-side per-account 25-item enforcement. The free tier is the honeypot; only logged-out users see the 25-item nudge as a signup driver.
+
+**Files changed:**
+- New: `db/migrations/add_favorites.sql`, `api/routers/favorites.py`, `web/src/components/FavoritesContext.tsx`, `web/src/pages/FavoritesPage.tsx`, `web/src/hooks/useRecentSearches.ts`
+- Modified: `api/main.py`, `web/src/api/client.ts`, `web/src/App.tsx`, `web/src/components/Header.tsx`, `web/src/components/ProductCard.tsx`, `web/src/components/SearchBar.tsx`, `web/src/components/BasketContext.tsx`
+
+**Bugs encountered & resolved:**
+1. ✅ Initial CC implementation reused the existing `Star` icon for both "favorites" and "cheapest indicator" — visually ambiguous. Caught during sanity check, swapped to `Heart` (favorites) and `CheckCircle2` (cheapest) before deploy.
+2. ⚠️ False alarm: CC's terminal report rendered Hebrew strings reversed (e.g., `ילש םיפדעומה` instead of `המועדפים שלי`). Verified via VS Code Find that file content is correct. Same RTL terminal display bug seen in 9b and 9c Phase 1. **From now on, treat reversed-Hebrew in CC reports as a non-issue unless VS Code Find can't locate the correctly-spelled string.**
+
+**Outcome:**
+- ✅ Phase 1 verified: logged-out 25-cap toast unchanged (regression test passed); logged-in 150-cap toast fires correctly with orange styling
+- ✅ Phase 2A verified: heart toggles, persists across reload, /favorites page renders, dropdown link works
+- ✅ Phase 2B verified: recent searches stored, dropdown appears on empty-focused input, click re-runs search, × removes individual, "נקה הכל" clears all
+- ✅ Cheapest indicator visual fix in production
+
+### Session 9d-1 (May 11-12, 2026) — City Expansion Phase 1 + Carrefour + Verification System
+
+**Done:**
+- **New chain shipped: Carrefour Israel** (chain_id `7290055700007`, operated by Global Retail C.I. — includes Carrefour + Mega + Yenot Bitan sub-brands under one publisher).
+- **New portal type abstracted**: `scraper/publishprice.py` base class (~130 lines) for JS-embedded file listing portals. `scraper/carrefour.py` is a 6-line subclass. Reusable for future chains.
+- **City expansion Phase 1**: added 5 new cities (Tel Aviv, Haifa, Be'er Sheva, Rishon LeZion, Ashdod) on top of existing Jerusalem + Bnei Brak. Total: 7 cities.
+- **Store selection rule documented**: lowest 2 `store_id` integers per (chain_id, city) from chain's `stores` table. Deterministic, reproducible. Falls back to store_name pattern matching for chains with NULL city data (Victory, Yochananof, Keshet — pre-existing 8a issue).
+- **Verification-before-scrape system (Path C)**: new `scraper/active_stores.yaml` populated by per-store `verify_publishes_pricefull()` check. `scraper/scheduled_stores.yaml` retained as intent/wish-list. `scraper/cron_main.py` reads from active_stores. **58 of 72 stores verified.** 14 excluded breakdown:
+  - 11 Shufersal (mostly Sheli format — old Jerusalem stores without per-store PriceFull files; 1 Universe-format unknown; 1 BE-format not found in scan; 1 store missing from local DB)
+  - 1 Rami Levy 004 (warehouse, no city)
+  - 2 Osher Ad 002, 004 (warehouses, no city)
+- **Verification report**: `db/verification_report_9d1.md` documents excluded stores by category for 9e replacement work.
+- **Shufersal page-limit patch**: scraper's hardcoded `start_page + 25` cutoff replaced with "scan until all requested stores found, OR safety cap at 200 pages with logged not-found list."
+- **Procfile fix**: added `cron: python -m scraper.cron_main` process type so Railway commands are repo-authoritative, not UI-only. Root cause of weeks of OFF-enrichment-instead-of-price-scrape silent failure.
+- **Sample Promo XML captured** for future promotions session: `Promo7290661400001-250-202605112159-001.xml.gz` and `Price7290055700007-3210-202605112200.gz` saved as reference samples.
+
+**Decisions made:**
+- **Carrefour publisher returns Mega + Yenot Bitan stores too — take them all under "קרפור" display name.** Cleaner UX than trying to split.
+- **Bnei Brak zero-Carrefour-stores is real**, not a CITY_CODES dict gap — verified via carrefour.co.il store locator manually.
+- **Store_name inference approved** for Victory/Yochananof/Keshet city assignment when `stores.city` is NULL. YAML entries get a "city inferred from store_name" comment for future audit.
+- **Keshet Haifa includes Hadar (real Haifa neighborhood) but EXCLUDES Nesher (separate municipality)** — sets a precedent: when sub-city names are ambiguous, prefer narrow interpretation over wide.
+- **Path C (verification gate) chosen over Path A (Shufersal-specific patch)** — surfaces heterogeneity across all chains at once; sets architecture for 9e Registry work.
+- **Sub-chain heterogeneity ("Yesh" = Shufersal haredi, "Mega" = Carrefour publisher) is a class of problem, not chain-specific.** Solving via systemic StoreNext-based registry (9e) rather than per-chain patches.
+- **9g (Scraper Infrastructure) prioritized AHEAD of 9e (StoreNext Registry)** — performance + geographic correctness unblocks all subsequent sessions; registry's payoff is architecturally cleaner selection but doesn't unblock anything urgent.
+
+**Files changed:**
+- New: `scraper/publishprice.py`, `scraper/carrefour.py`, `scraper/active_stores.yaml`, `db/verification_report_9d1.md`
+- Modified: `scraper/registry.py` (added Carrefour), `scraper/scheduled_stores.yaml` (added 46 new-city entries), `scraper/shufersal.py` (page-limit patch), `scraper/cron_main.py` (read from active_stores.yaml), `Procfile` (added cron: line)
+
+**Bugs encountered & resolved:**
+1. ✅ **Shufersal `start_page + 25` silent cutoff** — page-limit on `build_pricefull_index` was hiding the real issue (Sheli-format heterogeneity). Patched to 200-page safety cap with explicit not-found logging.
+2. ✅ **Phase B "lowest 2 store_ids" selection picked stores that don't publish PriceFull** — primarily affected Shufersal (11 of 12 new-city stores excluded). Path C verification gate now catches this before runtime.
+3. ✅ **Procfile missing `cron:` process type** — scraper-cron service was silently running `python -m scraper.fetch_off` from Railway UI config, not the actual price scrape. Last successful price load before fix was April 25 (16 days stale). Production prices were intact but not refreshing. Caught by reviewing build logs after first 9d-1 cron run "succeeded" in ~5 min instead of expected 15-25 min.
+4. ⚠️ **Geo-blocking on Victory + Carrefour** — both `laibcatalog.co.il` (Victory) and `prices.carrefour.co.il` (Carrefour) reject Railway US-West IPs. Confirmed via VPN test (works from Israeli IP, fails from US/India). Other 5 chains' portals don't enforce this. **Status at session close: trying Railway EU-West region as zero-cost mitigation; if insufficient, Israeli VPS migration planned in 9g.**
+
+**Outcome:**
+- ✅ Carrefour scraper shipped and verified locally (153 stores in StoresFull catalog, 130 city-mapped, 23 NULL-city for cities not in CITY_CODES dict)
+- ✅ Verification system shipped — 58/72 store gate working as designed
+- ✅ Procfile bug fixed, repo now source of truth
+- ✅ 5 of 7 chains successfully loaded fresh prices to production: Shufersal, Rami Levy, Osher Ad, Yochananof, Keshet (Carrefour + Victory blocked pending 9g geo fix)
+- ✅ Production state at session close: 7 chains, 49 stores, 372,159 prices (5 chains with fresh data from 5/11 evening; Carrefour + Victory pending 9g geo-fix). EU-West region experiment failed — caused 30× slowdown on Cerberus chains and didn't bypass geo-block. Reverted to US-West.
+- 📝 New session 9g queued for infrastructure work; 9e (StoreNext Registry) queued behind it
+- 📝 New session 9f queued for portal page (parallel track)
+- 📝 CITY_CODES audit added as small follow-up patch session
+
+**Next:** Session 9g — Scraper Infrastructure (performance + geographic correctness). Priority over 9e because (a) bulk inserts + parallelism unblocks all future city expansions, and (b) Victory + Carrefour need a geographic fix to get fresh data. StoreNext investigation continues in parallel; if their paid tier offers product catalog, 9e may re-prioritize ahead of 9g.
+
+### Session 9f (May 12-13, 2026) — XXL Portal Page → Live on xxl.co.il
+
+**Done:**
+- **Designed and built the xxl.co.il portal landing page**: hero with animated logo, AI search bar (rotating placeholders), 3 vertical tiles (מצרכים live, חופשות + אופנה בקרוב), value-props strip, footer.
+- **3-tile design (down from initial 4-tile)**: collapsed flights + hotels into "חופשות — טיסות ומלונות" with Sun icon. אופנה uses Shirt icon. מצרכים uses ShoppingCart with emerald LIVE badge.
+- **Mocked AI search router shipped**: `portalSearchRouter.ts` with Hebrew + English keyword lists. Groceries → external nav to super.xxl.co.il, vacation/fashion → internal React Router, unknown → Hebrew error hint.
+- **2 בקרוב sub-pages live** at `/vacation` and `/fashion`: hero + email signup card + "חזרה לדף הבית" link. Email signup `console.log` only (intentional, real wiring deferred to 9f-followup).
+- **XxlLogoPortal component created** as duplicate of XxlLogo.tsx with tagline "קונים חכם · חוסכים בענקקק" arching above wordmark. fontSize 28 + letterSpacing -0.5 to fit longer string. Distinct sessionStorage key.
+- **Sub-header polish**: "XXL — הפורטל שהופך כסף רגיל לכסף חכם" → final "הפורטל שהופך כסף רגיל לכסף חכם" (dropped XXL prefix; logo above establishes brand). `text-2xl md:text-4xl font-bold`.
+- **Hebrew default fixed**: app was loading English on first visit. Now defaults Hebrew with localStorage preservation of user's explicit choice.
+- **DNS setup**: A records at box.co.il for `xxl.co.il` and `www.xxl.co.il` → `82.198.227.247`. MX records for Titan email kept untouched.
+- **Hostinger parked domain**: `xxl.co.il` parked on top of `super.xxl.co.il`. Both serve from same `public_html/`.
+- **SSL**: Lifetime SSL auto-provisioned for `xxl.co.il` within ~30 min of parking.
+- **Hostname-based routing in React (final approach)**: `App.tsx` checks `window.location.hostname`; on xxl.co.il, `/` renders PortalPage. Clean URL — `xxl.co.il/` shows portal at `xxl.co.il/`, no `/portal-preview` suffix.
+- **Local dev override**: `localhost?portal=1` simulates portal hostname for testing.
+- **Two deploys to Hostinger this session**: first got portal pages onto production; second finalized clean URLs after hostname routing change.
+
+**Decisions made:**
+- **Multi-vertical portal = paths on xxl.co.il, NOT subdomains**. Simpler routing, one codebase, one deploy.
+- **חופשות collapses flights + hotels** — cleaner UX, matches how Israeli travelers actually shop (package vacations).
+- **Mocked keyword router over real Haiku for MVP** — ships UI without API key complexity; Haiku becomes its own clean session (9h).
+- **Email signup intentionally dummy at launch** — soft-launch acceptance: low signup volume expected, easier to wire backend later than delay launch.
+- **Hostname-based routing in React (not .htaccess)** — `.htaccess` 302 redirect approach worked but left `/portal-preview` in URL bar. Final: hostname detection in React, .htaccess back to minimal SPA fallback only.
+- **Softened "freemium" claim on value-props**: "ההשוואה תמיד חינם, ללא הגבלות" → "ההשוואה תמיד חינם" (no "unlimited" claim, since 25-item cap exists for logged-out users).
+- **XxlLogo.tsx untouched, XxlLogoPortal duplicated** — keeps super.xxl.co.il logo 100% safe from portal changes. Code duplication accepted as right tradeoff for visual isolation.
+
+**Files changed:**
+- New: `web/src/pages/PortalPage.tsx`, `web/src/pages/ComingSoonPage.tsx`, `web/src/pages/VacationPage.tsx`, `web/src/pages/FashionPage.tsx`, `web/src/components/XxlLogoPortal.tsx`, `web/src/utils/portalSearchRouter.ts`
+- Modified: `web/src/App.tsx` — added `isPortalHostname()` at top, restructured top-level `<Routes>` to include portal routes + conditional `/` for portal hostname + catch-all to `AppShell`. Existing supermarket logic preserved inside AppShell.
+- Modified: supermarket app's language initialization logic — now defaults Hebrew when no localStorage preference, preserves user choice when set.
+- Hostinger-side (not in repo): `.htaccess` briefly held portal-rewrite block mid-session, ended at minimal SPA fallback only.
+
+**Bugs encountered & resolved:**
+1. ✅ **Tagline clipping on portal logo arc** — "קונים חכם · חוסכים בענקקק" is ~60% longer than original. First fix (fontSize 42 → 36) insufficient. Final: fontSize 28 + letterSpacing -0.5.
+2. ✅ **First parked domain typo** — entered `xxk.co.il` instead of `xxl.co.il` in Hostinger. Caught before clicking nameserver-change guide (would have wiped DNS records). Deleted typo entry, re-added correctly.
+3. ✅ **.htaccess 302 redirect approach** — initial `^$` pattern didn't match Apache root requests on Hostinger's config. Fixed with `^/?$` + `[R=302]`, which worked but left "/portal-preview" in URL bar. Final work replaced this entirely with React hostname detection.
+4. ✅ **English-by-default on first load** — language init defaulted to 'en'. Fixed to default Hebrew while preserving localStorage choice.
+5. ✅ **Two `.htaccess` files after zip extraction** — Vite generates `.htaccess` in dist/. Resolved by deleting redundant copy.
+
+**Outcome:**
+- ✅ https://xxl.co.il loads portal at clean root URL
+- ✅ https://www.xxl.co.il same
+- ✅ https://xxl.co.il/vacation and /fashion show בקרוב pages
+- ✅ https://super.xxl.co.il/ unchanged, Hebrew default
+- ✅ SSL active on both (Lifetime)
+- ✅ All React Router routes work on both hostnames
+- ✅ Mobile responsive
+- ✅ Rotating placeholder cycles 4 examples
+
+**Next:** Session 9g — Scraper Infrastructure (performance + geo correctness). Sessions 9f-followup (portal polish) and 9h (Claude Haiku integration) are parallel tracks, can happen anytime.
+
+### Session 9f-followup (May 14, 2026) — Portal Polish
+
+**Done:**
+- Hostname-aware SEO meta tags (title/description/OG/Twitter cards differ for xxl.co.il vs super.xxl.co.il). Static tags in index.html default to portal; runtime override in App.tsx via `seoMeta.applyHostnameMeta()` switches to supermarket-app variant on super.xxl.co.il.
+- OG image URLs reference `/og-portal.png` (xxl.co.il) and `/og-super.png` (super.xxl.co.il) — 1200×630 PNGs uploaded separately by Eltzur to Hostinger public_html/.
+- Portal email signup (ComingSoonPage on /vacation + /fashion) now writes to Supabase `portal_email_signups` table via supabase-js. Anonymous insert allowed via RLS + explicit GRANT (future-proof for Oct 30 Data API policy change).
+- GA4 wired via VITE_GA_MEASUREMENT_ID env var. Pageviews tracked manually on SPA route changes (gtag config has send_page_view: false). Idempotent init, gated on cookie consent.
+- Minimal Hebrew cookie banner ("נמשיך, אנו משתמשים בעוגיות לשיפור החוויה") with X-dismiss-as-consent. localStorage key: `xxl_cookie_consent`. Banner only renders when key absent.
+- `isPortalHostname()` refactored from App.tsx-inline to `web/src/utils/hostname.ts` for reuse by seoMeta.ts.
+
+**Decisions made:**
+- Cookie banner X-dismiss = implicit consent (per Eltzur, soft-launch UX over strict GDPR-style explicit opt-in). IL-targeted product; revisit if/when expanding to EU users.
+- One GA4 property covers both hostnames; filter in reports by page_location host.
+- Supabase direct write from frontend (not via FastAPI endpoint) — anonymous signup, no auth flow needed, simpler. Explicit GRANT statements in migration to future-proof against Oct 30 Data API policy default change.
+- Static fallback meta tags default to portal version (xxl.co.il) since it's the new marketing surface; super.xxl.co.il SEO is well-established already and SPA crawlers (Google) execute the JS overrides anyway.
+- Did NOT modify XxlLogo.tsx or XxlLogoPortal.tsx — favicon decision was "same XXL logo for both," which means no work needed since existing favicon already serves both.
+
+**Files changed:**
+- New: `web/src/utils/seoMeta.ts`, `web/src/utils/hostname.ts`, `web/src/utils/analytics.ts`, `web/src/components/CookieBanner.tsx`, `db/migrations/9f_followup_portal_email_signups.sql`, `web/.env.example`
+- Modified: `web/index.html` (meta tags), `web/src/App.tsx` (hostname import + useEffect for meta/GA + CookieBanner mount), `web/src/pages/ComingSoonPage.tsx` (Supabase insert + vertical prop), `web/src/pages/VacationPage.tsx` + `FashionPage.tsx` (vertical prop), `web/.env.production` (VITE_GA_MEASUREMENT_ID), `web/.gitignore` (!.env.example exception)
+
+**Outcome:**
+- ✅ SEO meta tags hostname-aware
+- ✅ OG image refs in place (PNGs to be uploaded separately by Eltzur)
+- ✅ Email signups persist to Supabase
+- ✅ GA4 stub wired, awaiting Eltzur's real G-XXXXXXXXXX
+- ✅ Cookie banner shipped
+
+**Pending Eltzur post-deploy:**
+1. Run `db/migrations/9f_followup_portal_email_signups.sql` in Supabase SQL Editor
+2. Upload `og-portal.png` + `og-super.png` to Hostinger public_html/ (1200×630 each)
+3. Create GA4 property → grab G-XXXXXXXXXX → swap into `web/.env.production` → rebuild + redeploy
+4. Mobile QA: test /vacation + /fashion signup on real phone, verify WhatsApp link preview after PNGs uploaded, verify cookie banner dismiss works
+**Post-deploy state (end of session):**
+- ✅ SQL migration ran successfully in Supabase
+- ✅ GA4 wired with real Measurement ID G-YB4X4E5ZKM (baked into web/.env.production)
+- ✅ OG images uploaded to Hostinger public_html/ (og-portal.png, og-super.png)
+- ✅ Cookie banner verified live on xxl.co.il
+- ✅ Test email signup verified landing in portal_email_signups table
+- ⏳ Mobile QA pass on real device — deferred
+- ⏳ WhatsApp link preview shows title+desc but no image on first scrape — likely Facebook scraper cache. Fix via https://developers.facebook.com/tools/debug → paste URL → Scrape Again. Defer until pre-marketing-push.
+
+**Incident note:** og-super.png initially returned blank/404 due to filename typo during upload to Hostinger. Re-uploaded correctly via File Manager. Lesson: when uploading single files manually to Hostinger, double-check filenames against the index.html meta references — a typo there fails silently (blank response, not 404).
+
+---
+
+### Session 9g (May 17, 2026) — Scraper Performance + Kamatera Migration
+
+**Scope at session start:** Three workstreams — (1) bulk inserts replacing per-row INSERTs, (2) parallel chain execution, (3) geographic fix for Victory/Carrefour geo-block. Chose order: bulk inserts → parallel → geo fix.
+
+**What actually happened (order shifted by reality):**
+
+**9g-1: Bulk inserts** — Implemented as batched `INSERT ... VALUES (...), (...)` at 1000 rows/statement across items, item_chain_names, prices tables. Local SQLite tests passed (5.8s per store, 15× speedup over baseline). First Railway production run crashed with Postgres `CardinalityViolation: ON CONFLICT DO UPDATE command cannot affect row a second time` — Rami Levy's source XML had 9 duplicate item_codes per store with identical prices. SQLite tolerated this silently; Postgres did not.
+
+Dedup hotfix: deduplicate by `item_code` once per store before all three bulk calls in `scraper/base.py`. Last-wins semantics matches existing ON CONFLICT DO UPDATE. Added warning log for the rare case where duplicates have *differing* values (genuine data quality signal). Commit `4678207`. Local SQLite + Postgres-via-Docker validation passed.
+
+**Railway Postgres disk-full crash** — Second Railway production attempt failed differently: scraper couldn't even connect because Postgres was in a crash loop. Root cause: Railway free trial 0.5 GB volume exhausted by accumulated WAL from previous failed runs. Postgres logs showed `FATAL: could not write to file "pg_wal/xlogtemp.33": No space left on device` looping. Investigated Railway dashboard — trial status was "6 days or $2.45 left", no easy fix without paid tier upgrade.
+
+**Decision: skip Path C "Railway Hobby probation" and go directly to Path B "all-in on Kamatera."** Reasoning: Railway's tier curve doesn't fit a data-ingestion workload; we'd outgrow Hobby's 5GB in ~3 months anyway. GCP free tier rejected after fact-check (Always-Free e2-micro is US-only, doesn't solve geo-block). Kamatera chosen: Tel Aviv DC, 30-day free trial, ~$17/mo for 1 vCPU / 2 GB RAM / 30 GB SSD, simple operational model.
+
+**Kamatera migration (Phases 2-6):**
+- Provisioned `scrp-prod-il` at `185.229.226.190` (Tel Aviv, Type B General, Ubuntu 24.04 LTS)
+- Server hardening: non-root `dude` user with sudo, SSH key auth, password SSH disabled, UFW firewall (22 + 5432), fail2ban, timezone Asia/Jerusalem
+- Postgres 18.4 from PGDG official repo (not Ubuntu's default), tuned for 2GB RAM (shared_buffers 512MB, effective_cache_size 1GB, work_mem 16MB, wal_compression on)
+- Database `xxl_super` owned by `scrp_app` user (password generated via `openssl rand -base64 32`, stored in password manager)
+- Scrp repo cloned to `/home/dude/scrp`, venv created, requirements installed, `.env` at `~/scrp/.env` with permissions 600
+- All 9 expected tables created (chains, stores, items, item_chain_names, prices, favorites, fetch_runs, saved_baskets, users)
+- systemd timer `scrp-cron.timer` scheduled daily 03:00 IDT (DST-aware via OnCalendar). Service exits inactive on success; `Restart=no` so failures are visible.
+
+**Validation results — the moment of truth:**
+
+Three-chain geo-block test:
+| Chain | Store | Prices | Time | Result |
+|---|---|---|---|---|
+| Victory | 008 | 4,684 | 4.2s | ✅ Geo-block resolved |
+| Carrefour | 6 | 3,943 | 3.0s | ✅ Geo-block resolved |
+| Shufersal | 073 | 4,823 | 40.3s | ✅ (page-scan bottleneck unrelated to geo) |
+
+Full cron run, 7 chains × 58 stores:
+| Chain | Stores | Prices | Time |
+|---|---|---|---|
+| Shufersal | 1/1 | 4,823 | 41s |
+| Rami Levy | 14/14 | 101,620 | 39s |
+| Osher Ad | 8/8 | 57,713 | 24s |
+| Victory | 9/9 | 74,675 | 29s |
+| Yochananof | 9/9 | 62,666 | 25s |
+| Keshet | 8/8 | 96,301 | 35s |
+| Carrefour | 9/9 | 33,392 | 15s |
+| **Total** | **58 stores** | **430,190 prices** | **3m 31s** |
+
+Exit code 0, no errors. Keshet logged 2 stores with duplicate item_codes having differing values (dedup last-wins applied, warning logged — working as designed).
+
+**Decisions made:**
+- **All-in on Kamatera (Path B) over Path C "Railway Hobby probation"** — sunk-cost-fallacy avoidance; Railway tier curve wrong for our shape regardless of immediate fix
+- **GCP free tier rejected** — Always-Free e2-micro is US-only (wrong region, geo-block remains); $300 credit burns in ~4 weeks under real load; complexity tax not worth saving $4/mo
+- **9g-2 (parallel chains) deferred indefinitely** — sequential is 3m31s; parallelism saves ~2.8 min; low ROI vs other levers
+- **Shufersal page-scan caching identified as higher-leverage future optimization** than parallelism — would drop full cron from 3m31s to ~1m
+- **Postgres tuning explicitly captured in postgresql.conf** rather than left at defaults — 2GB RAM box needs hand-tuning to perform well
+
+**Files changed:**
+- `scraper/base.py` — added `valid_deduped = list({item['item_code']: item for item in valid}.values())` dedup before bulk insert calls + warning log for differing-value duplicates
+- `db/db.py` — bulk insert functions for items, item_chain_names, prices (batched VALUES at 1000 rows/statement)
+- Server-side new files (not in git, on Kamatera only):
+  - `/etc/systemd/system/scrp-cron.service` — runs `cron_main` as `dude` user, sources `.env`
+  - `/etc/systemd/system/scrp-cron.timer` — daily 03:00 IDT, DST-aware
+  - `/etc/postgresql/18/main/postgresql.conf` — tuned for 2GB RAM
+  - `/etc/postgresql/18/main/pg_hba.conf` — temporary `0.0.0.0/0` for scrp_app (to be narrowed in Phase 7)
+  - `/home/dude/scrp/.env` — DATABASE_URL with localhost Postgres connection
+
+**Bugs encountered & resolved:**
+1. ✅ Postgres CardinalityViolation on ON CONFLICT — duplicate item_codes in source XML, fixed via dedup in base.py (commit 4678207)
+2. ✅ SQLite vs Postgres semantic mismatch — SQLite tolerates ON CONFLICT duplicates in a single statement, Postgres rejects. Local SQLite tests were insufficient. Going forward, Docker Postgres test recommended for any DB-touching code change.
+3. ✅ Railway Postgres disk-full → crash loop — accepted data loss (reproducible from gov.il), migrated to Kamatera with proper disk sizing (30 GB vs 0.5 GB)
+4. ⚠️ CC's automated SSH password auth failed on Kamatera even though manual SSH worked — root cause unclear (possibly special chars in password or rate limiting). Worked around by manually installing SSH key on server, then having CC use key-based auth thereafter. **Note for future sessions**: use SSH key auth from day 1, don't fight password auth through CC's transport layer.
+
+**Outcome:**
+- ✅ Scraper migrated end-to-end to Kamatera Tel Aviv
+- ✅ Geo-block resolved (all 7 chains working)
+- ✅ 25× performance improvement (90 min → 3m31s)
+- ✅ Postgres on same host as scraper = localhost writes, no network latency for bulk inserts
+- ✅ systemd cron scheduled daily 03:00 IDT
+- ✅ Server hardened (key-only SSH, UFW, fail2ban)
+- ⏸️ Phase 7 (frontend reroute) deferred to next session — touches live site, better with fresh focus
+- ⏸️ Phase 9 (backups) deferred — important but not urgent
+- 📝 super.xxl.co.il is currently broken until Phase 7 lands. Acceptable: it was already broken from Railway Postgres crash, so this isn't new user-facing breakage.
+
+**Cost summary:**
+- Kamatera: $0 (in 30-day free trial, ~$17/mo after Jun 17, 2026)
+- Railway: ~$2.45 trial credit remaining, will expire ~May 23, 2026 — let it lapse naturally rather than actively cancel (web service still needed until Phase 7 completes)
+- Net cost: $0 this month, $17/mo from Jun onwards (vs estimated $25+/mo if we'd stayed on Railway Hobby + paid for bigger volume)
+
+**Credentials added to password manager this session:**
+- `scrp-prod-il root` (Kamatera root user)
+- `scrp-prod-il dude` (sudo user, daily driver)
+- `scrp_app Postgres password` (used in DATABASE_URL — will go into Railway web env var in Phase 7)
+
+**Next:** Session 9g Phase 7 — Reroute Railway web service `DATABASE_URL` env var to point at Kamatera Postgres (`185.229.226.190:5432/xxl_super`). Pre-work: identify Railway's egress IP to narrow `pg_hba.conf` from temporary `0.0.0.0/0`. Risk: touches live site, do with fresh focus. After Phase 7, super.xxl.co.il is healthy again. Then Phase 9 (pg_dump backups + Backblaze B2 offsite).
+
+### Session 9j (May 21, 2026) — City Field Normalization
+
+**Goal:** resolve 355 stores with NULL `city` via progressive auto-matching.
+
+**Done:**
+- Built `normalize_cities.py` — a per-chain city matcher: city dictionary (~190 Hebrew cities), abbreviation expansion (כ"ס→כפר סבא, ראשל"צ→ראשון לציון, etc.), Shufersal sub-format prefix stripping (שלי/דיל/אקספרס/BE/יש חסד), Hebrew-safe word-boundary matching. Output: `matches.csv` with per-store confidence scores. No DB writes — analysis only.
+- Auto-matcher resolved 299/355 (84%), 296 at confidence ≥0.80. Eltzur manually reviewed `matches.csv` in Excel and corrected/filled ~50 rows (everything below 90% confidence), bringing it to 350 clean fills.
+- Built `apply_matches.py` — dry-run + `--commit` modes, updates `city`/`city_norm` only where currently NULL. Committed: 318 rows + 1 online store moved to `sub_chain_id=1234`.
+- Built `fix_9j_residual.py` — fixed 14 Carrefour stores skipped due to `store_id` format mismatch + deleted 2 orphaned Yochananof rows (150/152, renumbered to 50/52).
+- Built `fix_ramilevy.py` — fixed 14 Rami Levy stores skipped because the DB stored them with `sub_chain_id='1'` while the apply script padded to `'001'`.
+- **Result: 349/355 resolved. 6 NULL remain, all intentional** — Shufersal 000, Yochananof 002 (יוחננוף ישן), Keshet 102-105 (Kulinarik). Final city coverage: 827/833 stores = 99.3%.
+
+**Decisions made:**
+- Online stores (e.g. Shufersal ONLINE) → `city='אונליין'`, moved to reserved `sub_chain_id='1234'`.
+- Kulinarik (Keshet store_ids 102-105) — identified as a separate chain (would-be chain_id `7690058200000`), but **left as Keshet rows for now**; too small to be worth a migration. Revisit if Kulinarik grows.
+- Yochananof pickup points 150/152 were the wrong store codes — corrected to 50/52, old rows deleted.
+
+**Bugs found (logged as pending work):**
+- Scrapers don't populate `city` on new stores → `9j-followup` 
+- `stores.sub_chain_id` / `store_id` format inconsistency caused two apply-script silent skips → `stores table data hygiene` pending session.
+
+**Corrections to this handoff:**
+- Rami Levy chain_id was wrong here (`7290058108879` — that's actually KingStore per Kaggle). **Correct Rami Levy chain_id: `7290058140886`.** Fixed throughout where it appears.
+
+**Scripts:** all four live in `~/scrp/scripts/` on Kamatera and `C:\scrp\` locally:
+`normalize_cities.py`, `review_matches.py`, `apply_matches.py`, `fix_9j_residual.py`, `fix_ramilevy.py`.
+
+
+```
+### Session 9j-followup (May 21, 2026) — City Matcher Ported to Scrapers + store_id Padding
+
+**Done:**
+- Created `scraper/city_matcher.py` — the 9j matcher logic (city dictionary, abbreviation expansion, sub-format prefix stripping, per-chain matchers, Hebrew-safe boundary matching) extracted into a reusable module. Public API: `resolve_city(store_name, address, chain_id) -> (city, confidence)`. Verified against the 355-store 9j dataset: identical results (296 high-confidence matches).
+- Wired `resolve_city` as a fallback into both scraper store-load paths (`cerberus.py`, `publishprice.py`): when the numeric government city-code lookup returns nothing, the matcher fills `city` if confidence ≥0.80. New stores now get a city at scrape time instead of accumulating as NULLs. (This was step 5 of the original 9j plan.)
+- `store_id` / `sub_chain_id` padding normalization: `publishprice.py` historically stored Carrefour store_ids unpadded (`'6'`) while `cerberus.py` zero-padded (`'006'`). Changed `publishprice.py` to zero-pad (2 spots); `db.py` `upsert_store` now defensively pads via `_pad_store_id`. Ran `migrate_store_id_padding.py` — **40 Carrefour rows migrated** to canonical 3-digit format.
+- Server hotfix committed: Shufersal `_fetch_raw_page` timeout 30s→60s (was applied directly on server during 9g, never committed).
+
+**NEW BUG FOUND (logged as session 9k):**
+- The padding migration surfaced 14 "collision" rows — Rami Levy stores that exist twice (`sub_chain_id='1'` and `'001'`). Investigation showed **both copies carry prices** (~8K rows each) — the catalog is split across duplicate store records. This is a data-integrity bug affecting basket comparison. See 9k pending session above. The migration correctly skipped these 14 rather than auto-merging.
+
+**Scripts:** `migrate_store_id_padding.py` committed to repo root. The 9j one-shot scripts (`apply_matches.py`, `fix_9j_residual.py`, `fix_ramilevy.py`, `normalize_cities.py`, `review_matches.py`) remain untracked local artifacts per the Option-A decision.
+
+**Files changed:** `scraper/city_matcher.py` (new), `scraper/publishprice.py`, `scraper/cerberus.py`, `db/db.py`, `scraper/shufersal.py`, `migrate_store_id_padding.py` (new).
+
+**Note on Claude Code:** CC initially generated its own simplified `city_matcher.py` from scratch (the real file wasn't in its prompt) — caught and overwritten with the correct tested version. Lesson: when handing CC a pre-built file, save it first and tell CC explicitly not to recreate it.
+```
+
+### Session 9d-2 (May 25, 2026) — Per-Store Coverage Metric [Priority 1 complete]
+
+**Done — Priority 1 of 9d-2:**
+- New table `fetch_store_runs` (per-store sibling to per-chain `fetch_runs`): one row per store per cron run, status enum loaded/no_file/error. Migration: `db/migrations/9d2_fetch_store_runs.sql` (includes scrp_app GRANTs — see lesson below).
+- `scraper/base.py`: emits one fetch_store_runs row per store during the load loop; fetch_runs INSERT now uses RETURNING id to correlate. store_id padded via _pad_store_id for consistency with stores table.
+- New view `v_store_coverage_72h` + `/coverage` API endpoint (`db/query.py` fetch_coverage, `api/routers/coverage.py`, `api/models.py`). Denominator is configured count from active_stores.yaml, so never-ran chains show 0% not invisible. Sorted worst-first.
+- Seed run completed (option B): full manual cron, 7 chains, 192s, errors none.
+
+**Key finding:** The scoping report's coverage alarms were price_update_date artifacts. Real per-store load coverage as of seed run: Carrefour 88.9% (8/9), all other 6 chains 100%. Keshet "50%" and Yochananof "88%" from the scoping baseline were stale-XML-date noise, not missing stores.
+
+**Carried into Priority 3:** (1) Carrefour store 6 — in active_stores.yaml but published no PriceFull on the seed run; investigate. (2) Shufersal — 100% is meaningless at 1 store configured; needs expansion.
+
+**Lesson — new tables need explicit GRANTs:** The seed run first failed with "permission denied for table fetch_store_runs" — the table was created as postgres superuser but the scraper connects as scrp_app. Any new table created via `sudo -u postgres psql` MUST include `GRANT ... TO scrp_app` (table + sequence + any views) in the same migration file, or it's invisible to the scraper.
+
+### Session 9n (May 25, 2026) — 3-Chain Diagnostic + Cron Timing Fix + FreshnessStrip Deploy
+
+**Goal:** Diagnose why Victory, Osher Ad, and Carrefour consistently loaded 0 files on daily cron; fix root cause; two follow-ups from catch-up run.
+
+**Root cause — confirmed timing race:**
+Cron fired at 03:00 IDT = midnight UTC. All three failing portals publish PriceFull files AFTER midnight UTC:
+- Carrefour (publishprice.py): publishes ~02:09 UTC daily (consistent over 6+ days)
+- Osher Ad (Cerberus): publishes ~03:00–04:00 UTC
+- Victory (laibcatalog.co.il): publishes ~04:00–05:00 UTC
+
+Scraper arrived before the files existed → zero loads → but skipped stores **kept old prices** (snapshot fallback is implicit in `base.py`: `DELETE FROM prices WHERE store_fk=:store_fk` only runs when a store has an index entry; skipped stores untouched). Prices were stale but not gone.
+
+**Fix — cron moved to 10:00 IDT (07:00 UTC):**
+```bash
+sed -i 's/OnCalendar=\*-\*-\* 03:00:00/OnCalendar=*-*-* 10:00:00/' /etc/systemd/system/scrp-cron.timer
+systemctl daemon-reload
+systemctl list-timers scrp-cron.timer
+```
+`Persistent=true` in the timer caused an immediate catch-up run on `daemon-reload` since the 10:00 IDT window was already past for the day.
+
+**Catch-up run results — all 7 chains loaded successfully.**
+
+**FreshnessStrip downward-expand:**
+- Code in `web/src/components/FreshnessStrip.tsx` was already correct (document-flow expand with `mt-1` on `<ul>`, no absolute positioning). The upward-expand behavior on the live site was because the old build was never redeployed after the fix was committed.
+- `web/deploy.zip` rebuilt locally at `C:\scrp\web\deploy.zip` (10.6 MB).
+- **Pending Eltzur action:** Upload `C:\scrp\web\deploy.zip` to Hostinger File Manager → `public_html/super.xxl.co.il/` → Extract. This will also ship the alphabetical city sort and any other commits since the last Hostinger deploy.
+
+**Column misalignment (fetch_runs table):**
+Diagnosed as RTL terminal rendering artifact. Raw DB query confirmed: `files_attempted=1`, `files_loaded=1`, `items_inserted=4864` for Shufersal — correct. The reporter's table appeared column-shifted only because RTL layout reversed column order in the terminal viewer. No DB data issue.
+
+**Decisions made:**
+- **10:00 IDT chosen over 06:00 or 08:00** — 07:00 UTC gives 2+ hours of margin past Carrefour's 02:09 UTC publish and 1+ hour past Victory's ~05:00 UTC worst case. No meaningful operational downside (prices still updated same calendar day).
+- **Cron description in `.timer` file NOT updated** (still says "3am Israel time") — low priority, timer behavior is authoritative; comment updated only in handoff.
+- **Carrefour store-ID mismatch NOT fixed in this session** — Carrefour published files for stores the scraper didn't have registered (non-zero `files_attempted` but zero or few matched stores). Logged as open investigation for 9d-2.
+
+**Files changed:**
+- Server-side only: `/etc/systemd/system/scrp-cron.timer` — `OnCalendar` changed `03:00:00` → `10:00:00`
+- `web/deploy.zip` — rebuilt locally (not committed; Hostinger deploy pending)
+
+**Known issue surfaced in 9n scoping:**
+Per-chain freshness (`/freshness` endpoint + FreshnessStrip) reads `MAX(run_at)` per chain — one fresh store makes the whole chain show "updated today." The 9d-2 scoping report found this masks per-store staleness (Keshet 50%, Yochananof 88% on May 25 despite all chains appearing green). A per-store freshness view is Priority 1 of 9d-2.
+
+**Open items carried forward:**
+- Hostinger upload of `web/deploy.zip` (FreshnessStrip fix goes live on upload)
+- Carrefour store-ID mismatch: may be metric artifact — confirm with per-store metric first
+- 9d-2 scoping report saved at `db/scoping_report_9d2.md`
+
+### Session 9d-2 (May 26, 2026) — Per-Store Coverage Metric + City Expansion
+
+**Priority 1 — DONE (per-store coverage metric):**
+- New table fetch_store_runs (per-store sibling to per-chain fetch_runs): one row per store per cron run, status enum loaded/no_file/error. Migration db/migrations/9d2_fetch_store_runs.sql (includes scrp_app GRANTs).
+- scraper/base.py emits one fetch_store_runs row per store; fetch_runs INSERT now uses RETURNING id. store_id padded via _pad_store_id.
+- New view v_store_coverage_72h + /coverage API endpoint (db/query.py fetch_coverage, api/routers/coverage.py, api/models.py). Denominator = configured count from active_stores.yaml.
+- Key finding: the scoping report's coverage alarms (Keshet 50%, Yochananof 88%, Carrefour 22%) were all price_update_date artifacts. Real per-store load coverage is healthy.
+- Lesson: new tables created via `sudo -u postgres psql` MUST include GRANT ... TO scrp_app (table + sequence + views) in the same migration, or the scraper (connects as scrp_app) gets "permission denied".
+
+**Priority 2 — DONE (city expansion, 9 new 100K+ cities):**
+- 9 cities: Petah Tikva, Holon, Bnei Brak, Ashkelon, Rehovot, Bat Yam, Beit Shemesh, Herzliya, Modi'in.
+- Built two analysis scripts: scripts/discover_p2_cities.py (catalog discovery, 3-bucket output) and scripts/verify_p2_candidates.py (PriceFull verification via build_pricefull_index).
+- 60 candidates verified, 55 PASSED, added to active_stores.yaml. Store count: 58 → 113.
+- Surprise finding: Shufersal יש חסד sub-format DOES publish PriceFull (Bnei Brak 219/295/611, Beit Shemesh 606 all verified PASS). The handoff's assumption that all sub-formats fail is wrong — at least יש חסד works.
+- Rami Levy store 016 (Bnei Brak Ayalon branch): catalog store_name says "רמת גן" but address מבצע קדש 68 confirms Bnei Brak municipality. Comment added in active_stores.yaml — do not "correct" it.
+
+**Priority 3 — bar already met:** Proof cron run (326s, errors none) → /coverage shows all 7 chains ≥90% on the 113-store denominator: Shufersal 100% (12/12, was 1 store), Rami Levy/Osher Ad/Victory/Yochananof/Keshet all 100%, Carrefour 95.5% (21/22).
+
+**Deferred to future sessions:**
+- Shufersal stores 014 (Ashkelon) + 018 (Holon): דיל-format, verification failed ONLY because the page-scan hit its 236-page safety cap — likely real. Re-verify with higher page cap during Priority 4 (Shufersal page-scan optimization).
+- Carrefour non-publishers: store 6, plus 183 (Bat Yam) + 191 (Holon); Yochananof 073 (Holon) — NO_FILE on verify. Carrefour per-store intermittency; re-check on a later run.
+- Shufersal שלי/אקספרס/BE/יוניברס sub-formats: NOT yet tested. Herzliya and Rehovot got zero Shufersal this session because they only have these formats. Worth a dedicated Shufersal sub-format session.
+- Priority 4 (Shufersal page-scan cache) and Priority 5 (new chains) not started.
+
+**New chains note:** User wants to choose chains rather than use the scoping report's AM:PM/Freshmarket/Co-op list. Candidates discussed: Tiv Taam (good), King Store (smaller, ~26 branches, unique Arab-sector coverage). Hazi Hinam stays deferred (HTML-scraped, fragile). Decide via portal-type probe at start of Priority 5.
+
+**Cron timing — confirmed, do NOT change:** Daily cron stays 10:00 IDT. 9n moved it there because Osher Ad publishes ~07:00 IDT; earlier cron re-creates the 9n silent-failure bug. The FreshnessStrip is already real-time (reads /freshness live per page load) — it shows "yesterday" before ~10:05 simply because that day's scrape hasn't run yet. Possible future polish: strip copy noting "updates daily by 10:00" so early-morning visitors don't read it as stale.
+
+**Operating note:** For ad-hoc DB queries with Hebrew or special characters, SSH in interactively first (ssh dude@..., then run the query at the server's bash prompt) — non-interactive ssh "..." from PowerShell mangles quotes and Hebrew.
+
+**Note for future migrations:** CC tip — when a migration creates a table, always append the scrp_app grants to the same .sql file.
+
+### Session 9d-2 (May 26, 2026) — Coverage Metric, City Expansion, Infra
+
+**COMPLETED:**
+
+Priority 1 — per-store coverage metric (DONE):
+- New table fetch_store_runs (per-store, sibling to per-chain fetch_runs); status enum loaded/no_file/error. Migration db/migrations/9d2_fetch_store_runs.sql (includes scrp_app GRANTs).
+- scraper/base.py emits one fetch_store_runs row per store; fetch_runs INSERT uses RETURNING id.
+- New view v_store_coverage_72h + /coverage API endpoint. Denominator = configured count from active_stores.yaml.
+- Finding: the scoping report's coverage alarms (Keshet 50%, Yochananof 88%, Carrefour 22%) were all price_update_date artifacts — real per-store coverage was healthy.
+
+Priority 2 — city expansion (DONE):
+- 9 new cities: Petah Tikva, Holon, Bnei Brak, Ashkelon, Rehovot, Bat Yam, Beit Shemesh, Herzliya, Modi'in.
+- Scripts: scripts/discover_p2_cities.py (catalog discovery), scripts/verify_p2_candidates.py (PriceFull verification).
+- 60 candidates verified, 55 PASSED, added to active_stores.yaml. Store count 58 → 113.
+- Finding: Shufersal יש חסד sub-format DOES publish PriceFull (verified). The assumption that all Shufersal sub-formats fail is wrong for יש חסד.
+- Rami Levy 016 = Bnei Brak Ayalon branch (catalog store_name says "רמת גן", address confirms Bnei Brak) — comment in active_stores.yaml, do not "correct".
+
+Priority 3 — bar met: proof cron run, /coverage shows all 7 chains ≥90% on the 113-store denominator. Shufersal 100% (12/12, was 1), others 100%, Carrefour 95.5%.
+
+City normalization (DONE): victory.py now normalizes city on store insert via resolve_city (Victory tagged branches "חולון קוגל" etc., creating duplicate dropdown cities). Permanent fix — confirmed working. scripts/normalize_store_cities.py exists as a one-time cleanup but was NOT needed and must NOT be run with --apply: its prefix-strip logic false-positives on hyphenated municipalities (פרדס חנה-כרכור, מודיעין-מכבים-רעות).
+
+Supabase keep-alive (DONE): cron_main.py ping_supabase() pings Supabase /auth/v1/health each cron run to reset the 7-day free-tier inactivity timer. Confirmed "ping OK (200)". Server .env has SUPABASE_URL + SUPABASE_ANON_KEY. Note: /rest/v1/ returns 401 for anon key — must use /auth/v1/health.
+
+Freshness strip (DONE): added static footnote "* עדכון מחירים מתבצע בשעות הצהריים" to the expanded FreshnessStrip, so early-morning visitors understand prices update midday.
+
+**DEFERRED / NEXT SESSION:**
+- Priority 4 — Shufersal page-scan optimization (page-scan cache). Includes re-verifying Shufersal stores 014 (Ashkelon) + 018 (Holon): דיל-format, failed verification ONLY due to the 236-page scan cap — likely real, re-verify with higher cap.
+- Priority 5 — new chains. User wants to choose: Tiv Taam (good candidate), King Store (~26 branches, unique Arab-sector coverage). Hazi Hinam stays deferred (HTML-scraped). Decide via portal-type probe (verify against each chain's endpoint) before building.
+- Shufersal שלי/אקספרס/BE/יוניברס sub-formats: not yet tested. Herzliya and Rehovot got zero Shufersal this session (only these formats). Worth a dedicated session.
+- Carrefour non-publishers: store 6, 183 (Bat Yam), 191 (Holon); Yochananof 073 (Holon) — NO_FILE on verify, re-check later.
+- CITY_VARIANTS cleanup: CITIES contains both "זכרון" and "זכרון יעקב". Make "זכרון יעקב" canonical, "זכרון" a variant in CITY_VARIANTS. Small. Check how CITIES and CITY_VARIANTS relate before editing — CITIES is used live by resolve_city.
+- Lod/Ramla, Ramat Gan/Givatayim: possible user-facing city consolidation — separate product decision, own mapping table, not done.
+
+**GS1 — incoming workstream (not started):**
+GS1 Israel can license canonical item data: names, images, barcodes, nutrition, kosher, ingredients. ~₪6,000, affordable. This is the canonical product layer the project lacks (replaces abandoned OpenFoodFacts, parked StoreNext). GS1 constraint: some chains are not GS1 members; GS1 doesn't want non-members getting GS1 data via xxl as a backdoor. Working approach: per-chain gs1_eligible flag — ineligible chains stay listed for price comparison but show no GS1 enrichment. Frame to GS1 as a sales incentive (visible richness gap pushes non-members to join). Before signing: get the eligible-chain list explicit and in writing. Needs a dedicated scoping session.
+
+**INFRA / SECURITY:**
+- Rotate the scrp_app DB password — it was printed to terminal/chat this session. Not urgent (localhost-only DB) but should be done.
+
+**OPERATING NOTES (important for all future sessions):**
+- Terminal RTL display of Hebrew is EXPECTED and normal — it does not indicate a bug, no verification needed for display mangling. Only verify logic when a Hebrew string comparison is load-bearing (use repr() / JSON.stringify, or open the file in VS Code).
+- CC cannot reliably surface file contents back to the operator — its file reads collapse ("Read 1 file / ctrl+o to expand") and don't paste through. Workaround: for any code review, the operator opens the file in VS Code and pastes it directly.
+- PowerShell → ssh → bash quoting mangles Hebrew, special characters, and long strings (JWTs). For ad-hoc DB queries with Hebrew: SSH in interactively first, run the query at the server bash prompt. To get a file/credential onto the server: build it locally and scp it — never interpolate it into an ssh "..." command string.
+---
+
+### Session 9d-3 (May 27, 2026) — Shufersal Per-Store Fetch + Tiv Taam Chain
+
+**Priority 4 — DONE (Shufersal page-scan eliminated, not just optimized):**
+
+The original P4 task was "build a page-scan cache." A cache was already in
+shufersal.py (undocumented). More importantly — the whole approach was
+replaced. Eltzur noticed the Shufersal portal has a STORE DROPDOWN. DevTools
+confirmed the selector posts a clean GET:
+  GET /FileObject/UpdateCategory?catID=0&storeId={N}&sort=Time&sortdir=DESC
+returns ONLY that store's files (~6-10 rows) as the same HTML table the
+existing parser already handles. Same UpdateCategory endpoint the scraper
+already used — nobody had tried the storeId param.
+
+Shufersal now fetches per-store, one request per store, flat as the chain
+grows — same shape as the other chains. No longer the weird one.
+
+Changes (scraper/shufersal.py, commit 4c70a1d):
+- build_pricefull_index rewritten: loops target store IDs, one _fetch_url per
+  store via ?storeId=N. start_page param kept (ignored) for call-site compat.
+- _fetch_url helper extracted; _fetch_raw_page is a one-line delegator
+  (still used by load_stores).
+- Newest PriceFull picked via max(pf_rows, key=filename). REVIEW CATCH:
+  CC first used pf_rows[0] trusting server sort — server sorts the full
+  mixed file listing, not the PriceFull subset, so [0] grabbed the STALE
+  03:00 file instead of the 04:31 republish. Fixed to max().
+- DELETED: the page-scan cache entirely — _CACHE_FILE, _load/_save_cached_
+  start_page, _CACHE_MARGIN, _DEFAULT_START_PAGE, safety cap, page loop.
+  .shufersal_cache.json on disk is dead, can be deleted manually.
+- load_stores UNCHANGED — still page-walks for store name/city metadata.
+  Folding into per-store path is a deferred follow-up.
+
+Verification: 17/17 stores FOUND. 12 existing actives + 014/018 (verified
+9d-2 deferred items, added to active_stores.yaml, commit 206a562) + spot-
+check of 318 (אקספרס), 270 (BE), 035 (יוניברס) — all FOUND. The handoff's
+old assumption that Shufersal sub-formats (אקספרס/BE/יוניברס) don't publish
+PriceFull is WRONG across the board — they all publish.
+
+**Priority 5 — DONE for Tiv Taam (deferred for others, see below):**
+
+Probe of four candidate chains via published gov-portal credentials (Tiv Taam,
+AM:PM/doralon, Fresh Market, King Store):
+- Tiv Taam, AM:PM, Fresh Market: all Cerberus portal (url.publishedprices.co.il),
+  username-only auth — ~5-line subclasses of CerberusScraper.
+- King Store: bina-projects platform (kingstore.binaprojects.com) — separate
+  portal, no scraper for it yet.
+
+Tiv Taam SHIPPED (commit 6f234b4):
+- chain_id 7290873255550, 46 retail stores (53 in Stores XML, minus 7 ליקוט
+  warehouses: 502, 503, 512, 514, 515, 519, 523).
+- scraper/tivtaam.py — 5-line subclass.
+- scraper/registry.py — wired into the chain dictionary (this is where new
+  chains get registered; pattern for future additions).
+- active_stores.yaml + scheduled_stores.yaml — both updated.
+- Verification: 46/46 PriceFull FOUND, 53/53 cities resolved, 0 NULLs.
+
+CITY_CODES rebuilt from official sources (same commit):
+- 12 new MOI codes added (104=מזרע, 346=גליל ים, 386=בני דרור, 587=סביון,
+  1061=נצרת עילית, 1139=כרמיאל, 1167=קיסריה, 2100=טירת כרמל, 2530=באר יעקב,
+  6800=קרית אתא, 8200=קרית מוצקין, 9400=יהוד).
+- 7 spelling/name overrides applied from the authoritative Israel Post
+  locality PDF in C:\scrp\data\ — typo fixes (3780 ביתר עלית→עילית; 171
+  פרדסיה; 6400 הרצליה; 9100 נהריה) and official compound names (195
+  קדימה→קדימה-צורן; 1200 מודיעין→מודיעין-מכבים-רעות; 5000 תל אביב→תל אביב-יפו).
+- POLICY COMMENT added above CITY_CODES: NEVER include regional councils
+  (מועצה אזורית) like נחל שורק. Only shopper-recognizable municipalities.
+  Do NOT bulk-import locality.xls — it mixes cities and regional councils.
+
+Locality file caveats discovered this session:
+- C:\scrp\data\kod_yeshuvim_02.xls is the CBS internal serial code system,
+  NOT the Ministry of Interior locality codes used by gov.il price portals.
+  Different number space. DO NOT USE for CITY_CODES work.
+- C:\scrp\data\locality.xls IS the correct MOI master, but labels code 31
+  as "נחל שורק" (regional council) — the price portals use 31 for אופקים
+  (the actual city). cerberus.py keeps the curated value 31=אופקים.
+- Israel Post's סמל_ישוב_דואר_ישראל.pdf cross-confirms the MOI codes.
+
+**Deferred queue (ranked by impact × readiness, top of list = next):**
+
+1. **CITY_VARIANTS cleanup** — alias-mapping pass. All surfaced live by
+   users in the city dropdown:
+   a) זכרון / זכרון יעקב → canonical "זכרון יעקב" (from 9d-2)
+   b) תל אביב / תל אביב יפו → canonical "תל אביב-יפו" (from 9d-5)
+   c) מודיעין → canonical "מודיעין-מכבים-רעות" (from 9d-5)
+   d) DO NOT merge מודיעין עילית — separate Haredi municipality (from 9d-5)
+   e) Audit dropdown for other split cities while in there.
+   Pure data work, zero scraper risk, immediate visible improvement.
+
+2. **Search quality — "חלבי" bleed.** From session 9f: searching "חלב"
+   returns "חלבי" (kosher dairy marker) results. Tokenization / stop-word
+   fix. Affects every search on the live site.
+
+3. **Bina-projects wave 2.** Base class validated 3×. Candidate chains
+   from Cheapersal cross-reference: זול ובגדול, מעיין 2000, סופר ברקת,
+   סופר יודה, פוליצר, סיטי מרקט, KT מרקט, יילו. Could batch 4-6 chains
+   in one session.
+
+4. **Shufersal 270-store sweep.** Currently tracking 14 of ~270 stores.
+   `shufersal_branch_list.csv` already captured. Largest single-step
+   coverage expansion available.
+
+5. **Paz + Dor Alon brand-filtering session.** Both publish multiple
+   brands under one chain_id. Cheapersal already separates these brands
+   (AM:PM / אלונית / סופר אלונית for Dor Alon; freshmarket / סופר חביב
+   / מחסני השוק variants for Paz) — use as empirical target. Operating
+   policy A: fetch each brand's real branch list first.
+
+**Lower-priority / housekeeping:**
+
+- Shufersal load_stores consolidation
+- Carrefour non-publishers re-check (store 6, 183, 191; Yochananof 073)
+- fetch_store_runs schema.sql drift fix
+- King Store load_stores target filter
+- .env.save / .env.save.1 cleanup
+- Kamatera VM reboot (System restart required)
+- Shefa coverage-calc fix — distinguish "configured but chain doesn't
+  publish PriceFull" from real misses, so /coverage doesn't penalize us
+  for chain decisions outside our control (would lift Shefa from 73.3%
+  to ~100% honestly)
+- GS1 scoping (separate workstream)
+
+**General references:**
+
+- **Cheapersal** (https://cheapersal.co.il) — competitor site with full
+  chain/branch/city/items coverage. Consult when scoping new chain waves
+  or making brand-split decisions.
+
+---
+
+### Session 9d-4 (May 28, 2026) — King Store (bina-projects) + Supabase Keep-alive Fix
+
+### ⚠️ SEVERE — RTL IS NEVER A BUG. STOP FLAGGING IT.
+Across multiple sessions the chat assistant has repeatedly raised false
+alarms that Hebrew strings are "reversed/corrupted" in code, yaml, DB
+names, or repr() output. EVERY instance has been a false positive — a
+terminal/paste RTL rendering artifact, never a real data bug. Hebrew in
+repr/screenshots/pasted output frequently APPEARS reversed; the underlying
+bytes are correct. Do NOT flag reversed/corrupted Hebrew as a bug or
+suspected bug. Do NOT propose codepoint rebuilds, byte checks, or
+"just to be safe" verifications. If a string parses and the app runs, it
+is correct. Address ONLY if a genuine reversed-text problem is seen in
+PRODUCTION on the live site. (This wasted real time in 9d-4.)
+
+**King Store — LIVE (9th chain)**
+- chain_id 7290058108879 (confirmed live from filenames; the old 9j scar
+  mislabeling this as Rami Levy is RESOLVED — it is genuinely King Store's).
+- Coverage: Arab-sector + northern/mixed towns no other chain has.
+- Production Postgres: 28 publishing stores, 148,016 prices, all cities
+  resolved (050 אינטרנט intentionally NULL). Rides daily cron (in both
+  active_stores.yaml and scheduled_stores.yaml; cron reads active as CONFIG).
+- 31 stores in yaml; 338 (small village) deliberately excluded.
+
+**bina-projects — REUSABLE BASE CLASS (the real prize)**
+- scraper/binaprojects.py — BinaProjectsScraper(ChainScraper). Several other
+  chains use this portal platform; adding one = ~4-line subclass (BASE_URL,
+  CHAIN_NAME, CHAIN_ID). See scraper/kingstore.py.
+- 3 JSON endpoints, all POST:
+  - {BASE}/Select_Store.aspx (empty) -> [{"Kod","Nm"}]
+  - {BASE}/MainIO_Hok.aspx (form WStore="",WDate="",WFileType="4") -> file
+    list. WFileType: 0=all 1=stores 2=prices 3=promos 4=PriceFull 5=PromoFull.
+    Returns FULL HISTORY (~1000 files); order unreliable.
+  - {BASE}/Download.aspx?FileNm=<name> (empty) -> [{"SPath":"<gz url>"}] (LIST, take [0])
+- Newest-per-store: select by the 12-digit YYYYMMDDHHMM stamp in FileNm, NOT
+  the DateFile display string (display doesn't sort across days).
+- KEY GOTCHA: bina files are ZIP (magic b'PK'), NOT gzip, despite .gz name.
+  binaprojects._decompress overrides base to detect magic bytes; base.py
+  untouched (other chains still gzip).
+
+**Supabase keep-alive — FIXED**
+- Old ping hit /auth/v1/health → 200 without touching Postgres → never
+  counted as activity; project paused despite daily "ping OK" logs.
+- Now reads 1 row from public.keepalive via /rest/v1/ (real DB read);
+  success requires non-empty body. New table public.keepalive (1 dummy row,
+  anon SELECT via RLS + explicit grant, future-proof for Oct 30 Data API
+  change). No .env change. Rides daily cron. Verified: "DB read confirmed."
+
+**Tooling added**
+- scripts/run_one.py — standalone single-chain runner:
+  `python -m scripts.run_one <chain_id> [--yaml active|scheduled]`. Mirrors
+  cron_main setup; no cron logic / no Supabase ping / one chain. DATABASE_URL
+  unset = local sqlite (safe); set from systemd env = Postgres.
+
+**KNOWN ISSUES / DEFERRED**
+- SCHEMA DRIFT: fetch_store_runs exists ONLY in Postgres migration
+  9d2_fetch_store_runs.sql, never added to schema.sql → local sqlite on any
+  machine lacks it; init_db won't create it. Fix: add it (+ fetch_runs/views)
+  to schema.sql. Worked around manually on Kamatera prices.db in 9d-4.
+- King Store load_stores inserts ALL portal stores (33), not just yaml's 31
+  → store rows 000 and 338 exist with no prices (harmless empties). Add a
+  target filter to load_stores if the table should match the yaml exactly.
+- New cities (אום אל פחם, פוריידיס, כפר קאסם, רהט) set via override but not in
+  CITY_VARIANTS — filtering works, but won't alias-group with other chains'
+  spellings. Future consolidation.
+- 2x .env backups (.env.save, .env.save.1) untracked in repo root — contain
+  secrets. Clean up; confirm .gitignore covers .env*.
+- VM "System restart required" — reboot in a maintenance window.
+
+**Commits (9d-4)**
+ea03cf5 Supabase cron fix · 71a335a bina base + KingStore + registry ·
+917c555 store lists · 70218d7 ZIP-not-gzip fix · 3304062 NULL-city overrides ·
+2c3d531 run_one.py · cfaa942 King Store city overrides (8 branches)
+
+---
+
+### Session 9d-5 — Shefa Birkat Hashem + Shuk Hayir onboarding (2026-05-28)
+
+**Scope pivot:** Session opened with Paz + Dor Alon brand-filtering as the
+locked priority. Eltzur surfaced two bina-projects portals (Shuk Hayir +
+Shefa Birkat Hashem) that were structurally identical to King Store (9d-4),
+so scope shifted to the cheaper, mechanical onboarding. Paz + Dor Alon
+deferred to a dedicated brand-filtering session.
+
+**Delivered:**
+
+- Two new chains live in production Postgres:
+  - **שפע ברכת השם** (chain_id 7290058134977) — 30 stores configured, 22
+    publishing PriceFull. Haredi-sector coverage: Beitar Ilit (8 stores),
+    Jerusalem (10), Beit Shemesh (3), Modi'in Ilit (2), Bnei Brak (2),
+    plus Givat Ze'ev, Elad, Tel Tzion, Netivot, Ofakim, Ashdod, Afula.
+    Items: 59,971. Coverage on /coverage: 73.3% (8 in-dropdown stores
+    don't publish PriceFull — kept in yaml for future-pickup).
+  - **שוק העיר** (chain_id 7290058148776) — 20 stores configured, 19
+    publishing. Mixed mainstream coverage: Ashkelon, Ashdod, Kiryat Gat,
+    Kfar Saba, Bnei Brak, Ramla, Holon, Timorim, Efrat, Netivot, Or
+    Akiva, Ra'anana, Hadera, Jerusalem. Store 304 = online fulfillment
+    hub (Ramot); 10 online duplicates (305, 307, 309, 311-314, 318, 319,
+    322) deliberately excluded. Items: 81,586. Coverage: 95.0%
+    (store 007 לב אשדוד intermittent).
+
+- Files added/modified (commit 44441b6):
+  - `scraper/shefabirkat.py` — new, 4-line subclass
+  - `scraper/shukhayir.py` — new, 4-line subclass
+  - `scraper/registry.py` — 2 imports + 2 SCRAPERS entries
+  - `scraper/active_stores.yaml` + `scraper/scheduled_stores.yaml` —
+    2 new chain blocks (30 + 20 store_ids each, identical in both files)
+  - `scraper/city_names.py` — 50 STORE_CITY_OVERRIDES entries (30 Shefa
+    + 20 Shuk Hayir), all hand-curated from chain branch lists provided
+    by Eltzur in `city_list_shefa_and_shuk_hayir.xlsx`
+
+- Production Postgres seeded via `scripts/run_one.py` against both chains
+  before commit (DATABASE_URL exported from `/home/dude/scrp/.env` —
+  systemd service uses EnvironmentFile=, not Environment=).
+- /coverage endpoint verified showing 11 chains, 242 stores configured,
+  229 loading 72h.
+- Frontend live smoke test: both chains appear in city dropdown, in price
+  comparison cards, in the all-chains count ("מחפש ב-11 רשתות").
+
+**Confirmed working patterns from 9d-4 (reusable for future bina chains):**
+
+1. BinaProjectsScraper base class is stable across 3 chains now (King
+   Store, Shefa, Shuk Hayir). Future bina onboardings = ~4 line subclass
+   + yaml block + STORE_CITY_OVERRIDES entries.
+2. ZIP-not-gzip magic-byte detection in `_decompress` handled all 3
+   chains correctly without modification.
+3. The "stores in dropdown but not in Stores XML" pattern is normal for
+   bina chains (King Store: 2, Shefa: 8) — they often publish PriceFull
+   anyway, so keep them in the yaml.
+4. `scripts/run_one.py` against local SQLite is the right pre-prod test;
+   reusing `DATABASE_URL` from systemd env file is the right prod seed.
+
+**Process learnings (added to operating notes):**
+
+- **Cheapersal (https://cheapersal.co.il)** is a competitor reference site
+  with full chain/branch/city coverage. Use as a market-spec for which
+  chains exist, how brands are split (e.g., Cheapersal separates AM:PM
+  from Alonit from Dor Alon — direct empirical answer to the Paz/Dor Alon
+  brand-filtering question), and what chains we haven't onboarded yet.
+  Add to general references; consult when scoping new chain waves.
+- **CC compact-summary screen** is NOT tool output — it's CC summarizing
+  its own context to itself when context fills up. If it appears,
+  immediately start a fresh CC chat. Pattern recognition cue: it begins
+  "● Compact summary" with a bulleted "Primary Request" / "Key Technical
+  Concepts" structure.
+- **PowerShell 5.1 `Set-Content -Encoding utf8` prepends a UTF-8 BOM**
+  that lands as a stray  at the start of commit subjects. Cosmetic only,
+  but for clean subjects use `Set-Content -Encoding utf8NoBOM` or
+  `[System.IO.File]::WriteAllText($path, $msg, [System.Text.UTF8Encoding]::new($false))`.
+  Do NOT amend + force-push to fix a BOM after the fact.
+- **Modi'in Ilit ≠ Modi'in-Maccabim-Re'ut.** These are two different
+  municipalities ~15km apart, with completely different demographics
+  (Haredi vs secular/mixed). Eltzur initially requested merging them in
+  CITY_VARIANTS; pushed back successfully. Same class of risk as the
+  Pardes Hanna-Karkur split caught in 9d-2. Future-self warning: never
+  merge cities sharing a name fragment without confirming they're the
+  same municipality.
+
+**Commit:** `44441b6` — "feat(scrapers): Shefa Birkat Hashem + Shuk Hayir
+(bina-projects, chains 10 & 11)" (note: BOM artifact on subject line,
+intentionally not amended).
+
+---
+
+## Session 9d-6 — CITY_VARIANTS cleanup + Shufersal sweep + 4 new chains + Kamatera frontend migration
+
+### Commits
+- 7fae88a: CITY_VARIANTS cleanup — 14 new canonicals, 5 variants added, 17 STORE_CITY_OVERRIDES
+- cab4094: Shufersal full sweep — 25 → 320 stores (95 BE excluded, 2 wholesale excluded, 878 deleted from DB)
+- add0932: 4 new Cerberus scrapers — Dor Alon/AM:PM (157), Paz/Alonit (262), Fresh Market (45), Super Yuda (26). Registry now 15 chains.
+- 74f9880: scripts/deploy_frontend.ps1 — Kamatera frontend deploy script
+
+### Infrastructure
+- super.xxl.co.il frontend migrated from Hostinger to Kamatera (185.229.226.190)
+- nginx static file server configured at /var/www/super.xxl.co.il/
+- SSL cert issued via certbot (expires 2026-08-29, auto-renews)
+- DNS A record updated at box.co.il: super.xxl.co.il → 185.229.226.190
+- Hostinger remains active (2yr subscription paid) — available as cold backup for xxl.co.il portal
+- Deploy process: run scripts/deploy_frontend.ps1 from repo root (builds + scps to Kamatera)
+
+### Key decisions
+- BE-branded Shufersal stores (95) excluded — pharmacy/beauty only, not groceries. Onboard as separate chain later.
+- Dor Alon = AM:PM only (157 stores, IDs 401–992 + 901–905, 991–992)
+- Paz = Alonit gas station stores (262 stores, EV charging nodes 891/4101/4102 excluded)
+- Fresh Market (7290876100000) = federation of 7 sub-brands under one chain_id: Fresh Market, Machsanei Mazon, Machsanei Lahav, Hyper Dudu, Super Dush, Tip Tov, Chaviv
+- סביון is an independent municipality, not part of Petah Tikva
+- מודיעין עילית must NEVER be merged with מודיעין-מכבים-רעות — separate Haredi municipality
+
+### Deferred / next session (9d-7) — priority order
+1. Verify tonight's cron — confirm all 15 chains seed correctly, check city_norm NULLs on new chains (Paz especially)
+2. Hazi Hinam scraper — custom HTML parser, Azure Blob, delta files (NOT PriceFull for most stores). Chain ID: 7290700100008. 12 physical stores (201–219), store 103 = delivery exclude. Price page: https://shop.hazi-hinam.co.il/Prices
+3. Victory coverage check — already in registry, check current store count vs available
+4. StoresFull XML ingestion — every chain publishes a StoresFull XML alongside price files. Should use as ground truth for store metadata instead of manual STORE_CITY_OVERRIDES. Strategic item.
+5. Promo files pipeline — t=2 on Cerberus/price pages returns promotional files. Add to DB and surface on site.
+6. Multi-select city + chain dropdowns — UI feature, add בחירה מרובה to both dropdowns
+7. Search quality — חלבי/חלב bleed (tokenization fix)
+8. Bina wave 2 — זול ובגדול, מעיין 2000 and others (lower priority)
+
+### Still deferred (lower priority)
+- Carrefour non-publishers re-check
+- fetch_store_runs schema.sql drift
+- King Store load_stores target filter
+- .env.save cleanup
+- VM reboot
+- Shefa coverage-calc fix
+- GS1 scoping (separate workstream)
+- DNS TTL: lower _railway-verify TXT record TTL from 7200 → 600 (cosmetic)
+
+---
+
+## Session 9d-7 (June 1 2026) — StoresFull XML ingestion + cron fixes
+
+### Commits
+- a6c2edb: scripts/ingest_store_xml.py — StoresFull XML city ingestion script (dry-run safe, --apply to write)
+- fddc113: fix — never overwrite good city_norm with NULL (safety guard)
+- 2533161: fix — קרית/קריית variants for missing canonicals (קריית מוצקין, קריית שמונה, קריית אתא)
+- d0b0129: fix(ui) — enable chain filter in compare mode
+
+### Data fixes applied
+- 244 city_norm rows updated from StoresFull XMLs across Shufersal, Victory, Carrefour, King Store, Rami Levy, Keshet, Tiv Taam
+- תל אביב consolidated from 3 entries → 1 (90 stores)
+- NULL city_norm: down to 23 (all intentional — online/phantom stores)
+- קשת טעמים name fix in chains table
+
+### Infrastructure fixes
+- systemd TimeoutStopSec + TimeoutStartSec set to infinity (cron was being killed by 1min30s timeout)
+- Added 2G swap (/swapfile2) — total swap now 4G, persisted in /etc/fstab
+- Root cause of OOM kill: Shufersal 320-store scrape peaks at 1.6G RAM + 933M swap. Fix: more swap for now; delta files as long-term solution
+
+### Cron status
+- Ran successfully May 30 (429 stores, 2.45M prices, 11 chains)
+- Killed twice June 1 — first by timeout, then by OOM during Shufersal 320-store scrape
+- Third attempt running now with timeout=infinity + 4G swap
+
+### 9d-8 priorities
+1. Verify tonight's cron completes successfully
+2. Promo files pipeline (t=2 files → DB → surface on site)
+3. Hazi Hinam scraper (delta-aware, custom HTML parser)
+4. Victory coverage check
+5. Search quality — חלבי/חלב bleed
+6. Bina wave 2 — זול ובגדול, סופר ספיר, סיטי צפרير and others from Store_XML unknowns
+7. Delta files architecture (replace PriceFull with Price delta for high-store-count chains)
+
+### Still deferred
+- Carrefour non-publishers re-check
+- fetch_store_runs schema.sql drift
+- King Store load_stores target filter
+- .env.save cleanup
+- VM reboot (deferred again — cron running)
+- Shefa coverage-calc fix
+- GS1 scoping
+
+### Additional items completed late session
+- systemd timeout fix (infinity) + 2G swap added (/swapfile2, persisted in fstab)
+- CLAUDE.md created (ead1a3f) — CC operating guide, replaces handoff paste at session start
+- Cron ran successfully past store 326+ (previous kill point was 283) — swap fix confirmed working
+- Cron still running at 15:05 on Paz chain (store 541/262) — architectural concern flagged
+- Decision: switch to delta (Price) files for daily scraping in 9d-8
+
+### City normalization — BROKEN, needs rebuild in 9d-8
+
+Current state (June 1 2026 end of session):
+- city_norm column has ~150+ distinct values, many wrong: neighborhoods treated as cities, duplicate spellings, obsolete names (נצרת עילית), non-existent places (כוכב הצפון, כורדני, עמק חפר, צומת גבעת מרדכי, צור יגאל, צור משה)
+- Multiple manual SQL patches applied this session made things worse, not better
+- Cron overwrites fixes every night since scrapers use normalize_city() which maps to our broken canonicals
+- Root cause: no authoritative city reference — we've been patching reactively
+
+What's needed (9d-8 Task 0 — before cron architecture work):
+- Download Israel CBS official settlement list as authoritative reference
+- Build city_canonical mapping table in DB (settlement_code → official_name)
+- Add city_canonical column to stores table
+- One-time migration: fuzzy-match all existing city_norm values to canonical list
+- Update /cities API endpoint to use city_canonical
+- Update cron to write city_canonical on each scrape
+- Reference: Cheapersal uses "תל אביב - יפו" (238 stores, 28 chains) as canonical — confirms official CBS naming
+
+9d-8 kickoff prompt: see below handoff.
+
+### 9d-8 priorities (revised)
+0. **City normalization rebuild** — see "City normalization — BROKEN" section above; must land before cron architecture work
+1. Verify cron completed all 15 chains + new chains seeded correctly
+2. Delta architecture: switch daily to Price delta + add PromoFull pipeline + chain parallelism
+3. Bina wave 2: זול ובגדול, סופר ספיר, סיטי צפרير + others from Store_XML unknowns
+4. Search quality: חלבי/חלב bleed fix
+5. Hazi Hinam scraper (dedicated session — delta-aware, custom HTML)
+6. Victory coverage check
+
+---
+
+### Session 9d-9 (June 4-5, 2026) — Delta Price Files + Per-Store Parallelism + Hazi Hinam + Missing Stores
+
+#### Performance
+| Chain | Before | After | Speedup |
+|---|---|---|---|
+| Shufersal | 4436s (74 min) | 544s (9 min) | 8× |
+| Tiv Taam | 6913s (115 min) | 93s (1.5 min) | 74× |
+| Rami Levy | ~600s | ~132s | ~4.5× |
+
+#### Delta Price file architecture
+- Daily cron now uses Price (delta) files instead of PriceFull for 8 chains
+- DELTA_CHAINS: Shufersal, Rami Levy, Osher Ad, Yochananof, Keshet, Fresh Market, Super Yuda, Hazi Hinam
+- Excluded from delta: Tiv Taam (no delta files published), Carrefour (portal down), Victory/King Store/Shefa/Shuk Hayir (non-Cerberus, needs build_price_index)
+- PriceFull remains available via --full flag in run_one.py for seeding new stores
+- Generator exhaustion bug fixed in shufersal.py (items = list(items))
+
+#### Per-store parallelism
+- ThreadPoolExecutor(max_workers=STORE_WORKERS=4) added to base.py and shufersal.py
+- Each worker thread owns its own DB connection (connect()/close() inside worker)
+- fetch_runs row inserted upfront with status='running'; workers write fetch_store_runs per-store
+- OOM incident during testing — root cause was two parallel Shufersal runs (manual + cron), not a code bug
+
+#### חצי חינם scraper (new chain — priority 3)
+- Chain ID: 7290700100008, 11 physical stores (201-217, store 103=online excluded)
+- Portal: shop.hazi-hinam.co.il/Prices — public Azure Blob, no auth
+- PriceFull only published for store 103 (online) — physical stores get Price delta only
+- Seeding strategy: seed_hazihinam.py copies store 103 PriceFull to all 11 physical stores (92,103 prices)
+- Daily delta: 11/11 stores, 4 seconds, confirmed working
+- docs/portals.md created — portal credentials and delta status for all chains
+
+#### Missing stores expansion (priority 2)
+| Chain | Before | After | Added |
+|---|---|---|---|
+| Rami Levy | 26 | 98 | +72 |
+| Yochananof | 15 | 50 | +35 |
+| Keshet | 10 | 22 | +12 |
+| Osher Ad | 12 | 23 | +11 |
+| Hazi Hinam | 11 | 12 | +1 |
+
+- All new stores seeded with PriceFull via run_one --full before delta takeover
+- Yochananof: only 3/50 files loaded in seed run — needs investigation
+- Osher Ad: 0 files in seed run — likely delta-only portal, needs investigation
+
+#### Commits this session
+- 82c190b: delta Price file support for Shufersal
+- 3b19a25: fix generator exhaustion (items = list(items))
+- ab4de5c: per-store ThreadPoolExecutor parallelism
+- 277dc74: delta for all Cerberus chains + docs/portals.md
+- d8bb4aa: seed_hazihinam.py
+- 84abe57: run_one delta flag
+- 7aaa986: run_one --full flag
+- 533e9e4: missing stores for 5 chains
+
+---
+
+### Session 9d-9 (June 5, 2026) — Delta Files + Promo Pipeline + HaziHinam + Missing Stores
+
+#### Final state
+- 14 chains, 812 stores, 4,925,598 prices
+- All 14 chains updated today (5.6.2026) — first full clean run
+- Cron runtime: 7615s today (seeding run) — expected ~15-20 min next week with delta
+- Errors: none on manual run
+
+#### What was completed
+- Delta Price files for 8 chains (Shufersal + 6 Cerberus + HaziHinam)
+- Per-store ThreadPoolExecutor parallelism (STORE_WORKERS=4)
+- PriceFull fallback when no delta found for a store
+- Promo pipeline: promos table, parse_promo_file, bulk_insert_promos, build_promo_index for Shufersal/Cerberus/HaziHinam
+- HaziHinam scraper (11 stores, seeded from store 103)
+- Missing stores: Rami Levy +72, Yochananof +35, Keshet +12, Osher Ad +11, Carrefour +133, HaziHinam +1
+- Connection pool: 20+10, chain workers: 4
+- SQLite fallback removed — fail fast on missing DATABASE_URL
+- docs/portals.md and docs/chain_registry.md created
+- chains table populated for all 14 chains
+
+#### Next session (9d-10) priorities
+1. API endpoint for promos + frontend highlighting (≥10% discount or 2-for-1)
+2. Store address/branch name in search results (from StoresFull XMLs)
+3. Measure Sunday cron runtime — if <20 min, consider STORE_WORKERS=8
+4. Fix DATABASE_URL export in systemd service (Environment= directive)
+5. Victory + BinaProjects delta (portals were down Friday)
+6. Supabase keep-alive: sudo systemctl enable supabase-keepalive.timer && sudo systemctl start supabase-keepalive.timer
+
+---
+
+### Session 9d-10 (June 9-14, 2026) — Store Seeding Fixes + Search Performance + Geolocation + Promo Failure
+
+> **Superseded by SU10A-5:** the "60K corrupt" framing was wrong — see SU10A-5. The rows were legitimate per-store fan-out, not duplication.
+
+#### Completed
+- publishprice.py regex bug fixed (subchain vs store_id capture). Carrefour: 59→148 seeded stores, 380K→827K prices.
+- Carrefour padding normalization: duplicate rows (0002/002) merged via scripts/fix_carrefour_padding.py. 91 rows merged.
+- Victory scraper rewritten to new laibcatalog REST API (old /webapi endpoint was 404). Victory: 17→69 stores, 604K prices.
+- Shefa 8 physical stores confirmed promo-only (no PriceFull). Leave in yaml, mark as chronic no-file.
+- Shufersal stores 413 (ONLINE) and 844 (Express Ramat Gan) added to active_stores.yaml and seeded.
+- scripts/seed_one_store.py added for targeted single-store seeding.
+- Cron post-run coverage report added to cron_main.py.
+- Search performance: 14s→0.28s cold, ~0.1s warm.
+  * Root cause: missing idx_prices_store_fk index + stale statistics + nested loop query plan
+  * Fix: ANALYZE prices, covering index idx_prices_item_store_cover, two-step store_fk pre-fetch in fetch_prices(), SET LOCAL enable_nestloop=off
+  * Migration: db/migrations/9d10_perf_indexes.sql
+- IP geolocation city auto-detect on page load (ip-api.com). localStorage persistence for returning users. Eliminates all-cities cold query.
+- API warmup ping on page load (/health) to eliminate gunicorn cold start.
+- docs/xxl-stack.md created — technical reference for CC (schema, conventions, common mistakes).
+- Victory promo CardinalityViolation fixed: bulk_insert_promos now deduplicates by (item_code, promo_id) before upsert.
+
+#### Failed / To Be Rebuilt from Scratch
+- **Promo pipeline: CRITICALLY BROKEN.** Victory DB has 60K+ active promo rows (impossible — real store has ~500-1000 promos). Shufersal promo data also suspect. Root causes unknown but likely:
+  1. Promo parser inserting duplicate rows across stores incorrectly
+  2. item_code matching between promos and prices tables is wrong
+  3. discount_pct calculation logic is fundamentally flawed for Israeli promo formats
+  * Promo display: NOT SOLVED. Promo table data is corrupt/inflated (Victory 60K+ rows, dedup bug). Frontend promo badges non-functional. Full audit and rebuild required — do not attempt incremental fixes. Deferred.
+  * מבצעים חמים page: exists at /promos but shows garbage data
+  * ALL promo work needs investigation and rebuild in a dedicated session
+  * DO NOT attempt incremental fixes — start fresh with promo data audit
+
+#### Deferred
+- P3: Store address columns (ALTER TABLE + ingest_store_address.py) — not started
+- Shefa 8 promo-only stores: decide whether to remove from active_stores.yaml
+- Carrefour store 006 cleanup: DONE (store was already absent from yaml — no action needed)
+- פומלית in פסטרמה results: token matching bug, documented, deferred
+- Victory promo deduplication (60K rows): needs full promo table audit and re-seed
+
+#### Known Issues Carried Forward
+- Promo table data is corrupt/inflated — do not use promo data until audited
+- CC must always git push after every commit (added to CLAUDE.md)
+- Cron runtime now ~70+ min due to expanded store count
+
+---
+
+### Session 9d-11 (June 14, 2026) — Carrefour Cleanup + GS1 Scoping
+
+#### Completed
+- Carrefour store 006 removal: no-op — store was already absent from active_stores.yaml (cleaned in prior session)
+- docs/gs1_integration.md created: full GS1 integration scoping document (schema, API changes, scraper enrichment flow, rollout plan, risk register, open questions). SCOPING ONLY — no implementation.
+
+#### Pivoted
+- GS1 path deprioritized (slow response from GS1 IL). Investigating Cheapersal catalog scraper as alternative product data source.
+
+#### Deferred
+- GS1 integration implementation: blocked on GS1 IL reply + decision gates (see docs/gs1_integration.md Phase 0)
+
+---
+
+| Session | What | Status |
+|---|---|---|
+| 1–6 | Project skeleton, SQLite schema, XML parser, Shufersal scraper, search CLI, Rami Levy + Osher Ad scrapers, basic API + UI | ✅ |
+| 7a | Railway backend + Postgres migration | ✅ |
+| 7b | Frontend deploy + custom domains + DNS | ✅ |
+| 8a | Victory/Yochananof/Keshet scrapers + SQLAlchemy port + snapshot mode + cron | ✅ |
+| 8b | Canonical naming via majority/weighted voting + search filtering | ✅ |
+| 8c | OpenFoodFacts enrichment (Hebrew names, images) | ✅ Code ready, partial production data |
+| 8d | (skipped/deferred — was about Shufersal image scraping) | — |
+| 9a | Basket feature (UI + API) + Hostinger deployment fix + 25-item limit toast | ✅ |
+| 8L | Brand identity + animated XXL logo + custom favicon | ✅ |
+| 9b | User authentication via Supabase + saved baskets | ✅ Email/pass + saved baskets in production. Google OAuth deferred. |
+| 9c | Mini-9c + Favorites + Recent Searches | ✅ 150-item logged-in cap, server-side favorites with heart icon, localStorage recent searches dropdown, cheapest-indicator visual fix |
+| 9d-1 | City expansion Phase 1 + Carrefour scraper + verification system | ✅ Carrefour scraper + `publishprice.py` base class shipped. 5 new cities added. PriceFull-verification gate (`active_stores.yaml`) shipped. 58 verified / 14 excluded. Cron-command persistence bug found and fixed (Procfile now authoritative). Surfaced: geo-blocking on 2 chains, ~2min/store scrape bottleneck, Shufersal sub-chain heterogeneity. |
+| **9f** | **XXL Portal Page — live on xxl.co.il** | ✅ Portal landing live at https://xxl.co.il with 3 vertical tiles, AI search bar (mocked router), 2 בקרוב sub-pages, hostname-based routing in React. Hebrew defaults fixed. DNS + parked domain + SSL + clean root URL all working. |
+| **9f-followup** | **Portal polish: SEO, OG, email signup backend, GA4 + cookie banner** | ✅ SEO/OG meta tags hostname-aware. Email signup writes to Supabase portal_email_signups table. GA4 wired (pending Eltzur measurement ID swap). Minimal Hebrew cookie banner with X-dismiss-as-consent. |
+| **9g** | **Scraper performance + full Railway → Kamatera migration** | ✅ Bulk inserts (9g-1). Scraper + Postgres migrated to Kamatera (9g Phases 2-6). FastAPI web service migrated to Kamatera with nginx + Let's Encrypt (9g Phase 7). Railway fully decommissioned. Cron 3m31s, 7 chains, all geo-blocks resolved. |
+| **9k** | Rami Levy split-store reconciliation | ✅ 14 Rami Levy stores existed as duplicate stores rows (sub_chain_id='1' legacy + '001' canonical), prices split. Merged onto '001', 89,298 duplicate price rows removed, 1 stale Shufersal ONLINE duplicate cleaned. No scraper code change needed (_pad_store_id from 9j-followup already prevents recurrence). |
+| **City-data fix** | store→city correction | ✅ Victory wrote full store name into city column; Yochananof name-guessing picked streets. 17 stores corrected in DB (9 via override map, 8 Yafo variants). Added STORE_CITY_OVERRIDES in city_names.py + 'תל אביב יפו'/'יפו' normalization. Deployed. |
+| **9d-3** | Shufersal per-store fetch + Tiv Taam onboarding | ✅ Shufersal global page-scan eliminated; per-store fetch (1 req/store, same shape as all other chains). TivTaam Cerberus scraper shipped: 46/46 stores verified, 0 city NULLs, wired as 8th chain in cron. CITY_CODES: 12 new MOI codes + 7 spelling/name overrides. King Store / Paz brands (freshmarket) / Dor Alon deferred — see 9d-3 session notes. |
+| **9d-4** | King Store (bina-projects) + Supabase keep-alive fix | ✅ King Store live as 9th chain (chain_id 7290058108879): 28 publishing stores, 148,016 prices, Arab-sector cities. BinaProjectsScraper reusable base class (ZIP-not-gzip fix, 3-endpoint JSON portal). Supabase ping fixed to hit real Postgres via /rest/v1/. scripts/run_one.py added. |
+| 9d-5 | 2026-05-28 | Shefa Birkat Hashem + Shuk Hayir (chains 10 & 11) onboarded via BinaProjectsScraper base class. 50 stores added, ~141K items in production Postgres. |
+| **9d-6** | CITY_VARIANTS cleanup + Shufersal full sweep + 4 new chains + Kamatera frontend migration | ✅ Shufersal 25→320 stores (95 BE excluded). Dor Alon/AM:PM, Paz/Alonit, Fresh Market, Super Yuda added. Registry: 15 chains. Frontend migrated to Kamatera nginx. |
+| **9d-7** | StoresFull XML ingestion + cron fixes | ✅ 244 city_norm rows updated from StoresFull XMLs. systemd timeout→infinity + 4G swap (OOM fix). Cron: 429 stores, 2.45M prices, 11 chains. Decision: switch to delta (Price) files for daily scraping. |
+| **9d-8** | city_canonical rebuild + parallel chains + Shufersal 403 fix | ✅ CBS 2024 city_canonical: 1057 stores, 0 NULLs. Paz/Dor Alon removed (422 stores, 887K prices deleted). City dropdown 0.13s (was 3.7s). Chain-level ThreadPoolExecutor(max_workers=6). Shufersal lazy per-store URL fetch (403 fix). |
+| **9d-9** | Delta Price files + per-store parallelism + Hazi Hinam + missing stores | ✅ Delta for 8 chains (Shufersal + 6 Cerberus + Hazi Hinam). STORE_WORKERS=4 — Shufersal 4436s→544s (8×), Tiv Taam 6913s→93s (74×). HaziHinam scraper + seed script. +131 missing stores (Rami Levy +72, Yochananof +35, Keshet +12, Osher Ad +11, Hazi Hinam +1). docs/portals.md. run_one.py --full flag. |
+| **9d-10** | Store seeding fixes + search performance + geolocation + promo failure | ✅ Carrefour 59→148 stores (regex+padding fix). Victory rewritten to laibcatalog REST API (17→69 stores). Shufersal stores 413+844 added. Search 14s→0.28s (covering index + nestloop off + store_fk pre-fetch). IP geolocation city auto-detect. API warmup /health ping. docs/xxl-stack.md created. ❌ Promo pipeline CRITICALLY BROKEN (60K+ corrupt rows) — marked failed, needs full audit and rebuild. **[Superseded by SU10A-5: the rows were not corrupt; pipeline rebuilt, all 14 chains live.]** |
+
+### Session SU10A-1 (July 26-27, 2026) — GS1 API access unblocked (auth confirmed working, root cause was local)
+
+**Status change from 9d-11:** GS1 IL access is no longer blocked. Registration completed and paid (₪2,950, invoiced 07/07/2026, signed 23/06/2026 under Elad Tzur, GLN 7292117800007). External-user + access-delegation forms on file in `GS1/` (gitignored, not in repo history). GS1 gave API credentials (account `xxlmain`) this session.
+
+**Confirmed working, end to end:**
+- Domain: `https://hq.gs1ildigital.org` — real, live, Cloudflare-fronted, Symfony backend. This is the ONLY confirmed-working domain for the search endpoint.
+- **Not our domain:** `fe.gs1-retailer.mk101.signature-it.com` (the doc's example for GET PRODUCT/media/fieldInfo endpoints) does not resolve at all — dead or was never real; "mk101" is another client's account code left in a templated doc. ~~`retailer.gs1ildigital.org` (the web UI you log into manually) is a completely different app — hitting the API path there returns a Symfony 404, not our endpoint.~~
+  - ⚠️ **CORRECTED 2026-07-28 (SU10A-2): the strikethrough above is WRONG and cost the next session a wrong turn.** `retailer.gs1ildigital.org` **does** serve the external API, on the same HTTP Basic Auth credentials as `hq.gs1ildigital.org`. Both of these returned **200 with real data** when probed directly:
+    - `GET https://retailer.gs1ildigital.org/external/product/{product_code}.json?hq=1` — the full product detail record (17 sections incl. Kashrut, ingredients, allergens, nutritional values table, dimensions).
+    - `GET https://retailer.gs1ildigital.org/external/product/{gtin}/files?media=all&default_image=1&hq=1` — product imagery.
+    The original 404 was presumably from a different path, or from before the credential casing bug was fixed. **Do not treat this domain as dead.** See § SU10A-2 for the field shape.
+- Auth mechanism: HTTP Basic Auth, confirmed via `WWW-Authenticate: Basic realm="Secured"` on the 401 challenge.
+- Endpoint verified live: `POST https://hq.gs1ildigital.org/external/app_query/select_query.json` with a `modification_timestamp` query returns real cross-supplier product data (verified against GLN 7290000200002, brand טיב טירת צבי).
+- Credentials stored server-side in `~/scrp/.env` as `GS1_USERNAME` / `GS1_PASSWORD` (uppercase — pre-existing before the new lowercase-default convention below; left as-is since it's now verified working, not touched to avoid re-breaking it).
+
+**Root cause of the entire day's "401 / IP not allowlisted / wrong auth" investigation:** a casing mismatch. `.env` had `GS1_Username`/`GS1_Password` (mixed case); every test script referenced `$GS1_USERNAME`/`$GS1_PASSWORD` (uppercase). Bash variable names are case-sensitive, so `source` set the mixed-case variables with zero error while the uppercase ones stayed empty — every "failure" for most of the session was actually an empty/wrong-case credential locally, not a GS1-side block. Cost a full session of misdirected diagnostics (IP-allowlist theories, domain-guessing, PowerShell/curl quoting deep-dives) before being caught by explicitly dumping the raw `.env` bytes and comparing sourced-vs-typed-inline credentials side by side.
+
+**New policy (added to CLAUDE.md):** default new env var names to lowercase going forward; always verify exact casing in the file before referencing a variable in a script, never assume.
+
+**Also fixed along the way (real bugs, not red herrings):**
+- `.env` line 1 (`DATABASE_URL`) had a stray leading `=` from a bad manual edit — fixed (typo, per Dude).
+- `.env` used `:` instead of `=` for the GS1 lines on first attempt — fixed.
+- Unquoted `$` in `GS1_PASSWORD` was getting partially expanded by `source` — fixed by single-quoting the value.
+
+**Not yet done — next session:** build the actual fetch/storage pipeline for the 72 approved vendor catalogs (original ask this session) — sweep by `modification_timestamp` across all connected suppliers, paginate via `get_chunks`, store raw + parsed records keyed by GTIN in a new schema (mirrors the `flights` schema-on-same-Postgres pattern), join path back to existing `items`/`item_code` tables per the GS1 scoping doc from 9d-11 (`docs/gs1_integration.md`). Also: let GS1's support contact know the issue resolved on our end, no IP allowlist or password reset needed after all.
+
+---
+
+### Session SU10A-2 (July 27-28, 2026) — GS1 phase-1 catalog pipeline shipped end to end
+
+Delivers the pipeline SU10A-1 scoped as "next session". Fully isolated: no scraper or city-resolution code was touched.
+
+**Shipped:**
+- **Schema** (`db/migrations/su10a1_gs1_catalog.sql`, + `su10a1b_gs1_gln_consolidate.sql`) — new `gs1` schema on the same Postgres, mirroring the `flights` schema-on-same-DB pattern. `gs1.products` (catalog rows, `product_code` UNIQUE, indexed on `gtin`/`gln`/`modification_timestamp`) and `gs1.sync_runs` (watermark + run status). Both migrations carry explicit `GRANT ... TO scrp_app` per the 9d-2 lesson — migrations run as postgres superuser, the app connects as `scrp_app`.
+- **`scraper/gs1_fetch.py`** — sweeps `modification_timestamp` across all connected suppliers, paginates `get_chunks` until an empty page, upserts into `gs1.products`, records a watermark in `gs1.sync_runs` so the next run is incremental. `--full`, `--dry-run`, `--page-size`, `--max-pages` flags. Loads `.env` itself via python-dotenv.
+- **Live data: 22,549 products across 77 suppliers.** Full sweep ran in 27s (46 pages × 500). Incremental runs since returned 3 and 1 rows respectively — the timestamp filter is honoured server-side.
+- **Wired into the 03:00 cron** (`scraper/cron_main.py::run_gs1_catalog`), incremental mode, after the canonical-name step. Lazily imported and exception-wrapped so a GS1 failure logs but **never fails the supermarket scrape** — same treatment as the canonical step and `ping_supabase`.
+- **`scripts/gs1_backfill_text.py`** — one-off backfill, imports `_clean_text` from `gs1_fetch` rather than reimplementing it so the two cannot drift. Dry-run by default.
+
+Commits: `5a46ddf`, `ac2a778`, `7bc5729`, `3afed40`, `5d5369c`, `993bb52`.
+
+**Three real bugs, all found by live testing rather than review — each invisible to the one before:**
+1. **Nested response envelope.** The endpoint returns a *doubly* nested bare list `[[{row},...]]` — `payload[0]` is the row list, not `payload`. Killed the first dry run. Caught only because a diagnostic `sorted()` call raised on it; that line is now type-guarded so a shape surprise logs instead of aborting.
+2. **Timezone-naive vs aware comparison.** The watermark round-trips through a `TIMESTAMPTZ` column and returns offset-aware; the API's timestamps parse naive. Comparing them raises `TypeError`. **Structurally impossible to hit on a first run** — with no stored watermark everything is naive — so it was guaranteed to appear only on run 2. Fixed with `_as_naive_local()`.
+3. **`id` is not the stable key — `product_code` is.** GS1 reissues a changed product under a **brand-new `id`** while keeping its `product_code`. `ON CONFLICT (id)` therefore let the reissue through as a fresh INSERT, which then tripped the `product_code` UNIQUE constraint. Now `ON CONFLICT (product_code) DO UPDATE SET id = excluded.id, ...` — the row updates in place and adopts the new id. Verified: 3 reissued products adopted new ids, 0 rows left on the old ids, total unchanged.
+
+**Also fixed:** the failure handler was running `UPDATE gs1.sync_runs` on an already-aborted transaction, so `InFailedSqlTransaction` **masked the real `IntegrityError`** and left a run stuck in `running`. It now logs the original exception *first*, then rolls back before recording the failure.
+
+**Text normalization** — a supplier survey found the API returns HTML-escaped text (`Lord &amp; King`, `vegan&#039;s choice`) and pads values with stray spaces/newlines, so `מיה`, `מיה ` and `מיה\n` counted as three separate brands. `_clean_text()` now unescapes, collapses whitespace, trims, and maps blank → NULL, applied to `brandname` / `trade_item_description` / `group_name` (identifier columns deliberately excluded). Backfilled 5,498 historical rows: **distinct brands 1,582 → 1,351, i.e. 231 phantom duplicates collapsed**; entity/whitespace counts all to zero; totals unchanged at 22,549 / 77.
+
+**Data inventory — what we actually hold.** Catalog *metadata only*: brand, trade item description, GTIN, GLN, category (`group_id`/`group_name`), status, and effective/discontinued/modification dates. **No images, no nutrition, no kosher certification.** The list response carries a `content` field but it is **empty in 100% of 200 sampled rows** — the richer per-product data lives behind the per-product detail endpoint. That is phase 2, and `full_content` JSONB + `full_content_fetched_at` + the partial index `idx_gs1_products_needs_full_content` already exist unused for it. Phase 1 never writes them, so a re-sweep cannot clobber phase-2 data.
+
+**Phase-2 endpoints — ✅ RESOLVED AND DELIVERING DATA (2026-07-29).**
+
+**CURRENT STATE — read this first:**
+- **GS1 fixed the quota.** Rami (teum.co.il) confirmed the block was account-side and raised our pull allowance. Note the first retest ~1h after his email still returned identical 403s — **the change took some hours to propagate**, so a single failed retest after a support fix does not mean it didn't land.
+- **Detail backfill: COMPLETE.** `scraper/gs1_fetch_detail.py` ran **11,492/11,492, 0 failures, ~2h06m** (7,595s, sustained 1.5–2.3 req/s). `gs1.products.full_content` is now populated on **11,496 / 11,496 targets — 100%**, ~59 MB of JSONB.
+- **Field coverage:** Kashrut block **100%**, `media_assets` **100%**, ingredients **97%**, nutrition table **67%** (a third of products simply publish no panel — treat every field as optional).
+- **Image pull: ✅ COMPLETE (2026-07-29 18:13).** `scraper/gs1_fetch_images.py`, resize to 800px / JPEG-80, **raw bytes never written to disk**. Final log line: `DONE — fetched=11,450 failed=46 skipped=0 in 11705s` (3h15m). 11,450 files on disk, **0.62 GB / 662 MB, avg 57.1 KB per image**; **24.92 GB of raw bytes were downloaded and never written**. Disk after: 13 GB free (55% used).
+  - **The storage projection held — and beat itself.** Predicted ~0.83 GB, actual **0.62 GB (25% under)**. The resize-in-memory design is what made this feasible at all: raw would have been ~32 GB against a 30 GB volume, i.e. the naive approach could not have completed regardless of time.
+  - **46 failures (0.4%), all benign and fully accounted for:** 39 × `UnidentifiedImageError` (bytes returned are not a decodable image) + 7 × `HTTP 404` ("file is missing on the server"). Both are upstream data defects, not our bugs — no retry is worthwhile.
+  - **Zero 403s across the entire 3h15m run**, confirming Rami's quota fix is durable under sustained load, not just on spot checks.
+  - Rate held at 1.0–1.1/s throughout, matching the "latency-bound, `--rps` never engages" note below.
+- **Rate reality:** image calls are **latency-bound at ~1.1s each solo**, so `--rps` never engages and raising it does nothing. Under concurrent load with another job it degrades to ~3.7s — **don't run two long GS1 jobs at once.**
+- **Gotcha:** the nightly GS1 sync fired *mid-backfill* and reissued row `id`s underneath it (our upsert keys on `product_code` and adopts new ids), leaving a 6-row gap. Harmless — the script skips already-populated rows, so a re-run closed it in 4s. Any long job keyed on `gs1.products.id` is exposed to this.
+
+<details><summary><b>Historical: the 23-attempt investigation that preceded the fix (kept — still useful if this recurs)</b></summary>
+
+> ⚠️ This block originally read "PROBED AND CONFIRMED WORKING (2026-07-28)". That was true of **one product** and wrongly generalised. The state below is what we saw *before* GS1 lifted the quota.
+>
+> **Tally: 23 distinct product_codes attempted, 1 success.** The single success was the original probe product `IL_7290000200002_7290013906892_1519196448768`, which returned 200 on every repeat, indefinitely. **Every other product returned `403 ["you have reached to your limit"]`** — a 34-byte body, byte-identical every time, regardless of supplier, product status, or parameters.
+>
+> **Six hypotheses ELIMINATED — do not re-test these:**
+>
+> | hypothesis | how it was ruled out |
+> |---|---|
+> | Credential / casing bug (the SU10A-1 class) | `gs1_fetch_detail.py` imports the *same* `_credentials()` as the working list script; `Authorization` headers are **byte-identical** (same SHA-256), both `Basic`, no whitespace, no casing variants present in env |
+> | `hq` parameter value or presence | tested **all three** states — `?hq=1`, omitted, and `?hq=0` — identical 403 each time |
+> | Per-supplier handshake / release | **17 failures vs 1 success within the same supplier** (`7290000200002`). If access were supplier-scoped they would behave alike |
+> | Missing retailer GLN parameter | tried `&retailer_gln=`, `&gln=`, `&rgln=` with GLN `7292117800007` — all three ignored, identical 403 |
+> | Rate limiting / daily quota | fails on the **first request of a fresh process**; no `X-RateLimit-*` or `Retry-After` headers exist at all; the 403 is origin-generated, not Cloudflare edge; **and it did not reset after 24h** (identical codes retested a day later → same 403, control still 200) |
+> | Wrong `$Domain` / routing | **settled by DNS.** GS1's docs template these endpoints as `https://$Domain/…`; neither our GLN nor our account slug resolves in that pattern — **and the doc's own example host `fe.gs1-retailer.mk101.signature-it.com` does not resolve either**, so that naming scheme is retired, not parameterised. Our two working hosts (`retailer.` and `hq.gs1ildigital.org`) resolve to an **identical Cloudflare IP set**, so we are already reaching GS1's real infrastructure |
+>
+> **GS1 support (Rami, teum.co.il):** confirmed the cause is **account-side** and said they were *"increasing your pull allowance"*. Retested ~1 hour later against 3 fresh product_codes across 3 different suppliers — **still identical 403, no change whatsoever**. As of end of session this is **pending on GS1's end, with no ETA given.**
+>
+> **Outcome:** everything testable from our side was exhausted; the cause was account-side, exactly as the eliminations implied, and GS1 resolved it. `scraper/gs1_fetch_detail.py` (`b201804`) needed **no change at all** once entitlement landed — the code was correct throughout, the blocker was purely permissions. **If a `403 ["you have reached to your limit"]` ever returns, skip straight to GS1 support: all six hypotheses above were tested and eliminated, and the answer was on their side both times.**
+
+</details>
+
+The field shapes below came from genuine 200 responses and remain accurate. (This also corrects the SU10A-1 claim that the domain 404s — see the correction there.)
+
+- **Detail:** `GET /external/product/{product_code}.json?hq=1` → 12.8 KB, JSON served as `text/html`, a **list of one** with keys `product_info` / `private_data` / `media_assets` / `multi_pack`. `product_info` holds **17 sections**, and everything phase 2 wanted is present:
+  - `Kashrut` (9 fields) — Kosher_for_Passover, Kosher_Supervision_Type (בשרי/חלבי), Rabbinate, Board_of_Supervision, Sabbath_Observing_Plant, Sheviit_Orlah_Tevel. A full certification block with code pairs, not a flag.
+  - `Product_Components_and_Instructions_General` — `Ingredient_Sequence_and_Name` (full ingredient string with percentages), `Allergen_Type_Code_and_Containment` + `..._May_Contain` (coded), `Diet_Information`.
+  - `Nutritional_Values.table` — a structured panel (`numberOfRows: 9`), not free text.
+  - Also useful: `Product_Dimensions.Price_Comparison_Content` (unit-price basis, e.g. `100 גרם`), `Case_or_Carton_Dimensions.Amount_of_Products_in_Package_or_Carton` (**the true source of the trailing `(N)` artifacts phase 1 strips**), storage/transport temperatures, `Produced_in_Israel`, `Parallel_Import`, `Private_Brand`.
+  - `Internal_System_Fields.Product_Status` is a **code pair** (`מבוטל`/6306). The list endpoint exposes only the Hebrew string, so a stable status *code* exists only here.
+- **Media:** `GET /external/product/{gtin}/files?media=all&default_image=1&hq=1` → **`{"file": "<base64>"}`**. **Not a URL — raw base64 JPEG**, 2.7 MB for a single image (EXIF: Canon 5D Mk III, "Yossi Mor Photography").
+  - **Storage is the blocker, not access.** 2.7 MB × 22,549 ≈ **60 GB** if fetched wholesale. `product_image_url` cannot be filled from this without decoding, resizing and self-hosting the bytes.
+  - `media=all` still returned a single `file` key while the detail response reports `media_assets: [3]`. Inspect `media_assets` first — it likely enumerates the assets and may allow requesting a specific or lower-resolution one.
+
+**Operational gotchas worth keeping:**
+- **The database is `xxl_super`, not `scrp`.** The repo, the server directory and the DB role are all `scrp`; the database is not. `psql -d scrp` fails.
+- **`source .env` does not reach python3 subprocesses** — plain `KEY=value`, no `export`. Proven: `DATABASE_URL` set in the shell, unset in the child. Use `set -a; source .env; set +a`, or have the script load it (gs1_fetch does). Noted in CLAUDE.md § Server access.
+- `sudo -u postgres` is **not** in the passwordless whitelist — migrations need an interactive `ssh -t`.
+- **77 suppliers = 72 originally approved + 5 added directly by GS1**, confirmed against GS1's list. No supplier filtering is applied; the fetch pulls everything the account can see, so a drift in `count(DISTINCT gln)` means an authorization change, not a bug.
+- `modification_timestamp` clusters hard: **17,391 of 22,549 rows (77%) fall in a 4-day window in Dec 2025**, and nothing predates 2025-12-28 — a bulk re-stamp/migration on GS1's side, not organic edits. July 2026 shows ~4.5× the Jan–Jun baseline.
+- `product_status` is a closed set of three Hebrew values: `פעיל` (active, 15,226), `מבוטל` (cancelled, 7,320), `נבדק` (under review, 3). A third of the catalogue is cancelled — filter on `פעיל` for sellable products.
+
+**Not yet done — next session:**
+- **GTIN-matching against the `items` table** — the join path back to `items`/`item_code` per the 9d-11 scoping doc. Nothing has been matched yet; `gs1.products` currently sits entirely on its own.
+- **Nothing is customer-facing.** No API endpoint, no UI, no enrichment of existing product data.
+- **Phase 2:** per-product detail + media endpoints — the data is confirmed present and rich, but **bulk access is BLOCKED by an account-side limit** (23 product_codes attempted, 1 success). Pending with GS1 support. See the corrected block below before doing any further testing.
+- The error-handler rollback path and the cron step inside a *real* 03:00 run are both still unexercised — the GS1 half is proven in isolation only.
+- **⚠️ The images are fetched, not served — and nothing about that is automatic.** The 11,450 files sit in `~/gs1_images` on the VPS as loose files owned by `dude`. There is **no nginx location block, no static route, no CDN, no `product_image_url` column populated, and no API field exposing them**. Acquisition and serving are two separate pieces of work, and only the first is done. Serving them is its own task: decide a URL scheme, give nginx a web-root it can actually read (the files are outside every current root and `www-data` cannot read `~dude`), map GTIN → filename, and only then surface a field the frontend can consume.
+
+> **Superseded by SU10A-3:** the first two "not yet done" bullets above are now done — GTIN matching shipped (`scraper/gs1_enrich_items.py`, 10,235 items stamped `name_source='gs1'`), and the enriched names are now genuinely customer-facing following the canonical_name fix.
+
+---
+
+### Session SU10A-3 (July 29, 2026) — Search relevance, canonical-name display bug, header logo
+
+Non-GS1 work. All three items are backend or frontend fixes found while validating the GS1 enrichment.
+
+**1. Header logo → portal (`d177f2a`, frontend deploy).**
+`web/src/components/Header.tsx` wrapped the logo in a React Router `<Link to="/">`, which inside `AppShell` on super.xxl.co.il just re-rendered the current page. Replaced with a plain `<a href="https://xxl.co.il">`. Verified by bundle hash (`index-CWn-zrYr.js`, sha256 matched live vs local) rather than trusting the deploy script's "Done!" line.
+- Note `AppShell` is *not* strictly super-only: App.tsx registers `<Route path="/*" element={<AppShell />} />` unconditionally and only `/` is hostname-switched, so `Header` also renders on e.g. `xxl.co.il/promos`. The link is sensible there too, but it isn't exclusively a super→portal jump.
+- `scripts/deploy_frontend.ps1` now has an scp exit-code check — the old "prints Done! even when scp failed" gotcha is fixed. Still worth verifying by bundle hash.
+
+**2. Search relevance overhaul (`65b700c`, backend + API restart).** Four distinct fixes in `db/query.py` / `api/routers/search.py`:
+- **Tiered relevance ranking.** New `find_barcodes_with_relevance()` scores every match on the FIRST meaningful word: `0` item_name starts with it, `1` whole word elsewhere (`\y` regex boundary), `2` substring anywhere, `3` manufacturer_name only. Tier is now the PRIMARY sort key in `_build_result`, with the old ordering nested under it (multi-chain before single-chain, then cheapest).
+- **Percentage tokens were silently dropped.** `_is_meaningful()` filtered `token.rstrip("%").isdigit()`, so "3%" was discarded and `חלב 3%` returned the same 2,247 results as `חלב`. Now only bare integers are filtered.
+- **LIKE-escaping bug (why fix 2 alone wasn't enough).** `build_word_clause` built `%3%%` with no escaping, so the literal `%` acted as a wildcard and matched "300 גרם". Added `_like_escape()` + `ESCAPE '\'`. Result: `חלב 3%` now returns **41 codes, down from 2,247**.
+- **Non-deterministic pagination.** `test_search_has_more_and_pagination` was **already failing on main** — `_PRICE_SQL` has no `ORDER BY` and the sort had no tie-break, so equal-priced items ordered arbitrarily and offset pages overlapped between requests. Added `item_code` as a final sort key. **Tests went 14 passed/1 failed → 15 passed.**
+- **Gotcha found in manual verification:** tier 0 was first written as `item_name LIKE 'חלב%'`, and `%` matched the ה in **חלבה** — a halva snack ranked #1 for חלב. Fixed to `item_name ~ '^חלב\y'`; moved 89 items from tier 0 to tier 2. **A bare `LIKE 'word%'` is not "starts with that word" in Hebrew** — it's "starts with those letters".
+
+**3. canonical_name display bug (`2fc012d`, backend + API restart) — the significant one.**
+`_PRICE_SQL` selected `icn.item_name` (item_chain_names — one chain's raw scrape), and `group_by_product` assigned it straight to `canonical_name`. The chain chosen was **whichever key came first in the `best` dict** — arbitrary. So `items.item_name`, the column `canonical.py`'s nightly vote *and* the GS1 enrichment both write to, **was never displayed at all**.
+
+Measured across **39,527 multi-chain items**:
+
+| measure | count | share |
+|---|---|---|
+| canonical name matches NO chain name → never visible | 7,487 | 18.9% |
+| >1 distinct chain name → displayed name is an arbitrary pick | 38,077 | 96.3% |
+
+Split by source — this is why it went unnoticed for so long:
+
+| `name_source` | multi-chain items | canonical never displayed |
+|---|---|---|
+| `chain` | 34,929 | 468 (**1.3%**) |
+| `gs1` | 8,838 | 7,703 (**87.2%**) |
+
+Majority-voted names usually *equal* one of the chain names by construction (the vote returns an existing string, it doesn't synthesise one), so the bug was nearly invisible until GS1 introduced names matching no chain string. **87% of the GS1 enrichment was landing correctly in the DB and never reaching a user.**
+
+Fix: both `_PRICE_SQL` and `_PRICE_SQL_CITY` now also select `i.item_name AS canonical_item_name` (no new join — `items i` was already joined), and `group_by_product` + `group_by_store` read `r.get("canonical_item_name") or r["item_name"]` — chain-name fallback only when NULL. `names_per_chain` still reads `icn.item_name`, which is correct per-chain data.
+
+Side effect worth knowing: **this also resolved the ranking-vs-display mismatch structurally.** Relevance tiering reads `items.item_name`; display now reads the same column, so no brand-stripping heuristic is needed. The goat-yogurt case (`7290012645297`) ranks tier 0 for "חלב" because its `items.item_name` is `"חלב הארץ, יוגורט עיזים…"` — the dairy *brand* — and now visibly displays that, so the placement reads as correct rather than arbitrary.
+
+**Frontend impact checked, nothing changed.** Only `ProductCard.tsx:95` consumes `canonical_name`; its `<h3>` has no truncate class so longer names wrap. **`BasketResults.tsx`'s `truncate max-w-[130px]` is NOT affected** — it renders `item.item_name` from the basket model, a different field. Names grew from avg 20.7 → 25.1 chars (2,772 over 40 chars, 399 over 60, max 191). Nothing overflows; `line-clamp-2` on that `<h3>` is the minimal option if a ceiling is ever wanted.
+
+**4. Bare numeric tokens were dropped from search (`8af63c4`, backend + API restart).** Direct follow-on from fix 2: removing the percentage filter exposed that `_is_meaningful()` still discarded every all-digit token, so a size in a query was silently thrown away and the search widened to *all* sizes. `במבה 80` returned all 72 Bamba products regardless of gram weight. `_is_meaningful()` is now just `len(token) >= 2` — length is the only remaining noise guard.
+
+**Un-filtering alone was not enough, and this is the part worth remembering.** A bare number went through the same `LIKE '%n%'` as a word, which substring-matches *inside longer numbers*. On live data that made results wrong, not merely wide:
+
+| query | word alone | + numeric via LIKE | false matches |
+|---|---|---|---|
+| `במבה 80` | 72 | 7 | 1 (`…פסח806`) |
+| `חלב 80` | 2,267 | 60 | **35 — 58%**, all 180/280/380 g |
+
+Bare numbers now match on a **digit-run boundary**, `(^|[^0-9])80([^0-9]|$)`, via new `_digit_run_pattern()`; non-numeric tokens keep the existing `LIKE`/`ESCAPE` path untouched. **Anchoring on non-digits rather than Postgres `\y` is deliberate** — `\y` treats `80גרם` as one word and would silently drop real matches, and the catalog genuinely writes quantities glued to the unit (`סוכריות ריבת חלב ללא סוכר 80גרם`). This is the same lesson as fix 2's `LIKE 'חלב%'` gotcha in a new guise: **the obvious boundary primitive is wrong for this data both times.**
+
+Verified live: `במבה 80` → **6 rows, all 80 g** (from 69); `חלב 80` → 25 with all 35 false entries gone; `חלב 3%` still 43 rows, tier-0 ordering intact. **15 passed.** Performance-neutral — no trigram index exists, so the `LIKE` was already a full seq scan over 139K items.
+
+**Known limitation, deliberately not fixed:** relevance *tiering* still uses `\y` when the first token is numeric (e.g. `q="80 גרם"`), so `80גרם` lands in a lower tier. Affects ordering only, never which rows match.
+
+**Deploy pattern for backend changes:** `git pull` on the server + `sudo /usr/local/bin/xxl-restart.sh scrp-api` (passwordless whitelist). **No frontend deploy** — `deploy_frontend.ps1` only ships `web/dist`. Items 2, 3 and 4 were backend-only; only item 1 needed the frontend deploy.
+
+---
+
+### Session close — 2026-07-29
+
+**GS1 image pull finished at 18:13:** `fetched=11,450 failed=46 skipped=0 in 11705s`. 0.62 GB written against an ~0.83 GB projection — **the storage projection held.** Full detail in the SU10A-2 entry above.
+
+**What today actually delivered:** GS1 phase-2 detail backfill at 100% (11,496/11,496), the image pull complete, and four search/display fixes shipped to production.
+
+**⚠️ What is NOT done — these are real future tasks, and none of them happen on their own:**
+
+1. **Images are not served anywhere.** 11,450 JPEGs sit in `~/gs1_images` on the VPS as loose files owned by `dude`. No nginx location, no web-root, no URL scheme, no `product_image_url` populated, no API field. `www-data` cannot even read `~dude`, so this is not a config tweak away from working — it needs a deliberate serving design.
+2. **None of the phase-2 product data is in the UI.** The nutrition tables, kosher/Kashrut certification blocks, ingredient strings and allergen codes pulled today all live in `gs1.products.full_content` as JSONB and **stop there**. No API endpoint reads them, no model exposes them, no component renders them. Fetching the data and surfacing it are separate pieces of work and only the fetch is done.
+
+Both items are frequently assumed to follow automatically from the backfill. **They do not.** The only GS1 data currently reaching a user is the enriched *product name*, via the `canonical_name` fix in item 3 above — nothing else.
+
+> **Superseded by SU10A-4 (next entry):** both "NOT done" items above shipped the following day — images are served via `GET /product/{item_code}/image` and the phase-2 data via `GET /product/{item_code}/details`, both surfaced in the product detail modal.
+
+---
+
+### Session SU10A-4 (July 30, 2026) — GS1 product detail modal shipped + dropdown search + deploy process fixes
+
+**GS1 phase-2 data now customer-facing — closes the two items flagged NOT done at the end of SU10A-3.**
+
+Two new backend endpoints (`api/routers/product.py`):
+- `GET /product/{item_code}/details` — 200 with `has_gs1_data: true` + full payload (kashrut, nutrition table, ingredients, allergens, brand, gs1_name) when a GTIN match exists; 200 with `has_gs1_data: false` + null fields when the item_code is real but has no GS1 match (the common case, ~91% of products); 404 only for a genuinely unknown item_code; 400 for a malformed barcode.
+- `GET /product/{item_code}/image` — serves the resized JPEGs from `~/gs1_images` (filename = GTIN = item_code, no DB hit, digits-only barcode check prevents path traversal). 200 with long-lived cache headers, 404 when absent.
+
+Frontend: `ProductDetailModal.tsx` — bottom sheet on mobile / centered card on desktop, single `<button>` combining the "מידע נוסף" label and + icon (deliberately one control, not two, for accessibility — two elements firing the same action is a bad a11y pattern, not just visual redundancy). Sections self-hide when empty. A failed `/details` call silently falls back to the no-data view rather than erroring, since GS1 enrichment is supplementary. Mobile-viewport verification was explicitly deprioritized — a native iOS/Android app is planned, so the mobile browser experience is not a priority surface.
+
+**Deploy incident, root-caused and fixed — worth reading if a future deploy looks broken:**
+Pushing to GitHub does not update the server. `git push` only updates the remote; restarting `scrp-api` after a push without an explicit `git pull` on the server just relaunches the *old* code. This shipped a broken state for several hours (endpoints 404ing, frontend gracefully falling back to "no data") before being caught. Fix now documented in CLAUDE.md's new "Deploy backend" section — always `git pull origin main` on the server before restarting.
+
+**Same commit (`c3833a0`) also swept in two unrelated stray files via `git add -A`:**
+1. `data/city_canonical_review.csv` — a completely different 9-column/1,078-row version from the Windows dev machine collided with the server's own independent ~1,078-row uncommitted local edits to the same file, blocking the pull. Resolved by reverting just that file back to its exact pre-`c3833a0` git content (`3553e03`) — this made the file a no-op in the incoming diff, so the pull went through without touching the server's local edits at all. **The server's uncommitted local CSV edits are still sitting there, untouched, exactly as before** — not lost, not committed, still a single-disk-failure risk, still worth a dedicated city-data session to review and commit properly.
+2. A stray duplicate `handoff_super.md` at repo root (1,274 lines, diverged from the real `docs/super/handoff_super.md`) — removed (`a6e0e9d`).
+
+**City/chain dropdown search (`41cd14f`, frontend-only deploy).** Added a search box to the shared `MultiSelect` component in `Filters.tsx` — covers both the city and chain filters. Autofocused input, case-insensitive substring filter, "no results" state, select-all unions the filtered set with the existing selection rather than replacing it. Verified against the live 146-city catalog on production.
+
+**Flagged for future care, not urgent:** search appears to be missing fresh produce / meat / fish / chicken categories — may be a PriceFull data gap (these chains may not publish loose/weighted goods the same way as packaged items) or a search/categorization issue. Not investigated this session; worth a dedicated look.
+
+**Still the top explicit priority, unchanged:** the promo pipeline remains CRITICALLY BROKEN (Victory alone has 60K+ corrupt rows) and needs a dedicated audit-and-rebuild session — do not attempt incremental fixes.
+
+> **Superseded by SU10A-5:** that rebuild happened and the premise did not survive it. The rows were never corrupt — a UNIQUE constraint makes duplicates impossible, and Victory's data is among the cleanest we hold. The promo pipeline is REBUILT and RESOLVED: all 14 chains populated, discounts computed at read time. See SU10A-5.
+
+**Session naming note:** this session continues the SU10A-* lineage (SU10A-1 → SU10A-4) rather than switching to the CLAUDE.md table's stated SUXX-a format — a deliberate decision made this session, not an oversight. Future sessions should keep using SU10A-N.
+
+---
+
+### Session SU10A-5 (August 2, 2026) — city_canonical_review.csv reconciled + promo pipeline rebuilt (all 14 chains live)
+
+**City CSV — resolved.** The "three divergent versions" was largely illusory: the server's uncommitted 1,078-row/9-col file and the reverted c3833a0 were byte-identical apart from CRLF vs LF. Committed the 1,078-row/9-col builder output as baseline (ec1142d) — two builder-versions newer than the old 890-row/7-col version, carrying 13 hand-entered action=delete review decisions that existed nowhere else. Provenance: an undocumented June 2 re-run of build_city_canonical.py (after 256bf68 added chain_id) plus a manual review pass; pinned by git timeline. DB check: all 13 delete-marked stores are already absent from stores — deletes effected, nothing pending. NOTE: the CSV's store_id column is actually stores.id, not stores.store_id.
+
+**Promos — the "60K corrupt Victory rows" narrative was FALSE.** A UNIQUE (store_fk, item_code, promo_id) constraint makes duplicate rows structurally impossible; Victory's 148K rows are legitimate per-store fan-out and among the cleanest data we have. The real defects: (1) 4 chains produced zero promos — the 3 BinaProjects chains (King Store, Shefa, Shuk Hayir) raised NotImplementedError and HaziHinam parsed to zero (variant schema); (2) three unit-mismatch bugs, each caught by a dry-run gate — Rami Levy encodes MinQty as agorot (5990=₪59.90), HaziHinam encodes DiscountRate as basis points (5000=50%), and reward_type is chain-specific (Victory 1+1 = reward_type 10) so it must never be branch logic; (3) the display collapsed per-branch rows via DISTINCT ON and masked garbage with a ≤99% cap.
+
+**Shipped:** new GET /promos/grouped endpoint with discount computed at READ TIME (store raw, stay re-fixable), min_qty-aware, uniform rate>100→/100 basis-points normalization, 0–100 guard, active-only, online-store filter, no dedup/cap (5ef8bc8, d57f728, 20a9ec5, d2afb1c). Grouped chain→city→branch frontend; city logic extracted to web/src/utils/city.ts shared with HomePage. One shared variant parser parser/price_parser.py::parse_promo_file_flat covering Bina+HaziHinam (shared parse_promo_file untouched); PROMO_PARSER hook in base.py. All 14 chains now populated — promos table 274K→560K rows; promo_type populated for the first time (new rows only). db/migrations/su10a5_promos.sql (450cdc1) formalizes the previously ad-hoc table with GRANT incl. the sequence USAGE/SELECT. Dead PROMO_CHAINS/uses_promo() removed (ccd0b56) — never called, and it had falsely named the 4 empty chains as promo-enabled for months, which made this look like a config problem.
+
+**Principle:** store promo fields raw, compute discounts at read time; never key promo logic on reward_type/DiscountType/rate/min_qty units without per-chain verification.
+
+**Carried forward:** King Store 68% catalog match (~1,200 promoted item_codes not in items → bare barcode); 4,091 weighted-goods rows (min_qty<1) excluded — the fresh-produce/meat/fish gap; promo_type still NULL on the original 10 chains (cosmetic). Parser adds still owed for club-only, max-qty, and gift-item-count ("3 for 2") signals.
+
+---
+
+### Session SU10A-5 (continued, Aug 2–3 2026) — promos UX, promo-in-search, GA4 fixed
+
+**Promos UX (/promos).** Added: chain-gated branch filter (enabled only when one chain is selected); multiselect discount bands as ranges (0-10 / 11-25 / 26-50 / 51-75 / 76-99 — gifts at 100% are reachable only via the promo-type chip, since bands stop at 99); promo-type chips derived from SHAPE not reward_type (gift = discount_price 0; bundle = min_qty 2-24 & price>0; fixed = min_qty 1 & price>0; discount = rate-only; basket = min_qty>24 / no unit price); sort (discount / savings / ending); ending-soon filter; item search bar; basket cards (conditional/spend-threshold promos shown with description + condition badge, no fabricated unit price). Backend /promos/grouped gained params branch, bands, promo_type, q, ending_within_hours, sort and returns promo_kind. Commits 08f9eb9 (backend), 6c399a7 (frontend), e8f693b (store_fk added for branch filter). Surfacing basket rows partially closes the fresh-produce gap (weighted goods now visible with real terms in the description).
+
+**Promo-in-search (main super search leads with best price).** Promos attach at (store_fk, item_code) BEFORE the per-chain collapse, via a DISTINCT ON LATERAL picking the single lowest comparable unit price per store+item — a plain LEFT JOIN would duplicate rows (2% of store+item pairs have >1 active promo, max 12) and distort cheapest/chains_count. Comparable classes ranked: direct single-unit (min_qty=1), rate-only single-unit, bundle (min_qty 2-24, unit=price/qty). Basket (min_qty>24) and junk barcode 0000000000000 never rank. Attach only when promo unit < that store's shelf. effective_price = LEAST(shelf, promo_unit) drives per-chain min, cheapest, sort, delta. Bundles DO rank (Option A, Dude's call) but always render with the condition + branch so a "₪4 that needs buying 3" never masquerades as a single-unit price. Commit 167a9a3 (backend; group_by_store fixed too), frontend in 6c399a7 area (ProductCard: struck shelf, מבצע badge, condition label, branch name). ~10,959 items (~8%) have a qualifying promo (~1 in 11 results); perf +11-14% warm, within budget. DEFERRED: promo-only items (a promo at a store with no shelf price row — ~86% of item+chain pairs) do not appear in search (search is price-row-driven) — the biggest remaining coverage lever.
+
+**Promo unit-mismatch lesson (reinforced three times).** Never key promo logic on reward_type / DiscountType / discount_rate scale / min_qty units without per-chain verification: Rami Levy stores MinQty as agorot (5990=₪59.90); HaziHinam stores DiscountRate as basis points (5000=50%); Victory encodes 1+1 as reward_type=10. Store raw, compute discounts at read time.
+
+**Promo-in-search is geographically uneven.** Promos average only 2-4 stores per chain, so the best-price benefit is thin in promo-sparse cities — structural, and the main argument for doing the promo-only-items work.
+
+**GA4 — was never collecting; now fixed and verified end to end.** Two real code defects: (1) the first page_view was never sent (config used send_page_view:false and nothing re-called trackPageview after consent) — so accept-and-read-one-page sent zero; (2) a consent dead-state trap — CookieBanner rendered only when the key was ABSENT (===null) while the GA gate required ==='true', so clicking decline ('false') left GA permanently off with no banner to re-prompt. Fixes: send the first page_view at the end of initGA(); trackPageview now uses pathname+search and re-checks consent at SEND time (a withdrawal stops reporting); openCookiePreferences() re-entry control on the privacy page + a footer "עוגיות" link. Super commits include 8f7d81f. VERDICT: both the site tag AND the GA property are correct — proven by a server-side Measurement Protocol hit appearing in DebugView (validationMessages [], HTTP 204). Every "No data received" was CLIENT-SIDE blocking: the dev desktop browser had privacy extensions swapping GA for a stub (network trace showed googletagmanager gtag/js 200 alongside a chrome-extension surrogate google-analytics_analytics.js, and google_tag_manager stayed undefined), and the phone browsers blocked it too (Mi Browser built-in blocker / Android Private DNS). CSP ruled out (no CSP header/meta anywhere). GA undercounts blocked users by design — nginx access logs are the true, unblockable traffic count. Measurement ID G-YB4X4E5ZKM. Flights (fly.xxl.co.il) wired into the SAME property (ac5e19c); all three surfaces (xxl.co.il, super, fly) separate by hostname. Note: flights .env.production is git-tracked and now holds the GA ID + Supabase anon key — both are public client values so this is acceptable, but a Supabase service-role key or any real secret must never go there.
+
+**Promo-only-in-search (2b) shipped:** search injects promo-only quotes (store with a comparable promo but no shelf row for that item) so it leads with the true cheapest. _PROMO_ONLY_SQL(_CITY) run as separate statements (DISTINCT ON needs its own ORDER BY → no UNION ALL), concatenated into fetch_prices' row list under the same store_fks/chain filters; item_price NULL, _effective falls to promo_unit, promo_kind='promo_only', LEFT JOIN item_chain_names with items.item_name fallback (41% lack icn). Direct+bundle only (rate-only needs a shelf, excluded). PERF GOTCHA: the NOT EXISTS anti-join needs a nested-loop plan, which collided with fetch_prices' SET LOCAL enable_nestloop=off (9d-8 price-query optimization) → 12× regression; fixed by running the promo-only statement BEFORE the SET LOCAL. ProductCard renders promo-only quotes with no strikethrough. SCOPE CORRECTION: the '86% promo-only gap' was mostly illusory — of truly-invisible items only 83 are nameable; ~2,250 aren't in `items` at all, so surfacing them is catalog enrichment (King Store task), NOT search injection.
+
+> **Correction to the perf note above, from the shipped fix:** running the promo-only statement *before* the `SET LOCAL` is NOT sufficient. `SET LOCAL` lasts for the **transaction**, not the statement, so on the second and later `fetch_prices` calls on one connection the flag is already off and the ordering achieves nothing (measured: call 1 817ms, call 2 8734ms). The shipped fix toggles explicitly per statement — `enable_nestloop = on` before the promo-only query, `off` before the price query. Final cost 596ms → 617ms (+3.6%). Also note **compare mode (the default) hides promo-only-only products**, since they have `chains_count = 1`.
+
+**Carried forward (open):** promo-only items in search (~86% gap); King Store 68% catalog match (~1,200 promoted item_codes not in items → bare barcode); fresh food / weighted goods (min_qty<1) into search; parser adds owed (club-only, max-qty, gift-count for "3 for 2").
+
+> **Superseded by SU10A-6 (measured):** the real figure is 60,275 orphaned promoted item_codes for King Store — 68.7% of its 87,771 promoted codes have no items row, ~50× the "~1,200" and ~27× the "~2,250" recorded here. Earlier figures likely used a different denominator (search-reachable items, not all promoted codes); not reconstructable from the note. 96.8% of sampled 13-digit codes are checksum-valid EAN-13 — real products King Store promotes but never publishes a shelf price for, not junk data. King Store alone is ~93% of all orphaned promoted codes across the 14 chains. **Also superseded in this same list: "fresh food / weighted goods (min_qty<1) into search" — measured 84.2% already searchable (17,461 of 20,730 weighted items), so that item is effectively done and its `min_qty<1` framing was wrong; see SU10A-6 carried-forward items (11) and (12).**
+
+---
+
+### Session SU10A-6 (August 4-5, 2026) — cron killed mid-run (8 "stale" chains diagnosed), delta extended to all 14, Cerberus + Bina field-name fallbacks
+
+**The "8 failing chains" were not failing.** 8 chains last loaded Aug 2 and looked broken. There is not one `FAILED` line, traceback, or per-chain error anywhere in the Aug 2-4 journal — the Aug 2 coverage report shows `0 errors` on all 14. The cron *process* was SIGKILLed mid-download: Aug 3 died 1h55m in, Aug 4 died 4h03m in (`Result: signal`, `ExecMainStatus=9`), so no coverage report was ever emitted on either day. `fetch_runs` shows the signature — chains that finish before the kill are `ok`, chains in flight are stuck at `status='running'` with 0/0/0, and chains scheduled later have no row at all. **The 8 "stale" chains were simply the 8 that run last.** Prior 8 days all completed in 13,828-19,314s (3.8-5.4h). Timer, disk (56%), and all portals were healthy and are not implicated.
+
+**SIGKILL cause is CONFIRMED: the kernel OOM killer.** The kernel log carries the signature on both dates, naming the cron's own python process:
+
+```
+Aug 03 11:59:45 kernel: Out of memory: Killed process 1043417 (python) anon-rss:1385448kB, task_memcg=/system.slice/scrp-cron.service
+Aug 04 14:03:40 kernel: Out of memory: Killed process 1066449 (python) anon-rss:1499364kB, task_memcg=/system.slice/scrp-cron.service
+```
+
+Both are **global** OOM-killer kills (not a cgroup limit — the unit has `MemoryMax=infinity`), with the scraper itself as the victim at **1.32 GiB / 1.43 GiB anon-rss** on a 1.9 GiB box. The PIDs and timestamps corroborate the journal exactly: 1043417 is the Aug 3 run, 1066449 the Aug 4 run, and the 14:03:40 kill precedes systemd's `Active: failed ... 14:03:42` by 2s. Contributing pressure: `shared_buffers=512MB` plus several *idle* `scrp_app` Postgres backends at ~600 MB RSS each. Reading it needs sudo — `kernel.dmesg_restrict=1` and `/var/log/kern.log` is `syslog:adm 0640` — whereas plain `journalctl -u scrp-cron` works for `dude` with no sudo at all. Note `TimeoutStartSec=infinity` in the drop-in, so it was definitively NOT a systemd timeout.
+
+> **OUTCOME — the Aug 5 10:00 cron ran clean, the first success since Aug 2.** `status=0/SUCCESS`, not killed; `Cron finished in 10747s. Errors: none`; full coverage report emitted, **863/943 stores (91.5%), 0 errors**. That is ~3h against 13,828-19,314s for the pre-delta successful runs — a 22-46% cut, consistent with all 14 chains now on delta. **Cause CONFIRMED (kernel OOM, both dates — see the log lines above); fix CONFIRMED (delta migration, first clean run since Aug 2).** One honest caveat on the fix specifically: a shorter run cannot re-trigger a late-run memory ceiling, so a run that finishes sooner looks the same whether the peak was avoided or merely never reached. The headroom is real but unquantified — the scraper peaked at 1.32-1.43 GiB on a 1.9 GiB box, so the margin is thin and a future chain addition could push it back over. If it ever recurs, the answer is capacity (`MemoryMax`, a swap/RAM bump, or trimming idle Postgres backends), not re-diagnosis.
+
+**Fix 1 — Cerberus field-name fallback (9ce86b4).** `parse_file()` matched `ManufacturerName`/`PriceUpdateDate`; the Cerberus delta feed publishes `ManufactureName`/`PriceUpdateTime`. Reused the existing `_first_text()` (already in the same file for the Bina flat promo parser) rather than duplicating it. Proof it works: after re-running, non-NULL `price_update_date` equals items inserted *exactly* — Tiv Taam 478,172 total − 164,038 NULL = 314,134 = items inserted; Victory 614,651/614,651. Every chain still on the old parser sits at 94-100% NULL, every re-run chain dropped sharply.
+
+**Fix 2 — promo upsert (9ce86b4).** Deleted the `DELETE FROM promos WHERE store_fk=:fk` that ran before every promo insert in `base.py::_process_store`. `bulk_insert_promos` is a genuine upsert (`ON CONFLICT (store_fk,item_code,promo_id) DO UPDATE` on all 10 fields, plus in-batch dedup), so duplicates were structurally impossible and the DELETE was only wiping a store's whole promo set on every partial file. Verified safe to drop: **all 447,663 promo rows have a non-NULL `promo_end`**, and every read path in `db/query.py` filters `(promo_end >= NOW() OR promo_end IS NULL)` — so the rows that now linger are unreachable from the API and the `IS NULL` branch is dead code in practice. Residual is housekeeping only: 15,169 expired rows (3.4%) now accumulate; an occasional `DELETE FROM promos WHERE promo_end < NOW() - interval '30 days'` caps it.
+
+**Fix 3 — delta for Tiv Taam / Carrefour / Victory (9ce86b4).** `build_price_index`/`build_promo_index` already existed for all three; only the `DELTA_CHAINS` membership was missing. Verified: Tiv Taam 46/46 files 314,134 items 0 errors 279s; Carrefour 87/87 383,747 items 0 errors 383s; Victory 69/69 614,651 items 0 errors 822s. **These three consumed ~2h20m of the Aug 4 cron and now take 24 min combined** — which should pull the run well inside the window where it was being killed. That is mitigation, not diagnosis.
+
+**Fix 4 — Bina Projects delta support (aa95f32).** Probed `MainIO_Hok.aspx`: **WFileType 1=StoresFull, 2=Price (delta), 3=Promo (delta), 4=PriceFull, 5=PromoFull, 6+ return nothing.** Added `build_price_index` → `_build_file_index(ids, "2", "Price")` and switched `build_promo_index` from `"5"/"PromoFull"` to `"3"/"Promo"`. The `"Price"` prefix cannot cross-match `PriceFull` — the pattern is `^{prefix}{CHAIN_ID}-(\d+)-(\d{12})\.gz$`, so the chain id must follow the prefix immediately. King Store/Shefa/Shuk Hayir moved into `DELTA_CHAINS`; **all 14 chains are now delta.** Delta coverage is identical to PriceFull coverage (28/30, 22/30, 19/20) — the skipped stores are the same chronic no-file stores from 9d-10, including Shefa's 8 known promo-only branches, not a delta regression. Bina files are ZIP despite the `.gz` extension (`PK` magic) — the scraper already handles both.
+
+**Fix 5 — `ItemNm` (aa95f32).** Bina publishes the product name as `ItemNm`, and **this is true of PriceFull as well as the delta feed**, not just delta. Confirmed by sampling a live file: `PriceFull7290058108879-340` carries `ItemNm` on all 2,364 items with **zero** missing, alongside a standard `ManufacturerName`. That asymmetry explains the whole picture — the old parser matched `ManufacturerName` fine but missed the name, so the 3 Bina chains sat at ~84% NULL `item_name` while every other chain was at 0.0%, and every *delisted* Bina item left a permanent row with manufacturer set and name NULL.
+
+**Catalog backfill.** A `run_one <chain> --full` pass on the 3 Bina chains under the fixed parser (King Store 28/28 146,325 items; Shefa 22/22 60,775; Shuk Hayir 19/19 81,837; all 0 errors) dropped their `item_chain_names` `item_name` NULL rate 84%→21-28% and `manufacturer_name` to 0.0%, and closed their Aug 3-4 data gap. Then one `UPDATE items ... FROM item_chain_names`: **`items.item_name` 12,744→4,978 NULL, `items.manufacturer_name` 79,294→54,056**, with 0 rows left backfillable afterwards.
+
+**Compare-mode promo-only exemption SHIPPED (c425384).** `/compare` now returns single-source promo-only products (`chains_count=1`, every quote `promo_kind='promo_only'`) alongside the 2+-chain comparables; ordinary single-chain *shelf* products stay filtered exactly as before. Backend-only — `_is_promo_only()` in `api/routers/search.py`. `test_compare_only_multi_chain` relaxed to assert that any single-chain item it sees must be promo-only; **suite 15 passed (404s)**. Verified end-to-end against the live API: 3 King Store orphans appear in `/compare` with `chains_count=1, promo_kind='promo_only'`, and of 53 items returned for one query exactly 4 were single-chain and all 4 were promo-only — the exemption is narrow, no shelf product leaked in. **No frontend change was needed, and note WHY:** `ProductCard.tsx` does not reference `promo_kind` at all — its pre-existing `isComparable = chains_count >= 2` branch already renders the amber `product_card.only_at` ("only at [chain]") badge and omits the strikethrough when there is no shelf price. So these render correctly by inheriting generic single-source handling, not via promo-only-specific UI. Do not go looking for `promo_only` in ProductCard; it is not there.
+
+**STRUCTURAL GOTCHA — re-scraping never repairs `items`.** `bulk_insert_items` is `ON CONFLICT(item_code) DO NOTHING` ("first writer wins canonical name", `db/db.py`), so once an `items` row exists with a NULL field it is **frozen** no matter how many times the chain is re-scraped. Only `item_chain_names` refreshes (`DO UPDATE`). **Any future parser field fix therefore needs an explicit SQL backfill to reach `items` — the scrape alone will not do it,** and judging a parser fix by an `items` NULL count will read as failure even when the parser is correct. Measure per-chain on `item_chain_names` instead.
+
+**Carried forward (open):** (1) **SIGKILL — CLOSED. Cause confirmed (kernel OOM on Aug 3 and Aug 4, scraper killed at 1.32/1.43 GiB anon-rss on a 1.9 GiB box), fix confirmed** (delta migration; the Aug 5 10:00 cron completed clean — `status=0/SUCCESS`, 10,747s, 863/943 stores, 0 errors). Not open work. The only live risk is capacity headroom: the margin was thin, so if a future chain addition lengthens the run again, go straight to memory (`MemoryMax`, RAM/swap, idle Postgres backends) rather than re-diagnosing. **CAPACITY RECLASSIFIED FROM "WATCH" TO "ACT" — measured 2026-08-06 mid-cron, 1h41m into a healthy shortened delta run: RAM 1.7/1.9 GiB used, only 262 MiB available, and swap 3.9/4.0 GiB — 97.5% exhausted — with the cron python at 612 MB RSS and still climbing.** Read that carefully: the delta migration cured the **acute** failure (peak RSS no longer reaches the 1.32-1.43 GiB kill point and the run completes) but did **not** fix the **chronic** memory starvation underneath it. Headroom is razor-thin even on a shortened run, which means the fix bought time, not capacity. **Act before the next chain addition or any material catalog growth — do not wait for another kill.** Cheapest lever to try first: trim the idle Postgres backends via a smaller app-side connection pool / lower `max_connections`, before paying for a RAM-tier bump — 5 idle `scrp_app` backends were observed at ~537-627 MB RSS each. **Caveat when sizing that win: those RSS figures double-count shared-buffer pages (`shared_buffers=512MB`), so trimming 5 backends does NOT free ~3 GB** — the real saving is the per-backend private footprint, so measure with `PSS`/`smaps_rollup` rather than `ps` RSS before deciding it is sufficient. **Never apply any of this mid-cron** — a restart or pool change while the scrape is running risks exactly the failure being prevented. (Practical consequence, learned the same day: a second Python process — even a small recon script — should not be launched while the cron is mid-run; at 262 MiB available the OOM killer would most likely select the cron itself, being the largest RSS on the box.) (2) **Backfill re-run after the Aug 5 cron: `manufacturer_name` 55,779 → 48,744 NULL (−7,035), `item_name` 4,976 → 4,971, 60,755 rows touched, 0 left backfillable.** Fix 1 is confirmed working where the field exists — Rami Levy 99.1%→30.8% NULL, Yochananof 94.9%→23.3%, Fresh Market 99.3%→34.7%, Super Yuda 100%→69.7% — and the residual keeps shrinking as deltas accumulate. **But three chains stayed at ~100% (Shufersal 95.6%, Osher Ad 96.0%, Hazi Hinam 99.9%): they appear not to publish a manufacturer field at all, so no parser fix will help them.** Confirm that against a raw file before spending time on it. (3) Delta has no periodic PriceFull resync (see Current Production State). (4) Fresh Market promos are 1,525/1,525 expired, 0 active. (5) Tiv Taam yields only 323 promos across 46 stores (~7/store) vs Carrefour 16,955 and Victory 72,828 — its promo index reports "54 stores available, 1 targeted" on every store; looks like a Bina-style index bug, unrelated to this session's changes. (6) The 4,978 residual NULL `item_name` are item codes with no name published by any chain — nothing left to extract. (7) **King Store catalog-completeness gap** — 60,275 orphaned promoted item_codes (68.7% of its promoted codes), no `items` row / no name / not in search. Split: 52,510 valid EAN-13, ~4,756 internal PLU, rest unpadded/ITF-14. **Both candidate explanations were measured this session, so do not re-run them:** **1,696 (2.8%)** match an active GS1 product and are now named via `gs1_enrich_orphans.py` (SU10A-6); the earlier ~5,372/8.9% figure was pre-status-filter and counted 3,683 cancelled GS1 rows that must not name items. All-chains adds only 9 (1,705 total), so King Store is 99.5% of GS1-matchable orphans. And un-scraped stores are **ruled out** — only 3 King Store branches are un-scraped (000, 050, 338), and 338's PriceFull shares **0 of 2,088** codes with the orphan set, so these products are never price-published anywhere in the chain. Net: GS1 addresses under 3% of the 60,275-code gap; the other ~97% have no name source anywhere and stay dark — accepted, not a bug. **The 1,696 were inserted (commit 0bee362) and the promo-only search path is verified working end-to-end on them — `promo_kind='promo_only'` confirmed. But only 32 of the 1,888 named promo-only orphans actually surface.** The blocker is NOT the missing name, which is now fixed: **1,886 of them have `min_qty < 1`**, so they are weighted-goods/basket rows and the promo-only path deliberately excludes them (the comparable classes are direct single-unit `min_qty=1`, rate-only single-unit, and bundle `min_qty 2-24`). **Naming was necessary but nowhere near sufficient — the binding constraint is the same fresh-food / weighted-goods (`min_qty<1`) exclusion already carried forward from SU10A-5.** **RETRACTED — the follow-on plan this originally stated ("lift the `min_qty<1` rule first, then re-measure") is FALSE and must not be attempted.** Measured in SU10A-6 recon: **0 of the 1,885** named King Store orphans blocked by `min_qty<1` are genuine weighted deals — **all 1,885 are basket-attached**, every one hanging off the chain-wide `100 ש"ח הנחה מעל 400 ש"ח` spend-threshold promo, which fans out across the whole catalog. Lifting the exclusion would surface 1,885 fake prices and zero real King Store products. The GS1 naming work stands on its own merit (those items now have real names instead of bare barcodes), but **it does not convert into search coverage by this route, and no further orphan naming should be funded on that expectation.** (8) **Promo-only deals rank below every multi-chain product** — the compare sort key puts `chains_count>=2` first, so on any query with 30+ comparables they fall past the default `limit=30` onto page 2+ and are effectively invisible (observing one in testing needed `limit=100`). Correct behavior, not a bug, but practical reach is near-zero on common queries until either the sort gives single-source promo-only deals some lift or the UI surfaces them in a separate band. **Do NOT wait on the `min_qty<1` work to supply volume — the recon below shows there is no volume coming.** Today only 32 products are affected, and that number is not going to grow by that route. Product call, low priority.
+
+(9) **`min_qty<1` recon (SU10A-6) — the exclusion is CORRECT and load-bearing; do NOT lift it wholesale.** The active `min_qty<1` bucket breaks down as **~94,417 basket rows / 87,389 items**, **~2,575 gift rows / 434 items**, and only **~330 items that are genuine weighted per-unit deals**. The mass of it is spend-threshold promos encoded `min_qty=0, discount_price=399, discount_rate=0` (`100 ש"ח הנחה מעל 400 ש"ח`) attached to every eligible product in the catalog — pasta, dog food, car air fresheners. Lifting the exclusion would surface ~87K fabricated "prices". These already render correctly on `/promos` as basket cards with the description and condition badge, so they are not invisible; they are merely (correctly) absent from search.
+
+> **RETRACTION:** an earlier SU10A-6 note claimed the basket classifier "catches only 199 rows and misses 87,322", implying a latent bug to fix first. **That was wrong.** It tested only the `min_qty > 24` clause; `_PROMO_TYPE_SQL`'s first branch is `min_qty > 24 OR (_UNIT_PRICE_SQL) IS NULL`, and since `_UNIT_PRICE_SQL` requires `min_qty BETWEEN 1 AND 24`, every `min_qty=0` row already yields a NULL unit price and classifies as `basket`. Verified live: `min_qty=0 AND discount_price>0` → `[('basket', 87322)]`. **No classifier bug exists and there is nothing to widen.**
+
+(10) **The real gap is 330 items, and the fix is known but UNBUILT — deprioritized.** Those 330 genuine weighted deals (`is_weighted=1`, `discount_price` < shelf: eggplant ₪4.40→₪3.40, plum ₪12.90→₪10.90, weighted strudel ₪54.00→₪40.00) misclassify as `basket` for the same reason — `_UNIT_PRICE_SQL` cannot derive a unit from `min_qty<1`, so they fall through to the NULL branch. **Fix:** for `is_weighted=1` rows with `min_qty<1`, treat `discount_price` as the flat price rather than dividing by `min_qty` (dividing gives ₪3.40/0.01 = ₪340). Gate it on `is_weighted=1` so no basket row can be caught. **Scope carefully — two different jobs:** a `_UNIT_PRICE_SQL`-only change fixes `/promos` classification and is **low risk** (that constant is referenced only at query.py:1324/1451/1509, all inside the `/promos` path, never in `_PROMO_PICK_SQL`); getting these into **search** additionally requires `_PROMO_PICK_SQL` + promo-only-path changes, which are **hot path with a 12× regression history** (SU10A-5's `enable_nestloop` collision). **DEPRIORITIZED — and now CONFIRMED, not merely deferred:** the fresh-food recon below measured **17,461 weighted items already searchable with live shelf prices**, so these 330 promo rows are a rounding error against the fresh-food coverage that already exists. Not worth hot-path risk at any point. If it is ever done anyway, do the `/promos`-only half first and stop there unless search coverage is independently justified.
+
+(11) **"Fresh food / weighted goods into search" — effectively DONE; the premise it was filed under was wrong.** Fresh food was never absent from search. Measured SU10A-6: **17,461 of 20,730 weighted items (84.2%) already have a live shelf price and are searchable**, making up **14.2% of the entire searchable catalog** (17,461 of 122,963). Every chain is healthy — Shufersal 4,275, Keshet 2,637, Rami Levy 2,218, Carrefour 1,955, Tiv Taam 1,886, Yochananof 1,853, Fresh Market 1,802, Victory 1,198, Shuk Hayir 1,067, Osher Ad 835, Shefa 648, King Store 599, Super Yuda 465, Hazi Hinam 245 — **no dark chains, so this was never a scraping or parser gap.** Sample confirms genuine counter goods (produce, fish, butcher, cheese counter, prepared, bulk) with `ק"ג`/`1קילוגרם`/`100 גרם`/`יחידה` units. **Only true remaining absence: 3,269 weighted items (15.8%) with no shelf price at all.** Close this item; do not re-open it as a promo or `min_qty` problem.
+
+(12) **THE REAL FRESH-FOOD LEVER — cross-chain PLU matching. Not scoped, not built.** Of the 17,461 searchable weighted items, only **2,583 (14.8%) are multi-chain comparable; 14,878 (85.2%) are single-chain** and therefore invisible in compare mode, the default view. Cause: **weighted goods carry chain-internal PLU codes, not shared EANs**, so Shufersal's tomato and Rami Levy's tomato are both priced and both searchable but never match on `item_code`. This is a catalog-matching / fuzzy-name problem — **different in kind and size from anything else on this list**, and **GS1 cannot help** because these are not GTINs. Note these are also precisely the products item (8)'s promo-only exemption does NOT reach: they have shelf prices, so they are ordinary single-chain shelf rows and stay filtered by design. **CAUTION for whoever scopes this: a wrong match is worse than no match.** There is no barcode ground truth, and showing "tomato ₪4.90 vs ₪12.90" when one is loose and the other a packed vine variety is a credibility hit, not a feature. Start with high-confidence matches only — normalized name **and** same unit **and** a sanity price band — and never fall back to a best guess.
+
+(13) **Parser signals — club-only, max-qty, gift-count ("3 for 2"). RECON DONE, BUILD DEFERRED.** All three are **dropped at parse time and have no `promos` columns** — verified: `db/migrations/su10a5_promos.sql` defines none of them, and `parser/price_parser.py` references none of the tags (its only mention is a comment that `GiftsItems` is a sibling container it deliberately skips). **This is a full vertical slice — schema migration + BOTH parsers + read path + display — not a display tweak.** Prevalence is **not measurable from the DB**: the signals exist only in the raw feeds. **Tag locations differ by file variant:** *club-only* — standard `<ClubID>` at Promotion level, TEXT with a numeric prefix (`"0 - כלל הלקוחות"`, 0=all, nonzero=club-only); flat (Bina) `<AdditionalRestrictions><Clubs><ClubId>`, bare numeric. *max-qty* — standard `<MaxQty>` at PromotionItem level (often empty) **plus** `<RedemptionLimit>` at Promotion level, a distinct concept; flat `<MaxQty>` at Promotion level. *gift-count* — flat `<AdditionalGiftCount>` + `<GiftsItems count>` + RewardType (rich); standard `<IsGiftItem/>` + RewardType only (thin). **The flat/Bina variant carries more explicit gift and club structure than the standard variant, so these signals are unevenly available across chains** — plan for partial coverage, not uniform. **HIGHEST RISK: never derive "N for M" from `reward_type` alone.** `reward_type` is chain-specific (Victory encodes 1+1 as 10), so per-chain verification against `reward_type` + `min_qty` + gift-count *together* is mandatory — this is the same trap class as the SU10A-5 promo unit-mismatch bugs, which bit three separate times. **BUILD PLAN:** (a) migration adds `max_qty NUMERIC`, `club_id INTEGER` (or `is_club_only BOOL`), `gift_count INTEGER` to `promos`, with GRANT incl. sequence USAGE/SELECT as su10a5_promos.sql does; (b) extend `parse_promo_file` + `parse_promo_file_flat` to emit all three at their respective tag locations; (c) extend `bulk_insert_promos`' column list (and its ON CONFLICT DO UPDATE set); (d) read path in `db/query.py` + promo-card display (club badge, "limit N" badge, "N for M" label); (e) **FIRST STEP is a dry-run parse-and-count over live files per chain to measure prevalence** — the DB cannot tell you, so do this before committing to (a).
+
+**SESSION END STATE (SU10A-6).** Shipped: **OOM diagnosed and closed** — kernel-confirmed on both dates, fixed by migrating all 14 chains to delta (Aug 5 cron confirmed clean, `status=0/SUCCESS`, 10,747s, 863/943 stores, 0 errors, first success since Aug 2). **Two parser field-name bugs fixed** — Cerberus `ManufactureName`/`PriceUpdateTime` and Bina `ItemNm` — plus the `items` catalog backfill they required. **Promo blanket-DELETE bug fixed** (the upsert made it unnecessary and it was wiping each store's promo set on every partial file). **King Store GS1 orphan enrichment** — 1,696 promo-only orphans given real names. **Compare-mode promo-only exemption shipped** so single-source promo deals are no longer hidden by the default view. Recon work closed **three theses as "not the problem"** — orphan-naming→search coverage, lifting `min_qty<1`, and fresh-food-into-search were each measured and disproven — and surfaced the **one real fresh-food lever, cross-chain PLU matching (14,878 single-chain weighted items)**, which was not previously on the list in any form. Task-4 parser-signals recon done, build deferred with a spec. **Net: more backlog was retired by measurement than by code this session** — treat that as the pattern, and measure before building on any of the remaining items.
+
+---
+
+### Session SU10A-7 (August 5-6, 2026) — OOM fix confirmed over two clean runs, King Store double break fixed same-day, Hazi Hinam verified flat, GS1 nightly confirmed, task-4 recon
+
+**OOM fix CONFIRMED — two more clean unattended cron runs; cause and fix are both closed.** Aug 5 finished in **10,747s** and Aug 6 in **10,029s**, **0 errors on both**, each running well past *both* historical kill points (1h55m on Aug 3, 4h03m on Aug 4). The cause was kernel-OOM, already confirmed in SU10A-6 from `journalctl -k`; the delta migration is the fix, and it now holds across consecutive unattended runs rather than a single lucky one. **Nothing here reopens the diagnosis — do not re-run it.**
+
+**But capacity remains CHRONIC, not incidental — and the correct posture is act, not watch.** A mid-run snapshot on Aug 6 caught **swap at 97.5% with only 96 MiB free**, recovering to **989 MiB free** only once the cron had finished. The box has no headroom *during* a run; it simply no longer crosses the kill line. Two levers, in order: **(1) trim the idle Postgres backends first**, and size that win with **PSS / `smaps_rollup`, never `ps` RSS** — RSS counts the 512 MB of `shared_buffers` once per backend and wildly overstates what trimming actually frees; **(2) RAM bump second**, only after (1) is measured and shown insufficient. Do not wait for a second kill to justify the work.
+
+**King Store broke TWICE on the same day, in two unrelated ways. Both were fixed same-day rather than waiting on a cron run to confirm the break.**
+
+**Break 1 — the filename format changed, and it broke EVERY file type at once, not just one.** The portal moved to `{prefix}{chain}-{subchain}-{store}-{YYYYMMDD}-{HHMMSS}.GZ` — a subchain segment inserted and the timestamp split into separate date and time fields. The Bina index regex in `binaprojects.py::_build_file_index` matched only the old form, so **stores, prices and promos all indexed to zero simultaneously**. Fix: dual-pattern matching accepting both the old and the new shape (**commit `039545e`**), which restores King Store while leaving Shefa / Shuk Hayir — still publishing the old form — untouched. **28/28 stores, 63,987 items** after the fix.
+
+**Break 2 — the promo XML migrated flat → standard nested, the same day.** King Store's promo feed moved from the flat Bina shape to the standard `<Groups><Group><PromotionItem>` nesting, which `parse_promo_file_flat` (built in SU10A-5) cannot read. Fix: a shape-detecting `parse_promo_file_auto` that inspects the **raw bytes** for `<Groups>`, delegating to the standard parser when found and to the flat parser otherwise, wired in as `BinaProjectsScraper.PROMO_PARSER` (**commit `4df1f90`**). Verified explicitly that the standard parser reads the new shape with **complete `promo_start`/`promo_end`** — that check mattered specifically because a missing `promo_end` would leave every one of these rows never expiring and permanently visible, since the read path filters on exactly that column. **27/28 stores loading promos.**
+
+**LIMITATION — record this as a standing warning, not a footnote.** `parse_promo_file_auto` matches a **byte pattern (`<Groups>`), NOT a schema.** It is safe everywhere it is currently deployed — King Store → standard, Shefa / Shuk Hayir → flat, all three verified — but **a corrupt file, or an incidental `<Groups>` string inside a genuinely flat file, will mis-route to the standard parser and yield silent 0 rows**: no exception, no `FAILED` line, nothing visible in the coverage report except a store that quietly stops having promos. **If hardening is ever wanted, the cheap version is a 0-row fallback** — when the detected parser returns 0 rows, retry with the other one. Not implemented, deliberately.
+
+**Hazi Hinam — verified NOT migrated, and deliberately left on the flat parser.** 5 of 6 sampled files are still flat, and the flat parser reads them correctly (**2,852 rows**) where the standard parser returns **0**. **Do NOT switch Hazi Hinam to `parse_promo_file_auto`.** The one file that looked like evidence of a migration — store 201's `<Groups>` — is **corruption, not a schema change**: the tags are mismatched and *both* parsers error on it. It is 1 of 12 stores, already caught by `_process_store`'s try/except, and the chain's promo data is healthy (**24,008 rows, all active**). On the filename axis Hazi Hinam is already covered — its own index logic handles the new 4-segment format — but it would **not** self-heal if its promo *schema* ever migrates for real. **That is accepted exposure, consciously taken; revisit if Hazi Hinam starts reporting 0 promos.** Using `recover=True` to salvage the corrupt file is a **separate, DEFERRED decision** — it is a broader parser-strictness change that silently accepts truncated content chain-wide, which may well be worse than skipping one store.
+
+**This is a PLATFORM-WIDE rollout, not a King Store quirk.** The 4-segment filename format appeared on **King Store AND Hazi Hinam on the same day** — two chains, two different scrapers, one change — so read it as rolling across the Bina/portal platform generally, not as a chain-specific event. The useful consequence: both fixes shipped here are forward-covering for **Shefa and Shuk Hayir** when their turn comes — dual-pattern handles the filename axis, shape-detection handles the schema axis, and neither should need a code change at migration time.
+
+**GS1 nightly sync CONFIRMED working.** `status ok` on every run; it is wired post-scrape at the end of `cron_main`, exception-wrapped as before. Current counts: **78 GLN / 22,596 products** — one supplier more than the 77 recorded in this handoff, auto-caught by the incremental sweep with no intervention. **But only +1 of "a few" newly-authorized suppliers landed, and that is the real finding.** The likely cause is the **incremental watermark skipping suppliers whose products carry old timestamps** — newly authorized, but with nothing that looks new to a timestamp-driven sweep. **A one-time `gs1_fetch --full` to backfill is recommended and PENDING.** Related operational note: **there are no GS1 runs at all on Aug 3-4**, the two OOM-killed days — the sweep sits at the *end* of cron, so a killed cron silently skips GS1 too. Assume any future cron failure also skipped the GS1 sweep unless proven otherwise.
+
+**Task 4 (parser signals) — RECON DONE; CAPTURE LAYER SHIPPED, DISPLAY LAYER DEFERRED.** Findings, several of which correct or sharpen item (13) of SU10A-6:
+- **`IsGiftItem` is the quantity N in an "N for M" offer, not a boolean.** Confirmed on three independent sources — Rami Levy, Victory, **and** a King Store Bina file (`IsGiftItem=2`, description "2 for 23", `MinQty=2`, `DiscountedPrice=23`). This is the signal to build on.
+- **`reward_type=10` means multi-buy with a DIFFERENT N across chains.** N must therefore **never** be derived from the reward code — only from `IsGiftItem` plus the description. Same trap class as the SU10A-5 unit-mismatch bugs, which bit three separate times.
+- **`ClubID` appears in BOTH bare-numeric and `"0 - text"` forms *within* the standard variant.** The form is not a variant discriminator — accept both.
+- **`AddGiftCount` / `GiftsItems` are zero everywhere.** This **REVERSES** item (13)'s claim that "the flat variant is the richer gift source" — **flat is the poorer one.** Correct that expectation before scoping the build.
+- **`MaxQty` ≈ `RedemptionLimit` wherever both are set** — possibly one column under two names, rather than the two distinct concepts item (13) assumed. Verify on a chain where they genuinely differ before modelling them as independent fields.
+
+**CAPTURE layer SHIPPED (commit `accc7ca`), and `db/migrations/su10a7_promo_signals.sql` is APPLIED to production.** Three new nullable columns on `promos`: **`club_id INTEGER`** (leading numeric of `ClubID`/`ClubId` — **0 = all customers, nonzero = club-restricted**), **`max_qty NUMERIC`** (`MaxQty`, falling back to `RedemptionLimit` when absent), **`gift_count INTEGER`** (`IsGiftItem` = the N in "N for M"). Both parsers extract all three — one shared `_club_num()` / `_gift_count()` pair searching beneath the promotion, so the standard and flat variants are covered in one place rather than duplicated. `bulk_insert_promos` stores them (**16 cols == 16 placeholders == 16 params, 13 `SET` clauses** — the three conflict-key columns correctly excluded). Validated against all 5 committed fixtures across both parser shapes (see `docs/super/promo_samples/`). **The columns are NULL until the first cron after deploy (2026-08-08 10:00 IDT) repopulates `promos`** — do not read an empty column as a broken parser before then. Table verified pristine (**0 rows carry the new columns**) after a reverted end-to-end insert test.
+
+**DISPLAY layer DEFERRED — deliberately gated on measuring real prevalence from the 8/8 cron, per item (13)'s own "measure before display" rule.** Read-side semantics to handle when it is built:
+- **`max_qty = 0` means NO CAP, not "limit 0"** — and it is widespread. A naive badge renders a nonsense purchase limit on a large fraction of rows.
+- **`gift_count` / `max_qty` are sparsely populated on some chains** — Carrefour ran ~55% gift, ~7% max_qty across the fixture. Plan for partial coverage per chain, not uniform availability.
+- **Club restriction can also live in free-text descriptions while `club_id = 0`**, so the structural signal misses those. `club_id` is a floor on club-only detection, not a complete answer.
+- **`reward_type` is NOT a reliable source for N** — it is chain-specific (Victory encodes 1+1 as `reward_type=10`). **Always use `gift_count`.** Same trap class that bit three times in SU10A-5.
+
+**Migration-run note (operational, learned the hard way):** apply migrations with `cat ~/scrp/db/migrations/x.sql | sudo -u postgres psql xxl_super`. **`ssh ... psql -f` fails** because the `postgres` user cannot read files under `~dude` — the same permission gap already documented for the GS1 image directory.
+
+**Carried forward (open):**
+1. **GS1 watermark gap — RESOLVED on both halves; only a GS1-side propagation question remains.** *(a) One-time `gs1_fetch --full` backfill: **DONE 2026-08-07** (`gs1.sync_runs` id=14) — **22,971 rows, distinct GLN 78→79, +375 products**, and it caught the one vendor the incremental watermark had been skipping. **The table total equals the sweep count, so there are no stale rows** — every GLN stored is one currently accessible to us, not a leftover from an earlier entitlement. (b) **Weekly full sweep: SHIPPED (commit `94791ab`)** — `run_gs1_catalog()` now passes `full=True` on Sundays (`datetime.date.today().weekday() == 6`) and runs incremental every other day. `gs1_fetch.run()` upserts **page-by-page** (one page fetched, normalised, `execute` + `commit`, then rebound — nothing accumulates across pages bar an int total and one timestamp), so a full sweep's **peak RSS matches the incremental one and adds no OOM risk** on a box already under the chronic pressure in item 3. First full sweep **Sunday 2026-08-09**. **The watermark gap is now closed structurally — a newly-authorized vendor whose products carry old timestamps can be invisible for at most a week, instead of indefinitely.*** **STILL OPEN, but GS1-side and not ours: ~3 new vendors were expected and only ~2 new GLNs appeared (77→79 cumulative — 77 was the pre-session baseline, the incremental sweep caught +1 to 78, the full backfill the last +1 to 79).** A vendor still absent *after* a full sweep is no longer a watermark artefact — the full sweep ignores the watermark entirely — so it points at **GS1 entitlement propagation on their side**. Retest after a day; if the vendor is still missing, ping GS1 (Rami). **Do not read 79 stored GLN against the portal's 75 authorized as a discrepancy — GLN is not 1:1 with vendor, so the two counts are not expected to match.**
+2. **Task 4 parser-signals — CAPTURE done, DISPLAY open.** Capture layer shipped (`accc7ca`) and migration applied; the columns fill on the 2026-08-08 cron. **What remains is steps (d)/(e) of SU10A-6 item (13)'s build plan — the read path and promo-card display — deliberately gated on measuring real prevalence from that cron first.** See the read-side semantics listed above before building any badge (`max_qty=0` = no cap; sparse per chain; `club_id=0` misses free-text club restrictions; never derive N from `reward_type`).
+3. **Memory capacity — ACT, do not watch.** Trim idle Postgres backends first (PSS-sized, not `ps` RSS), RAM bump second. Chronic, and entirely unaffected by the OOM fix now being confirmed.
+4. **`parse_promo_file_auto` 0-row fallback** — known silent-failure gap; hardening not implemented.
+5. **`recover=True` for corrupt promo XML** — deferred, needs its own decision on chain-wide parser strictness.
+6. **All SU10A-6 carried-forward items other than (1) stand unchanged** — notably King Store's 60,275-code catalog gap (item 7), cross-chain PLU matching for weighted goods (item 12), and the 30-day promo cleanup sweep. **SU10A-6 item (1) is now closed twice over on the acute side; only its capacity half survives, as item 3 above.**
+
+---
+
+### Session SU10A-8 (August 9-10, 2026) — OOM recurred for three runs and was cured by CAPACITY not code; "6 stale chains" split 3 cosmetic / 3 real; the idle-backend lever measured and spent; ProductCard promo row rebuilt across four fixes
+
+**The OOM came back, and the delta migration did NOT hold.** SU10A-7 closed this as "fix CONFIRMED over two clean runs" and said *"Nothing here reopens the diagnosis — do not re-run it."* It broke on the very next run and stayed broken for three consecutive days. Read that as the lesson: **two clean runs was not enough evidence to close a capacity problem**, and the caveat SU10A-7 itself recorded — that a shorter run cannot re-trigger a late-run ceiling — was the correct read all along.
+
+| Day | Start | Died / finished | Duration | Result | `ok` | `running` | no row |
+|---|---|---|---|---|---|---|---|
+| Aug 5 | 10:00:02 | 12:59:09 | **10,747s** | `Cron finished. Errors: none` | 14 | 0 | 0 |
+| Aug 6 | 10:00:01 | 12:47:10 | **10,029s** | `Cron finished. Errors: none` | 14 | 0 | 0 |
+| Aug 7 | 10:00:15 | 11:22:12 | ~1h22m | **SIGKILL** | 5 | **4** | 5 |
+| Aug 8 | 10:00:14 | 11:47:54 | ~1h48m | **SIGKILL** | 2 | **4** | 8 |
+| Aug 9 | 10:00:11 | 12:57:15 | ~2h57m | **SIGKILL** | 8 | **4** | 2 |
+| Aug 10 | 10:00:xx | 11:19:28 | **4,765s** | `Cron finished. Errors: none` | **14** | 0 | 0 |
+
+**KERNEL CONFIRMATION WAS NOT OBTAINED THIS SESSION — record that as a gap, not a fact.** Unlike SU10A-6, which quoted `Out of memory: Killed process …` from `journalctl -k`, **no kernel log line was captured for Aug 7/8/9.** `dude` is in groups `dude,sudo` only — not `adm`, not `systemd-journal` — so `journalctl -k` returns `-- No entries --`, `dmesg` returns `Operation not permitted`, `/var/log/kern.log` is `syslog:adm 0640` and unreadable, and `sudo -n` requires a password (the passwordless whitelist covers only `xxl-restart.sh` / `xxl-deploy-webroot.sh`). What IS confirmed is systemd's own record, readable without sudo: `Result=signal`, `ExecMainCode=2` (CLD_KILLED), `ExecMainStatus=9`, `NRestarts=0`, with `TimeoutStartUSec=infinity` and `MemoryMax=infinity` ruling out both a systemd timeout and a cgroup limit. OOM is therefore inference by elimination (the only other SIGKILL source is a manual `kill -9`), not kernel-proven. **To close it properly, run:** `sudo journalctl -k --since "2026-08-07" | grep -i "killed process"`.
+
+**The "6 stale chains" were NOT 6 broken chains — and the SU10A-6 signature applied exactly, once you account for parallelism.** `cron_main.py:257` is `ThreadPoolExecutor(max_workers=4)`, so at any instant four chains are in flight. A SIGKILL leaves precisely those four at `status='running'` with 0/0/0 (the row is INSERTed upfront at `base.py:292-296` and only UPDATEd to its final status at `base.py:317-318`, so there is no `error` transition on a kill), and everything still queued gets no row at all. **Exactly 4 chains sat at `running` on each of the three killed days — that is the worker count, not a coincidence.**
+
+> **CORRECTION TO THIS DOC:** the Current Production State section says `cron_main.py ThreadPoolExecutor(max_workers=6)`. **The code is 4.** The distinction is load-bearing for this diagnosis — 4 stuck rows = 4 occupied slots.
+
+**Genuine vs cosmetic, per chain — 3 of the 6 had already landed Aug 9 data:**
+
+| Chain | fetch_runs | Aug 9 stores loaded | max `price_update_date` | Verdict |
+|---|---|---|---|---|
+| קרפור Carrefour | `running` 0/0/0 | 76 + 3 no_file, 409,927 items | **2026-08-09** | cosmetic |
+| טיב טעם Tiv Taam | `running` 0/0/0 | 25, 253,159 items | **2026-08-09** | cosmetic |
+| שוק העיר Shuk Hayir | `running` 0/0/0 | 16 + 1 no_file, 15,736 items | **2026-08-09** | cosmetic |
+| פרש מרקט Fresh Market | `running` 0/0/0 | 4, 10,743 items | 2026-08-06 | **genuinely stale** |
+| סופר יודה Super Yuda | **no row** | none (zero journal mentions) | 2026-08-06 | **genuinely stale** |
+| חצי חינם Hazi Hinam | **no row** | none (zero journal mentions) | 2026-08-06 | **genuinely stale** |
+
+**WARNING — `price_update_date` is the SUPPLIER FEED's timestamp, not our ingest time, and must never be used as a staleness metric.** Keshet read `2026-08-08 19:57` while being fully `ok` on Aug 9 with 22 stores and 247,588 items. Use `fetch_runs.status` — it is the only authoritative signal.
+
+**The idle-Postgres-backend lever is now MEASURED AND SPENT — and an earlier claim made during this session was wrong.** Mid-session this handoff's author reported the 21 idle `scrp_app` backends as a leak, *"up 4× from the 5 observed in SU10A-6"*, citing *"six idle backends at 472-581 MB RSS."* **That framing was wrong and is retracted.** 19 of the 21 were a healthy API connection pool actively recycling — every one showed SQLAlchemy's pool-reset `ROLLBACK` with `state_change` inside the last 21-38 minutes. Only **2** were true orphans, and they did not come from the Aug 7/8/9 kills at all: `backend_start 2026-08-03 18:59`, four days earlier, with an 8-second `active_window` and then nothing for 5d20h (no keepalive rhythm, so not legitimate long-lived connections), a distinct `ROLLBACK;` query text, and **RSS of 1,960 kB each — not hundreds of MB.** Terminating both took idle 21→19 and moved memory by nothing measurable: available 912→911 MiB, swap 883→879 MiB. **Conclusion: SU10A-7's "trim idle backends first" lever was worth ~3.8 MB. It is closed. Do not re-run it.** The ~500 MB RSS figures belong to the *live* pool backends and are inflated by `shared_buffers` double-counting exactly as SU10A-7 warned; PSS via `smaps_rollup` remains unmeasurable without sudo.
+
+**RAM BUMP SHIPPED — this is what actually fixed it. 1.9 GiB → 3.8 GiB.**
+
+| | Before (Aug 9, idle, post-kill) | After reboot (Aug 10, idle) | After today's successful cron |
+|---|---|---|---|
+| Mem free | 238 MiB | 3.0 GiB | 1.3 GiB |
+| Mem available | 912 MiB | 3.2 GiB | 2.6 GiB |
+| Swap used | **883 MiB** | **0 B** | 602 MiB |
+
+**Today's cron is verified clean and dramatically faster: `status=0/SUCCESS`, `Cron finished in 4765s. Errors: none`, `TOTAL: 866/943 stores loaded (91.8%), 77 no_file, 0 errors`, and all 14 chains `ok` in `fetch_runs`.** 4,765s against 10,029-10,747s for the pre-bump successful runs is a **2.1× cut with no code change** — consistent with the box no longer swap-thrashing rather than with anything having got algorithmically faster. All 6 previously-stale chains are current. Zero failed units on the box.
+
+**Postgres was NOT retuned for the new RAM — FLAGGED, NOT FIXED.** Live settings are still sized for the 1.9 GiB box: `shared_buffers` 512 MB (65536×8kB), `effective_cache_size` **1 GB** (131072×8kB), `work_mem` 16 MB, `max_connections` 100. Nothing is broken — they are merely conservative now, so the new headroom shows up as free RAM rather than as database cache. `effective_cache_size` at 1 GB on a 3.8 GiB box understates what the planner can assume. **Decide deliberately next session; do not treat this as done.**
+
+**GS1 — nightly sweep CONFIRMED running; the WEEKLY FULL sweep is the open item.** Checked directly against `gs1.sync_runs`: **id 15, 2026-08-10 11:19:27→11:19:28, `status=ok`, 172 rows** — it fired at the tail of today's cron. **There are no runs at all on Aug 8 or Aug 9**, confirming SU10A-7's warning that a killed cron silently skips GS1 (the sweep sits at the end of `cron_main`). id 14 (Aug 7 16:42, 22,971 rows) was the manual `--full` backfill, not a scheduled run. **STILL OPEN: the first-ever weekly FULL sweep was scheduled for Sunday 2026-08-09** (`run_gs1_catalog()` passes `full=True` when `weekday()==6`) **and was skipped by that day's SIGKILL. Next opportunity is Sunday 2026-08-16 — verify it actually lands, and do not assume the weekly-full mechanism works until one has been observed.** Today's 172 rows is an incremental, not a full (a full reads ~23K).
+
+**ProductCard promo-row rendering — FOUR separate fixes, all live. This is one row that broke four different ways; read the whole sequence before touching it again.**
+
+1. **Chain name rendered at ZERO pixels wide (`61910bf`).** The price row is a two-segment flex: chain+city was `min-w-0` with `truncate` children, the price/badge side was `shrink-0`. So the badge side never yielded and every extra promo badge came straight out of the chain name. Measured on a 3-across card: `scrollWidth 101, clientWidth 0` — not ellipsised, *gone*. Fix: chain/city `shrink-0` with no `truncate`, badge side `flex-wrap … min-w-0`, and the freeform `promo_description` badge moved down to the wrapping detail row (it had needed a `max-w-[7rem]` cap in the price row).
+2. **Gap regression, self-inflicted (`eb5ef45`).** Letting the badge side wrap meant it could grow to fill the row, so `justify-between` no longer guaranteed any space — measured **0 px** between city and the wrapped `הכי זול` badge on live promo rows. The `ms-2` that looked like it should help did not: that element is `dir="ltr"` inside an RTL parent, so `margin-inline-start` resolved to the far edge. Fix: `gap-2` on the wrapper (direction-agnostic), `ms-2` dropped.
+3. **The "1+1" badge was FACTUALLY WRONG and has been removed (`dcd0b36`) — do not reintroduce it.** It was inferred from `reward_type === 1 && min_qty === 2`. **Across 80,461 active promo rows in 13 chains, that combination is always an "N for ₪M" bundle and never buy-one-get-one** (`פיירי סבון 2 ב 18`, `דובדבנים 250 גר 2 ב 35`, `מרכך בדין 2 ב 30`, `בירה 2 ב 15`): `discount_price` is the bundle **total** for `min_qty` units, so 2 × ₪9.00 = ₪18.00 against a ₪13.10 shelf price — which is exactly where the co-displayed `-31%` came from. **This is the trap CLAUDE.md marks SEVERE and SU10A-7 says bit three times: `reward_type` is chain-specific and must never be read as a quantity** (Victory encodes 1+1 as `reward_type=10`, not 1). Note `PromosPage.tsx:165` already did this correctly by matching the description text — **ProductCard was the outlier.** The honest structural signal is `gift_count` (`IsGiftItem`, added SU10A-7), which **`/promos/bulk` does not currently return** — exposing it is the prerequisite for any future genuine 1+1 badge. Nothing was lost by removal: `bundleCondition()` already renders the deal exactly, as `2 יח' ב-₪18.00 · ₪9.00 ליח׳`.
+4. **Promo rows restructured to a fixed 3-row layout (`9c0e3a8`).** Row 1 = chain + price only; row 2 = promo detail (badge, cheapest, discount %, bundle condition / description); row 3 = branch + city. **Plain promo-free rows deliberately left as the single line they already were.** Also dedupes the city on row 3 — several chains bake it into `store_name` (Shefa's `23 כהנמן בני ברק`), which rendered `… בני ברק · בני ברק`; the city is now appended only when `store_name` does not already contain it, verified working both ways.
+
+> **Diagnostic note worth keeping: none of the four were found by looking.** Each was caught by DOM measurement against live data — `scrollWidth` vs `clientWidth` for clipping, `getBoundingClientRect()` deltas for the gap, and a record-count query against `/promos/bulk` for the badge. The zero-width and 0px-gap defects both looked *plausible* in a screenshot. **Measure this row; do not eyeball it.**
+
+**Carried forward (open):**
+1. **Kernel OOM confirmation for Aug 7/8/9 — never captured.** Needs one sudo command (above). Until then the cause is inference, not proof.
+2. **Weekly GS1 full sweep unproven** — first one was skipped by the Aug 9 kill; watch Sunday 2026-08-16.
+3. **Postgres not retuned for 3.8 GiB** — `shared_buffers` / `effective_cache_size` still at 1.9 GiB-era values. Flagged, not fixed.
+4. **`gift_count` not exposed on `/promos/bulk`** — blocks any correct 1+1 / "N for M" badge.
+5. **Idle-backend trimming is CLOSED as a memory lever** (worth ~3.8 MB, measured). Do not revisit; the RAM bump was the real fix.
+6. **`max_workers` doc drift** — this handoff said 6, code says 4. Corrected above; check the doc against `cron_main.py` before relying on it.
+7. All SU10A-7 carried-forward items not listed here stand unchanged.
+
+---
+
+## Session SU10R-1 (September 25-26, 2026) — Ratings & reviews backend
+
+Item ratings on a 1-3 scale with optional comments, plus reporting and a blacklist-driven moderation path. The mobile and web surfaces are SU10R-2 and the mobile handoff; this entry is the backend.
+
+### Schema (`db/migrations/su10r1_ratings.sql`)
+
+Three new tables: `ratings`, `rating_reports`, `rating_blacklist`.
+
+**`item_code` is deliberately NOT a foreign key to `items`.** Catalog churn is routine here — the scraper re-ingests constantly and products get delisted — and no amount of it may be able to destroy user-authored content. A rating has to outlive the catalog row it points at. Reads therefore LEFT JOIN `items` and tolerate a null name; confirmed working against a code with no catalog row.
+
+Applied as `scrp_app` because `sudo -u postgres` is not passwordless on this box. That is **not a new precedent** — every existing table in this database was created ad-hoc the same way via `init_db()`, and `scrp_app` already owns all of them.
+
+### Endpoints (`api/routers/ratings.py`)
+
+| Endpoint | Auth | Notes |
+|---|---|---|
+| `POST /items/{code}/rating` | required | Upsert on `(user_id, item_code)` — re-submitting **edits in place**, no history kept. |
+| `GET /items/{code}/ratings` | public | `status='active'` only. |
+| `POST /ratings/{id}/report` | required | Flags for review; **never** auto-hides. |
+| `GET /admin/ratings/pending` | allowlist | Gated on an `ADMIN_USER_EMAILS` env var. |
+| `GET /me/ratings` | required | The caller's own ratings **including hidden/pending**, with `item_name` via a cheap LEFT join. |
+
+There is no RBAC system in this application, so `ADMIN_USER_EMAILS` is the deliberately scrappy equivalent rather than a designed permission model. It **fails closed**, and returns **404 rather than 403** to a signed-in non-admin, so the endpoint's existence is not confirmable by probing it.
+
+`GET /me/ratings` was a follow-up within the same session. It replaced a client-side AsyncStorage workaround on mobile that existed only because no such endpoint did — that workaround is gone, not left dormant.
+
+### Blacklist moderation — one real bug, one deliberate gap
+
+On a match the submission is auto-hidden and a system report is auto-filed, case-insensitively.
+
+**Bug found and fixed mid-session:** the first implementation matched by substring (`if t in haystack`). A short term such as `לבז` then false-positived **inside unrelated words** — e.g. within `הלבזמ` ("rubbish dump"). Fixed to word-boundary matching, `re.search(rf"\b{term}\b", ...)`; verified that Python's `\w` is Unicode-aware, so `\b` behaves correctly on Hebrew.
+
+**Deliberate, tested tradeoff — do not "fix" this later without re-reading it.** Hebrew's inseparable prefixes (ש/מ/ל/כ/ב/ו/ה) mean a prefixed insult will **not** be caught by strict word-boundary matching. Prefix-inclusive matching was implemented, tested and **rejected**: it false-positived on innocent, common words — e.g. `ניזה` ("fed [the baby]" / "entered [data]"), which merely contains a slang term as a substring. The rationale is asymmetric cost: missing a prefixed insult is acceptable because it remains user-reportable; hiding a legitimate review is not.
+
+16 initial terms seeded, supplied directly by Dude rather than generated. The table is live and empty-by-default until terms exist.
+
+### Moderation email — confirmed absent, deferred
+
+A full-repo search confirmed **no email-sending infrastructure exists anywhere in this project**: no `smtplib`, no SendGrid or equivalent, no `SMTP_*` env vars, no mail library in `requirements.txt`. The portal's own 9i contact-form notification was scoped once and never built either, so there was nothing to reuse.
+
+`_notify_moderation()` therefore only logs at WARNING today. A real send is deferred pending a provider decision — **SendGrid recommended**: it unifies with the flights vertical's already-floated choice and needs only one API key, since `requests` is already a dependency. Tracked in `docs/roadmap.md`, not scheduled.
+
+### Design principle, verified live rather than merely designed
+
+A blacklist-hidden submission returns a real `blocked: true` to the submitting client, and **nothing in either frontend surfaces it**. This was confirmed by submitting a genuine blacklist-tripping comment against production and inspecting every author-reachable surface — `GET /me/ratings`, the public `GET`, and both mobile and web source — for any trace of the match reason. None found.
+
+The actual reason (`blacklist term matched: X`) exists **only** in `rating_reports`, reachable only through the admin allowlist endpoint. The mobile handoff's SU10R section carries the full do-not-surface invariant; do not weaken it from this end either.
+
+---
+
+## Session SU10R-2 (September 26, 2026) — Web ratings UI + product-detail restructured to three tabs
+
+### Initial ship
+
+- **Rating badge on `ProductCard`** — percentage + count, with a neutral "no ratings yet" state at zero. It never renders a literal 0%, which would read as a unanimously terrible product rather than an unrated one. A failed fetch degrades to that same neutral state, so ratings can never take the price card down with them.
+- **`ProductDetailModal` gained a ratings tab** — aggregate, an X/XX/XXX submission form, the public comment list and a report action. The form uses **native radio inputs** rather than styled buttons, so arrow-key navigation between options comes for free and matches what a screen-reader user expects.
+- **Full WAI-ARIA tabs pattern** — `tablist`/`tab`/`tabpanel`, roving `tabIndex`, Arrow/Home/End keys, with **RTL-inverted arrow direction**, per this project's IS 5568 / WCAG 2.0 AA baseline.
+- **`/my-ratings` page** — cloned from `FavoritesPage`'s auth-redirect pattern rather than inventing a second gating mechanism.
+
+### Real bug: `hidden` was set correctly and did nothing
+
+The modal's non-reviews panels toggled visibility with the HTML `hidden` attribute while **also** carrying Tailwind's `flex` class. `.flex { display: flex }` is a class selector, which outranks the UA stylesheet's `[hidden] { display: none }` on specificity — so `hidden` was being set on every tab change with **literally zero visual effect**, and price rows plus every GS1 section rendered on every tab.
+
+The reviews panel only looked correct because it happened to use conditional rendering (`{tab === 'reviews' && ...}`) instead.
+
+Fixed by switching **all** panels to conditional rendering, which makes the bug **structurally impossible to reintroduce** rather than merely patched for this instance — there is no longer a `hidden` attribute for a CSS rule to outrank.
+
+### Restructured from two tabs to three
+
+Follow-up direction from Dude in the same session: **מחירים** (the chain-by-chain price rows, previously unscoped content bleeding below the tabs) / **פרטי מוצר** (GS1 kashrut, nutrition, ingredients, allergens) / **ביקורות ודירוגים** (unchanged).
+
+Verified by a **DOM audit per tab**, confirming exactly one `tabpanel` mounted at a time — run against both a full-GS1 product and a no-GS1 product (the ~92% case).
+
+### Deploys verified by hash, not by the script's own output
+
+Every deploy this session was confirmed by comparing file hashes between the local build output and the live served bundle. `deploy_frontend.ps1` prints "Done!" regardless, and this project has a documented history of that message being unreliable — do not trust it on its own.
+
+### Device/browser verification
+
+Verified by Dude across the full checklist — badge display, tab switching, submission, editing via My Ratings, blacklist silent-hide plus the "under review" tag, signed-out gating, and keyboard tab navigation. All confirmed working.
+
+
+---
+
+## Session SU10S-1 (September 26, 2026) — stale GS1 image cache fixed; serving-layer recon
+
+### Shipped: stale cached images are now deleted (`fd324c5`)
+
+`scraper/gs1_fetch_images.py`. `_fetch_and_resize()` returned `None` both when the media endpoint answered 200 with no `"file"` and when the fetch failed, so `run()` counted them identically as "failed" and never touched the local JPEG. Since `api/routers/product.py::_image_path()` is a bare `is_file()` check with no upstream cross-reference, a product whose imagery was withdrawn kept serving its stale copy indefinitely — under a 7-day immutable Cache-Control header.
+
+The two cases are now distinct. A 200 with no `"file"` returns the sentinel `"no_image"` and any local copy is deleted; HTTP errors and the exception path still return `None` and touch nothing. **That distinction is the whole point** — conflating them would let one afternoon of 5xx responses wipe the cache. Deletion is additionally gated on `not dry_run`. New `deleted` / `no_image` counters appear in the progress line, the DONE summary and `run()`'s return dict.
+
+Verified on the server: `--dry-run --limit 15` and `--limit 250` both exit 0 with the new counters, and a stubbed-response test confirms the safety property directly — 200-with-no-file, `file: null` and `file: ""` all return `"no_image"`, while 500 and 404 both return `None`.
+
+**Two limits worth knowing before relying on this:**
+
+1. **It only runs under `--refresh`.** A default run skips any GTIN that already has a file, which is exactly the population that can hold a stale image. A plain run will never delete anything. Recorded in the module docstring.
+2. **It does not reach orphans.** `run()` iterates the target set (active GS1 row ∩ `items`), so a GTIN that drops out of that set is never visited again. Measured: **262 of the 11,450 JPEGs on disk are no longer in the target set** and will be served forever regardless of this fix. A sweep comparing the directory against the target set is a separate, still-unbuilt job.
+
+Also measured, and it corrects an assumption: 16,204 GTINs are now in the target set but only 11,188 have a local file. Spot-checking six of the 5,016 without one found **all six still have imagery upstream** — so that gap is unfetched backlog from catalog growth since the last full image pull, not withdrawn imagery.
+
+### Task B recon (read-only): what `fetch_gs1_details()` never reads
+
+Sampled **260 active products across 65 distinct supplier GLNs** (4 per GLN, newest first) rather than the newest 5 overall, which all turned out to be one supplier.
+
+**The structure is completely stable** — all 17 `product_info` branches are present on 100% of sampled products, so this is a fixed schema and not a per-supplier grab-bag. That is a materially different risk class from the promo `reward_type`/`min_qty` problem: there is no per-chain variance to verify here. 14 branches are unread; how many actually carry data varies a lot:
+
+| Unread branch | Has data |
+|---|---|
+| `Main_Fields`, `General_Information`, `Additional_Information`, `Product_Dimensions`, `Internal_System_Fields`, `Case_or_Carton_Dimensions`, `System_Features`, both `Logistics_*` | 100% |
+| `Marketing_Information` | 62% |
+| `Additional_Features` | 60% |
+| `Pallet_or_Logistic_Unit_Dimensions` | 34% |
+| `Tray_Dimensions` | 4% |
+| `Promotional_Product_Information` | **0%** — present on every product, populated on none |
+
+**Leaf field names + fill rates for the consumer-facing branches** (this is what the follow-up needs in order to stop guessing):
+
+- `Main_Fields` — `BrandName`, `Sub_Brand_Name`, `Net_Content` {value, UOM, text}, `Country_of_Origin`, `Short_Description`, `Trade_Item_Description`, `GPC_Category_Code` — all 100%; `functionalName` 78%, `Variant` 67%.
+- `General_Information` — `Manufacturer_Name` 79%, `Manufacturer_Address` 75%, `Search_Words` 74%, `Additional_Trade_Item_Description_1` 72%, `Product_Description_English` 45%.
+- `Additional_Information` — `Food_Symbol_Red` **100%**, `Consumer_Storage_Instructions` 46%, `Hazard_Precautionary_Statement` 25%, `Serving_Suggestion` 24%, `Forbidden_Under_the_Age_of_18` 3%.
+- `Product_Dimensions` — `Price_Comparison_Content` **100%**, `Product_Gross_Weight` 100%, `Net_Weight` 84%.
+- `Marketing_Information` — `Trade_Item_Marketing_Message` 61%, then _2 26%, _3 16%, tailing to _7 at 0%.
+
+**Two findings worth surfacing above the rest:**
+
+- `Food_Symbol_Red` is Israel's mandated front-of-pack warning label and is present on **every** sampled product. Values are a closed set: `ללא סימון` (131), `סוכר בכמות גבוהה` (68), `שומן רווי בכמות גבוהה` (64), `נתרן בכמות גבוהה` (48), `סמל ירוק` (6) — note products carry more than one. This is high-value, regulator-defined consumer data we already hold and have never shown.
+- `Price_Comparison_Content` (100%) is the declared unit-price basis, e.g. `100 גרם` — directly relevant to a price-comparison product, and currently unread.
+
+**Shape corrections for whoever scopes the build** — the recon query assumed dicts:
+
+- `media_assets` is a **list of dicts**, not a dict. Every sampled product has at least one entry, averaging 2.8. Keys are uniform at 100%: `filename`, `file_size`, `width`/`height` (2560x2560 typical), `image_type` (`S` 510 / `E` 210), `default_image`, `hidden`, `publish_file`, `show_in_gallery`, `modification_timestamp`. **This is the missing half of the image-staleness story**: it names the assets a GTIN should have, so a future sweep could reconcile the image directory against it instead of re-fetching to find out.
+- `private_data` and `multi_pack` are **empty lists** on every sampled product — nothing to serve, do not scope work against them.
+- `gs1.products` has no `supplier_gln` column; the supplier column is `gln`.
+
+No code was changed for Task B and nothing was committed from it.
+
+
+---
+
+## Session SU10S-2 (September 26, 2026) — GS1 warning labels + unit-price basis served
+
+Two of the 14 unread `product_info` branches from SU10S-1 are now served end to end. Everything else in that recon stays unread by design.
+
+Backend + web: `9c370cd`. Mobile (separate repo): `dd77034`.
+
+### The shape was confirmed before the parser was written
+
+- `Food_Symbol_Red` is a coded list, so it reuses the existing `_coded_values` convention.
+- `Price_Comparison_Content` is **not** — it is a single `{UOM, text, value}` dict, so `_first_value()` does not apply and it gets its own reader. That reader takes `text`, the supplier's own rendering, because it is the only field that survives a non-numeric basis such as a bare `יחידה` (144 occurrences), and because UOM is dirty in production — 135 nulls and a `גרם\n` with a trailing newline across 4,000 sampled active products.
+
+### One finding changed the spec: FSR5 is not a warning
+
+`Food_Symbol_Red` is a **closed five-code set**, counted over 4,000 active products:
+
+| Code | Value | Count | |
+|---|---|---|---|
+| FSR1 | `ללא סימון` | 2463 | absence sentinel |
+| FSR2 | `נתרן בכמות גבוהה` | 517 | warning |
+| FSR3 | `סוכר בכמות גבוהה` | 743 | warning |
+| FSR4 | `שומן רווי בכמות גבוהה` | 825 | warning |
+| FSR5 | `סמל ירוק` | 119 | **the GREEN label — a positive health marker** |
+
+The brief anticipated filtering only FSR1. **FSR5 is filtered too**: it is Israel's green label, awarded to products meeting healthy-nutrition criteria, and rendering it among red warning badges would tell a user that a healthy product carries a warning. Since this field is typed and labelled as warnings, FSR5 is held rather than shown — surfacing it properly needs its own field and its own copy, deliberately out of scope here. **That data is in hand and unshown; it is the obvious next increment if a green-label badge is ever wanted.**
+
+Filtering is by **code**, not by Hebrew string, wherever a code is present — codes are stable identifiers and the display values are free text already observed carrying stray whitespace in this payload; the value set is a fallback for the rare entry with no code. An all-filtered result collapses to `None` rather than `[]`, matching how `kashrut` already handles an all-blank block, so both clients branch on presence alone.
+
+### Verification
+
+17 unit cases on the two parsers pass, covering every code in the set, the blank sentinel, a missing code, duplicates, whitespace and wrong types.
+
+Live against production after the API restart:
+
+- Warning products return the real warnings — e.g. `7290000363424` → `["נתרן בכמות גבוהה","שומן רווי בכמות גבוהה"]`.
+- FSR1 products return `null`.
+- **Four green-label (FSR5) products return `null`**, confirming the deviation holds in production and not just in the unit test.
+
+Browser-verified on super.xxl.co.il: on a warning product the פרטי מוצר tab renders all six sections in order — כשרות, ערכים תזונתיים, רכיבים, אלרגנים, **סימון אזהרה**, **בסיס להשוואת מחיר** — with no sentinel leakage; on a no-warning product (`7290000057132`) the warning section is **absent from the DOM** while the basis line still renders. Deploy confirmed by file hash against the live bundle, not by the deploy script's "Done!".
+
+### Note for whoever regenerates mobile types
+
+`xxl-super-mobile/src/types/api.ts` was regenerated from the live OpenAPI schema rather than hand-edited. The diff was **+350 lines, purely additive** — the file had gone stale and predated the ratings endpoints, so that regeneration also pulled those in. Worth knowing that this file drifts silently: nothing fails until something reads a field the stale copy lacks.
+
+
+---
+
+## Session SU10S-3 (September 26, 2026) — GS1 backlog backfilled, durable archive created
+
+No code changed. Two operational outcomes: the GS1 detail backlog is now **fully cleared**, and there is a verified, restorable archive of everything GS1 we hold.
+
+### Coverage, before → after
+
+| | before | after |
+|---|---|---|
+| detail targets with `full_content` | 11,221 / 16,204 | **16,204 / 16,204 (100%)** |
+| images present | 11,188 / 16,204 | 12,856 / 16,204 |
+| `gs1.products` rows with `full_content` | 11,496 | 16,479 |
+| detail coverage of the 166,453-item catalog | 6.74% | **9.73%** |
+| image coverage of the catalog | 6.72% | 7.72% |
+
+Detail ran clean: **4,983 fetched, 0 failed** in 2,216s at ~2.3 req/s.
+
+### The image run was stopped early — GS1 rate-limited us
+
+Images reached `ok=1,668 failed=163 skipped=4,369` of 16,204 and were **deliberately stopped**, not left to finish. At 19:18:58 the media endpoint began returning **HTTP 400 `נחסמת בעקבות כ…`** ("you have been blocked due to …", truncated at 80 chars by `resp.text[:80]`). Failures went 26 → 163 in four minutes; 254 such responses in total.
+
+Stopping was the right call and costs nothing: the fetcher **skips GTINs that already have a file**, so re-running later resumes at exactly the 3,348 still missing. Nothing was half-written — deletion only happens under `--refresh`, which was not used.
+
+**Operational lesson for whoever schedules this:** the detail endpoint tolerated 4,983 sequential calls at 2.3/s without complaint, but the media endpoint blocked after roughly 1,800 calls in one sitting at 2.0/s. They do not share a budget. Any weekly job must cap images per run, or expect to be blocked. The two other error classes seen were `UnidentifiedImageError` (33 — GS1 returned a payload that is not a decodable image) and one HTTP 404.
+
+### Archive — `~/gs1_archive/2026-09-26/` (716 MB)
+
+| artifact | size | contents |
+|---|---|---|
+| `gs1_schema.dump` | 18 MB | `pg_dump -Fc -n gs1` — products, sync_runs, indexes |
+| `gs1_full_content.jsonl.gz` | 12 MB | 16,204 rows, one JSON line per GTIN, Postgres not required to read it |
+| `gs1_images.tar.gz` | 686 MB | 13,118 JPEGs |
+| `MANIFEST.txt` | — | date, row/file counts, sha256 of each artifact, scrp commit `9c370cd` |
+
+The JSONL uses the **same active-row ranking `fetch_gs1_details()` serves from** (`_GS1_RANKED_CTE`, `rn = 1`), so it is the payload users actually see, not a raw table dump.
+
+**Verified restorable, not merely present:** `pg_restore --list` succeeds and lists `gs1.products`; the tar holds 13,118 `.jpg` entries, matching the live directory exactly; all three sha256 sums re-verify against MANIFEST on both copies.
+
+#### Restore instructions
+
+```bash
+# Schema (into an existing database; drops and recreates the gs1 schema)
+pg_restore -d xxl_super --clean --if-exists -n gs1 gs1_schema.dump
+
+# Portable alternative, no Postgres needed
+zcat gs1_full_content.jsonl.gz | head -1 | python3 -m json.tool
+
+# Images — MUST land at ~/gs1_images on the API host.
+# api/routers/product.py::_image_path() resolves {gtin}.jpg under that
+# directory and does a bare is_file() check, so the path is load-bearing.
+tar -xzf gs1_images.tar.gz -C ~
+```
+
+### Copies
+
+- **Copy 2 (Dude's Windows machine): DONE** — `C:\xxl-archive\gs1\2026-09-26\`. Deliberately outside `C:\scrp`; confirmed not inside any git repository, so 716 MB cannot reach a commit. All three sha256 re-verified after transfer, and the tar reads back 13,118 entries.
+- **Copy 1 (offsite B2): NOT DONE — blocked on credentials, not on effort.** `dude` has **no rclone config** (0 remotes); the B2 credentials live in `/root/.config/rclone/rclone.conf`, unreadable to `dude`; and while `dude` has `(ALL : ALL) ALL` in sudoers it is **password-required** — NOPASSWD covers only five specific `xxl-*` scripts. The archive exists and is verified on the server and on Windows, so nothing is lost; only the third, offsite copy is outstanding.
+
+### Backup scope — the gap is images, not the schema
+
+Determined from `/usr/local/bin/scrp-backup.sh` (world-readable) plus the DB layout; the dump files and the B2 listing are root-only, so this is established from the command the script runs, not from inspecting a dump.
+
+- **The gs1 schema IS backed up.** The script runs `sudo -u postgres pg_dump -Fc xxl_super` — a whole-database dump with no `-n` filter, and `gs1` is a schema inside `xxl_super` (the app's own `DATABASE_URL` points there). All schemas are therefore included.
+- **`~/gs1_images` is NOT backed up.** The script touches only the dump; the image directory appears nowhere in it. Those 13,118 files (754 MB) exist on exactly one disk, which is what this session's archive now mitigates.
+- Remote: `b2:xxl-scrp-backups`, path `daily/`. Retention prunes **local** files only (>6 days, keeping Sundays 28d and 1st-of-month 180d); nothing in the script prunes B2.
+
+**Not changed this session, by instruction.** The minimal fix would be one line in `scrp-backup.sh` — `rclone copy ~dude/gs1_images "${BUCKET}/gs1-images/" --no-traverse` — but it is infra that has run cleanly and the change is Dude's call. Note it would add ~750 MB to each run unless made incremental (`rclone sync` would, at the cost of mirroring deletions).
+
+### Cron proposal (STEP 3 — proposal only, nothing implemented)
+
+Today `cron_main.py` already runs two GS1 steps at the end of the daily 10:00 IDT job: `run_gs1_catalog()` (incremental, FULL on Sundays) then `run_gs1_enrichment()`. Both are lazily imported, exception-wrapped and never raise, so a GS1 failure cannot fail the supermarket scrape. `gs1_fetch_detail` and `gs1_fetch_images` are **not** in the cron at all — the backlog this session cleared had simply accumulated since the last manual run.
+
+**Recommendation: a separate systemd timer, not inside `cron_main.py`.** Three reasons.
+
+1. **Memory.** SU10A-8's OOM history is the binding constraint on the cron path. The box is now 3.8 GB (up from the 1.9 GB of that incident) with 2.4 GB available, so this is no longer acute — but the daily cron already peaks with 4 chain workers, and appending a 45-minute image job to the same process raises peak RSS for no scheduling benefit. A separate timer costs nothing and keeps the OOM-sensitive path exactly as it is.
+2. **Rate limits.** The media endpoint blocked us after ~1,800 calls in one sitting. That has to be handled with a per-run cap and a retry the following week, which is natural for a standalone job and awkward inside a run whose failure policy is "log and continue".
+3. **Duration.** At a steady state of a few hundred new GTINs a week the job is minutes, but the first catch-up run after any gap is hours. That must not sit inside the daily scrape.
+
+Suggested shape, for Dude to approve rather than to be taken as done:
+
+- `scrp-gs1-fetch.timer`, weekly, **Sunday ~14:00 IDT** — after the 10:00 scrape has finished and after `run_gs1_catalog()`'s Sunday FULL sweep, so the week's new GTINs are already in `gs1.products` before this runs.
+- `ExecStart`: `gs1_fetch_detail` then `gs1_fetch_images --limit 1500`. **Never `--refresh`** — new GTINs only.
+- The `--limit 1500` is the load-bearing part: it keeps each run under the observed block threshold. A backlog then drains over a few weeks instead of triggering a block on week one.
+- Expected steady-state load: a few hundred detail calls (~2 min) plus the image cap (~12 min at 2 req/s), once a week, entirely outside the daily cron's process and memory.
+- Same failure policy as the existing GS1 steps: log, never raise, never block anything else.
+
+
+---
+
+## Session SU10S-4 (September 26, 2026) — Health Ministry green label surfaced; two data findings
+
+Backend + web `397ac84`; mobile `bd1f7a3`.
+
+### `green_label` — FSR5 as its own positive field
+
+SU10S-2 held FSR5 out of `warning_labels` so it could not render as a red warning. It is now its own boolean, matched on the **code** like `warning_labels`; that field is unchanged and still excludes FSR5.
+
+Measured across all 16,204 served rows: **422 products carry FSR5, and it never co-occurs with FSR1 or with any FSR2/3/4 warning** — it is always the sole entry. Green and warnings are therefore mutually exclusive in today's data. The code deliberately does **not** enforce that: it reports what the field says and the two sections render independently, so a product that ever carried both would show both rather than silently hiding one. A unit case covers that hypothetical alongside the ten real ones.
+
+Display is text plus a neutral check glyph. **The official ministry graphic is a government mark and is not reproduced.** Meaning is carried by the text, not by colour.
+
+Contrast measured per the IS 5568 baseline rather than assumed — and the measurement earned its keep: the first mobile draft hardcoded an emerald-800 icon tint that scores **7.29:1 on the light badge but only 1.97:1 on the dark one**. It is now emerald-600, the single value clearing 3:1 on both (3.58 / 4.02). The text label was already theme-aware: 7.29:1 light, 11.81:1 dark.
+
+### Finding 1 — GS1 disagrees with the physical carton
+
+**`7290000056845` (Tnuva 3% milk 1.5L) does NOT carry FSR5 in GS1.** Its `Food_Symbol_Red` is `[{"code":"FSR1","value":"ללא סימון"}]` — "no marking" — even though Dude has the physical carton bearing the green label. Same for `7290004131074`. Both have `has_gs1_data: true`, so this is not a missing-record problem: the supplier published a positive statement that the product is unmarked, and it is wrong.
+
+Consequence worth carrying forward: **absence of a marking in GS1 is not evidence of absence on the package.** We render what suppliers publish, which is the only defensible thing to do, but the 422 green-label products are a floor rather than a count. If green-label coverage is ever quoted to anyone, quote it as "declared in GS1", not as "products bearing the label".
+
+### Finding 2 — the nutrition basis is the supplier's, not our bug (read-only, no fix)
+
+For `7290004131074` the app shows nutrition "ל-100 גרם" while the unit-price basis says "100 מל". Checked the raw payload: `col_label` on `fields[0]` **is literally `ל-100 גרם`**, entered by the supplier, for a product whose `Net_Content` is `1 ליטר`. So the grams-for-a-liquid mismatch is **the supplier's own inconsistency, faithfully displayed** — not an artefact of `_parse_nutrition` reading `fields[0]`.
+
+The `fields[0]`-only limitation is nonetheless real and now has a concrete example: this product's table has **two** columns — `ל-100 גרם` and `למנה` (per serving, with its own values: 60 vs 120 calories) — and the second is silently discarded. `table` also carries `colLabels`, `numberOfCols` and `numberOfRows`, none of which are read. Filed under known bugs in `docs/roadmap.md`; **no fix this session, by instruction.**
+
+### Verification
+
+- Parser: 10 unit cases pass, including FSR5-only, FSR5+FSR1, the no-code value fallback, and the hypothetical FSR5+warning. Invariant asserted directly: FSR5 never lands in `warning_labels`.
+- Live API: three FSR5 products return `green_label: true` with `warning_labels: null`; a warning product returns `false` with both warnings; the no-GS1 empty shape carries `green_label: false` as a present key, not a missing one.
+- Browser on super.xxl.co.il: green product shows the badge, helper line and the aria-label `"הסימון הירוק. סימון משרד הבריאות…"`, with no warnings section; a warning product shows warnings and no badge; a GS1 product with neither marking shows neither section. Deploy hash-verified (`8078860e…`).
+
+### Web placement check (Step 3)
+
+Web's `מידע נוסף` button already renders **above** the price rows in `ProductCard.tsx`, so it never had mobile's below-the-fold problem. **Web deliberately unchanged.**
+
+
+---
+
+## Session SU10S-5 (September 26, 2026) — weekly GS1 fetch timer, offsite image backup, block circuit breaker
+
+Commits `2d48b40` + `439aa17`. **Units are committed, NOT installed** — installation needs root and is Dude's single paste-in step (printed at the end of the session, and reproduced below).
+
+### Circuit breaker in `gs1_fetch_images.py`
+
+HTTP 400 — the block response measured in SU10S-3 — now returns a distinct `"blocked"` sentinel. It is still counted as a plain failure, but a streak of them is tracked: **10 consecutive aborts the run**, logs how many remain for next week, and exits non-zero so a blocked run shows as a failed unit rather than a clean finish with suspiciously few images. Any non-400 answer resets the streak, so isolated 400s cannot trip it.
+
+**A block never reaches the delete path.** Only a confirmed 200 with no `"file"` may delete (SU10S-1); that is unchanged and is covered by a test that fills a directory with files, runs 12 blocks against it, and asserts nothing was removed.
+
+Verified on the server with stubbed responses: 400→`"blocked"`, 500/404→`None`; 10×400 aborts at exactly 10 of 30; 9×400 then a 200 continues; 30×500 never aborts; `SystemExit(1)` on abort and none on a clean run.
+
+### The two units
+
+| | `scrp-gs1-fetch` | `scrp-gs1-images-backup` |
+|---|---|---|
+| when | Sunday 14:00 IDT | Sunday 17:00 IDT |
+| as | `dude` | `root` (B2 creds are root's) |
+| does | `gs1_fetch_detail` then `gs1_fetch_images --limit 1500` | `rclone copy ~dude/gs1_images → b2:xxl-scrp-backups/gs1-images/current/` |
+
+**14:00 was chosen against data, not by feel.** The Sunday catalog FULL sweep is the daily cron's last step and finished between **11:21 and 11:42** across four observed Sundays (the sweep itself takes ~30s; the cron around it runs 81-101 min from its 10:00 start). 14:00 leaves over two hours of margin.
+
+**`--limit 1500` is load-bearing.** The media endpoint blocked after roughly 1,800 requests in one sitting at 2 req/s; 1,500 stays under that with margin. The remaining **3,348-image backlog drains in about three weekly runs**, after which each run is only the week's new GTINs (tens to low hundreds) and takes minutes. **CORRECTION (SU10S-13): that estimate only holds from SU10S-13 onward.** As written, `--limit` capped *targets examined* rather than *fetch attempts*, so the first scheduled run reached only GTINs that already had files and fetched nothing — it would have drained the backlog never, not in three weeks.
+
+**Never add `--refresh`** — it would re-fetch all ~16k images every week and get us blocked immediately.
+
+Other deliberate choices: the detail step carries a leading `-` so a detail failure does not cost us the image run, while the image step does **not**, so its non-zero exit surfaces. `Persistent=false` on both timers, because catching up a missed week would fire a run right after boot and two runs close together is exactly what triggers a block.
+
+**`rclone copy`, never `sync`.** A stale image deleted locally by the SU10S-1 upstream-deletion path must remain in the backup — the point of an offsite copy is surviving the loss of the local disk, and `sync` would faithfully propagate every local deletion into the only other copy.
+
+Expected peak memory is small: the image job holds one decoded JPEG at a time (a 4800×4800 original is ~69 MB decoded) on top of a ~50 MB interpreter, so a couple of hundred MB against 2.4 GB available — and it runs at 14:00, entirely outside the 10:00-11:45 cron window. This was the main reason for a separate timer rather than appending to `cron_main.py`; SU10A-8's OOM history makes the cron path the wrong place to add anything.
+
+### Two findings about the EXISTING units
+
+1. **`TimeZone=` is not a systemd timer option.** `systemd-analyze verify` reports it as an unknown key and ignores it — on my first draft, and on the installed `scrp-cron.timer` and `scrp-backup.timer`. Those two fire at the intended Israel times **only because the server's own timezone is Asia/Jerusalem**; the line that looks like an explicit guarantee is decorative, and a host timezone change would silently shift both. The new timers use the inline `OnCalendar=Sun *-*-* 14:00:00 Asia/Jerusalem` form, which systemd 255 supports and `systemd-analyze calendar` resolves correctly. **The two installed timers were not touched** — they are root-owned and the fix is Dude's call, but it is a one-line change in each if wanted.
+2. **`supabase-keepalive.service` has a fatal parse error** — `Unbalanced quoting … unit will not be started`, from the multi-line inline `python3 -c` in its `ExecStart`. It was never enabled (still listed as an open item from 9d-4), so nothing regressed; it simply would not have worked if it had been. Now that it is tracked it is at least visible.
+
+### Repo layout change
+
+`deploy/` was gitignored outright, so `deploy/systemd/` was **never actually committable** and the supabase-keepalive units existed only in one working tree. Narrowed to `deploy/*` plus a `!deploy/systemd/` negation, since units that cannot be pulled on the server defeat their own purpose. Added `deploy/systemd/* text eol=lf` to `.gitattributes` — authored on Windows, parsed by systemd on Linux, and CRLF in a unit file is not reliably handled. Verified 0 CR bytes in all four files after the server pull.
+
+No wrapper `.sh` was needed — systemd's multiple `ExecStart` lines cover the two-step run — so there is no exec bit to set and the `core.fileMode` caveat does not apply here.
+
+### Install (Dude, one paste after `ssh dude@185.229.226.190`)
+
+```bash
+cd ~/scrp && git pull origin main
+sudo cp deploy/systemd/scrp-gs1-fetch.service \
+        deploy/systemd/scrp-gs1-fetch.timer \
+        deploy/systemd/scrp-gs1-images-backup.service \
+        deploy/systemd/scrp-gs1-images-backup.timer /etc/systemd/system/ && \
+sudo systemctl daemon-reload && \
+sudo systemctl enable --now scrp-gs1-fetch.timer scrp-gs1-images-backup.timer && \
+systemctl list-timers "scrp-gs1*" --no-pager && \
+sudo systemctl start scrp-gs1-images-backup.service && \
+sudo journalctl -u scrp-gs1-images-backup -n 30 --no-pager
+```
+
+The fetch unit is deliberately **not** test-run by that block. (A 3-request probe at the end of this session came back clean, so the earlier block has cleared and the first Sunday run should proceed normally.)
+
+### Checking a run
+
+```bash
+journalctl -u scrp-gs1-fetch -n 50 --no-pager      # last weekly fetch
+journalctl -u scrp-gs1-images-backup -n 30 --no-pager
+systemctl list-timers "scrp-gs1*" --no-pager       # next run times
+```
+
+A healthy fetch ends with a `DONE — fetched=… failed=… skipped=…` line and an active-exited unit. A blocked one ends with `media endpoint blocking — aborting run, N remain for next run` and a **failed** unit — that is working as designed, not a regression; the next Sunday picks up where it stopped.
+
+
+---
+
+## Session SU10S-7 (September 27, 2026) — moderation email over SMTP, sent in the background
+
+Commit `9d94fc5`. `_notify_moderation()` is no longer a stub. **Live send is still pending Dude adding the credentials** — see the end of this entry.
+
+### Why SMTP and not SendGrid
+
+SendGrid, floated in SU10R-1 and carried on the roadmap since, **dropped its free plan in 2025**. Every transactional provider then wants DNS records and a sender-verification dance for what is, in the end, one mailbox emailing another inside the same domain.
+
+Sending through the domain's own mailbox provider needs **no DNS change at all**. Verified against live DNS this session: `xxl.co.il` MX is `mx1/mx2.hostinger.com` and its SPF is `v=spf1 include:_spf.mail.hostinger.com ~all` — so mail leaving Hostinger's servers is already authorised, and alignment is inherited rather than configured. Cost zero, new dependencies zero (`smtplib` and `email` are stdlib).
+
+Outbound reachability from Kamatera was checked before building, since VPS hosts commonly block mail ports: **465, 587 and 25 are all open**. The code uses SMTP_SSL on 465 and STARTTLS otherwise.
+
+### The background send is a security property, not tidiness
+
+Only a *blocked* submission sends mail. Sending it inline would make blocked submits measurably slower than clean ones, and **that timing difference is itself a disclosure** — an abusive author could submit, watch the clock, and learn which of their words trip the filter. That is precisely the leak the "DO NOT SURFACE `blocked`" invariant exists to prevent, reached from a direction the original rule did not consider.
+
+So the alert is queued with FastAPI `BackgroundTasks` and runs after the response. Measured with a deliberately slow 300 ms fake SMTP:
+
+| | clean | blocked |
+|---|---|---|
+| handler time (what the client waits for) | 5.3 ms median (2.2-23.7) | 8.9 ms median (4.7-11.7) |
+| background time (never waited on) | 0 ms, 0 tasks | **304 ms**, 1 task |
+
+The whole 304 ms of mail cost is outside the response path. The residual **+3.6 ms** on the blocked path is the extra `rating_reports` INSERT that blocked submits have always done — pre-existing, about 1% of the mail cost, and comfortably inside the noise (the clean runs alone spanned 2.2-23.7 ms).
+
+The same reasoning drove a smaller decision: the alert's product-name lookup runs **inside the background task on its own connection**, not in the request, so the blocked path does no extra query either.
+
+**Do not "simplify" the `background.add_task` call into a direct call.** The call site says so.
+
+### Shape of the thing
+
+`api/mailer.py` is provider-isolated: all transport-specific code is in `_smtp_send`, so swapping providers touches one function. `send_email()` **never raises** into a caller and **never logs a credential** — missing config logs which *keys* are absent by name, and a send failure logs the exception type plus a truncated message.
+
+Throttle: 20/hour and 60/day, in memory. gunicorn runs `--workers 2`, so the effective ceiling is **2x** those numbers since each worker holds its own counter. That is documented in the module rather than engineered around with Redis; it still bounds the failure.
+
+Both paths keep their existing WARNING log line — `journalctl -u scrp-api` stays the fallback surface, and mail is best-effort by design.
+
+### Environment variables (names only — never commit or print values)
+
+`smtp_host`, `smtp_port`, `smtp_user`, `smtp_password`, `moderation_email_to` — lowercase per CLAUDE.md. Sender `notify@xxl.co.il`, recipient `info@xxl.co.il`.
+
+**The API takes its environment from systemd's `EnvironmentFile=/home/dude/scrp/.env`, and there is no `load_dotenv()` anywhere in `api/`.** systemd reads that file when the unit *starts*, so adding the keys does nothing until `scrp-api` is restarted. This is the most likely reason a first attempt appears to do nothing.
+
+### Verification
+
+Mailer, against a fake SMTP: missing config → `False` without raising; `SMTPAuthenticationError` → `False` without raising; the hourly cap trips on exactly the 21st call; a Hebrew subject and body round-trip intact with `charset=utf-8` and `Date` + `Message-ID` set.
+
+Endpoints, via TestClient with auth stubbed: a clean submit schedules **0** mails, a blacklist submit exactly **1**; both return 200 with identical keys (`blocked`, `id`, `status`) differing only in the values that are supposed to differ; a report returns 201 and schedules one. Test rows were deleted afterwards and the borrowed account's four real ratings were confirmed untouched.
+
+**Not done: the live end-to-end send.** All five keys are absent from `.env` (checked by presence count only). Also not done: the 5-vs-5 timing comparison over real HTTP, for two reasons — a Supabase token cannot be minted from here (ES256/JWKS, anon key only, a limitation carried since SU10R), and with SMTP unconfigured `send_email` short-circuits so there would be nothing to measure. The in-process measurement above tests the same property directly and with a worse-case 300 ms round trip.
+
+### To finish (Dude)
+
+1. Add the five keys to `~/scrp/.env`.
+2. `sudo /usr/local/bin/xxl-restart.sh scrp-api` — **required**, see the note above.
+3. Submit a rating containing a blacklist term, and report any rating.
+4. Confirm both mails reach `info@xxl.co.il` — **inbox, not spam** — with readable Hebrew.
+
+If nothing arrives, `journalctl -u scrp-api | grep -i mail` distinguishes the cases: "mail not configured — missing: …" names the keys, "mail send failed (…)" carries the SMTP error, and "[MODERATION] throttled" means the caps hit.
+
+
+---
+
+## Session SU10S-8 (September 27, 2026) — infra tidy-up: timers, a keep-alive that never worked, stale env copies
+
+Commits `731df8f` (timers captured as-is) + the follow-up fix. **The timer change needs Dude to install it** — block at the end.
+
+### Timers: the Israel-time guarantee is now real
+
+`scrp-cron.timer` and `scrp-backup.timer` have run in production for months but **existed only in `/etc/systemd/system`** — `deploy/` was gitignored until SU10S-5, so they were never committable. They are now tracked, captured byte-for-byte from the server (sha256-verified against the installed copies) and committed **unmodified first**, so the fix is a diff against what actually runs rather than against a reconstruction.
+
+Both carried `TimeZone=Asia/Jerusalem`, which **is not a systemd [Timer] key** — it is reported as unknown and ignored, so the timers fired at Israel time only because the host timezone happens to be Asia/Jerusalem. Changed to the inline `OnCalendar=… Asia/Jerusalem` form.
+
+**The schedule is provably unchanged** — that was the whole risk, so it was measured rather than asserted:
+
+| | before | after |
+|---|---|---|
+| scrp-cron | Mon 2026-09-28 10:00:00 IDT / 07:00 UTC | identical |
+| scrp-backup | Mon 2026-09-28 04:00:00 IDT / 01:00 UTC | identical |
+
+Descriptions were also corrected: they said "3am" and "4am" while the units run at 10:00 and 04:00 — the cron one has been wrong since 9n moved it off 03:00. The 10:00 choice is load-bearing (portals publish 02:09-05:00 UTC) and is now noted in the file itself so it is not "tidied" back.
+
+### The Supabase keep-alive has been failing silently for months
+
+This corrects **two** earlier claims, including one of mine in SU10S-5.
+
+SU10S-5 said `supabase-keepalive.service` had a fatal quoting error and had never been enabled. That was true of the **repo copy** — a stale version with a broken multi-line inline `python3 -c`. The **installed** unit is a different, valid file that runs `scripts/supabase_ping.py` (untracked), and it is enabled and running every 4 hours.
+
+**And every single run returns HTTP 404.** Six times a day, for as far back as the journal goes. The script pings `/rest/v1/stores` — but `stores` lives in the Kamatera Postgres, not in Supabase, so that table does not exist there. The keep-alive has been keeping nothing alive.
+
+What actually works is `cron_main.py`'s `ping_supabase()`, which reads `/rest/v1/keepalive` and logs `ping OK (200) — DB read confirmed` daily. Note its docstring, which is the opposite of the intuitive choice and worth not re-learning: `/auth/v1/health` returns 200 **without touching Postgres**, so it does not count as activity and the project paused anyway (confirmed May 2026). Only a genuine `/rest/v1/` read counts.
+
+All three consumers — scrp's `.env`, the keep-alive unit (which reads that same file), and **the flights backend** — point at the same project, `dwohlwmiejgjlsbuegeu.supabase.co`. So the daily cron ping already covers everything, including flights. **The unit is redundant as well as broken**, and is removed rather than repaired: repairing it would add a second daily request that duplicates a working one.
+
+### Cleanup
+
+Deleted `.env.bak`, `.env.save`, `.env.save.1` from `~/scrp` after confirming, by key NAME comparison only, that none held a key absent from the current `.env`. Kept `.env.bak-su10s7` (the pre-SMTP copy) until mail is confirmed stable — noted in the rotation runbook that it holds the **old** password and should go once that is done.
+
+Deleted the SU10S-7 live-test data: rating 33 and its one blacklist report. The author's other rating (id 17) was confirmed present before and after.
+
+Incidental but worth recording: the five SMTP keys are now present in `.env`, so SU10S-7's remaining step is done.
+
+### Password rotation — runbook written, NOT executed
+
+`docs/runbooks/rotate_scrp_app_password.md`. Every step needs sudo or the value itself, so it is Dude's to run.
+
+The finding that shapes it: **the flights backend shares the `scrp_app` credential** (`~/xxl-flights/backend/.env`, same role), so a rotation that only updates `~/scrp/.env` takes flights down at its next restart rather than immediately — the worst kind of failure to debug later. Conversely `scrp-backup.sh` is **not** affected: it uses `sudo -u postgres pg_dump`, i.e. peer auth, and never sees the password.
+
+The runbook also insists on editing `.env` with an editor rather than `sed`/`echo`, since those put the password into shell history and the process list — the exact exposure (9d-2, printed to a terminal and a transcript) the rotation exists to close.
+
+### Install block (Dude, one paste after `ssh dude@185.229.226.190`)
+
+```bash
+cd ~/scrp && git pull origin main
+sudo cp deploy/systemd/scrp-cron.timer deploy/systemd/scrp-backup.timer /etc/systemd/system/ && \
+sudo systemctl disable --now supabase-keepalive.timer && \
+sudo rm -f /etc/systemd/system/supabase-keepalive.service /etc/systemd/system/supabase-keepalive.timer && \
+rm -f ~/scrp/scripts/supabase_ping.py && \
+sudo systemctl daemon-reload && \
+systemctl list-timers "scrp-*" --no-pager
+```
+
+**What the NEXT column must show:** `scrp-cron` tomorrow at **10:00 IDT**, `scrp-backup` tomorrow at **04:00 IDT**, and the two `scrp-gs1-*` timers on the coming **Sunday** (14:00 and 17:00 IDT). `supabase-keepalive` must be **gone from the list entirely**. If any scrp-cron/backup time moved, the inline-timezone change went wrong — revert by reinstalling the previous commit's copies.
+
+
+---
+
+## Session SU10S-9 (September 27, 2026) — GPS/nearby-stores inspection + geocoding pilot (read-only, no schema change)
+
+Commits `d645f97` + `8ab3c39` — the pilot script only. **Nothing was written to any production table and no schema was changed.** Pilot output lives at `~/geocode_pilot/<date>.csv` on the server and is deliberately not committed.
+
+### The finding that changes the design: CBS already has city centroids
+
+`data/bycode2024.xlsx` — the workbook `city_canonical` is already built from — carries a `קואורדינטות` column nobody has used: a **12-digit concatenated ITM pair** (EPSG:2039, first 6 Easting, last 6 Northing) for every locality.
+
+So the city-centroid tier needs **zero Nominatim requests** and the wrong-city check gets an authoritative reference instead of a guess. **pyproj is not required** — a closed-form inverse Transverse Mercator with the Israeli grid parameters is enough, verified against known points (Abu Ghosh ITM 210524/634814 → 31.80566, 35.10941, ~10 m from truth).
+
+### Address quality is the real constraint, and it is bimodal
+
+Of **959 serving stores** (have prices; 1,197 rows exist in total):
+
+| | count | |
+|---|---|---|
+| NULL or blank address | 503 | 52% |
+| literal `"unknown"` (Yochananof's sentinel) | 24 | |
+| address containing a digit | **364** | 38% — the street-level candidates |
+| no `city_canonical` at all | 105 | 91 Carrefour + 12 Hazi Hinam |
+
+It splits **by chain, not by store**: שופרסל (321 stores), ויקטורי (69), קינג סטור (28), שפע ברכת השם (22), שוק העיר (19) and חצי חינם (12) publish **no address at all** — 0%. רמי לוי, יוחננוף, טיב טעם, פרש מרקט, סופר יודה and אושר עד are at 100%; קרפור 82%, קשת 95%. **Shufersal alone is a third of the network and has nothing to geocode**, so no amount of provider tuning reaches it — only a city centroid, or a separate source of branch addresses.
+
+### Pilot results — 60 stores, 5 per chain, all 12 serving chains
+
+| tier | n | share |
+|---|---|---|
+| address (house-level) | 7 | 11.7% |
+| street (centreline) | 21 | 35.0% |
+| city centroid (CBS) | 32 | 53.3% |
+| rejected | 0 | 0% |
+
+Zero rejections **only because every sampled store had a city_canonical** — the 105 stores that do not would reject outright. The sample was stratified address-first per chain, so these are best-case rates for the chains that publish addresses and worst-case for those that do not.
+
+Street-or-better by chain: סופר יודה, קרפור, קשת 5/5 · רמי לוי, אושר עד 4/5 · טיב טעם 3/5 · פרש מרקט 2/5 · **שופרסל, ויקטורי, יוחננוף, קינג סטור, חצי חינם 0/5** (city fallback only).
+
+### Two distinct failure modes, and why a flat distance threshold is wrong
+
+Distance from city centroid, geocoded results only (n=28): min 0.06, **p50 2.16**, p90 3.85, max 6.07 km.
+
+**Do not use a flat km threshold.** The spread is driven by city size, not by error: Jerusalem's legitimate results sit at 3.4-4.1 km (Talpiot, Givat Shaul — hand-verified as correct), Tel Aviv's at 1.9-6.1 km. A 5 km cap would reject real Jerusalem stores while passing a wrong match in a small town.
+
+The reliable signal is the **OSM class**, not the distance:
+
+| class | n | meaning |
+|---|---|---|
+| `highway/*` | 18 (64%) | street centreline — legitimate "street" tier |
+| `place/house` | 7 (25%) | house-level — legitimate "address" tier |
+| `amenity/*` | 2 (7%) | **POI name collision — a dentist and a pharmacy**, not addresses |
+| `shop/*` | 1 (4%) | possibly the supermarket itself; treat as a bonus, verify |
+
+Both `amenity` hits are wrong in the way that matters — Nominatim matched a business whose name resembled the street, and one of them is the 6.07 km outlier. **Recommended rule: reject `amenity/*` outright, accept `highway/*` and `place/*`, flag `shop/*` for review, and use distance only as a coarse wrong-city guard at ~25 km** (wider than any Israeli municipality, so it catches "same street name, wrong city" without touching legitimate big-city spread).
+
+### Cost of the full run: about 13 minutes, not hours
+
+The pilot used **52 Nominatim calls for 60 stores** — ~1.86 calls per store that has an address (structured first, free-text on miss), and **zero** for the 32 that fell back to CBS. Extrapolating to the 364 stores with a usable address: **~677 calls ≈ 12-13 minutes** at the mandated 1 req/s. The other 595 stores cost nothing.
+
+That is small enough that provider cost and rate limits are simply not the constraint here — address coverage is.
+
+### Step 0d/0e — does on-device distance work today? Yes, with no API change
+
+**`store_fk` (= `stores.id`) is already on every quote row** — added in the promo work, since a promo is store-local. Verified live: **100% populated** on both `/product/{barcode}` (11/11 quotes) and `/search` (37/37 quote rows). `chain_id` + `store_id` are also always present as a composite fallback.
+
+So the privacy design works as proposed: ship a `store_fk → (lat, lon)` table to the client once (959 rows, a few tens of KB), compute distance on device, and **the server never receives a user coordinate**. That matters concretely here — gunicorn and nginx both log full request paths, so a lat/lon query parameter would be written to disk on every request.
+
+The one new endpoint needed is a static `GET /stores/coordinates` dump. No change to existing payloads.
+
+**`/basket/compare`** accepts `chain_ids` and `cities` today and aggregates per `(chain_id, item_code)` — not per store. A "only these stores" filter is small (`store_fks` on `BasketRequest`, one list comprehension; `fetch_prices` already returns `store_fk`), but it carries a **semantic change worth deciding deliberately**: the per-chain total becomes "cheapest among *your nearby* branches", and `items_found` drops for chains with few nearby stores, which reorders the winner. That is arguably the right answer for a nearby-basket feature, but it is not the same number users see today.
+
+### Non-physical stores: no way to identify them today
+
+Three serving stores are online/fulfilment rows, and **each is detectable a different way** — there is no flag, no column, and `active_stores.yaml` has no exclusion markers at all (it is purely "verified to publish PriceFull", and all three do):
+
+- קרפור id 39248 — `"קרפור אונליין"` in `store_name`, `city_canonical` NULL
+- שופרסל id 6116 — `"ONLINE"` in the name, and `city` is literally `"אונליין"`
+- שוק העיר id 18848 — `"304 אונליין - רמות"`, but `city_canonical` is **ירושלים**, a real city
+
+That last one is the dangerous case: a city-centroid fallback would silently give it Jerusalem's coordinates and it would surface as a "nearby store" that cannot be visited. **Recommendation: an explicit `is_physical` boolean set once by hand, not a regex** — the patterns disagree across chains and a new chain will invent a fourth spelling.
+
+### Recommendation (proposal only — nothing implemented)
+
+**Schema** (`stores`): `lat double precision`, `lon double precision`, `geo_precision text` CHECK IN (`'address','street','city'`), `geo_source text` (`'nominatim'/'cbs'/'manual'`), `geocoded_at timestamptz`, plus `is_physical boolean NOT NULL DEFAULT true`. **PostGIS is not needed**: 959 rows and an on-device haversine make a geometry type and spatial index pure overhead.
+
+**Going forward**: a weekly `scrp-geocode.timer` on the SU10S-5 pattern, geocoding only `WHERE lat IS NULL AND is_physical`. A steady week adds a handful of stores, so runs are seconds; the same `--limit` discipline applies. **Not** a hook inside `cron_main.py` — same reasoning as SU10S-5, the OOM-sensitive daily path should not grow a network job.
+
+**Sequence**: ship the `is_physical` flag and the CBS city centroids first. That alone gives every store with a city a usable coordinate — enough for a 5 km default radius to be useful — with no external requests at all. Street-level geocoding is then an accuracy improvement on 38% of stores, not a prerequisite.
+
+**Honest limit to set expectations on**: with Shufersal, Victory, Yochananof, King Store and Hazi Hinam publishing no addresses, **just over half the network can only ever be placed at its city centre** until a different address source appears. A "stores within 1 km" filter would be misleading for those; the radius UI should probably not offer anything below the city-centroid error, or should mark city-level stores as approximate.
+
+
+---
+
+## Session SU10S-10 (September 27, 2026) — store coordinates: schema, CBS centroids, OSM geocode, /stores/coordinates
+
+Backend half of nearby-stores. **Mobile is next and owes the OSM attribution** (see the end). Timer units are committed but **not installed** — block below.
+
+### Coverage
+
+| precision | all physical (1,171) | serving (959) |
+|---|---|---|
+| `address` (house) | 76 | 74 |
+| `street` (centreline) | 109 | 106 |
+| `city` (CBS centroid) | 780 | 669 |
+| none | 206 | 107 |
+
+**The centroid tier cost zero external requests.** CBS's locality table carries coordinates nobody had used (SU10S-9). 5 cities failed to match because our `city_canonical` holds a short form CBS does not use — `יקנעם` (CBS: יקנעם עילית), `יהוד`, `גוש עציון` (a regional council, not a locality). Small and known.
+
+### Nominatim run
+
+326 targets, **427 calls**, ~11 minutes. Result: 76 address, 109 street, 99 no-hit, 27 shop/* flagged, 11 rejected, 4 too far.
+
+Acceptance rules came from the SU10S-9 pilot, not from intuition:
+
+- `highway/*` → `street`; `place/house` and `building/*` → `address`.
+- **`amenity/*` rejected outright** — Nominatim matches businesses whose names resemble streets. The pilot's two were a dentist and a pharmacy, one of them its worst outlier.
+- **`shop/*` keeps the centroid and is logged** (27 rows). It might be the supermarket itself or a different shop on the same street; not worth guessing either way.
+- **25 km is a coarse WRONG-CITY guard, not an accuracy filter.** The pilot measured legitimate results 3-6 km from their centroid in Jerusalem and Tel Aviv because those municipalities are large, so a tight cap would reject real stores. It caught 4 genuine errors here, at 25.9 / 29.3 / 32.4 / 42.3 km.
+- **A rejected result leaves the centroid in place.** Precision is never downgraded.
+
+All 10 sampled accepted results were hand-verified to land in their stated city (Arad 31.253/35.209, Nesher 32.766/35.052, Begin Rd Tel Aviv 32.079/34.795, …).
+
+### `GET /stores/coordinates` — and why it takes no input
+
+965 rows, **63 KB**, `Cache-Control: public, max-age=86400`. Shape: `[{store_fk, lat, lon, precision}]`, 5-decimal rounding.
+
+**The endpoint accepts no parameters at all, and that is the design.** The client downloads the table once and computes distance on device, so a user's location never leaves the phone. A "stores near me" endpoint is the obvious shape and the wrong one: gunicorn **and** nginx both log full request paths, so a `?lat=…&lon=…` parameter would write user coordinates to disk on every request, in two places, indefinitely. Do not add a radius parameter to this endpoint later — that is the whole point of it.
+
+Verified live: 0 rows outside Israel's bounding box, **0 non-physical stores leaked**, and 18 of 20 sampled `store_fk` values from live `/search` quote rows are present (the 2 misses are stores with no `city_canonical`, i.e. no coordinate at all).
+
+### Schema and the safety check that justified it
+
+`stores` += `lat`, `lon`, `geo_precision`, `geo_source`, `geo_input`, `geocoded_at`, `is_physical`. Additive, idempotent (re-run verified). No PostGIS — 965 rows and an on-device haversine make a geometry type and spatial index pure overhead.
+
+Step 0a checked **every** path that writes `stores`. All six scraper loaders use explicit column lists, and every `ON CONFLICT DO UPDATE SET` names only `store_name`/`city`/`city_norm`/`address` — never a wildcard — so the daily upsert cannot wipe a coordinate. No `DELETE` of store rows is reachable from the cron (the DELETE-bearing scripts are one-off city migrations, referenced nowhere in `cron_main.py` or `registry.py`).
+
+`geo_input` stores exactly what was geocoded, because the scrapers keep `address` fresh via `COALESCE(excluded.address, …)` — an upstream address change would otherwise leave a stale coordinate with nothing to detect it.
+
+### `is_physical` — 26 rows, set by id
+
+Online / fulfilment / pickup rows, excluded by **id** rather than a read-time regex: the wording disagrees across chains (`אונליין`, `אינטרנט`, `ליקוט`, `פיקאפ`, `מרלוג`) and a new chain will spell it a fourth way.
+
+Only **3** serve prices today — the SU10S-9 pilot's three. The other 23 are idle, but **most carry a real `city_canonical`**, so the centroid fill would have scattered them across real cities and they would have entered the feed the moment they started serving. שוק העיר 304 is the clearest: its city is ירושלים, so it would look like an ordinary Jerusalem branch.
+
+**Known gap:** a NEW online store defaults to `is_physical = true` and will get a centroid. There is no signal in the source data to catch that automatically, so it needs a periodic eyeball — deliberately not guessed at with a regex.
+
+### Restore note
+
+Pre-migration dump: `~/backups/stores-2026-09-27.dump` (31 KB, `pg_dump -t stores -Fc`). To roll back the table only:
+
+```bash
+pg_restore -d "$DATABASE_URL" --clean --if-exists -t stores ~/backups/stores-2026-09-27.dump
+```
+
+That restores the pre-coordinate table including its rows, so re-run `geo_centroids` + `geo_nominatim` afterwards (the Nominatim disk cache at `~/.cache/xxl_geocode/` makes the second run cost no requests).
+
+### Install block (Dude, one paste after `ssh dude@185.229.226.190`)
+
+```bash
+cd ~/scrp && git pull origin main
+sudo cp deploy/systemd/scrp-geocode.service deploy/systemd/scrp-geocode.timer /etc/systemd/system/ && \
+sudo systemctl daemon-reload && \
+sudo systemctl enable --now scrp-geocode.timer && \
+systemctl list-timers "scrp-*" --no-pager
+```
+
+**Expect:** `scrp-geocode` next Sunday **15:00 IDT** — between `scrp-gs1-fetch` (14:00) and `scrp-gs1-images-backup` (17:00), so the three weekly jobs never overlap.
+
+### ⚠️ OSM attribution is owed
+
+Street- and house-level coordinates come from OpenStreetMap via Nominatim and are **ODbL-licensed**. Any UI that displays them owes a visible **"© OpenStreetMap contributors"**. City-level rows are CBS and carry no such requirement, but the two are mixed in one endpoint, so the attribution is owed wherever `/stores/coordinates` is consumed. **This is a mobile-session task and is not yet done anywhere.**
+
+
+---
+
+## Session SU10S-11 (September 27, 2026) — nearby stores: on-device distance + basket branch filter
+
+Backend `/basket/compare` gains one optional field; the feature itself is mobile (`87b73fa`). Web unchanged.
+
+### The one backend change
+
+`store_fks: list[int] | None` on the `/basket/compare` **request body**, capped at 300. Absent — the default — is byte-identical to before; present, each chain's total becomes the cheapest among only those branches.
+
+**Body, never a query parameter.** gunicorn and nginx both log full request paths, and a list of branches near someone is a location disclosure by another name. The list is not logged.
+
+Verified live: omitted and explicit `null` produce byte-identical responses (6,914 chars both); a 3-store allow-list narrowed 14 chains to 3 with prices changing accordingly; 301 ids and a non-integer both 422.
+
+### Privacy model — the point of the whole design
+
+The user's position **never reaches the server** for product or scan results. The client downloads `/stores/coordinates` (parameterless, 63 KB, cached 24 h) and computes haversine distance on device.
+
+The basket toggle is the single exception, and it still sends no coordinates — only a list of **store ids** already public in every price response. Nothing about the user is transmitted or stored.
+
+**For the privacy policy draft:** coordinates are read on demand in the foreground only (no background permission, no continuous watch), used on device, and never transmitted. The basket "nearby branches" option sends branch identifiers, not a location, and those are neither stored nor logged.
+
+### Two decisions worth not re-litigating
+
+**Precision changes what we claim, not just what we filter.** `'street'`/`'address'` rows show a number; `'city'` rows filter but show `מיקום משוער` with **no** number, because a municipal centroid cannot honestly be rendered as "2.4 ק״מ". 780 of 965 stores are city-level, so this is the common case rather than an edge one. Stores with no coordinate are never in the nearby set.
+
+**The filtered winner label is `הכי זול באזור`, never plain `הכי זול`.** Calling a local minimum the global one is the same class of error as the basket "cheapest" mislabel corrected in SU10M-3.
+
+### Verification
+
+20 unit cases on the pure geo module, including real city distances (TLV-Jerusalem 53.9 km, TLV-Haifa 81.2, TLV-Beer Sheva 92.6 — all within tolerance of the true values), both sides of the radius boundary and the exact-boundary case, the city-tier no-number rule, and the no-coordinate exclusion.
+
+**No rebuild needed.** `expo-location` was already a dependency, an app.json plugin and in use by Settings, so the native side is unchanged — a JS reload picks this up. The 5-button segmented control instead of a slider was chosen partly for that reason: a native slider would have forced an EAS rebuild before anything could be tested.
+
+
+---
+
+## Session SU10S-12 (September 27, 2026) — no-city stores: diagnosis (READ-ONLY, nothing changed)
+
+No DB writes, no edits to `city_names.py`, `CITY_VARIANTS`, `STORE_CITY_OVERRIDES`, `active_stores.yaml` or any loader. Proposal CSV for Dude at `~/stores_no_city_proposal.csv` and `C:\xxl-archive\stores_no_city_proposal.csv` (sha256 `30f9e248d83a8246…`).
+
+### The city matcher is not broken. It was never run on these rows.
+
+Of the 72 stores that carry a raw city, **69 match a CBS name exactly** and would resolve at Layer 1 with no code change whatsoever. Re-running the existing cascade resolves **71 of 72**:
+
+| layer | count |
+|---|---|
+| L1 exact CBS match | 69 |
+| L3 fuzzy ≥0.85 | 2 |
+| still unresolved | 1 |
+
+The reason is an id boundary, not a matching failure: **every unresolved store has `stores.id` 23275-39280; every resolved store is ≤ 21906.** Zero overlap. These rows were added after the last `build_city_canonical.py` + `apply_city_canonical.py` run (9d-8).
+
+The two fuzzy matches were checked against the SEVERE no-cross-municipality rule and are safe spelling variants, both 0.941 with a clear gap to the runner-up: `קרית אתא` → `קריית אתא` (CBS 6800, next best 0.750) and `נצר סירני` → `נצר סרני` (CBS 435, next best 0.737). No bare `מודיעין` appears anywhere in the set, so that ambiguity is not in play.
+
+The one genuine failure is `ויקטורי` id 23275, raw city `שמוטקין` — a street or person, not a locality (best CBS match 0.57). Needs Dude.
+
+### ⚠️ The 33 "no city" stores are a DIFFERENT and worse problem
+
+**31 of the 33 are not missing a city — they are duplicate store rows.** Each is a 4-digit zero-padded twin of an existing, fully-populated 3-digit row, and **both are serving prices**:
+
+```
+id 39250  store_id 0002  no city   7,250 prices  last 2026-06-29
+id   143  store_id  002  אשקלון   11,991 prices  last 2026-09-23
+```
+
+Chain-wide: Carrefour has **91 four-digit store rows, all with no city**, against 152 three-digit rows. The four-digit set holds **142,622 prices that stopped updating around 2026-06-29 to 07-02** — roughly when the padding fix landed and the loader moved to three digits. They were never retired.
+
+**This is user-visible today.** `db/query.py` has no freshness filter at all — no `INTERVAL`, no `now() -`; `price_update_date` is selected for display only, never to exclude. So the abandoned rows still compete to be a chain's cheapest price, and:
+
+> **7,870 of 22,416 Carrefour items (35.1%) currently take their displayed cheapest price from one of these stale duplicate rows.** The oldest examples carry `price_update_date = 2015-01-01`.
+
+Per-chain quote collapsing means they do not show as duplicate branches — they show as *wrong prices*, which is harder to notice.
+
+This is scraper/store-identity territory and was **not touched**. It wants its own read-and-report session covering: which loader path still emits 4-digit ids, whether the rows should be merged or retired, and whether the read path should gain a staleness guard independently (a dead branch in any chain would have the same effect).
+
+### Recommended fix shape
+
+**For the 71 resolvable: re-run the existing build, do not add overrides.** `CITY_VARIANTS` or `STORE_CITY_OVERRIDES` entries would be dead weight — 69 of them already match CBS exactly, so an override would encode a rule the matcher already knows. The durable fix is to run `build_city_canonical.py` then review `data/city_canonical_review.csv` and apply.
+
+**Durability, stated precisely:** no scraper writes `city_canonical` — all six loaders name only `store_name`/`city`/`city_norm`/`address` in their `ON CONFLICT` (verified SU10S-10). So the nightly cron will **not** overwrite a city fix. What does erase it is a later `apply_city_canonical.py` run whose review CSV was built before the rule existed — which is an argument for fixing by rebuild rather than by hand-editing the DB.
+
+**Knock-on for geocoding:** of the 71, **42 carry a usable address** and would become eligible for street-level geocoding on the next Sunday `scrp-geocode` run; the other 29 would get a city centroid. That closes most of the 107 serving stores currently holding no coordinate at all.
+
+### Proposal CSV
+
+105 rows. By confidence: **69 exact**, **2 variant**, **34 needs Dude** — of which 31 are the duplicate rows (proposed city deliberately left blank, since assigning one would paper over the real bug), 2 have no city/name/address anywhere, and 1 is `שמוטקין`.
+
+One row deserves a look regardless of the duplicate question: `קרפור` id 39226, `"קרפור סיטי גבעת סביון"`, address `78 הגליל`. גבעת סביון is a neighbourhood of יהוד-מונוסון rather than a CBS locality, so it is marked needs-Dude instead of being fuzzy-matched to something adjacent.
+
+
+---
+
+## Session SU10S-13 (September 27, 2026) — the weekly image fetch was a no-op; ZIP payloads recovered
+
+Commits `4a50f78` + the dry-run follow-up. No restart needed — the timer starts a fresh process.
+
+### The first scheduled run did nothing, and would have every week
+
+```
+Sun 27 Sep 14:00  DONE — fetched=0 failed=10 skipped=1,490 deleted=0 no_image=0 in 10s
+```
+
+`--limit` sliced the **sorted target list** before the file-exists check. So `--limit 1500` examined the first 1,500 GTINs, 1,490 of which already had files, and **the 3,348 images actually missing — further down the sorted list — were never reached.** Not a rate-limit problem, not a block: the run simply looked at the wrong 1,500 GTINs, and would have looked at the same wrong 1,500 every Sunday indefinitely.
+
+Fixed by dropping already-present GTINs **before** applying the limit, so the limit counts real download attempts. Under `--refresh` every target is a genuine attempt by definition, so that meaning is unchanged. The presence filter also applies under `--dry-run` now — it decides *which* GTINs to try, and only writing is what a dry run should suppress. Without that, a dry run could not rehearse the very bug being fixed.
+
+### The 10 "unreadable images" were ZIP archives full of perfectly good JPEGs
+
+Sniffing the decoded bytes: all ten start `PK\x03\x04`. GS1's media endpoint sometimes returns **a ZIP of several product shots** rather than a single base64 JPEG, and the contents are ordinary well-formed JPEGs:
+
+```
+4015400824749  6,072,206 bytes  ZIP -> 2 entries, both JPEG (3.2 MB, 3.0 MB)
+41390000058    1,573,559 bytes  ZIP -> 2 entries, both JPEG (754 KB, 1.2 MB)
+```
+
+So they are **extracted, not skip-listed** — which recovers them instead of recording them as permanently dead. Largest readable entry wins: the filenames embed a date in an undocumented layout that is not safely parseable, the image is downscaled to 800 px regardless so more source pixels is never worse, and entries are tried largest-first so a damaged one falls through to the next.
+
+**This is not a rare edge case.** In a 20-GTIN dry run against the real remaining backlog, **7 of 20 were ZIPs** and all extracted cleanly. If that rate holds, roughly a third of the outstanding images were previously destined to fail permanently.
+
+### No skip list, deliberately
+
+The brief allowed for one. Nothing in the sample is actually unreadable, so it would be infrastructure for a problem that does not exist — and now that `--limit` counts real attempts, a handful of repeat failures costs ten requests a week rather than an entire wasted run. What was genuinely missing was **diagnosis**: the WARNING now names the detected format (`format=ZIP`, `format=PDF`, `unknown(0102…)`) instead of printing `<_io.BytesIO object at 0x…>`, which is what sent this investigation looking in the wrong place to begin with.
+
+### Verification
+
+17 stubbed cases pass, including the SU10S-5 regressions (circuit breaker still trips at exactly 10; a block still never deletes a cached file) and the new ones: 1,500 existing + 20 missing with `--limit 10` produces **exactly 10 attempts, all on missing GTINs**, with `skipped` still reporting the 1,500.
+
+Live `--dry-run --limit 20` on the server:
+
+```
+already have images for 12,856 of the target set; 3,348 remain
+DONE — fetched=19 failed=1 skipped=12,856 ...
+```
+
+The single failure is a genuine upstream `HTTP 404 "file is missing on the server"` — correctly a failure, correctly not a deletion. **Zero format failures.**
+
+### Catch-up (Dude)
+
+The Sunday 14:00 slot has passed, so this week's run needs starting by hand:
+
+```bash
+sudo systemctl start --no-block scrp-gs1-fetch.service
+```
+
+Check ~20 minutes later:
+
+```bash
+journalctl -u scrp-gs1-fetch -n 40 --no-pager
+```
+
+**Good looks like** a `DONE` line with **fetched ≈ 1,500**, `skipped=12,856`, and **no** `"media endpoint blocking — aborting run"`. A few `failed` are normal (upstream 404s). If the breaker does trip, that is it working — the next run resumes where it stopped.
+
+The 17:00 backup timer ships the new images to B2 on its own; to push them immediately instead:
+
+```bash
+sudo systemctl start scrp-gs1-images-backup.service
+```
+
+
+---
+
+## Session SU10S-14 (September 27, 2026) — stale stores + price freshness (READ-ONLY, proposal)
+
+No writes, no code changes. Proposal for Dude.
+
+### Scope: this is entirely Carrefour
+
+| | |
+|---|---|
+| duplicate store groups, all chains | **32** — 31 קרפור, 1 שופרסל |
+| Carrefour 4-digit rows | **91** — 31 twinned, **60 orphaned** (no 3-digit counterpart) |
+| serving stores with no successful load in >7 days | **94, all Carrefour** (93 stale + 1 never loaded) |
+| prices on them | **412,203** |
+| any other chain affected | **none** |
+
+The dividing line is exact: every 4-digit row last loaded **2026-07-03**; every 3-digit twin loaded **today**. Nothing 4-digit has loaded in ~3 months, so **no loader still emits them** — the padding fix (`0812bdc`, 2026-05-24) changed which id the loader writes, and the old rows were simply left behind with their prices.
+
+**The 60 orphans matter more than the 31 duplicates.** A twin at least has a live counterpart carrying the real price; an orphan is a branch Carrefour stopped publishing altogether, and its last prices stand unchallenged.
+
+### The freshness distribution is bimodal with a 29-day gap
+
+```
+  0-1 days   865 stores
+  2-30 days    0 stores      <- nothing lives here
+  >30 days    93 stores
+  never         1 store
+```
+
+Per chain, measured against that chain's **own** latest successful run: every chain except Carrefour has a maximum lag of **0-1 days** across all its stores. Carrefour's maximum lag is **110 days**, with 93 stores beyond 3 days.
+
+So a threshold anywhere from 2 to 30 days separates the two populations cleanly. **N = 3 days** is proposed — comfortably clear of normal daily jitter, with 27 days of margin before it could touch a healthy store.
+
+### User impact
+
+**7,673 of 22,416 Carrefour items (34.2%)** take their displayed chain-cheapest from a dead store. Worst cases, shown price vs the real live price:
+
+| item | shown | dated | actually |
+|---|---|---|---|
+| חלה מתוקה קלועה בונז'ור | ₪30.00 | 2024-07-07 | ₪120.00 |
+| צלי כתף קפוא | ₪49.90 | 2025-05-08 | ₪119.90 |
+| פילה בקר טרי | ₪211.00 | 2026-01-05 | ₪249.90 |
+
+On a 4-item test basket Carrefour ranked 2nd at ₪39.56 against a ₪38.60 winner — close enough that stale rows can plausibly flip a basket winner, though I did not find a flipped case in the baskets I tried. The per-item damage above is the firmer finding.
+
+### ⚠️ This corrects SU10S-12's recommendation
+
+SU10S-12 proposed resolving cities for 71 stores. **59 of those are dead Carrefour rows.** Running that rebuild as written would give them a `city_canonical`, which makes them eligible for the Sunday geocoder, which puts them in `/stores/coordinates` — surfacing 59 branches that do not exist as *nearby stores with 3-month-old prices*.
+
+Genuinely resolvable, alive, and safe to fix: **11 חצי חינם + 1 שופרסל = 12**. (The 1 ויקטורי is alive but its raw city is `שמוטקין`, still needs Dude.) **Do the store cleanup before the city rebuild, not after.**
+
+### (A) Retire the dead data — delete PRICES, keep the store rows
+
+FK reality decides this:
+
+```
+prices.store_fk            ON DELETE NO ACTION
+fetch_store_runs.store_fk  ON DELETE NO ACTION   <- the audit trail
+promos.store_fk            ON DELETE CASCADE
+```
+
+**Deleting the store rows is the wrong move**: `fetch_store_runs` references them with NO ACTION, so it would fail unless the run history is destroyed too — and that history is the only evidence of *when* and *why* each store died. Nothing else references `stores.id`; favorites and saved baskets key on barcode, and `ratings.item_code` is deliberately not an FK.
+
+So: **delete the prices, leave the rows.** A store with no price rows disappears from every user-facing query (they all join through `prices`), no new column is needed, and the row plus its history stays for diagnosis.
+
+```
+stores affected     93   (+1 that has never loaded — confirm separately)
+prices to delete    409,783
+promos cascaded     29
+backup first:  pg_dump -t prices -t stores -Fc "$DATABASE_URL" -f ~/backups/pre-su10s14.dump
+```
+
+**Keeping them gone** is the part to get right. Nothing currently re-creates them — the loader no longer emits 4-digit ids, so a re-run will not resurrect them. But the structural cause is still live (9n note): `base.py` only DELETEs a store's prices when that store has an index entry, so *any* store that stops publishing keeps its last prices forever. Cleanup is a one-off; (B) is what stops the next one.
+
+### (B) Read-path guard — and the measurement that rules out the obvious design
+
+Use `fetch_store_runs`, not `price_update_date`. The latter is chain-supplied and demonstrably unreliable: the stale rows carry dates as absurd as **2015-01-01**, and some are NULL.
+
+**Measured on production, 40-item price query, best of several runs:**
+
+| approach | time | |
+|---|---|---|
+| current, no guard | **3.5 ms** | baseline |
+| liveness computed in-query (CTE over `fetch_store_runs`) | **78.5 ms** | **20× — rejected** |
+| predicate on an already-joined `stores` column | **6.1 ms** | 1.7× |
+
+The CTE re-aggregates all 108,215 run rows on every request. **The cost is computing liveness, not filtering by it** — which is exactly the hot-path regression class SU10A-5 warns about, and the reason to not put this in `_PRICE_SQL` as a subquery or join.
+
+**Proposed shape:** a denormalised `stores.last_loaded_at timestamptz`, written by the same code that already writes `fetch_store_runs`. The guard then becomes one predicate on a table `_PRICE_SQL` already joins — no new join, no aggregation:
+
+```sql
+-- in _PRICE_SQL, alongside the existing stores join
+JOIN stores s ON s.id = p.store_fk AND s.chain_id = icn.chain_id
+...
+WHERE icn.item_code IN :codes
+  AND s.last_loaded_at >= (chain_latest.value - interval '3 days')
+```
+
+**Safety rule — anchor to the chain, never to wall-clock.** If the cron fails for everyone, a wall-clock cutoff blanks the entire site. Anchoring each store to *its own chain's* latest successful load means a chain-wide outage moves the cutoff with it and excludes nothing. The data supports this directly: every healthy chain's maximum intra-chain lag is 0-1 days, so a 3-day window against the chain's own latest run never excludes a live store.
+
+Chain latest is 14 rows and can be a tiny CTE or a cached lookup — the expensive part was per-store aggregation, not per-chain.
+
+**Verification before shipping (B):** capture `EXPLAIN (ANALYZE, BUFFERS)` for the current `_PRICE_SQL` on a broad query (`q=חלב` class, the SU10A-3 regression shape) and on a barcode lookup, then the same after, and compare execution time **and** buffer counts. Watch specifically for a nested-loop flip — that is what bit SU10A-5.
+
+### Recommended order
+
+1. **(A) first.** It is reversible with a dump, needs no hot-path change, and removes today's user-visible damage immediately — 34.2% of Carrefour items stop showing 2024 prices the moment the rows go.
+2. **Then the SU10S-12 city rebuild**, which becomes safe once the 59 dead rows hold no prices.
+3. **(B) last**, as the durable guard. It needs a scraper change (writing `last_loaded_at`) plus a hot-path predicate, so it wants its own session with before/after plans.
+
+**Done looks like:** no serving store with a last successful load older than its chain's latest minus 3 days; 0 items taking their chain-cheapest from such a store; and a deliberately un-published test store proving the guard excludes it without a deploy.
+
+
+---
+
+## Session SU10S-16 (September 27, 2026) — dead Carrefour prices removed; city fix STOPPED at the dry run
+
+### Step 1 — fix A applied
+
+The dead set re-derived exactly as SU10S-14 measured it, so no STOP: **93 Carrefour stores, 409,783 prices, 29 promos**, nothing outside Carrefour.
+
+Deleted in one transaction. **Store rows and all fetch_store_runs history kept** — that history is the only evidence of when each store died, and `fetch_store_runs.store_fk` is `ON DELETE NO ACTION` anyway. `is_physical` deliberately untouched.
+
+| | before | after |
+|---|---|---|
+| Carrefour items taking cheapest from a dead store | **7,954** of 22,416 (35.5%) | **0** |
+| prices on dead stores | 409,783 | 0 |
+| dead store rows | 93 | 93 (kept) |
+| their fetch_store_runs rows | 5,970 | 5,970 (kept) |
+| serving Carrefour stores | 181 | 88 |
+| total prices | 7,697,314 | 7,287,531 |
+
+API verified healthy afterwards: `/health` 200, a product lookup still returns 11 quotes across רמי לוי / ויקטורי / קרפור / קשת, `/search?q=חלב` still 2,672 matches.
+
+Spot-checks resolved differently than SU10S-14 implied, and the honest version is worth recording: the two example items (`6806963` challah, `7290008719193` frozen shoulder roast) now have **zero** Carrefour price rows, not a corrected higher price. They were priced *only* at dead branches, so what the fix removed was a phantom price rather than a wrong number. SU10S-14's "actually ₪120" came from a name-matched sibling item_code, not the same row. The aggregate 7,954 → 0 is the real proof.
+
+#### Backup and restore
+
+CSV rather than `pg_dump` for the deleted rows, because `pg_dump` has no row-level filter and the full `prices` table is 3.7 GB. Row counts verified against the delete counts exactly.
+
+```
+~/backups/su10s16_prices_20260927T155851.csv.gz    409,783 rows   5.8 MB
+~/backups/su10s16_promos_20260927T155851.csv.gz         29 rows
+~/backups/su10s16_stores_20260927T155851.csv.gz         93 rows   (reference)
+~/backups/su10s16_stores_20260927T155851.dump        full stores table, pg_restore --list verified
+```
+
+Restore:
+
+```bash
+cd ~/scrp && source venv/bin/activate && set -a && source .env && set +a
+zcat ~/backups/su10s16_prices_20260927T155851.csv.gz \
+  | psql "$DATABASE_URL" -c "\copy prices FROM STDIN WITH CSV HEADER"
+zcat ~/backups/su10s16_promos_20260927T155851.csv.gz \
+  | psql "$DATABASE_URL" -c "\copy promos FROM STDIN WITH CSV HEADER"
+```
+
+#### Two stores DID leak into /stores/coordinates — reported, not hidden
+
+`id 184` (store 121, טמרה) and `id 195` (store 191, חולון) are dead Carrefour branches that already carried a `city_canonical`, so SU10S-10 gave them city centroids. They now hold **0 prices**, so they cannot appear in any price list — but they are still in `/stores/coordinates`, because that endpoint filters on `is_physical AND lat IS NOT NULL` and has **no liveness or serving filter at all**.
+
+Left in place per the brief. The general shape of the gap is the point: a branch that stops publishing keeps its coordinates and would still be offered as a nearby store. Worth folding into the fix-B session rather than patching two ids.
+
+### Step 2 — STOPPED at the dry run
+
+The brief required the rebuild diff to contain **exactly** the 12 live stores. It contains **231**:
+
+| | count | |
+|---|---|---|
+| GAIN (blank → city) | 150 | of which **serving and alive: exactly 12** — the intended targets |
+| **LOSE (city → blank)** | **80** | **would erase curated values** |
+| CHANGE (city → other) | 1 | |
+
+The cascade identifies the 12 correctly (11 חצי חינם + 1 שופרסל, precisely as SU10S-14 predicted). The problem is that `apply_city_canonical.py` would apply the whole CSV, and the other 219 rows include **80 stores that would lose a working city** — among them the SEVERE-sensitive ones: `מודיעין-מכבים-רעות` and `מודיעין עילית` both blanked (raw city is the bare `מודיעין`), plus `קריית גת`, `חצור הגלילית`, `קריית אתא`. Blanking is not merging, so the SEVERE rule is not violated outright — but it destroys exactly the distinctions that rule exists to protect.
+
+The remaining 138 GAIN rows are dead or non-serving stores, which is the SU10S-14 hazard again: giving them a city makes them eligible for the geocoder.
+
+**Nothing was applied.** A targeted apply — only rows where the current value is blank AND the store is serving AND alive — would do exactly the right 12, but that is a change to `apply_city_canonical.py` and belongs in its own session.
+
+### Follow-up — Victory 23275 resolved (same day)
+
+Dude supplied the fact the data could not: Victory store 094 is at
+**בנימין שמוטקין 29, ראשון לציון**. Its raw `city` holds `שמוטקין` — the *street* —
+which is why every layer of the cascade correctly declined it (best fuzzy 0.57
+against `השומרון`).
+
+Fixed as a `STORE_CITY_OVERRIDES` entry (`dad2b39`), **not** a bare DB edit, so a
+future `build_city_canonical` run resolves it at L2 rather than reverting it to
+NULL. Verified by running the cascade over all 1,197 stores with and without
+the new entry: **exactly one outcome changes** — id 23275, `None → ראשון לציון`,
+CBS 8300. The value string was already proven against CBS by the existing
+Victory 023 entry.
+
+`city_canonical` and `address` were then set on that one row (`rows updated: 1`).
+Address was NULL, so it is now `בנימין שמוטקין 29` — which makes the store
+**street-level eligible** on the next Sunday `scrp-geocode` run rather than
+getting only a city centroid. The geocoder was not run.
+
+Serving stores with no city: **14 → 13**. The 13 remaining are the 12 SU10S-16
+targets (11 חצי חינם + 1 שופרסל) plus חצי חינם id 35348, which has no raw city,
+name or address anywhere and still needs manual entry.
+
+#### A trap in the review CSV, worth knowing before anyone touches this
+
+`data/city_canonical_review.csv` has a column named `store_id` that actually holds **`stores.id` (the primary key)**, not the chain's store_id (`build_city_canonical.py` line 152: `"store_id": store_pk`). Joining it on the chain store_id silently produces garbage — and because `(chain_id, store_id)` is not unique for Shufersal (many `sub_chain_id`s), it produces *plausible-looking* garbage: my first attempt showed `תל אביב → חיפה` labelled as an exact match. `apply_city_canonical.py` reads it correctly as a pk; any new consumer must too.
+
+
+---
+
+## Session SU10S-17 (September 27, 2026) — freshness write path, coordinates liveness, targeted city fill; price-read guard STOPPED at its gate
+
+Commits: `c924eb5` (stores/scraper), `2496bb2` (api), `5c2d73a` (city tool). API deployed and curl-verified.
+
+| part | status |
+|---|---|
+| 1 — `stores.last_loaded_at` + scraper write path | **done, live** (next 10:00 cron is the real test) |
+| 2 — guard on the price/promo reads | **STOPPED at the performance gate, not deployed** — design decision needed |
+| 3 — `/stores/coordinates` liveness | **done, live** |
+| 4 — targeted city fill | **done** — exactly the 12 |
+
+### Part 1 — `stores.last_loaded_at`
+
+**Invariant: `last_loaded_at` = `max(run_at::timestamptz)` of the store's `status='loaded'` `fetch_store_runs` rows; NULL = never loaded.**
+
+- Migration `db/migrations/su10s17_stores_last_loaded_at.sql` (owner `scrp_app` confirmed). Backup first: `~/backups/pre-su10s17-stores-20260927T170052.dump` (full `stores`, `pg_restore --list` verified). Backfill **958 stores**; re-run updated **0**; **0 invariant violations** over all 1,197; 239 never-loaded stay NULL (matches the per-chain never-loaded counts exactly).
+- **`fetch_store_runs.run_at` is TEXT** (Python `isoformat()`), not a timestamp — hence the cast. All 108,215 values verified to parse first.
+- **The write path is TWO statements, not one** — the reason for the first STOP this session. `ShufersalScraper` has its own `_process_store_shufersal` with its own `'loaded'` insert; changing only `base.py` would have frozen every Shufersal store at its backfill value. Approved by Dude: the same statement after each `'loaded'` insert, same transaction:
+  ```sql
+  UPDATE stores SET last_loaded_at = GREATEST(last_loaded_at, CAST(:rat AS timestamptz)) WHERE id = :sfk
+  ```
+  `:rat` is the run's own `run_at` (Dude's call; keeps the invariant exact), and `GREATEST` means an overlapping older run can never move it backwards. Dry-tested through SQLAlchemy with an `isoformat()` string on production (rolled back): a newer run advances it, an older run leaves it.
+- Deploy order mattered: migration **before** `git pull`, because the new scraper line fails every store load if the column is missing.
+
+**Check after the next 10:00 cron:**
+
+```bash
+sudo journalctl -u scrp-cron --since today --no-pager | grep -iE "last_loaded_at|does not exist|failed" | head
+psql "$DATABASE_URL" -c "SELECT count(*) FILTER (WHERE last_loaded_at::date = current_date) AS loaded_today,
+  count(*) FILTER (WHERE last_loaded_at IS DISTINCT FROM x.last) AS violations
+  FROM stores s LEFT JOIN (SELECT store_fk, max(run_at::timestamptz) last FROM fetch_store_runs
+  WHERE status='loaded' GROUP BY store_fk) x ON x.store_fk = s.id;"
+```
+
+Expected: no `last_loaded_at` errors in the journal, `loaded_today` ≈ 865 (every chain, שופרסל included), `violations` 0. If Shufersal stores are missing from `loaded_today`, the `shufersal.py` line did not run.
+
+### Part 2 — price-read guard: STOPPED, nothing deployed
+
+The rule is implemented once, as `db/query.py live_store_clause()`: live = `last_loaded_at >= (own chain's max(last_loaded_at) − 3 days)`, NULL excluded, 14 chain cutoffs cached per process for 5 min and inlined as a `CASE` on the stores row. Correctness was fully proven on production (rolled-back transaction): a fake stale store vanished from prices, promos and the coordinates rule while every other store was unchanged, and shifting a **whole chain** 10 days back excluded **nothing** (315 → 315 rows).
+
+**But the gate tripped.** Shape selection first (wall-clock, interleaved, n=40): InitPlan jsonb map +27–31%, joined per-chain derived table worse, cached `CASE` +12–15% — chosen. Then the final code, `EXPLAIN (ANALYZE, BUFFERS)` old vs new on the exact `fetch_prices` statements:
+
+| case | old | new | |
+|---|---|---|---|
+| barcode lookup | 10.18 ms | 14.15 ms | **+38.9%** |
+| basket, 10 items | 4.02 ms | 5.26 ms | **+30.8%** |
+| search `q=חלב` (3,049 codes) | 11,842 ms | 9,768 ms | −17.5% |
+
+Wall-clock the same change is only +6.7% / +12.9%, but the plan itself changed, which is the SU10A-5 class the gate exists for. The planner cannot estimate the `CASE`, **guesses ~400 live stores instead of 865**, and reorders the barcode plan from `prices ⋈ stores` (hash) into a nested loop over 14 `item_chain_names` rows × a materialised prices⋈stores, discarding 11,076 rows in a join filter. `enable_nestloop` was not involved (the city path is untouched, and it was reset between measurements). **Reverted before commit; production never ran it.** The helper's comment says not to paste the predicate into `_PRICE_SQL`.
+
+**Proposal for Dude:** filter in Python instead: `fetch_prices` (and the promo functions) drop rows whose `store_fk` is not in the cached live-store set. Measured: **0.13 ms** per barcode lookup, 90 ms on the 393K-row `חלב` search (~1% of it), **no SQL or plan change at all**. The city path's store-id prefetch is the one place a SQL predicate is free (it runs on `stores` alone).
+
+What the guard would hide today, measured:
+
+- **Prices: only store 145**, קרפור היפר אשדוד צפוני (store 006): no `'loaded'` run since tracking began 2026-05-25, last runs `no_file` in early June, newest `price_update_date` 2026-05-12. **2,420 quotes.** This is SU10S-14's "+1 never loaded"; hiding it is the guard working (Dude, SU10S-17). Barcode `7290004131074`: 853 → 852 quotes.
+- **Promo-only quotes from 7 never-loaded שוק העיר "אונליין" stores** (ids 18849–18858): 0 prices, 75–90 active promos each, some ending **2050**. 8 non-live stores carry 2,239 active promo rows in all. They surface in search today; the guard would remove them.
+- Not a guard effect: the same old promo-only SQL is **non-deterministic run to run**. `DISTINCT ON` ties between equal-priced promos pick an arbitrary `promo_id`, so 4–6 rows differ between identical runs. Pre-existing; worth an explicit tie-break someday.
+
+### Part 3 — `/stores/coordinates`
+
+`live_store_clause` applied: **965 → 846 rows**. 184 and 195 (SU10S-16's dead Carrefour) and 145 are gone. The other 116 removed rows have **never loaded** and hold **zero prices**: ~90 Shufersal BE pharmacies, המפיץ wholesale, pickup points, Keshet קולינריק, some שפע ברכת השם / King Store / Victory 090. No quote can ever reference them, so nothing user-visible changes except 145. Query cost unchanged (1.71 → 1.62 ms). Curl-verified on production after deploy; `/health` 200, product lookup fine.
+
+### Part 4 — targeted city fill
+
+`scripts/apply_city_canonical.py --targeted [--apply]` fills `city_canonical` only where it is NULL **and** the store is serving (holds prices) **and** live. It never changes or blanks a value, ignores DELETE actions, is a dry run unless `--apply`, and its UPDATE re-checks `IS NULL`. The legacy full apply is unchanged. Run against the server's regenerated `data/city_canonical_review.csv` (still uncommitted there, from SU10S-16), read as `stores.id`.
+
+Dry run: **exactly the 12**: 11 חצי חינם (201–210, 217) + שופרסל 844 (id 24093), all L1 exact, raw city = canonical, and all six values already established (10–34 stores each). Applied: **12 filled**; re-run 0. Serving + live stores with no city: **13 → 1**.
+
+**Hazi Hinam 35348** is store_id **219** (not delivery store 103): it loads daily and has 602 prices, the size of the chain's produce-only "תוצרת חקלאית" branches. Dude: physical, so `is_physical` is left as is; it stays NULL for manual review (**SU10S-18**).
+
+Also visible in the CSV, and a reason the full apply stays dangerous: it maps BE "כפר גנים" (a פתח תקווה neighbourhood) to **כפר גלים** (L3 fuzzy 0.875). That's wrong, and untouched here because that store is not serving.
+
+### Found along the way — pre-existing, not fixed
+
+**`/search?q=חלב` takes 17–33 s in production.** 3,049 relevance codes → ~393K price rows; the price SQL alone is ~10 s under EXPLAIN. Nothing in this session caused it: it predates the deploy, and the guard made that query faster. Added to the roadmap as its own item.
+
+---
+
+## Session SU10S-18 (September 27, 2026) — address_override survives the cron; branch review export
+
+No price-path changes. One migration, one geocoder change, one read-only export script.
+
+### Part 1a — does the nightly cron overwrite `stores.address`? Yes, for most chains.
+
+Answered **empirically, tonight**, not by waiting for tomorrow's cron: each chain's real `load_stores()` was run against its **live feed** on a connection whose `commit()` was a no-op, a hand value was stamped on a probe store first, and everything was rolled back.
+
+| loader | chains | hand-set `address` after the nightly upsert |
+|---|---|---|
+| Cerberus, PublishPrice | Osher Ad, Carrefour (tested); also Rami Levy, Yochananof, Keshet, Tiv Taam, Fresh Market, Super Yuda | **replaced by the feed's value, every night** (`HAND-SET-TEST 1` → `האיצטדיון 11`, → `הרצל 33`) |
+| binaprojects | King Store (tested); Shefa Birkat, Shuk HaIr | **blanked to `''`, every night** (it passes `"address": ""` unconditionally) |
+| Victory, Shufersal, Hazi Hinam | Victory (tested) | untouched: these upserts never write `address` |
+
+All upserts are `address = COALESCE(excluded.address, stores.address)`: a feed NULL never overwrites, **but `''` does**, and Cerberus/PublishPrice turn a missing `<Address>` into `''`. So **Victory 23275's hand-set address survived only because Victory writes no addresses at all** — a hand edit on most other chains would be gone by 10:05 the next morning. (Rami Levy's feed published no Stores file tonight, so its run upserted nothing; Osher Ad and Carrefour stood in for the Cerberus/PublishPrice family.)
+
+23275 itself had not yet met a cron: its address was set on the afternoon of Sep 27, after that day's 10:00 run.
+
+### Part 1b — `stores.address_override`
+
+`db/migrations/su10s18_stores_address_override.sql`: one nullable `text` column. Backup first: `~/backups/pre-su10s18-stores-20260927T195152.dump` (`pg_restore --list` verified); re-run is a no-op.
+
+**No scraper change was needed and none was made.** Every write to `stores` was read — the 7 INSERT paths (`db.py`, binaprojects, cerberus, hazihinam, publishprice, shufersal, victory) and every UPDATE (scrapers, `geo_*`, `apply_city_canonical`, `ingest_store_xml`, `normalize_store_cities`, the padding fixers). All name their columns explicitly; there is no wildcard, ORM model, `to_sql` or `COPY` into `stores`. Nothing can write `address_override` by accident.
+
+**Effective address, everywhere it is read:** `COALESCE(NULLIF(btrim(address_override), ''), address)`.
+
+### Part 1c — geocoder
+
+`scripts/geo_nominatim.py` now geocodes the effective address (`EFFECTIVE_ADDRESS_SQL`), and one function, `build_geo_input()`, produces the Nominatim query, the stored `geo_input`, and the change test, so they cannot drift.
+
+**The brief assumed a `geo_input` comparison already existed. It did not.** The target filter was only `geo_precision IS DISTINCT FROM 'address'`, so a house-level row was **never re-geocoded**, whatever its address became — a wrong house-level pin would have outlived any correction. Now an `'address'` row is re-targeted when its stored `geo_input` differs from the input built today (compared in Python on the exact string, not a SQL re-implementation of the normalisation).
+
+Measured effect on today's data (DB-only, no Nominatim call): old targets 250, new 251 — **the only difference is 23275**. No house-level row has a changed input, so next Sunday brings no surprise re-geocodes and exactly **one** new Nominatim request.
+
+23275 moved: `address` → NULL, `address_override` = `בנימין שמוטקין 29`. **The geocoder was not run**; Sunday's `scrp-geocode` gives it a city centroid (`geo_centroids`), then tries the street.
+
+**Known limit, for the apply session:** if a re-targeted row's new lookup is rejected or finds nothing, the geocoder `continue`s and the OLD coordinate stays. For a corrected address that means the pin from the wrong address survives. When applying Dude's corrections, reset those rows to their city centroid (or NULL `lat`/`lon` so `geo_centroids` refills them) before the re-geocode.
+
+**Check after the next 10:00 cron (Sep 28):**
+```sql
+SELECT id, address, address_override FROM stores WHERE id = 23275;
+-- expect: address NULL, address_override 'בנימין שמוטקין 29'
+```
+
+### Part 2 — branch review export
+
+`scripts/export_branch_review.py` (read-only). Population = serving + live + physical: **863 stores**.
+
+`~/branch_review.xlsx` and `C:\xxl-archive\branch_review.xlsx`, sha256 `c6c0f2c5d4c36fd5e34601f1b6b7b0d1cf5acd384c7b50fde7f074df5d5aac7f` both sides. Two RTL sheets: **"לבדיקה" 363 rows** (manual), **"Shufersal-bulk" 320 rows** (`BULK — awaiting StoresFull ingestion`). Reviewer columns `correct_address`, `correct_city`, `is_physical` (yes/no dropdown), `notes` are empty and shaded.
+
+**GEOCODE_\* are replayed, not stored.** The geocoder only persists accepted results, so the export replays its own `classify()` + 25 km rule against its on-disk cache and never calls Nominatim. The replay reproduces SU10S-10 exactly — 185 accepted (76 + 109), 99 no-hit, 27 shop, 11 rejected, 4 too far — so the categories are faithful.
+
+Stores per issue (whole population, before the Shufersal split):
+
+| issue | stores |
+|---|---|
+| NO_CITY | 1 (Hazi Hinam 35348) |
+| NO_ADDRESS | 469 (320 Shufersal → bulk sheet) |
+| PLACEHOLDER | 24 (22 Yochananof `unknown`, 2 Rami Levy) |
+| NO_HOUSE_NUMBER | 50 |
+| GEOCODE_REJECTED | 15 (11 class + 4 > 25 km) |
+| GEOCODE_FLAGGED | 26 (27 overall; 1 outside the population) |
+| GEOCODE_NO_MATCH | 99 |
+| MAYBE_ONLINE | 0 |
+
+Manual rows per chain: ויקטורי 68, רמי לוי 46, יוחננוף 44, קרפור 39, פרש מרקט 29, קינג סטור 28, טיב טעם 27, שפע ברכת השם 22, שוק העיר 18, אושר עד 14, חצי חינם 12, קשת 12, סופר יודה 4.
+
+Beyond the brief, flagged as such: an **`issue_detail`** column (the geocode reason, the placeholder text, "address is just the city name"), and a **`GEOCODE_NO_MATCH`** category — no Nominatim result is not a rejection, but it is the same "check this address" signal.
+
+**MAYBE_ONLINE = 0 is real, not a regex miss:** SQL over the whole table finds 23 online-looking names; 19 are already `is_physical = false` and the other 4 have never loaded, so none is in the population.
+
+**Worth deciding before hand entry:** 148 manual rows are NO_ADDRESS from chains whose feeds publish **no address for any branch** — Victory 68, King Store 28, Shefa Birkat 22, Shuk HaIr 18, Hazi Hinam 12. Same shape as Shufersal; if any of them has a StoresFull-style source, those could go bulk too.
+
+**Apply step (later session, once the file is back):** `correct_city` → `STORE_CITY_OVERRIDES` (durable); `correct_address` → `address_override`; `is_physical = no` → `is_physical = false`; reset re-targeted coordinates (see Known limit above); then a targeted re-geocode.
+
+### Follow-up (September 28) — workbook re-cut to Dude's triage
+
+Commit `207e49a`. `scripts/export_branch_review.py` now writes three sheets (`~/branch_review.xlsx` = `C:\xxl-archive\branch_review.xlsx`, sha256 `f8882ac45460078e8b895daf3539c03a62e65134268adeb0d405b461dd2c787e`):
+
+| sheet | rows | contents |
+|---|---|---|
+| **עדיפות** (first) | 42 | GEOCODE_REJECTED 15, GEOCODE_FLAGGED 26, NO_CITY 1 — `issue_detail` = what Nominatim matched: class/type, the matched name, km from the city centroid, and `(>25 km guard)` where that was the reason |
+| **לבדיקה** (optional) | 174 | GEOCODE_NO_MATCH 99, NO_HOUSE_NUMBER 50, PLACEHOLDER 24, NO_ADDRESS 1 (קשת) |
+| **bulk-awaiting-StoresFull** | 468 | NO_ADDRESS of chains that publish no address at all: שופרסל 320, ויקטורי 68, קינג סטור 28, שפע ברכת השם 22, שוק העיר 18, חצי חינם 12 |
+
+The no-address chains are **computed** (no store with a non-empty feed `address`), not hard-coded, and the computation returns exactly those six. Same fill-in columns on every sheet; a store appears at most once per sheet.
+
+Useful for the review: **13 of the 26 FLAGGED rows matched a `shop/supermarket` carrying the chain's own name** within a few km (e.g. טיב טעם 074 → 'טיב טעם בעיר' 0.9 km) — very likely the store itself, so quick accepts. Keshet 015 and Rami Levy 036 share the address `היוצרים 7` and both matched 'קשת טעמים'.
+
+---
+
+## Session SU10S-20 (September 27, 2026) — freshness guard on every price and promo read (Python post-filter)
+
+Commit `013ffaf`. API deployed and curl-verified. **Closes SU10S-14 fix B**: the write path (`stores.last_loaded_at`, SU10S-17), `/stores/coordinates` (SU10S-17) and now every user-facing price and promo read apply the same liveness rule.
+
+### Design — no SQL text changed
+
+The SU10S-17 SQL predicate failed the plan gate, so this is the approved alternative: filter rows **in Python, after the query**. The unchanged originals were renamed (`_fetch_prices_all`, `_fetch_grouped_promos_raw`, …) and the public names are wrappers in one section at the end of `db/query.py`, "Liveness filter (SU10S-20)". The diff contains no SQL change; the only new statement is the cache's own `SELECT … FROM stores`.
+
+- **Live set**: per gunicorn worker, **10 min TTL**, built from the SU10S-17 rule (`last_loaded_at >= own chain's max − 3 days`, NULL = not live) via the same `_chain_cutoffs()`. Loaded on its **own connection**, so a failure cannot abort the request's transaction. **Fail open**: on any failure it logs `WARNING db.query: liveness set unavailable, NOT filtering stale stores`, returns unfiltered rows, and retries after 60 s — proven by forcing the load to fail (10,260 rows returned, = unfiltered).
+- **Promo-pick**: needs nothing. The LATERAL attaches a promo to a price row from the SAME store, so it goes wherever its row goes.
+
+| read | how | counts |
+|---|---|---|
+| `fetch_prices` (shelf + promo-only, city and non-city) → /search, /compare, /product, /basket/compare, CLI | drop rows whose `store_fk` is not live | callers group AFTER the filter → `total_matches`, `has_more`, `chains_count`, cheapest all consistent |
+| `fetch_promos` (single store) | `[]` if the store is not live | — |
+| `fetch_promos_bulk` | rows carry `(chain_id, store_id)`, no `store_fk`: drop a key only when **no** live store shares it | today every dead key is unambiguous |
+| `fetch_grouped_promos` | **refill**: materialise the filtered sequence from row 0 up to `offset + limit`, then slice | exact page length and offsets (web pages with `offset = rows.length` and stops on a short page) |
+| `fetch_today_promos` | drop rows whose `(chain_id, store_name)` is dead (no `store_fk` in the row); refill to `limit` | exactly `limit` rows |
+| `fetch_promo_cities` / `fetch_promo_chains` | keep a city/chain only if it has a live store | — |
+
+**Why grouped needed the refill, not a plain filter:** a dead branch's rows are contiguous in grouped order (chain → city → branch). King Store 23595 alone is 1,628 rows, so a plain filter could empty whole pages, and the web client stops at the first short page — hiding every chain after King Store. The refill costs re-reading earlier rows, but measured by depth (one 300-row page) it tracks the old code: offset 0 2.15 → 2.24 s, 3,000 2.13 → 2.23 s, 15,000 16.2 → 13.9 s, 60,000 15.5 → 15.8 s. The SQL already sorted `offset + limit` rows either way.
+
+**Documented residuals (exact, measured):**
+- `fetch_today_promos`: its SQL `DISTINCT ON (item_code, chain_id)` picks one store per item/chain *before* the filter; where a dead store won that pick, a live store with the same deal is not substituted. **Today: 0 such rows** — no dead store appears in /promos/today even unfiltered (23595 has no prices, so none of its promos qualifies as ≥10% off).
+- `fetch_promo_cities` / `fetch_promo_chains`: a city whose only active promos are at a dead store would still be listed. **Today: none** (132 → 132 cities, 14 → 14 chains).
+- Fixing either needs the liveness test inside the SQL, which this design deliberately avoids.
+
+### What it hides today (production, rolled-back proof)
+
+- **Store 145** (קרפור היפר אשדוד צפוני): **2,420 → 0** quotes across all its item codes. `/product/7290004131074` no longer lists it.
+- **7 never-loaded שוק העיר "אונליין" stores** (18849–18858): their promo-only quotes in search **7 → 0**; `/promos/18849` 90 → 0; gone from `/promos/bulk`. (They were already excluded from today/grouped/cities by the online-name filter.)
+- **King Store 23595 "338 דוכאן חי אלוורוד"** — a new find: physical, no city, **never** in `fetch_store_runs`, 0 prices, yet **1,628 active promos** last refreshed 2026-08-02. A one-off load nothing has updated since. **1,628 → 0** in grouped, single-store and bulk.
+- Search `q=חלב`: 199 rows from non-live stores → 0 (SU10S-17's "202" included tie-break noise).
+- Unchanged, byte-identical JSON: barcode `7290003726615` (567 rows) and a 10-item basket (284 rows). A live store's promos: 843 169 → 169.
+
+### Cost (median, interleaved, cache warm)
+
+| | old | new | |
+|---|---|---|---|
+| barcode lookup | 20.71 ms | 21.20 ms | +0.49 ms |
+| basket, 10 items | 12.12 ms | 12.50 ms | +0.38 ms |
+| grouped, first page | 2,083 ms | 2,100 ms | +0.8% |
+| /promos/today (200) | 10,878 ms | 11,091 ms | +2.0% |
+| the filter inside `q=חלב` | | 542 ms of 56.8 s | **0.95%** |
+| cache load | | 12.8 ms | once per worker per 10 min |
+
+The barcode figure is higher than the 0.13 ms filter-only estimate from SU10S-17 because it is end-to-end under load; the filter itself is a set lookup per row.
+
+### Two "not identical" results — both pre-existing, not the filter
+
+- **The promo-only quotes are non-deterministic run to run.** The old code against itself differs by 2 rows on the same 300 codes (`DISTINCT ON` ties pick an arbitrary `promo_id`). Old vs new: every shelf row identical, every promo-only (store, item) pair identical.
+- **⚠️ `/promos/grouped` pagination is broken in production, independent of this change.** Paging King Store 300 at a time exactly as the web does (`offset = rows.length`), the **old** code returns 47,025 rows of which **14,039 are duplicates and 14,039 are missing** — ~30% wrong. Cause: the `ORDER BY` (chain, city, branch, discount…) has no unique tiebreaker, so rows tied on discount within a branch come back in a different order on every query. The new code has the same property (14,777 of 45,397) and never returns a dead row. **Fix: add a unique final sort key (e.g. `p.store_fk, p.item_code, p.promo_id`) — a SQL change, out of this session's scope.** Added to the roadmap.
+
+### Also found — pre-existing, not fixed
+
+**`/promos/{store_fk}` and `/promos/store/{chain_id}/{store_id}` return 500 for any store that has promos.** `PromoItem.discount_pct` is a required field, but the single-store query never selects it (only the bulk query computes it) — `ResponseValidationError: 169 validation errors … discount_pct Field required` for store 843. Unchanged by this session (the wrapped function body is byte-identical, `api/models.py` untouched since SU10S-4). No web or mobile client calls these endpoints. One-line fix: `discount_pct: float | None = None`. Added to the roadmap.
+
+### An operational lesson
+
+A verification script that built JSON for three full copies of store 145's result set was **killed by the kernel OOM killer** on this 3.8 GiB box. Only the script died — Postgres (up 4 days) and the gunicorn workers were untouched, `/health` stayed 200 — but the page cache was flushed and product lookups briefly took ~1.4 s. Run ad-hoc production scripts under `ulimit -v` (the rerun used 1.2 GB) and hash rows instead of holding them as strings.
+
+---
+
