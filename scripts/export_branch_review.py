@@ -26,10 +26,21 @@ results. Every answer it ever got is in its on-disk cache, and its accept rules
 the cache. It NEVER calls Nominatim - an uncached query is reported as
 "not geocoded yet" instead.
 
-Sheets: "לבדיקה" (manual list) and "Shufersal-bulk". Shufersal publishes no
-address for any branch; those rows wait for StoresFull ingestion rather than
-hand entry, so Shufersal NO_ADDRESS lives only on the bulk sheet. A Shufersal
-branch with some OTHER issue still appears on the manual list for that issue.
+Sheets, in order (Dude's triage, SU10S-18 follow-up):
+    "עדיפות"                   worth manual effort: GEOCODE_REJECTED, GEOCODE_FLAGGED,
+                               NO_CITY. issue_detail says what Nominatim matched -
+                               class/type, the matched name, km from the city centroid.
+    "לבדיקה"                   optional: everything else (NO_MATCH, NO_HOUSE_NUMBER,
+                               PLACEHOLDER, ...).
+    "bulk-awaiting-StoresFull" NO_ADDRESS rows of chains that publish NO address for
+                               any branch. They wait for StoresFull ingestion, not
+                               hand entry. Which chains is computed, not listed: a
+                               chain qualifies when none of its stores has a non-empty
+                               FEED `address` (the loader-owned column, not the
+                               override). At SU10S-18: שופרסל, ויקטורי, קינג סטור,
+                               שפע ברכת השם, שוק העיר, חצי חינם.
+A store is on each sheet at most once. A no-address-chain store with another
+issue is on the bulk sheet for NO_ADDRESS and on עדיפות / לבדיקה for the rest.
 
 The four trailing columns are for the reviewer; the apply session reads them:
     correct_city     -> scraper/city_names.py STORE_CITY_OVERRIDES (durable)
@@ -61,8 +72,20 @@ from scripts.geo_nominatim import (
     haversine_km,
 )
 
-SHUFERSAL = "7290027600007"
 BULK_LABEL = "BULK — awaiting StoresFull ingestion"
+SHEET_PRIORITY = "עדיפות"
+SHEET_OPTIONAL = "לבדיקה"
+SHEET_BULK = "bulk-awaiting-StoresFull"
+PRIORITY_ISSUES = {"GEOCODE_REJECTED", "GEOCODE_FLAGGED", "NO_CITY"}
+
+# Chains whose feed carries no address for ANY store (see module doc).
+_NO_ADDRESS_CHAINS_SQL = """
+    SELECT s.chain_id, c.name
+    FROM stores s LEFT JOIN chains c ON c.chain_id = s.chain_id
+    GROUP BY s.chain_id, c.name
+    HAVING count(*) FILTER (WHERE btrim(coalesce(s.address, '')) <> '') = 0
+    ORDER BY c.name
+"""
 
 ISSUE_ORDER = ["NO_CITY", "NO_ADDRESS", "PLACEHOLDER", "NO_HOUSE_NUMBER",
                "GEOCODE_REJECTED", "GEOCODE_FLAGGED", "GEOCODE_NO_MATCH", "MAYBE_ONLINE"]
@@ -121,12 +144,18 @@ def replay_geocode(r: dict, cache: dict) -> tuple[str | None, str]:
         return "GEOCODE_NO_MATCH", f"no Nominatim result for '{geo_input}'"
     hit = hits[0]
     precision, reason = classify(hit)
+    # What Nominatim actually matched, for the reviewer: "amenity/dentist
+    # 'מרפאת שיניים' 0.4 km". Distance is from the store's current (centroid)
+    # coordinate - the same reference the geocoder's 25 km guard uses.
+    matched = reason.split(" — ")[0]
+    name = (hit.get("name") or (hit.get("display_name") or "").split(",")[0]).strip()
+    dist = (haversine_km(float(hit["lat"]), float(hit["lon"]), r["lat"], r["lon"])
+            if r["lat"] is not None else None)
+    what = f"{matched}" + (f" '{name}'" if name else "") + (f" {dist:.1f} km" if dist is not None else "")
     if precision is None:
-        return ("GEOCODE_FLAGGED" if reason.startswith("shop") else "GEOCODE_REJECTED"), reason
-    if r["lat"] is not None:
-        dist = haversine_km(float(hit["lat"]), float(hit["lon"]), r["lat"], r["lon"])
-        if dist > MAX_CENTROID_KM:
-            return "GEOCODE_REJECTED", f"{dist:.1f} km from city centroid (> {MAX_CENTROID_KM:.0f})"
+        return ("GEOCODE_FLAGGED" if reason.startswith("shop") else "GEOCODE_REJECTED"), what
+    if dist is not None and dist > MAX_CENTROID_KM:
+        return "GEOCODE_REJECTED", f"{what} (>{MAX_CENTROID_KM:.0f} km guard)"
     return None, ""
 
 
@@ -210,51 +239,53 @@ def main() -> None:
         live_sql, live_params = live_store_clause(conn)
         rows = conn.execute(text(_POP_SQL.format(eff=EFFECTIVE_ADDRESS_SQL, live=live_sql)),
                             live_params).mappings().all()
+        no_addr = {r[0]: r[1] for r in conn.execute(text(_NO_ADDRESS_CHAINS_SQL)).all()}
     finally:
         conn.rollback()
         conn.close()
 
     cache = load_cache()
-    manual, bulk = [], []
+    sheets: dict[str, list] = {SHEET_PRIORITY: [], SHEET_OPTIONAL: [], SHEET_BULK: []}
     cat = Counter()
-    per_chain = Counter()
-    manual_by_chain_issue = Counter()
+    per_sheet_chain: dict[str, Counter] = {k: Counter() for k in sheets}
+    per_sheet_issue: dict[str, Counter] = {k: Counter() for k in sheets}
     for r in rows:
         issues, detail = issues_for(r, cache)
         for i in issues:
             cat[i] += 1
-        if r["chain_id"] == SHUFERSAL and "NO_ADDRESS" in issues:
-            bulk.append(to_row(r, ["NO_ADDRESS"], []))
+        if r["chain_id"] in no_addr and "NO_ADDRESS" in issues:
+            sheets[SHEET_BULK].append((r["chain"] or "", "", r["store_id"], to_row(r, ["NO_ADDRESS"], [BULK_LABEL])))
+            per_sheet_chain[SHEET_BULK][r["chain"]] += 1
+            per_sheet_issue[SHEET_BULK]["NO_ADDRESS"] += 1
             issues = [i for i in issues if i != "NO_ADDRESS"]
-        if issues:
-            issues.sort(key=ISSUE_ORDER.index)
-            manual.append((r["chain"] or "", ISSUE_ORDER.index(issues[0]), r["store_id"],
-                           to_row(r, issues, detail)))
-            per_chain[r["chain"]] += 1
-            for i in issues:
-                manual_by_chain_issue[(r["chain"], i)] += 1
+        if not issues:
+            continue
+        issues.sort(key=ISSUE_ORDER.index)
+        sheet = SHEET_PRIORITY if PRIORITY_ISSUES & set(issues) else SHEET_OPTIONAL
+        sheets[sheet].append((r["chain"] or "", ISSUE_ORDER.index(issues[0]), r["store_id"],
+                              to_row(r, issues, detail)))
+        per_sheet_chain[sheet][r["chain"]] += 1
+        for i in issues:
+            per_sheet_issue[sheet][i] += 1
 
-    manual.sort(key=lambda t: t[:3])
     wb = Workbook()
-    ws = wb.active
-    ws.title = "לבדיקה"
-    write_sheet(ws, [t[3] for t in manual])
-    ws2 = wb.create_sheet("Shufersal-bulk")
-    for row in bulk:
-        row[COLUMNS.index("issue_detail")] = BULK_LABEL
-    write_sheet(ws2, bulk)
+    wb.remove(wb.active)
+    for name, entries in sheets.items():
+        entries.sort(key=lambda t: t[:3])
+        write_sheet(wb.create_sheet(name), [t[3] for t in entries])
     wb.save(args.out)
 
     print(f"population (serving + live + physical): {len(rows)}")
-    print(f"manual list rows: {len(manual)}   shufersal bulk rows: {len(bulk)}")
-    print("stores per issue (whole population, before the bulk split):")
+    print(f"no-address chains (computed): {', '.join(no_addr.values())}")
+    print("stores per issue (whole population, before the split):")
     for i in ISSUE_ORDER:
         print(f"  {i:18} {cat[i]}")
-    print("manual list rows per chain:")
-    for ch, n in sorted(per_chain.items(), key=lambda kv: -kv[1]):
-        parts = ", ".join(f"{i} {manual_by_chain_issue[(ch, i)]}" for i in ISSUE_ORDER
-                          if manual_by_chain_issue[(ch, i)])
-        print(f"  {ch:14} {n:4}   ({parts})")
+    for name in sheets:
+        print(f"sheet {name}: {len(sheets[name])} rows")
+        print("   by issue: " + ", ".join(f"{i} {per_sheet_issue[name][i]}" for i in ISSUE_ORDER
+                                          if per_sheet_issue[name][i]))
+        print("   by chain: " + ", ".join(f"{ch} {n}" for ch, n in
+                                          sorted(per_sheet_chain[name].items(), key=lambda kv: -kv[1])))
     print(f"wrote {args.out}")
 
 
