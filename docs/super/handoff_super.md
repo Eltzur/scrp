@@ -3254,6 +3254,20 @@ Beyond the brief, flagged as such: an **`issue_detail`** column (the geocode rea
 
 **Apply step (later session, once the file is back):** `correct_city` → `STORE_CITY_OVERRIDES` (durable); `correct_address` → `address_override`; `is_physical = no` → `is_physical = false`; reset re-targeted coordinates (see Known limit above); then a targeted re-geocode.
 
+### Follow-up (September 28) — workbook re-cut to Dude's triage
+
+Commit `207e49a`. `scripts/export_branch_review.py` now writes three sheets (`~/branch_review.xlsx` = `C:\xxl-archive\branch_review.xlsx`, sha256 `f8882ac45460078e8b895daf3539c03a62e65134268adeb0d405b461dd2c787e`):
+
+| sheet | rows | contents |
+|---|---|---|
+| **עדיפות** (first) | 42 | GEOCODE_REJECTED 15, GEOCODE_FLAGGED 26, NO_CITY 1 — `issue_detail` = what Nominatim matched: class/type, the matched name, km from the city centroid, and `(>25 km guard)` where that was the reason |
+| **לבדיקה** (optional) | 174 | GEOCODE_NO_MATCH 99, NO_HOUSE_NUMBER 50, PLACEHOLDER 24, NO_ADDRESS 1 (קשת) |
+| **bulk-awaiting-StoresFull** | 468 | NO_ADDRESS of chains that publish no address at all: שופרסל 320, ויקטורי 68, קינג סטור 28, שפע ברכת השם 22, שוק העיר 18, חצי חינם 12 |
+
+The no-address chains are **computed** (no store with a non-empty feed `address`), not hard-coded, and the computation returns exactly those six. Same fill-in columns on every sheet; a store appears at most once per sheet.
+
+Useful for the review: **13 of the 26 FLAGGED rows matched a `shop/supermarket` carrying the chain's own name** within a few km (e.g. טיב טעם 074 → 'טיב טעם בעיר' 0.9 km) — very likely the store itself, so quick accepts. Keshet 015 and Rami Levy 036 share the address `היוצרים 7` and both matched 'קשת טעמים'.
+
 ---
 
 ## Session SU10S-20 (September 27, 2026) — freshness guard on every price and promo read (Python post-filter)
