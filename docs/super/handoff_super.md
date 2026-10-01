@@ -685,4 +685,26 @@ Next free session ID: see the last line of this file (moved in SU11A-4)
 
 **Deploy:** per CLAUDE.md "Deploy backend" — pull, `xxl-restart.sh scrp-api`, then curl `/product/7290004131074` and confirm the quote count is in the hundreds. NOT device-verified: needs the deploy plus a phone check of "קרוב אלי" at Dude's Ramat Gan spot.
 
-Next free session ID: SU11A-5
+Next free session ID: see the last line of this file (moved in SU11A-6)
+
+---
+
+## SU11A-5 (October 1, 2026) — read-only: structured product attributes (recorded retroactively in SU11A-6)
+
+No code, no writes. Findings: no category column exists anywhere in `public`. GS1 (`gs1.products`) has a GPC category for every row plus structured `Net_Content` / `Net_Weight` / `functionalName` / `Variant` in `full_content`, but covers only 19,644 items (11.7%) and is joined into `items` only as the name. Regex on `item_name` can drop obvious noise but identifies a category at only ~70–90% precision. Sizing for "חלב": 3,044 matches / 386,799 price rows → ~164 likely-dairy-milk items / 34,384 rows.
+
+---
+
+## Session SU11A-6 (October 1, 2026) — LLM category-classification pilot (validation only)
+
+No DB writes, no schema change, nothing written to `items`. Purpose: measure whether an LLM can classify the catalog into a 20-category taxonomy before any full run.
+
+- **Headline: 79.8% top-level accuracy** (13,518 / 16,930) for Claude Haiku 4.5 (`claude-haiku-4-5`, the only Haiku this key lists), blind (name, manufacturer, size only), against GS1-derived ground truth. 0 failed items; category 20 (מיוחדים) used for 0.68%.
+- **The 79.8% understates the model.** In a hand-reviewed random sample of 60 misses: 22 were ground-truth errors (GS1 brick wrong, or the SU11A-6 mapping wrong — e.g. baby toiletries mapped to 15 while the taxonomy puts them in 16), 17 ambiguous (taxonomy overlaps), 21 clear model errors. Clear model error is therefore roughly 7% of items on this set (small sample — treat as a rough estimate).
+- **But this set is the easy one:** GS1-covered items, most with GS1-quality names. The remaining ~147k items have truncated retailer names; accuracy there is unmeasured.
+- Cost: 1,593,265 input + 184,573 output tokens (pilot + test batch + key check) = **$2.52** at Haiku 4.5 list rates ($1 / $5 per MTok). No prompt caching: the prompt is below Haiku's 4,096-token cache minimum. A full ~147k run would be about $22 synchronous, about $11 via the Batch API.
+- Files: taxonomy [category_taxonomy.md](category_taxonomy.md) (12–19 filled in; the placement notes are decisions for Dude to review); GS1 mapping [gs1_category_mapping.md](gs1_category_mapping.md) (501 GS1 categories, 120 EXCLUDED, Hebrew translations); per-item results `C:\xxl-archive\su11a6_classification_pilot.csv` (16,930 rows: item_code, name, manufacturer, predicted, ground_truth, match, gs1_group; also on the server in `~/su11a6/`, with the scripts). The CSV is not in git (2 MB).
+- `anthropic` 1.11.0 was pip-installed into the server venv for this pilot; it is not in requirements.txt. `ANTHROPIC_API_KEY` lives in `~/scrp/.env` (uppercase on purpose — the SDK reads that exact name).
+- **Before any full run:** fix the taxonomy overlaps (sauces 7/13, cleaning accessories 14/19, crackers and wafers 4/9, frozen pastry 4/6, ice-cream bars 6/9, baby toiletries 15/16); add prompt rules for the recurring model errors (pickles → 5, toilet soap blocks → 14, cookies/wafers → 9, frozen fruit → 1, pet treats → 17, milk drinks → 2, flour/sweeteners → 13); clean the mapping (exclude the polluted GS1 bricks Pate (Perishable), Fruit - Unprepared_Unprocessed (Frozen), Nuts_Seeds - Unprepared_Unprocessed, Oils Edible); and validate on ~200 hand-labelled NON-GS1 items. Category 18 has no ground truth at all (66 predictions unverified).
+
+Next free session ID: SU11A-7
