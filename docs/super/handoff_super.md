@@ -665,4 +665,4 @@ Supersedes SU10S-26's close as the final state of this chat, which ran SU10S-21,
 (2) After Sunday's 15:00 geocode run (`scrp-geocode`), confirm the 7 manual rows are untouched and that ~212 stores were re-queried under the new cache keys.
 (3) GS1 image catch-up runs Sunday Oct 4 and Sunday Oct 11 (`scrp-gs1-fetch`, 14:00 IDT) — check `journalctl -u scrp-gs1-fetch` after each.
 
-Next free session ID: SU10S-29
+Next free session ID: SU11A-3
