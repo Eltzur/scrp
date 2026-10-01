@@ -707,4 +707,20 @@ No DB writes, no schema change, nothing written to `items`. Purpose: measure whe
 - `anthropic` 1.11.0 was pip-installed into the server venv for this pilot; it is not in requirements.txt. `ANTHROPIC_API_KEY` lives in `~/scrp/.env` (uppercase on purpose — the SDK reads that exact name).
 - **Before any full run:** fix the taxonomy overlaps (sauces 7/13, cleaning accessories 14/19, crackers and wafers 4/9, frozen pastry 4/6, ice-cream bars 6/9, baby toiletries 15/16); add prompt rules for the recurring model errors (pickles → 5, toilet soap blocks → 14, cookies/wafers → 9, frozen fruit → 1, pet treats → 17, milk drinks → 2, flour/sweeteners → 13); clean the mapping (exclude the polluted GS1 bricks Pate (Perishable), Fruit - Unprepared_Unprocessed (Frozen), Nuts_Seeds - Unprepared_Unprocessed, Oils Edible); and validate on ~200 hand-labelled NON-GS1 items. Category 18 has no ground truth at all (66 predictions unverified).
 
-Next free session ID: SU11A-7
+Next free session ID: see the last line of this file (moved in SU11A-7)
+
+---
+
+## Session SU11A-7 (October 1, 2026) — taxonomy overlaps resolved, blind review sample, retailer-category feasibility
+
+No DB writes, no classification calls, no scraper built, no retailer data stored.
+
+- **Taxonomy:** [category_taxonomy.md](category_taxonomy.md) now has a "Resolved overlaps" table — sauces split by use (cooking/marinade → 7, table condiments and dressings → 13), cleaning accessories → 14, crackers/wafers/pretzels → 9, frozen bakery → 6, ice-cream bars → 6, baby toiletries → 16 — and ★ rules for the SU11A-6 recurring errors (pickles → 5, toilet-soap blocks → 14, cookies → 9, frozen fruit → 1, pet treats → 17, milk drinks → 2). All are decisions for Dude to confirm.
+- **Blind review sample (250 items)** in `C:\xxl-archive\` (the archive convention, outside git): `su11a7_review_blind.csv` (item_code, item_name, manufacturer_name, quantity, unit_qty — 125 GS1-matched + 125 not, shuffled together) is what Dude labels; `su11a7_review_key.csv` (gs1_covered, gs1_group, gs1_derived_category, su11a6_haiku_prediction) is for later reconciliation and should not be opened before labelling. 110 of the 125 GS1 rows have a mapped category and an SU11A-6 prediction; 15 fall in EXCLUDED GS1 groups. Population with a non-empty name: 19,559 GS1-matched, 143,058 not.
+- **Retailer storefronts (a look only, a handful of public requests):**
+  - **Rami Levy — low effort.** `POST https://www.rami-levy.co.il/api/catalog?` with JSON `{"q": ..., "from": ...}` and header `uid: 0` works as a guest, accepts a full barcode as `q` (milk 7290004131074 → 1 hit), and returns the barcode plus a three-level Hebrew category (`department` › `group` › `subGroup`, e.g. חלב ביצים וסלטים › חלב › חלב טרי).
+  - **Shufersal — low to medium.** `GET /online/he/search/results?q=...&limit=...` returns JSON without auth: hierarchical category codes (`allCategoryCodes`, e.g. A01 › A0107 › A010701) and a `secondLevelCategory` name that is sometimes not a real category ("מוצרים בפיקוח"). `ean` is null and barcode search returns nothing: products key on Shufersal's own `sku` (milk = 4131074), so matching to our barcodes is not direct. robots.txt asks for a 10-second crawl delay.
+  - **Carrefour — medium to high.** The storefront answers a plain request with a Cloudflare challenge (HTTP 403 "Just a moment"); needs a real browser. Not attempted further.
+  - Terms of service were not reviewed for any of the three; that comes before any scraper.
+
+Next free session ID: SU11A-8
