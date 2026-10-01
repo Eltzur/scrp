@@ -665,4 +665,24 @@ Supersedes SU10S-26's close as the final state of this chat, which ran SU10S-21,
 (2) After Sunday's 15:00 geocode run (`scrp-geocode`), confirm the 7 manual rows are untouched and that ~212 stores were re-queried under the new cache keys.
 (3) GS1 image catch-up runs Sunday Oct 4 and Sunday Oct 11 (`scrp-gs1-fetch`, 14:00 IDT) — check `journalctl -u scrp-gs1-fetch` after each.
 
-Next free session ID: SU11A-3
+Next free session ID: see the last line of this file (moved in SU11A-4)
+
+---
+
+## Session SU11A-4 (October 1, 2026) — `/product/{barcode}` returns per-store quotes ("קרוב אלי" real fix)
+
+**Correcting the record.** SU11A-2's roadmap and handoff_mobile lines call the nearby-filter bug "fixed in code". That was premature: the SU10S-30 investigation said `/product/{barcode}` returns one quote per live store, which was wrong — it was read from the docstring and a client comment, not from `group_by_product`. SU11A-2's client change (mobile `b3250ec`, radius first, then cheapest per chain) is correct and still needed, but on its own it changed nothing.
+
+**Real root cause:** `/product/{barcode}` grouped its rows with `group_by_product`, which keeps ONE quote per (item, chain): the chain's cheapest branch nationwide. The phone never received the nearby branches. Eilat is VAT-free, so for milk Rami Levy, Carrefour and Shufersal always sent an Eilat branch.
+
+**Fix (`db/query.py`, `api/routers/product.py`):** `group_by_product(rows, per_store=False)`. With `per_store=True` the dedup key is (item, chain, store_fk), so every live store keeps its own quote; `/product/{barcode}` passes `per_store=True`. `/search` and `/compare` are unchanged (default `False`). Reused the existing function rather than `group_by_store`, which returns one single-quote *product* per store (the wrong shape for `/product`). Summary fields keep their per-chain meaning in both modes — `cheapest_price`, `chains_count`, and `most_expensive_price` = the most expensive chain's cheapest branch — so web's savings badge (`most_expensive - cheapest`, used on FavoritesPage) does not inflate. In per-chain mode the new `most_expensive_price` expression equals the old `quotes[-1]`.
+
+**Consumers checked:** mobile `product-detail`, `scan-result` card and `open-barcode` (scan history) all run `cheapestPerChain` on the quotes; web `FavoritesPage` renders `ProductCard`, which also collapses per chain client-side; web `useProduct` has no callers; `ProductDetailModal` collapses per chain. Nothing assumes one quote per chain.
+
+**Payload (live data, patched code loaded in memory on the server, GET only):** milk `7290004131074` 852 quotes (was 14) / 351 KB / 0.23 s; sour cream `72963746` 291 (was 10) / 122 KB; `7290000066318` 787 (was 11) / 329 KB. Far from search's ~387k-row scale; no LIMIT needed. **API JSON is NOT gzipped** — nginx has `gzip on` but `gzip_types`/`gzip_proxied` are commented out and the app has no GZip middleware — so 351 KB goes over the wire raw. Worth enabling (an nginx change, needs sudo).
+
+**Tests:** `api/tests` 15/15 passed against the patched app (run on the server, modules swapped in memory, nothing written; the local Windows venv is broken — it points at a Python under another user profile). Synthetic check: per-store keeps two stores sharing a `store_id` apart; summary fields identical across modes.
+
+**Deploy:** per CLAUDE.md "Deploy backend" — pull, `xxl-restart.sh scrp-api`, then curl `/product/7290004131074` and confirm the quote count is in the hundreds. NOT device-verified: needs the deploy plus a phone check of "קרוב אלי" at Dude's Ramat Gan spot.
+
+Next free session ID: SU11A-5

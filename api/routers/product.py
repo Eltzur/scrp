@@ -56,7 +56,9 @@ def product(
     if not rows:
         raise HTTPException(status_code=404, detail=f"Barcode {barcode} not found")
 
-    by_item = group_by_product(rows)
+    # One quote per STORE, not per chain: the app filters "near me" on-device
+    # and needs every branch to do it (SU11A-4). Clients collapse per chain.
+    by_item = group_by_product(rows, per_store=True)
     prod    = by_item.get(barcode)
     if not prod:
         raise HTTPException(status_code=404, detail=f"Barcode {barcode} not found")

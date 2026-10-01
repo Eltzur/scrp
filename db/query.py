@@ -588,9 +588,17 @@ def _fetch_prices_all(
 # Product grouping (used by both search and compare)
 # ---------------------------------------------------------------------------
 
-def group_by_product(rows: list[dict]) -> dict[str, dict]:
+def group_by_product(rows: list[dict], per_store: bool = False) -> dict[str, dict]:
     """
     Group raw price rows by item_code.
+
+    per_store=False (search/compare): one quote per CHAIN, its cheapest branch.
+    per_store=True (/product/{barcode}, SU11A-4): one quote per STORE. The
+    client needs every branch to filter by distance on-device; collapsing here
+    first kept only each chain's nationwide-cheapest branch (for milk, an Eilat
+    branch — VAT-free), so "near me" could never show a nearby branch. The
+    summary fields keep their per-chain meaning in both modes, so web's
+    savings badge (most_expensive - cheapest) does not inflate.
     Returns dict: item_code → {
         "item_code", "canonical_name", "manufacturer", "unit_of_measure",
         "is_weighted", "names_per_chain": {chain_id: name},
@@ -618,7 +626,7 @@ def group_by_product(rows: list[dict]) -> dict[str, dict]:
     # shopper can actually pay today.
     best: dict[tuple, dict] = {}
     for r in rows:
-        key = (r["item_code"], r["chain_id"])
+        key = (r["item_code"], r["chain_id"], r.get("store_fk") if per_store else None)
         if key not in best or _effective(r) < _effective(best[key]):
             best[key] = r
 
@@ -630,7 +638,7 @@ def group_by_product(rows: list[dict]) -> dict[str, dict]:
 
     # Build product groups
     by_item: dict[str, dict] = {}
-    for (code, _chain), r in best.items():
+    for (code, _chain, _store), r in best.items():
         if code not in by_item:
             by_item[code] = {
                 "item_code":        code,
@@ -685,8 +693,13 @@ def group_by_product(rows: list[dict]) -> dict[str, dict]:
         for q in prod["quotes"]:
             q["delta_from_cheapest"] = round(q["price"] - cheapest, 4)
         prod["cheapest_price"]       = prod["quotes"][0]["price"]
-        prod["most_expensive_price"] = prod["quotes"][-1]["price"]
-        prod["chains_count"]         = len({q["chain_id"] for q in prod["quotes"]})
+        # Most expensive CHAIN (its cheapest branch), in both modes. Quotes are
+        # sorted ascending, so the first one seen per chain is its cheapest.
+        chain_min: dict[str, float] = {}
+        for q in prod["quotes"]:
+            chain_min.setdefault(q["chain_id"], q["price"])
+        prod["most_expensive_price"] = max(chain_min.values())
+        prod["chains_count"]         = len(chain_min)
 
     return by_item
 
