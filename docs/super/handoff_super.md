@@ -737,4 +737,12 @@ No changes. For milk 7290004131074 near store 205 every branch of a chain has th
 
 See docs/handoff_mobile.md SU11A-9. JS-only, not device-verified.
 
-Next free session ID: SU11A-10
+Next free session ID: see the last line of this file (moved in SU11A-10)
+
+---
+
+## SU11A-10 (October 4, 2026) — mobile: "קרוב אלי" lists individual branches
+
+See docs/handoff_mobile.md SU11A-10. JS-only; observed working on Dude's dev client; not yet in a build.
+
+Next free session ID: SU11A-11
