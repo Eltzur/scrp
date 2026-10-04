@@ -12,6 +12,7 @@ Minor mobile fixes accumulate here instead of triggering standalone builds; they
 - SU11A-9: hidden location diagnostics screen "אבחון מיקום" (Settings → tap the version row 7 times). JS-only; NOT yet device-verified.
 - SU11A-10: "קרוב אלי" lists every precisely located branch in range, nearest first (city-precision branches in a collapsed section, one per chain). DONE in code; observed working on Dude's dev client (Oct 4); not yet in a build.
 - SU11A-11: sort toggle "הכי קרוב" / "הכי זול" on both price lists ("הכל" now lists every branch, 15 at a time) and the build-info line on the diagnostics screen. DONE in code; typecheck clean apart from the 5 known src/tw errors; device check pending; not yet in a build.
+- SU11A-12: third sort option "הכי זול והכי קרוב" in the "הכל" view (the near-me list in price order). DONE in code; typecheck ok (Dude); device check pending; not yet in a build.
 - Next batch build = 1.2.1 / versionCode 5, preview APK; build when the batch is ready, not per fix.
 
 ## Done (recent — kept here so they are not re-scheduled)
@@ -26,6 +27,8 @@ Minor mobile fixes accumulate here instead of triggering standalone builds; they
 - Post-launch UI polish (web + mobile) — after the mobile apps launch.
 
 ## Needs a decision from Dude before scoping
+- **DECIDED (Dude, Oct 4 2026): far-away coupons stay in the plain "הכל" list.** "הכל" + "הכי זול" is nationwide by design, so e.g. Rami Levy Eilat's ₪0.90 milk coupon leads it. The way around them is the "הכי זול והכי קרוב" option (SU11A-12), not filtering "הכל".
+- **DECIDED (Dude, Oct 4 2026): search redesign location handling.** The user's position may go to the server only in a POST body, rounded to a 500 m grid or finer, never logged or stored; displayed distances are still computed on the phone. **Before that ships, the privacy policy and the store data-safety / privacy-label answers must be updated** (today they rest on "location never leaves the device").
 - **GS1 not a priority:** Dude evaluating direct vendor APIs; about 95% utilization is acceptable; post-Oct-12 reform refresh and the contract-terms question stay open (both below).
 - GS1 refresh + re-archive — after the Oct 12 2026 "What's Good for Europe" reform lands, and again before any subscription cancellation. The reform changes the payload; the archive taken 2026-09-26 predates it. Sequence matters: refresh first, then re-archive, then cancel.
 - GS1 contract terms on post-cancellation data — a business question, not a code one: what the agreement permits us to retain and display if the subscription lapses. The archive is worthless if we are not allowed to serve from it, and that answer should arrive before anyone relies on it as an exit plan.

@@ -753,4 +753,12 @@ Next free session ID: see the last line of this file (moved in SU11A-11)
 
 See docs/handoff_mobile.md SU11A-11. JS-only; typecheck clean apart from the 5 known src/tw errors; device check pending; not yet in a build.
 
-Next free session ID: SU11A-12
+Next free session ID: see the last line of this file (moved in SU11A-12)
+
+---
+
+## SU11A-12 (October 4, 2026) — mobile: third sort option "הכי זול והכי קרוב" in "הכל"
+
+See docs/handoff_mobile.md SU11A-12. JS-only; typecheck ok; device check pending; not yet in a build.
+
+Next free session ID: SU11A-13
