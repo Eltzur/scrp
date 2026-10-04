@@ -130,7 +130,9 @@ class BinaProjectsScraper(ChainScraper):
                     address    = COALESCE(excluded.address, stores.address)
                 """), {
                 "chain_id": self.CHAIN_ID, "sub_chain_id": "001", "store_id": sid,
-                "store_name": name, "city": city, "city_norm": city_norm, "address": "",
+                # None, not "": Select_Store has no address, and COALESCE must keep
+                # the one backfilled from StoresFull (SU11A-15) instead of blanking it.
+                "store_name": name, "city": city, "city_norm": city_norm, "address": None,
             })
             seen[sid] = {
                 "store_id": sid, "store_name": name,

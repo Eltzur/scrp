@@ -44,6 +44,12 @@ contains the chain name, then a building/house, then anything else.
 
 THE ADDRESS IT GEOCODES (SU10S-18) is the EFFECTIVE address,
     COALESCE(NULLIF(btrim(address_override), ''), address)
+The QUERY sent for it is cleaned by scripts/geo_clean.py (SU11A-15): רחוב /
+רח' stripped, a glued city / "מרכ" / ", ישראל" dropped, abbreviations spelled
+out. שדרות / שד' are kept first; a boulevard is also queried stripped and both
+outcomes are printed ("BOULEVARD …"); the stripped one is used only when the
+kept one is NO_MATCH. Any NO_MATCH then gets a street-only retry (no house
+number), which can only give 'street'. geo_input is still the RAW address.
 `address` is owned by the nightly store upsert and is overwritten from the
 feed (or blanked to '' by binaprojects) every night; a hand correction lives
 in `address_override`, which no scraper writes.
@@ -82,6 +88,7 @@ from sqlalchemy import text
 from db.db import connect
 from scraper.city_names import CITY_CANONICAL_OVERRIDES, normalize_city
 from scripts.geo_centroids import load_cbs_centroids
+from scripts.geo_clean import clean_address, has_sderot
 
 NOMINATIM = "https://nominatim.openstreetmap.org/search"
 USER_AGENT = "XXL-super/1.0 (info@xxl.co.il)"
@@ -311,13 +318,17 @@ def _pref(hit: dict, chain: str | None) -> int:
 
 
 def evaluate(hits: list, addr: str, city_canonical: str, centroid, chain: str | None,
-             cities: CityResolver) -> dict:
+             cities: CityResolver, parsed: tuple | None = None) -> dict:
     """The store's outcome over all candidates.
 
     Keys: precision ('address'/'street'/None), reason, hit (the candidate
     shown), dist_km, road, house_number, city.
+
+    `parsed` (street, number, letter) overrides parse_address(addr) - the
+    street-only retry (SU11A-15) passes (street, None, None), which can only
+    ever yield STREET_MATCH.
     """
-    street, num, letter = parse_address(addr)
+    street, num, letter = parsed or parse_address(addr)
     ranked = {"ADDRESS_MATCH": [], "STREET_MATCH": [], "CITY_MISMATCH": [], ">25km": []}
     for h in hits:
         a = h.get("address") or {}
@@ -442,7 +453,7 @@ def select_targets(conn, include_overrides: bool = False) -> list:
 REPORT_COLUMNS = ["stores.id", "chain", "store_id", "input address", "city_canonical",
                   "old precision", "new precision", "reason", "matched display_name",
                   "returned road", "returned house_number", "returned city",
-                  "lat", "lon", "km from centroid", "sheet"]
+                  "lat", "lon", "km from centroid", "sheet", "query sent"]
 
 
 def write_report(path: str, rows: list[list]) -> None:
@@ -460,7 +471,7 @@ def write_report(path: str, rows: list[list]) -> None:
         ws.append(row)
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = ws.dimensions
-    widths = [8, 13, 9, 32, 15, 11, 11, 15, 60, 22, 10, 15, 11, 11, 10, 10]
+    widths = [8, 13, 9, 32, 15, 11, 11, 15, 60, 22, 10, 15, 11, 11, 10, 10, 32]
     for idx, w in enumerate(widths, 1):
         ws.column_dimensions[ws.cell(row=1, column=idx).column_letter].width = w
     wb.save(path)
@@ -516,17 +527,47 @@ def main(argv: list[str] | None = None) -> None:
             reason = None
         if reason:
             stats[reason] = stats.get(reason, 0) + 1
-            report.append(base + [old, reason] + [None] * 7 + [label])
+            report.append(base + [old, reason] + [None] * 7 + [label, None])
             continue
 
+        # geo_input stays built from the RAW address (the "input changed" test);
+        # only the query sent to Nominatim is cleaned (scripts/geo_clean.py, SU11A-15).
         addr, city, geo_input = build_geo_input(r["address"], r["city_canonical"])
-        hits = geo._get({"street": addr, "city": city})
-        if not hits:
-            hits = geo._get({"q": f"{addr}, {city}"})
         centroid = centroids.get(city)
         if centroid is None and r["lat"] is not None:
             centroid = (r["lat"], r["lon"])      # no CBS entry: fall back to the stored pin
-        res = evaluate(hits, addr, city, centroid, r["chain"], cities)
+
+        def attempt(query: str, parsed: tuple | None = None) -> dict:
+            hits = geo._get({"street": query, "city": city})
+            if not hits:
+                hits = geo._get({"q": f"{query}, {city}"})
+            return evaluate(hits, query, city, centroid, r["chain"], cities, parsed)
+
+        # רחוב / רח' always stripped; שדרות / שד' KEPT for the first query.
+        query = clean_address(addr, [city])
+        res = attempt(query)
+        if has_sderot(addr):
+            # Boulevards: query the stripped form too and log BOTH outcomes, so
+            # whether to strip שדרות / שד' can be decided from data. The stripped
+            # result is used only when the kept form found nothing.
+            q_strip = clean_address(addr, [city], strip=("rehov", "sderot"))
+            res_strip = attempt(q_strip)
+            used = "stripped" if res["reason"] == "NO_MATCH" and res_strip["reason"] != "NO_MATCH" else "kept"
+            print(f"  BOULEVARD id={r['id']} kept={res['reason']} stripped={res_strip['reason']} "
+                  f"used={used} | {query!r} | {q_strip!r}")
+            stats[f"boulevard kept {res['reason']}"] = stats.get(f"boulevard kept {res['reason']}", 0) + 1
+            stats[f"boulevard stripped {res_strip['reason']}"] = stats.get(
+                f"boulevard stripped {res_strip['reason']}", 0) + 1
+            if used == "stripped":
+                res, query = res_strip, q_strip
+        if res["reason"] == "NO_MATCH":
+            # Street-only retry (no house number): can only yield STREET_MATCH.
+            street = parse_address(query)[0]
+            if street:
+                res_street = attempt(street, parsed=(street, None, None))
+                if res_street["precision"]:
+                    res, query = res_street, street
+                    stats["street-only retry used"] = stats.get("street-only retry used", 0) + 1
         stats[res["reason"]] = stats.get(res["reason"], 0) + 1
 
         h = res["hit"]
@@ -535,7 +576,7 @@ def main(argv: list[str] | None = None) -> None:
             new, res["reason"], (h or {}).get("display_name"), res["road"],
             res["house_number"], res["city"],
             float(h["lat"]) if h else None, float(h["lon"]) if h else None,
-            round(res["dist_km"], 2) if res["dist_km"] is not None else None, label])
+            round(res["dist_km"], 2) if res["dist_km"] is not None else None, label, query])
 
         if res["precision"] and not args.dry_run:
             conn.execute(text("""

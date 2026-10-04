@@ -791,4 +791,32 @@ Phase 1 read-only (2 portal requests), phase 2 after Dude's go.
 - **Expected after the first full run:** 146 live Carrefour stores; within 5 km of the test point 17 → 27 physical (Korazin 409 at the Givatayim centroid, 1.34 km, until the geocoder places "1 כורזין | גבעתיים").
 - **Server steps (Dude, no sudo, outside the 10:00 IDT cron):** `git pull`; `python3 -m scripts.run_one 7290055700007 --full`; `python3 -m scripts.geo_centroids`; `python3 -m scripts.geo_nominatim`. No API restart: `db/query.py` reads `active_stores.yaml` per request.
 
-Next free session ID: SU11A-15
+Next free session ID: see the last line of this file (moved in SU11A-15)
+
+---
+
+## SU11A-15 (October 4, 2026) — store addresses and coordinates: query cleaning, address backfill, scoreboard
+
+Phase 1 read-only (4 portal requests, 75 Nominatim calls with the cache read but not saved, read-only DB); phase 2 after Dude's go.
+
+**Phase 1 findings.**
+- **Baseline (scoreboard, Oct 4):** 921 live physical stores — house-level 126 (13.7%), street 119 (12.9%), city centroid only 670 (72.7%), none 6 (0.7%); **exact (house + street) 26.6%**. Shufersal 0 of 320 exact, Victory 1 of 69, King Store / Shefa / Shuk HaIr 0.
+- **467 live physical stores have no address and no override** (Shufersal 320, Victory 68, King Store 28, Shefa 22, Shuk HaIr 18, Hazi Hinam 10, Keshet 1). `shufersal.py`, `victory.py` and `hazihinam.py` insert no address; `binaprojects.py` wrote `""` every night, which `COALESCE(excluded.address, …)` turns into a blank (`""` is not NULL). Cerberus and PublishPrice already store the feed address.
+- **The live store lists carry no address:** Victory `getbranches` returns `name`/`number`, Bina `Select_Store` returns `Kod`/`Nm`; Shufersal has no Stores-file helper (its loader scrapes branch names from listing pages) and Hazi Hinam's list is hard-coded. The addresses come from the Stores/StoresFull XML in `Store_XML/` (2026-05-30/31). Of the 467: **458 have a feed address, 396 with a house number**; 9 are junk/URL/empty. Matching on (chain, store_id) is unambiguous for the single-sub-chain chains; Shufersal 421 of 422 feed stores match by store_id.
+- **Feed addresses combine street and number in one field**, with quirks: city glued on (`תרצה 19ר"ג`), prefixes (`רח'`, `שד'`, `רח.`), `, ישראל` and a placeholder ` 0` (Hazi Hinam), truncated `מרכ`/`מר`, `מ.מסחרי`, corners (`פינת`), ranges (`4-6`), letters glued to the number (`אשר20א`), glued names (`נתןברניצקי`), abbreviations (`קק"ל`).
+- **Real `parse_address`:** Shufersal 75% (308/410), Victory 91%, Keshet 92%, King / Shefa / Shuk HaIr / Hazi Hinam 100%. Every failure has no house number at all (place names such as `ככר מאירהוף`, `מרכז שפע אנרגיה`), so cleaning cannot raise that rate.
+- **Geocoding dry run, 56 sampled stores of the 467, cleaned queries:** ADDRESS 13 (23%), STREET 20 (36%), NO_MATCH 22 (39%), CITY_MISMATCH 1. Extrapolated to the 396 with a numbered address: ~234 placed (≈92 house, ≈141 street; range ~180–285). NO_MATCH patterns: glued digits, glued names, `קק"ל` vs OSM `קרן קיימת לישראל`, spelling (`נאג'רה` vs `נג'ארה`), a trailing `מרכ`. The שדרות stripped-vs-kept comparison did not finish inside the 75-call cap (one pair: identical) — hence the logging below.
+- **Previous full geocoder run (250 targets):** ADDRESS 9, STREET 110, NO_MATCH 128, CITY_MISMATCH 3.
+- **Alternatives (desk research only, none used):** Google Geocoding allows caching lat/lng for 30 days only, so its results cannot be stored; Mapbox permanent geocoding ($5 / 1,000) stores results but forbids redistribution, which serving them to phones may breach; HERE permanent storage is internal-use only. No national open address-point dataset with coordinates was confirmed on data.gov.il; GovMap's terms were not found. Pins Dude places by hand from Google Maps are his own observation.
+
+**Phase 2 changes.**
+- `scripts/geo_clean.py` (new): `clean_address()` shapes the QUERY only — stored `stores.address` and `address_override` are never changed, and `geo_input` is still built from the raw address. רחוב / רח' always stripped (whole tokens, street part only, never the city, never emptying the street; רחובות and the city שדרות untouched). שדרות / שד' kept for the first query. Also: glued city suffix, `, ישראל`, placeholder ` 0`, truncated `מרכ`, `מ.מסחרי`, `כביש מס'`, corners, ranges, glued digits, glued first names, `קק"ל`.
+- `tests/test_geo_clean.py` (new): the 33 phase-1 cases + phase-2 rule cases + `has_sderot` — 52 tests, all passing (run on the server venv; pytest is not installed on the Windows machine).
+- `scripts/geo_nominatim.py`: sends the cleaned query; a boulevard is queried kept AND stripped, both outcomes printed as `BOULEVARD id=… kept=… stripped=… used=…` and counted in the run summary, the stripped result used only when the kept one is NO_MATCH; any remaining NO_MATCH gets a street-only retry (no house number, can only yield 'street'; `evaluate()` gained an optional `parsed` argument for it). The cache is saved as before. Report gains a "query sent" column. Smoke test (2 stores, `--dry-run`): runs, logs the boulevard line, 5 calls.
+- `scraper/binaprojects.py`: `"address": ""` -> `None`, so the nightly load keeps the backfilled address. No other scraper change (the Cerberus / PublishPrice `NULLIF` hardening and the STORE_CITY_OVERRIDES code were deliberately left alone).
+- `scripts/backfill_store_addresses.py` (new, one-time): fills `stores.address` from the newest `Store_XML/` file of the 7 address-less chains, only for live physical rows with empty address AND empty override, not `geo_source='manual'`, unique (chain, store_id) on both sides, skipping junk/URL addresses. Dry run by default; `--apply --expect N` takes `pg_dump` to `~/backups/pre-su11a15-stores-<ts>.dump`, then `stores_bak_su11a15` and the guarded UPDATEs in one transaction, rolling back unless the count matches. **Dry run on Oct 4: 458 planned** (Shufersal 317, Victory 68, King 26, Shefa 22, Shuk HaIr 15, Hazi Hinam 10; 9 skipped as junk). Not applied yet.
+- `scripts/accuracy_scoreboard.sql` (new, read-only): live physical stores by tier with percentages, overall and by chain (`psql "$DATABASE_URL" -f …`).
+- `scripts/export_pin_sheet.py` (new, read-only, not run yet): RTL xlsx of live physical stores still at city precision or without a position, with a Google Maps search URL and blank lat/lon for manual pins.
+- **Known side effect:** `scripts/export_branch_review.py` replays the geocoder from the cache using the RAW address, so for rows whose cleaned query differs it will now say "not geocoded yet". Not changed in this session.
+
+Next free session ID: SU11A-16

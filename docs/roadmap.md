@@ -23,6 +23,7 @@ Minor mobile fixes accumulate here instead of triggering standalone builds; they
 - **₪0 shelf prices outside search; basket 500 on promo-only quotes — DONE (SU10S-26).** See handoff_super.md.
 
 ## Next (agreed priority, ready to schedule)
+- **Store position accuracy: target 98%+ exact (house or street level) for live physical stores (SU11A-15).** Baseline Oct 4: 26.6% exact (126 house, 119 street, 670 city centroid, 6 none of 921). Steps: (1) address backfill from the store files + cleaned geocoder queries (SU11A-15, in code; server run pending); (2) measure with `scripts/accuracy_scoreboard.sql` before and after; (3) up to 2–3 prompt rounds on the remaining NO_MATCH patterns (spelling variants, abbreviations, place-name addresses), decide שדרות stripping from the `BOULEVARD` log lines; (4) manual pins for the residue from `scripts/export_pin_sheet.py` (store-count rule: over 50 -> prompt fixes first). Also open: a live address source for Shufersal / Victory / Bina / Hazi Hinam (their live store lists carry no address; the backfill uses the May 2026 XML), and `export_branch_review.py` replaying raw-address queries.
 - iOS build — after Android mobile app is fully wrapped up (per standing "Android first, then iOS" decision). Blocked on: ios.bundleIdentifier still unset, no Apple Developer account confirmed yet.
 - Post-launch UI polish (web + mobile) — after the mobile apps launch.
 
