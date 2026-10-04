@@ -723,4 +723,18 @@ No DB writes, no classification calls, no scraper built, no retailer data stored
   - **Carrefour — medium to high.** The storefront answers a plain request with a Cloudflare challenge (HTTP 403 "Just a moment"); needs a real browser. Not attempted further.
   - Terms of service were not reviewed for any of the three; that comes before any scraper.
 
-Next free session ID: SU11A-8
+Next free session ID: see the last line of this file (moved in SU11A-9)
+
+---
+
+## SU11A-8 (October 4, 2026) — read-only: why "קרוב אלי" shows far branches (recorded retroactively in SU11A-9)
+
+No changes. For milk 7290004131074 near store 205 every branch of a chain has the same price (Rami Levy 7.20, others 7.35), so the row per chain is decided by the tie-break: `cheapestPerChain` keeps the FIRST row on a tie (strict `<`), and the API's row order among equal prices is Postgres's arbitrary `ORDER BY p.item_price` order (no secondary key). The first in-range branch per chain in the live API order matched every row Dude saw (e.g. Carrefour 223 Lev Dizengoff 4.58 km over store 205 at 0 km). City-precision stores enter "in range" by their city centroid and show "מיקום משוער". The app's position is fine: a fit to the four displayed distances lands ~220 m from store 205 (12 m RMS). Location code is one-shot only (last-known first, else Balanced), no watchers — it cannot explain another app losing its GPS fix. Not fixed yet.
+
+---
+
+## SU11A-9 (October 4, 2026) — mobile: hidden location diagnostics screen
+
+See docs/handoff_mobile.md SU11A-9. JS-only, not device-verified.
+
+Next free session ID: SU11A-10
