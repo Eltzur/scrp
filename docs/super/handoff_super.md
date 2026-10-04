@@ -761,4 +761,34 @@ Next free session ID: see the last line of this file (moved in SU11A-12)
 
 See docs/handoff_mobile.md SU11A-12. JS-only; typecheck ok; device check pending; not yet in a build.
 
-Next free session ID: SU11A-13
+Next free session ID: see the last line of this file (moved in SU11A-14)
+
+---
+
+## SU11A-13 (October 4, 2026) — read-only: store coverage near Neve Ya'akov (recorded retroactively in SU11A-14)
+
+No changes. Test point 32.065861, 34.822135; 2 Carrefour portal requests, read-only DB, cached `Store_XML/` (2026-05-31) for everything else.
+
+- **Carrefour renumbered its stores around early July 2026.** Today's Stores file lists 147 stores, StoreId 2–981 (none ≥1000); the renumbered ones carry the old ID in StoreName, e.g. 409 "קרפור מרקט יהלומים (1201)". `active_stores.yaml` still held 150 Carrefour IDs, only 87 of them published, so ~60 published stores were not scraped — Korazin (409, old 1201) among them. Fixed in SU11A-14.
+- **The address is dropped by four loaders.** `shufersal.py`, `victory.py`, `hazihinam.py` insert stores without an address column and `binaprojects.py` (King Store, Shefa, Shuk HaIr) hard-codes `address: ""`, although every chain's Stores/StoresFull file publishes one. Of **637** live physical stores at city precision nationwide, **395** have no address in our DB while the feed has one with a house number (Shufersal 259, Victory 63, King 26, Shefa 22, Shuk HaIr 15, Hazi Hinam 10); 493 of 637 have a feed address with a number. All 395 already have `city_canonical`, so the weekly geocoder would pick them up; at its observed hit rate (223 of 321 geocodable rows placed, ~69%) about 270 would gain a street or house position.
+- **637 live physical stores at city precision nationwide, 86 within 5 km of the test point** (Shufersal 50 of 50, Victory 11 of 11, Carrefour 8 of 17, Tiv Taam 5 of 15, Yochananof 4 of 5, others ≤2). The diagnostics-screen stores 18, 204, 312, 313 all sit on the Ramat Gan CBS centroid, 0.32 km from the test point.
+- **Feed addresses combine street and number in one field** (`Address`/`ADDRESS`, plus `City`, `ZipCode`); no separate street or house-number fields. Some carry the city glued on ("תרצה 19ר"ג") or a prefix ("רח' הרוא"ה 152"), which `parse_address` may not handle.
+- No StoresFull ingestion design exists yet; `scripts/ingest_store_xml.py` (9d-7) only updates `city`/`city_norm`.
+
+**Correction (SU11A-14) to the SU11A-10 roadmap lines "two stores have no store row":** wrong. Carrefour Market Korazin is in `stores` twice — old StoreId 1201 (row 39185, last loaded 2026-07-01) and its renumbered StoreId 409 (row 61481, never loaded until SU11A-14), address "1 כורזין" (spelled with כ), city Givatayim (feed city code 6300), not Giv'at Shmuel. "Tirzah 19 Ramat Gan" is Shufersal 324 "70 - שלי רמת גן- מרום נווה" (feed address "תרצה 19ר"ג"), live but city precision only. The earlier searches missed them because the Korazin address is spelled כורזין, not קורזין, and Shufersal's address is not stored at all (see SU11A-13).
+
+---
+
+## SU11A-14 (October 4, 2026) — Carrefour store-ID renumbering: active list re-keyed, city for the new rows
+
+Phase 1 read-only (2 portal requests), phase 2 after Dude's go.
+
+- **Cause.** `PublishPriceScraper.load_stores` inserts every store in the Stores file before each Carrefour run, so the renumbered IDs (404–473) got rows (name, city, address; no `city_canonical`). Prices are fetched only for `active_stores.yaml` IDs, which were still the old ones, so the new rows were never loaded and the old IDs logged `no_file` nightly. Also found: 31 zero-padded phantom rows (`0002` … `0830`, last loaded Jun 25–Jul 3, 0 prices), most likely from price-file headers carrying a padded StoreId during the transition (`_pad_store_id` keeps 4 digits). Harmless; left in place.
+- **Mapping** from "(old ID)" in the feed StoreName, no guesses: 73 feed stores carry an old ID; 59 match an old row, 14 (400–403, 405–408, 411, 413–416, 470) were already active with no old row. All 59 old rows had no coordinate, `city_canonical`, `address_override` or manual pin — nothing to copy, so the planned coordinate-copy step was dropped. `473` "כפר סבא @ קוויק" has the same name as old 5204 but no ID in its name, so it was not matched.
+- **Foreign keys:** `prices` and `fetch_store_runs` (no action) and `promos` (cascade) reference `stores.id`; no user data does. Old rows have 0 prices/promos but 6,163 `fetch_store_runs` rows, so they stay in place, not live.
+- **`active_stores.yaml`:** Carrefour 150 → 146. 63 stale IDs removed (59 old IDs plus 059, 121, 191, 5204, none in the feed); 59 added, every feed store with a PriceFull file on 2026-10-04 that was not yet active: 404, 409, 410, 412, 417–428, 430–469, 471–473. **429** (old 2470, Neot Hen Hadera) left out — no PriceFull that day; recheck. **`scheduled_stores.yaml`:** 1228→410, 2040→418, 2530→432, 2976→440, 3300→447.
+- **DB (one guarded transaction, after `pg_dump` to `~/backups/pre-su11a14-stores-20261004T182152.dump` and table `stores_bak_su11a14`, 243 Carrefour rows):** `city_canonical` set on **55** never-loaded rows, pairs computed by `build_city_canonical`'s own layers (53 exact, 2 fuzzy: 424→קריית אתא, 466→נצר סרני; 433→מודיעין-מכבים-רעות), guarded on `city_canonical IS NULL AND last_loaded_at IS NULL`. **No city on purpose:** 471, 472, 473 (online stores, `is_physical` true — a city would put them on a centroid in near-me); **450** "קרפור סיטי גבעת סביון (3506)" has no city in the feed mapping — manual review.
+- **Expected after the first full run:** 146 live Carrefour stores; within 5 km of the test point 17 → 27 physical (Korazin 409 at the Givatayim centroid, 1.34 km, until the geocoder places "1 כורזין | גבעתיים").
+- **Server steps (Dude, no sudo, outside the 10:00 IDT cron):** `git pull`; `python3 -m scripts.run_one 7290055700007 --full`; `python3 -m scripts.geo_centroids`; `python3 -m scripts.geo_nominatim`. No API restart: `db/query.py` reads `active_stores.yaml` per request.
+
+Next free session ID: SU11A-15

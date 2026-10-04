@@ -134,13 +134,13 @@ chains:
     store_ids:
       # New in 9d-1: Tel Aviv (stores 85/89 have no PriceFull — using Market/4-digit stores)
       - "205"   # קרפור מרקט לה גרדיה תל אביב
-      - "1228"  # קרפור מרקט תל כביר תל אביב
+      - "410"  # קרפור מרקט תל כביר תל אביב (SU11A-14: was 1228)
       # New in 9d-1: Haifa (stores 140/470 have no PriceFull — using 4-digit stores)
-      - "2040"  # קרפור כרמליה חיפה
-      - "2530"  # בעיר בת גלים חיפה
+      - "418"  # קרפור כרמליה חיפה (SU11A-14: was 2040)
+      - "432"  # בעיר בת גלים חיפה (SU11A-14: was 2530)
       # New in 9d-1: Be'er Sheva (stores 117/610 have no PriceFull — using 4-digit stores)
-      - "2976"  # קרפור סיטי צפון באר שבע
-      - "3300"  # קרפור מרקט קניון אביה באר שבע
+      - "440"  # קרפור סיטי צפון באר שבע (SU11A-14: was 2976)
+      - "447"  # קרפור מרקט קניון אביה באר שבע (SU11A-14: was 3300)
       # New in 9d-1: Rishon LeZion (only 1 store has PriceFull)
       - "81"    # קרפור סיטי ראשון מערב
       # New in 9d-1: Ashdod
