@@ -745,4 +745,12 @@ Next free session ID: see the last line of this file (moved in SU11A-10)
 
 See docs/handoff_mobile.md SU11A-10. JS-only; observed working on Dude's dev client; not yet in a build.
 
-Next free session ID: SU11A-11
+Next free session ID: see the last line of this file (moved in SU11A-11)
+
+---
+
+## SU11A-11 (October 4, 2026) — mobile: sort toggle on both price lists; build info on the diagnostics screen
+
+See docs/handoff_mobile.md SU11A-11. JS-only; typecheck clean apart from the 5 known src/tw errors; device check pending; not yet in a build.
+
+Next free session ID: SU11A-12
