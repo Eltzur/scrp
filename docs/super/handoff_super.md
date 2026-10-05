@@ -819,4 +819,46 @@ Phase 1 read-only (4 portal requests, 75 Nominatim calls with the cache read but
 - `scripts/export_pin_sheet.py` (new, read-only, not run yet): RTL xlsx of live physical stores still at city precision or without a position, with a Google Maps search URL and blank lat/lon for manual pins.
 - **Known side effect:** `scripts/export_branch_review.py` replays the geocoder from the cache using the RAW address, so for rows whose cleaned query differs it will now say "not geocoded yet". Not changed in this session.
 
-Next free session ID: SU11A-16
+Next free session ID: see the last line of this file (moved in SU11A-19)
+
+---
+
+## SU11A-16 (October 4, 2026) — read-only: Haiku address rewrite, OSM attempt, street-level error (recorded retroactively in SU11A-19)
+
+No changes; geocoder cache copy only (original unchanged). After SU11A-15: 921 live physical stores — house 232, street 312, city 371, none 6; **377 unplaced** = 215 last NO_MATCH/CITY_MISMATCH, 126 address without a house number, 33 no address, 3 no city.
+- **Haiku rewrite** (`claude-haiku-4-5-20251001`, structured output, 15,353 in / 7,522 out tokens, **$0.053**) of the 215, then the SU10S-25 acceptance rule: ADDRESS 12, STREET 21, NO_MATCH 175, CITY_MISMATCH 7 (Haiku returned no street for 14). Of the 168 failures with a proposal, 104 got zero Nominatim candidates for every spelling (e.g. "יהודה מכבי" — OSM spells it "יהודה המכבי"); relaxing the house-number rule would have recovered 1. The limit is OSM / Nominatim coverage, not the acceptance rule.
+- **OSM supermarket points:** the single allowed Overpass request returned HTTP 504; not retried.
+- **Street-level error** (street-only result vs the stored house point, 220 of the 232): median 235 m, p75 457 m, p90 844 m, max 7.4 km; 23% over 500 m, 6% over 1 km. Street pins are a street's midpoint — not precise.
+
+---
+
+## SU11A-17 (October 5, 2026) — measurement only: Google Geocoding vs our positions (recorded retroactively in SU11A-19)
+
+No changes. 920 live physical stores, 1,000 calls to the Google Geocoding web service (legacy v3; within the free monthly allowance). **No Google coordinates are stored in any table, cache, repository file or doc**: Google's terms allow caching latitude/longitude for 30 days at most, so the per-store results lived only in a mode-700 scratch folder on the server with a delete-by date (2026-11-04), and were not used by any later session. Aggregate findings only:
+- Google returned a rooftop, same-city, non-partial result for 63% of stores; agreement with our 225 house-level pins: median 20 m, 88% within 100 m, 5% over 500 m — the large disagreements were mostly our pins on a wrong same-named street (e.g. Carrefour 337 "15 לאה" placed in south Tel Aviv).
+- The 7 manual pins agreed within 15–43 m (control).
+- City mismatches and partial matches make blind use unsafe; and the storage terms rule Google out as a source of stored pins. Decision (Dude): pins are placed by hand from licence-clean sources (SU11A-19).
+
+---
+
+## SU11A-18 (October 5, 2026) — read-only: OSM extract, Overture places, name search (recorded retroactively in SU11A-19)
+
+No changes; one Geofabrik `israel-and-palestine` download (120 MB, data 2026-10-03, deleted), one Overture places query (release 2026-09-23.1, 4,289 places), geocoder cache copy only.
+- **OSM:** 6,553 `shop=supermarket|convenience` points, only 393 with street + house number. Chain mapping found 187 Shufersal, 53 Rami Levy, 52 Carrefour, 38 Tiv Taam, 34 Victory … points; BE excluded; "מגה" left unmapped (listed under Shufersal in one brief and under Carrefour in `scraper/carrefour.py`).
+- **Validation against our house-level pins:** "strong" matches (same chain, street and number) agree (OSM median 1 m — not independent, since Nominatim pins are OSM-derived); "single" matches (the city's only mapped same-chain shop) are mostly wrong, because many branches are unmapped (e.g. one "יינות ביתן – קניון איילון" point claimed by 10 Tel Aviv Carrefour stores).
+- **Yield on the 376 unplaced:** only **17** reliable (strong); 48 "single" not trustworthy. Name search ("<chain> <city>") accepted 14 of 60 but with the same weakness; Hebrew article variants recovered 2 of 40.
+- Ambiguity audit: 4 address-level pins have two same-city candidates over 500 m apart; 11 same-chain pairs share one pin.
+- Conclusion: free automation cannot finish the job; manual pinning from licence-clean sources (SU11A-19).
+
+---
+
+## SU11A-19 (October 5, 2026) — manual store-pinning tool
+
+New files only; no DB writes (the import was tested in dry run). Scrapers, geocoder, loaders and city resolution untouched.
+- `scripts/export_pin_queue.py` (read-only): `queue.csv` (live physical stores not yet manual: tier unplaced / street / house_unconfirmed / house_confirmed, flags ambiguous_pin, shares_pin_30m, no_house_number, no_address, CBS centroid) and `candidates.json` (same-chain OSM + Overture shop points per store, suggested point when exactly one matches street + number) into `~/pin_tool_data/` (mode 700). `--fetch` = one Geofabrik download (deleted) + one Overture query; needs `osmium` / `duckdb` from a throwaway `pip --target` dir. **Run on Oct 5:** 913 stores — unplaced 376, street 312, house_unconfirmed 102, house_confirmed 123; candidates per store 0: 120, 1: 124, 2+: 669; 96 with a suggested (strong) point; 760 points kept (443 OSM, 317 Overture). house_confirmed here = a same-chain point within 150 m of the pin (looser than SU11A-18's "verified exact").
+- `tools/pin_tool/` (`index.html`, `app.js`, `pinlib.js`, README): local page (`python -m http.server 8765`), Hebrew/RTL, Leaflet 1.9.4 with SRI, OSM standard tiles with attribution; queue sorted city → chain; filters by tier / chain / city / status with counters and a time estimate; markers for the current pin, OSM / Overture candidates and the suggestion; Enter / click / C / S / B / N / U keys; guards (3 km from the centroid, outside Israel, within 30 m of a same-chain store); localStorage autosave; export `picks_YYYYMMDD_HHMM.csv`. Google Maps is linked for identification only. OSM tile policy read: attribution visible, interactive use only, no prefetch / offline, the browser's own User-Agent / Referer / cache.
+- `scripts/import_manual_pins.py`: dry run by default; validates live physical store, method, Israel box, ≤ 15 km from the CBS centroid, no two stores within 10 m unless same address, existing manual pins skipped unless `--overwrite-manual`, latest row per store wins. `--apply --expect N --session <id>`: `pg_dump` + `stores_bak_<session>`, one transaction, count assertion; sets geo_precision='address', geo_source='manual', geo_input='manual <method> <candidate> <date>'. Reports per-chain counts and moves (median / p90 / max, list over 1 km).
+- **Tests:** `tests/test_import_manual_pins.py` (18 test cases covering every guard) + `tests/test_geo_clean.py` — 70 passed on the server venv; `tests/pin_tool/test_pinlib.js` — 11 passed with Node 24, including a real 5-store sample (kept out of git). Import dry run on the sample: 4 to write, 1 rejected (outside Israel); `--apply` without `--session`, and with a wrong `--expect`, refused before any write (no dump, no backup table, manual count unchanged at 7). The page itself was not driven in a browser.
+- Manual rows are safe from the weekly geocoder (`geo_nominatim` excludes `geo_source='manual'`; `geo_centroids` only fills `lat IS NULL`), and `/stores/coordinates` serves the new lat/lon/geo_precision with no code change.
+
+Next free session ID: SU11A-20
