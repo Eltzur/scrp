@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XXL – נעיצת סניפים</title>
+<!-- Leaflet 1.9.4, pinned with Subresource Integrity (hashes computed SU11A-19). -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="pinlib.js"></script>
+<style>
+  :root { --bg:#fafafa; --fg:#1b1b1b; --muted:#5f6368; --line:#d0d4d9; --ok:#1e7d32; --warn:#b26a00;
+          --osm:#1f5fbf; --ov:#c4560c; --pick:#c62828; --focus:#0b57d0; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, "Segoe UI", Arial, sans-serif; background:var(--bg); color:var(--fg);
+         display:grid; grid-template-columns: 340px 1fr; grid-template-rows: auto 1fr; height:100vh; }
+  header { grid-column: 1 / -1; display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+           padding:8px 12px; border-bottom:1px solid var(--line); background:#fff; }
+  header h1 { font-size:18px; margin:0 0 0 12px; }
+  label.file { display:inline-flex; gap:6px; align-items:center; }
+  button, select, input[type=file] { font-size:15px; min-height:40px; }
+  button { padding:6px 14px; border:1px solid var(--line); border-radius:6px; background:#fff; cursor:pointer; }
+  button:focus-visible, select:focus-visible, a:focus-visible { outline:3px solid var(--focus); outline-offset:2px; }
+  button.primary { background:var(--ok); color:#fff; border-color:var(--ok); }
+  #side { overflow:auto; border-left:1px solid var(--line); background:#fff; display:flex; flex-direction:column; }
+  #filters { display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:8px; border-bottom:1px solid var(--line); }
+  #filters label { display:flex; flex-direction:column; font-size:13px; color:var(--muted); }
+  #counts { padding:6px 10px; font-size:14px; border-bottom:1px solid var(--line); }
+  #list { list-style:none; margin:0; padding:0; overflow:auto; flex:1; }
+  #list li button { width:100%; text-align:right; border:0; border-bottom:1px solid #eee; border-radius:0;
+                    padding:8px 10px; min-height:48px; background:#fff; }
+  #list li button[aria-current="true"] { background:#e8f0fe; font-weight:600; }
+  #list .st-done { color:var(--ok); } #list .st-skipped { color:var(--warn); }
+  main { display:grid; grid-template-rows:auto 1fr auto; min-height:0; }
+  #card { padding:10px 14px; background:#fff; border-bottom:1px solid var(--line); }
+  #addr { font-size:26px; font-weight:700; margin:2px 0 6px; }
+  #meta { color:var(--muted); font-size:14px; }
+  .flag { display:inline-block; background:#fff3e0; color:#7a4a00; border:1px solid #f0c27b; border-radius:4px;
+          padding:1px 6px; margin-inline-start:4px; font-size:13px; }
+  #links a { margin-inline-end:14px; font-size:15px; }
+  #map { min-height:0; direction:ltr; }
+  #actions { display:flex; flex-wrap:wrap; gap:8px; padding:8px 12px; background:#fff; border-top:1px solid var(--line); }
+  #status { margin-inline-start:auto; color:var(--muted); align-self:center; }
+  kbd { border:1px solid var(--line); border-bottom-width:2px; border-radius:3px; padding:0 4px; font-size:12px; }
+  .legend { font-size:13px; color:var(--muted); padding:4px 14px; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin:0 4px; vertical-align:middle; }
+</style>
+</head>
+<body>
+<header>
+  <h1>נעיצת סניפים</h1>
+  <label class="file">queue.csv <input type="file" id="fQueue" accept=".csv"></label>
+  <label class="file">candidates.json <input type="file" id="fCand" accept=".json"></label>
+  <button id="bExport" type="button">ייצוא בחירות (CSV)</button>
+  <span id="loadInfo" aria-live="polite"></span>
+</header>
+
+<aside id="side" aria-label="תור סניפים">
+  <div id="filters">
+    <label>שכבה<select id="fTier"><option value="">הכל</option>
+      <option value="unplaced">ללא מיקום (עיר/אין)</option><option value="street">רמת רחוב</option>
+      <option value="house_unconfirmed">כתובת – לא מאומת</option><option value="house_confirmed">כתובת – מאומת</option></select></label>
+    <label>סטטוס<select id="fStatus"><option value="">הכל</option><option value="todo">לטיפול</option>
+      <option value="done">בוצע</option><option value="skipped">דולג</option></select></label>
+    <label>רשת<select id="fChain"><option value="">הכל</option></select></label>
+    <label>עיר<select id="fCity"><option value="">הכל</option></select></label>
+  </div>
+  <div id="counts" aria-live="polite"></div>
+  <ul id="list"></ul>
+</aside>
+
+<main>
+  <section id="card" aria-live="polite">
+    <div id="meta">טענו את queue.csv ואת candidates.json כדי להתחיל.</div>
+    <div id="addr"></div>
+    <div><button id="bCopy" type="button">העתקת כתובת</button> <span id="flags"></span></div>
+    <div id="links"></div>
+  </section>
+  <div id="map" aria-label="מפה"></div>
+  <div>
+    <div class="legend">
+      <span class="dot" style="background:#888"></span>מיקום נוכחי
+      <span class="dot" style="background:var(--osm)"></span>OSM
+      <span class="dot" style="background:var(--ov)"></span>Overture
+      <span class="dot" style="background:#fff;border:3px solid var(--ok)"></span>מוצע
+      <span class="dot" style="background:var(--pick)"></span>בחירה
+    </div>
+    <div id="actions">
+      <button class="primary" id="bConfirm" type="button">אישור <kbd>Enter</kbd></button>
+      <button id="bExisting" type="button">אישור המיקום הקיים <kbd>C</kbd></button>
+      <button id="bSkip" type="button">דילוג <kbd>S</kbd></button>
+      <button id="bBack" type="button">הקודם <kbd>B</kbd></button>
+      <button id="bNext" type="button">הבא <kbd>N</kbd></button>
+      <button id="bUndo" type="button">ביטול פעולה <kbd>U</kbd></button>
+      <span id="status" aria-live="polite"></span>
+    </div>
+  </div>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
