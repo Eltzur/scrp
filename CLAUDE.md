@@ -16,6 +16,8 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 10. **Before assigning a session ID, grep docs/ and CLAUDE.md for it.** (SU10S-22 was assigned twice; the promo session was renamed SU10S-21b in SU10S-26.)
 11. **Hebrew in API tests from Windows shells is unreliable.** curl from Git Bash (and PowerShell's own encoding) can send Hebrew query strings as `???`, so `/search?q=חלב` returns 0 and looks like a broken search — check the echoed `query`. PowerShell → `ssh "..."` also mangles Hebrew. Test Hebrew from the server (interactive SSH) or URL-encode explicitly.
 12. **Handoff files too large for the Edit tool: patch with a small script and verify with `git diff --stat`.**
+13. **Never print `.env` or any secret** (keys, passwords, connection strings) - not in output, logs, tracebacks or commit messages. **Never put a user's coordinates in a query string**: a position goes only in a POST body (gunicorn and nginx log full request paths).
+14. **Commit from Windows only; the server only pulls.** Commit messages via a temp file in UTF-8 without BOM + `git commit -F`, always followed by `git push origin main`. One CC prompt at a time.
 
 ## Store-count escalation rule (Dude, 2026-09-28)
 "if there are issues with 1 or up to 10 specific stores, please flag them for manual review cause running prompts to handle a single store issue is to costly and time consuming. the rule of thumb is that up to 10 - manual only. 10 to 50 flag is and ask if to run a fix or handle manually. over 50, try to fix 2-3 times and if not resolved, consult with me before running another prompt."
@@ -23,6 +25,32 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 - 11–50 stores: flag them with the same list and ask Dude whether to fix by prompt or handle manually. Wait for his answer.
 - More than 50 stores: prompt fixes are allowed, at most 2–3 attempts. If still unresolved, consult Dude before any further prompt.
 - The count is distinct stores affected by one issue, not rows.
+
+## Store positions (decision 2026-10-07, SU11A-22)
+- **Goal: rooftop-level coordinates for every live physical store, stored in the DB.** Near-me / GPS search uses ONLY the stored store coordinates (`/stores/coordinates`, distance computed on the phone).
+- **Allowed sources for stored coordinates:** house-level OSM/Nominatim pins, manual pins from the pin tool (an OSM or Overture candidate point, or a click on the OpenStreetMap map), other non-Google open sources. **Google coordinates are NOT loaded** (see "Google data" below) unless Google confirms in writing that permanent storage and use on a non-Google map are allowed.
+- **Geocoder:** `scripts/geo_nominatim.py` (weekly `scrp-geocode`, Sun 15:00 IDT) accepts a Nominatim result only by ADDRESS_MATCH / STREET_MATCH (NO_MATCH and CITY_MISMATCH are rejected). The query is cleaned by `scripts/geo_clean.py` (רחוב / רח' stripped; שדרות / שד' kept first, retried stripped); `geo_input` keeps the raw address. Precision tiers: `address` (house), `street` (a street's midpoint - median ~250 m off, not precise), `city` (CBS centroid), none.
+- **`geo_source='manual'` pins are never touched** by `geo_nominatim` or `geo_centroids`. Check after each geocode run that the manual pins are unchanged.
+- **Pin tool:** `tools/pin_tool/` (local page), `scripts/export_pin_queue.py`, `scripts/import_manual_pins.py` (dry run by default; `--apply --expect N --session <id>`; pg_dump + backup table). Data lives in `~/pin_tool_data/` on the server, never in the repo.
+- Phones cache `/stores/coordinates` for up to 24 h (stale-while-revalidate).
+- Licences: OpenStreetMap data is ODbL (share-alike on the coordinates table needs a proper read before public launch); Overture places CDLA-Permissive-2.0. Open Food Facts was abandoned - do not revisit. Rami Levy's site terms prohibit scraping.
+
+## Google data (measurement only - SU11A-17 to SU11A-21)
+- **Terms, as read (not legal advice):** Google Maps Platform Service Specific Terms 6.3.1 (lat/lng may be cached at most 30 consecutive days), 6.3.2 (indefinite caching only per end user); Terms of Service 3.2.3(a)(b)(c) and 6.2 (no use with a non-Google map). A breach allows immediate suspension with no liability cap.
+- **Therefore Google results live ONLY in `~/google_compare/` on the server (mode 700) and one PC copy in `C:\xxl-archive\google_compare\`.** Never in `stores`, a coordinates table, the geocoder cache, the repo, docs, or on any non-Google map. They are used only as a yardstick; no coordinate is copied. Aggregate statistics are fine.
+- **Cleanup due by 2026-11-04:** `rm -rf ~/google_compare` on the server; delete the PC copy; check Billing > Reports for Places usage (expect $0); revoke or narrow `GOOGLE_MAPS_API_KEY` (in `~/scrp/.env` - never print it); remove Places API (New) from the key if Google is not pursued.
+- **Open item:** ask Google in writing whether permanent storage and use on a non-Google map are allowed (not yet sent). Dude wants Google results if the answer allows it.
+- Google Cloud setup: project `scrp`, pay as you go, 90-day free-trial credit; free monthly usage: Geocoding 10,000 calls, Places Text Search (Pro) 5,000; key restricted to the server IP; a budget alert is set (alerts only - it does not stop spending).
+
+## Mobile dev (xxl-super-mobile)
+- Start the dev server with **`npm start`** (the start script writes the build-info line on the diagnostics screen; `npx expo start` skips it).
+- Typecheck: `node node_modules/typescript/bin/tsc --noEmit` takes 6-8 minutes; **exit 2 with only the 5 known `src/tw` errors is a pass**. CC runs time out on it - Dude runs it.
+- The dev client needs Metro on the laptop and the phone on the same (home) Wi-Fi; a preview APK has the JS baked in.
+- Next batch build: **1.2.1 / versionCode 5** (preview APK). iOS is parked until Android is stable.
+
+## Parked (do not raise)
+- Store 450 and the 3 CBS-mismatch stores - parked until store accuracy reaches 98-100%.
+- Category classification / taxonomy, and the manufacturer outreach email (after Sukkot).
 
 ## Repo layout policy (established SU10M-2)
 - **C:\scrp is the root for the entire XXL codebase family**, not just the supermarket vertical. Every XXL-related repo lives as a subfolder under it.

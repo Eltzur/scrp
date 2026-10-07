@@ -861,4 +861,58 @@ New files only; no DB writes (the import was tested in dry run). Scrapers, geoco
 - **Tests:** `tests/test_import_manual_pins.py` (18 test cases covering every guard) + `tests/test_geo_clean.py` — 70 passed on the server venv; `tests/pin_tool/test_pinlib.js` — 11 passed with Node 24, including a real 5-store sample (kept out of git). Import dry run on the sample: 4 to write, 1 rejected (outside Israel); `--apply` without `--session`, and with a wrong `--expect`, refused before any write (no dump, no backup table, manual count unchanged at 7). The page itself was not driven in a browser.
 - Manual rows are safe from the weekly geocoder (`geo_nominatim` excludes `geo_source='manual'`; `geo_centroids` only fills `lat IS NULL`), and `/stores/coordinates` serves the new lat/lon/geo_precision with no code change.
 
-Next free session ID: SU11A-20
+Next free session ID: see the last line of this file (moved in SU11A-22)
+
+---
+
+## SU11A-20 (October 5-6, 2026) — measurement only: tuned Google lookup (recorded in SU11A-22)
+
+No changes; no Google coordinates outside `~/google_compare/` on the server. Targets: the 343 stores not exact in SU11A-17's first pass. Attempt 1 (Oct 5) stopped after 2 calls: the key blocked Places API (New); Dude enabled it and the run was repeated from scratch (Oct 6).
+- Method: Geocoding v3 (Hebrew, `components=country:IL|locality:<city>`, bounds around the CBS centroid; raw then cleaned address; street + city only for stores with no house number), then Places API (New) Text Search ("<chain> <street> <city>", 5 km bias) accepted only when the name holds the chain and the formatted address holds the city.
+- Classes: A (rooftop, not partial, same city) 3; B (range-interpolated, street and number equal) 32; C (Places shop match) 152 -> **187 new exact**; D 156 (94 ambiguous several branches, 24 partial, 22 no house number, 7 city mismatch, 4 none, 3 no city, 2 other). None of the 72 rooftops excluded in the first pass became A (44 became C).
+- **Total exact: 764 of 920 (83.0%)**; union with our 232 house-level pins 765. Calls 655 (352 geocoding, 303 Places Pro) + 2 in attempt 1, all inside the free monthly usage ($0).
+- **Precision sample (2026-10-07):** 40 newly exact stores (A 1, B 6, C 33) checked by hand: 38 correct (95%); projected correct share = 765/920 x 0.95 = 79% -> PASS against the 70% bar.
+
+---
+
+## SU11A-21 (October 7, 2026) — merged Google CSV for all 920 stores (recorded in SU11A-22)
+
+No Google calls, no writes outside `~/google_compare/`. `~/google_compare/google_all_920.csv` (mode 600, UTF-8 with BOM): one row per store, the tuned result where SU11A-20 marked it exact, else the first pass. Checks: 920 rows, 920 unique stores, 764 exact (577 first pass + 187 tuned). 156 stores remain non-exact; a review workbook for them exists on the PC only.
+
+---
+
+## SU11A-22 (October 7, 2026) — docs sync for SU11A-1 to SU11A-21
+
+Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google calls; no Google coordinate or Google-derived per-store value written to any file.
+- **State on 2026-10-05:** 920 live physical stores - house level 232 (25.2%), street 312, city ~370, none 6.
+- **Goal and bar:** store positions as close to 100% exact as possible; the bar for automated routes was lowered to 70%; no paid external service.
+- **Google measurement summary (SU11A-17 to SU11A-21):** first pass 577 exact (63%); our OSM house-level pins agree with Google (median 20 m, 5% over 500 m); street-level pins median 268 m off (26% over 500 m); automatic OSM / Overture placement reliable for only 17 of 376 (SU11A-18); tuned run +187 -> 764 exact (83.0%); hand check 38/40 (95%), projected 79% (PASS). Hand-pin workload ~155 stores with Google as a yardstick (2.6-5.2 h at 1-2 min each) vs ~688 without.
+- **Decision (2026-10-07):** rooftop-level coordinates for all stores in the DB, from OSM house pins, pin-tool manual pins and other non-Google sources; Google coordinates are not loaded unless Google confirms in writing (request pending). Details: CLAUDE.md "Store positions" and "Google data"; roadmap priority "store coordinates - to build".
+- Carrefour Korazin is feed StoreId 409 (old 1201) after Carrefour's renumbering (SU11A-14).
+- CLAUDE.md: operating rules 13 (never print secrets; no user coordinates in query strings) and 14 (commit from Windows only, server pulls); new sections "Store positions", "Google data", "Mobile dev", "Parked".
+
+### Session index SU11A-1 to SU11A-22
+- SU11A-1 — see git log (no record found in the docs or git log).
+- SU11A-2 (Oct 1) — near-me: radius filter before cheapest per chain (mobile `b3250ec`, scrp `06d8e8f`); see handoff_mobile.md.
+- SU11A-3 — see git log (no record found in the docs or git log).
+- SU11A-4 (Oct 1) — `/product/{barcode}` returns per-store quotes (`8ccbc14`).
+- SU11A-5 (Oct 1) — read-only: structured product attributes.
+- SU11A-6 (Oct 1) — LLM category-classification pilot (`6955c4a`).
+- SU11A-7 (Oct 1) — taxonomy overlaps, blind review sample, retailer-category feasibility (`d677373`).
+- SU11A-8 (Oct 4) — read-only: why "קרוב אלי" showed far branches.
+- SU11A-9 (Oct 4) — mobile: hidden location diagnostics screen (mobile `1f7eed6`, scrp `cdad83d`).
+- SU11A-10 (Oct 4) — mobile: near-me lists individual branches (mobile `7e0e2f4`, scrp `0f5ce50`).
+- SU11A-11 (Oct 4) — mobile: sort toggle, build-info line (mobile `01b469d`, scrp `9716871`).
+- SU11A-12 (Oct 4) — mobile: third sort option in "הכל" (mobile `cc0fd98`, scrp `4b61fc0`).
+- SU11A-13 (Oct 4) — read-only: store coverage near the test point.
+- SU11A-14 (Oct 4) — Carrefour store-ID renumbering, active list re-keyed (`9d4050e`).
+- SU11A-15 (Oct 4) — geocoder query cleaning, address backfill, accuracy scoreboard (`b8d5f1d`).
+- SU11A-16 (Oct 4) — read-only: Haiku rewrite, OSM attempt, street-level error.
+- SU11A-17 (Oct 5) — measurement only: Google first pass.
+- SU11A-18 (Oct 5) — read-only: OSM extract, Overture places, name search.
+- SU11A-19 (Oct 5) — manual store-pinning tool (`44753dc`, `7ab1c73`).
+- SU11A-20 (Oct 5-6) — measurement only: tuned Google lookup.
+- SU11A-21 (Oct 7) — merged Google CSV on the server.
+- SU11A-22 (Oct 7) — this docs sync.
+
+Next free session ID: SU11A-23
