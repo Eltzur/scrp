@@ -914,6 +914,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-20 (Oct 5-6) — measurement only: tuned Google lookup.
 - SU11A-21 (Oct 7) — merged Google CSV on the server.
 - SU11A-22 (Oct 7) — this docs sync.
+- SU11A-26 (Oct 8) — iOS config in app.json: bundleIdentifier, When-In-Use-only permissions, he/en localization (mobile); see handoff_mobile.md.
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
 
@@ -959,4 +960,4 @@ Next free session ID: see the last line of this file (moved in SU11A-23)
 - **Rollback of this batch:** `python3 -m scripts.import_google_coordinates --rollback SU11A-23c` (restores the four rows to their pre-23c values from `stores_bak_su11a_23c`).
 - **465's stored city is wrong** (city_canonical חריש; the store is in ראשון לציון) - left for the city-resolution session.
 
-Next free session ID: SU11A-25
+Next free session ID: SU11A-27
