@@ -28,6 +28,7 @@ from pathlib import Path
 from sqlalchemy import text
 
 from db.db import connect
+from scripts.geo_guard import has_coord_source, protected_sql
 
 ROOT = Path(__file__).resolve().parent.parent
 CBS_XLSX = ROOT / "data" / "bycode2024.xlsx"
@@ -122,6 +123,16 @@ def load_cbs_centroids() -> dict[str, tuple[float, float]]:
     return out
 
 
+def target_sql(with_coord_source: bool = False) -> str:
+    """Physical stores with no coordinate that the geocoders may write (SU11A-23 guard)."""
+    return f"""
+        SELECT id, city_canonical
+        FROM stores
+        WHERE is_physical AND lat IS NULL AND {protected_sql("", with_coord_source)}
+        ORDER BY id
+    """
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Fill store coordinates from CBS city centroids")
     ap.add_argument("--dry-run", action="store_true")
@@ -132,12 +143,9 @@ def main() -> None:
     print(f"CBS localities with coordinates: {len(centroids):,}")
 
     conn = connect()
-    targets = conn.execute(text("""
-        SELECT id, city_canonical
-        FROM stores
-        WHERE is_physical AND lat IS NULL
-        ORDER BY id
-    """)).mappings().all()
+    # Never a manual or Google-loaded row (scripts/geo_guard.py, SU11A-23); lat IS NULL already
+    # excludes them today - this is the explicit guard should one ever lose its coordinate.
+    targets = conn.execute(text(target_sql(has_coord_source(conn)))).mappings().all()
     print(f"physical stores without coordinates: {len(targets):,}")
 
     filled = 0
@@ -159,7 +167,7 @@ def main() -> None:
                 SET lat = :lat, lon = :lon,
                     geo_precision = 'city', geo_source = 'cbs_centroid',
                     geo_input = :city, geocoded_at = now()
-                WHERE id = :id AND lat IS NULL
+                WHERE id = :id AND lat IS NULL AND COALESCE(geo_source, '') NOT IN ('manual', 'google')
             """), {"lat": hit[0], "lon": hit[1], "city": city, "id": r["id"]})
         filled += 1
 

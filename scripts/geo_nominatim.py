@@ -62,7 +62,9 @@ run would build - i.e. an override was set, or the feed address moved.
 address_override, input changed or not; without it they are left alone.
 
 geo_source = 'manual' ROWS ARE NEVER RE-GEOCODED (SU10S-25), by any path:
-the coordinate was placed by hand, so no Nominatim answer outranks it.
+the coordinate was placed by hand, so no Nominatim answer outranks it. Since
+SU11A-23 the same holds for geo_source = 'google' and for coord_source in
+(google_exact, google_reviewed, manual_pin): see scripts/geo_guard.py.
 
 WHY 25 KM AND NOT SOMETHING TIGHTER. The pilot measured legitimate results
 3-6 km from their city centroid — Jerusalem's Talpiot and Givat Shaul, Tel
@@ -89,6 +91,7 @@ from db.db import connect
 from scraper.city_names import CITY_CANONICAL_OVERRIDES, normalize_city
 from scripts.geo_centroids import load_cbs_centroids
 from scripts.geo_clean import clean_address, has_sderot
+from scripts.geo_guard import coord_source_col, has_coord_source, is_protected, protected_sql
 
 NOMINATIM = "https://nominatim.openstreetmap.org/search"
 USER_AGENT = "XXL-super/1.0 (info@xxl.co.il)"
@@ -399,17 +402,19 @@ _GEOCODABLE = f"""
       AND city_canonical IS NOT NULL AND btrim(city_canonical) <> ''
 """
 
+# {coord_col} / {protected} are filled per run (scripts/geo_guard.py, SU11A-23): manual and
+# Google-loaded coordinates are never targeted.
 _TARGETS_SQL = f"""
-    SELECT {_ROW_COLS}
+    SELECT {_ROW_COLS}, {{coord_col}}
     FROM stores s LEFT JOIN chains c ON c.chain_id = s.chain_id
     WHERE s.is_physical AND s.id IN (
         SELECT id FROM stores WHERE {_GEOCODABLE})
-      AND s.geo_source IS DISTINCT FROM 'manual'
+      AND {{protected}}
     ORDER BY s.id
 """
 
 _BY_IDS_SQL = f"""
-    SELECT {_ROW_COLS}, s.id IN (SELECT id FROM stores WHERE {_GEOCODABLE}) AS geocodable
+    SELECT {_ROW_COLS}, {{coord_col}}, s.id IN (SELECT id FROM stores WHERE {_GEOCODABLE}) AS geocodable
     FROM stores s LEFT JOIN chains c ON c.chain_id = s.chain_id
     WHERE s.id = ANY(:ids)
     ORDER BY s.id
@@ -430,8 +435,8 @@ def build_geo_input(address: str, city_canonical: str) -> tuple[str, str, str]:
 
 def needs_geocode(r, include_overrides: bool = False) -> bool:
     """Below house level, or the input changed, or (flag) an overridden
-    house-level row. Never a hand-placed (geo_source='manual') row."""
-    if r["geo_source"] == "manual":
+    house-level row. Never a hand-placed or Google-loaded row (geo_guard.is_protected)."""
+    if is_protected(r):
         return False
     if r["geo_precision"] != "address":
         return True
@@ -442,7 +447,9 @@ def needs_geocode(r, include_overrides: bool = False) -> bool:
 
 def select_targets(conn, include_overrides: bool = False) -> list:
     """Rows to geocode this run."""
-    return [r for r in conn.execute(text(_TARGETS_SQL)).mappings().all()
+    hc = has_coord_source(conn)
+    sql = _TARGETS_SQL.format(coord_col=coord_source_col("s", hc), protected=protected_sql("s", hc))
+    return [r for r in conn.execute(text(sql)).mappings().all()
             if needs_geocode(r, include_overrides)]
 
 
@@ -502,7 +509,9 @@ def main(argv: list[str] | None = None) -> None:
             if line.strip():
                 sid, _, label = line.partition("\t")
                 labels[int(sid)] = label.strip()
-        rows = conn.execute(text(_BY_IDS_SQL), {"ids": list(labels)}).mappings().all()
+        hc = has_coord_source(conn)
+        rows = conn.execute(text(_BY_IDS_SQL.format(coord_col=coord_source_col("s", hc))),
+                            {"ids": list(labels)}).mappings().all()
     else:
         rows = select_targets(conn, args.include_overrides)
     if args.limit:
@@ -521,7 +530,8 @@ def main(argv: list[str] | None = None) -> None:
         if args.ids_file and not r["geocodable"]:
             reason = "NOT_GEOCODABLE"
         elif args.ids_file and not needs_geocode(r, args.include_overrides):
-            reason = ("SKIPPED_MANUAL" if r["geo_source"] == "manual"
+            reason = ("SKIPPED_MANUAL" if r["geo_source"] == "manual" or r["coord_source"] == "manual_pin"
+                      else "SKIPPED_GOOGLE" if is_protected(r)
                       else "SKIPPED_OVERRIDE" if r["has_override"] else "ALREADY_ADDRESS")
         else:
             reason = None
@@ -583,7 +593,7 @@ def main(argv: list[str] | None = None) -> None:
                 UPDATE stores
                 SET lat = :lat, lon = :lon, geo_precision = :p,
                     geo_source = 'nominatim', geo_input = :gi, geocoded_at = now()
-                WHERE id = :id
+                WHERE id = :id AND COALESCE(geo_source, '') NOT IN ('manual', 'google')
             """), {"lat": float(h["lat"]), "lon": float(h["lon"]),
                    "p": res["precision"], "gi": geo_input, "id": r["id"]})
 

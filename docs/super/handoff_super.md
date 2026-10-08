@@ -915,4 +915,19 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-21 (Oct 7) — merged Google CSV on the server.
 - SU11A-22 (Oct 7) — this docs sync.
 
-Next free session ID: SU11A-23
+Next free session ID: see the last line of this file (moved in SU11A-23)
+
+---
+
+## SU11A-23 (October 8, 2026) — store coordinates from the Google results: phase 1 (build + dry run)
+
+**Decision (Dude, 2026-10-08):** OSM / Nominatim / Overture are dropped as store-coordinate sources (they miss most location searches); the Google results are the single source of truth - coordinates first, address text second. Dude handles the licensing and commercial side.
+- **Inputs** (copied to `~/google_compare/` only, mode 600; never in the repo or docs): `store_full_920_list.csv` (set A: the Exact = TRUE rows -> `google_exact`) and `156_store_update.xlsx`, sheet "Review 156" (set B: Dude's hand-resolved lat,lon in "Notes" -> `google_reviewed`; label = his "My decision" text when it is an address, else Google's formatted address). On the PC they are named `store full 920 list.csv` / `156 store update.xlsx`.
+- **Schema** (`db/migrations/su11a23_stores_coord_source.sql`, NOT applied): `stores.coord_source` (CHECK: osm_house / manual_pin / google_exact / google_reviewed), `verified_at`, `verified_by`, `geo_label`; backfill osm_house / manual_pin.
+- **Importer** `scripts/import_google_coordinates.py`: dry run by default; `--apply --expect N --session SU11A-23` (pg_dump + `stores_bak_su11a_23`, one transaction, count assertion; sets lat, lon, geo_precision='address', geo_source='google', coord_source, geo_label, verified_at, verified_by); `--rollback SU11A-23`; allow-list in code; manual rows skipped unless `--override-manual`. Validation: one coordinate per store, A and B disjoint and covering the live physical stores, live physical, Israel bounds, move histogram (<50 m / <500 m / <5 km / >=5 km, >=5 km listed), >15 km from the city centroid listed, non-rooftop Precision under Exact = TRUE listed for approval, stores within 10 m (same / different chain), the manual pins, unparseable set-B rows.
+- **Geocoder guard** (`scripts/geo_guard.py`, used by `geo_nominatim` and `geo_centroids`): skips `geo_source` in ('manual', 'google') and `coord_source` in ('google_exact', 'google_reviewed', 'manual_pin'), in SQL and in Python; works before the migration (no coord_source column yet).
+- **Tests:** `tests/test_import_google_coordinates.py`, `tests/test_geo_guard.py` (with the existing suites: 115 passed on the server venv).
+- **Phase status:** built, dry run on the server, nothing applied. Waiting for Dude's approval of the dry-run lists. To disable the weekly geocoder (Dude, sudo): `sudo systemctl disable --now scrp-geocode.timer`.
+- CLAUDE.md "Store positions" and "Google data" rewritten; roadmap priority updated; the 2026-11-04 Google cleanup is on hold.
+
+Next free session ID: SU11A-24
