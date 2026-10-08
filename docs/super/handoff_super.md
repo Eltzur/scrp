@@ -941,4 +941,13 @@ Next free session ID: see the last line of this file (moved in SU11A-23)
 - **Rollback:** `python3 -m scripts.import_google_coordinates --rollback SU11A-23` (coordinates + is_physical / last_loaded_at from the backup table); YAML: `git revert` of the active_stores.yaml change in `3bb9eec`.
 - **Next:** Dude disables the weekly geocoder (`sudo systemctl disable --now scrp-geocode.timer`); device verification; open items in the roadmap.
 
+### SU11A-23 phase 2b (October 8, 2026) — last three stores resolved
+
+- **Loaded** two hand-confirmed coordinates as `google_reviewed` (geo_source='google', geo_precision='address', verified_by='SU11A-23b'): 5696 (Shufersal 377, קריית הדסה 1) and 18819 (Shefa 36, אהבת ישראל 1). Input `~/google_compare/su11a23_extra.csv` (server only). New importer option `--extra` (CSV store_fk,lat,lon,source; same allow-list, bounds, live-physical check, trial, backup and transaction; tests added) - commit `2d775a0`. Backups: `~/backups/pre-SU11A-23b-stores-20261008T155652.dump` and table `stores_bak_su11a_23b`.
+- **Retired** 21838 (Fresh Market 003, היפר דודו שוק, Petah Tikva) - closed (Dude): `is_physical=false`, `last_loaded_at=NULL`, and "003" removed from Fresh Market's list in `scraper/active_stores.yaml` (pulled on the server the same day). The feed had nearly stopped: `no_file` on Oct 3-5, 7 and 8, one file on Oct 6.
+- **Verification (DB counts):** live physical stores 917 - google_exact 757, google_reviewed 153, manual_pin 7, all at address level; **no live physical store without a Google or manual coordinate**; the 7 manual pins unchanged (hash); `/stores/coordinates` 917 rows, all `address`.
+- Pin tool: the Hebrew Google-link label now reads "פתיחה בגוגל מפות" (text only).
+- **Rollback of this batch:** `python3 -m scripts.import_google_coordinates --rollback SU11A-23b` (coordinates of 5696 / 18819, and is_physical / last_loaded_at of 21838, from `stores_bak_su11a_23b`); YAML: restore the Fresh Market "003" line.
+- **Remaining:** far-store city fixes (`review_far_stores.csv`), close-pair review (`review_close_pairs.csv`), the 415 and 465 point check, and the 32 range-interpolated rows.
+
 Next free session ID: SU11A-24
