@@ -950,4 +950,13 @@ Next free session ID: see the last line of this file (moved in SU11A-23)
 - **Rollback of this batch:** `python3 -m scripts.import_google_coordinates --rollback SU11A-23b` (coordinates of 5696 / 18819, and is_physical / last_loaded_at of 21838, from `stores_bak_su11a_23b`); YAML: restore the Fresh Market "003" line.
 - **Remaining:** far-store city fixes (`review_far_stores.csv`), close-pair review (`review_close_pairs.csv`), the 415 and 465 point check, and the 32 range-interpolated rows.
 
+### SU11A-23 phase 2c (October 8, 2026) — 415 and 465 replaced (revised 2b decisions)
+
+- Dude's revised 2b list had four coordinates. 5696, 18819 (loaded in 2b) and the 21838 retirement were already done; **415** (Shufersal 211 Univers Karmiel, מעלה כמון 5) and **465** (Shufersal 79 Express, הנחשול 30, Rishon LeZion) were new: both REPLACE the phase-2 points (415's was near Ra'anana, 91.7 km off; 465's about 300 m off).
+- Because `stores_bak_su11a_23b` already held the pre-2b state, this batch ran as **session SU11A-23c** (backup table `stores_bak_su11a_23c`, `~/backups/pre-SU11A-23c-stores-20261008T160446.dump`) with all four rows, `--expect 4`; 5696 and 18819 got the same values again. Dry run 4 / 0 manual / 0 rejected; trial accepted and rolled back; committed.
+- `--extra` may replace an existing google_exact / google_reviewed coordinate, never a manual pin (validation skips it and the SQL guard excludes geo_source='manual'); tests added (59 pass).
+- **Verification (DB counts):** the four rows carry the confirmed lat/lon, geo_source google, coord_source google_reviewed, verified_by SU11A-23c; live physical stores 917 (757 google_exact, 153 google_reviewed, 7 manual_pin), **none without a Google or manual coordinate**; manual pins unchanged (hash); `/stores/coordinates` 917 rows, all `address`.
+- **Rollback of this batch:** `python3 -m scripts.import_google_coordinates --rollback SU11A-23c` (restores the four rows to their pre-23c values from `stores_bak_su11a_23c`).
+- **465's stored city is wrong** (city_canonical חריש; the store is in ראשון לציון) - left for the city-resolution session.
+
 Next free session ID: SU11A-24

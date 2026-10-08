@@ -202,3 +202,17 @@ def test_extra_row_values_pass_the_stores_constraints():
     assert rep["accepted"][0]["source"] in _allowed("stores_coord_source_check", "coord_source")
     assert M.WRITE_GEO_SOURCE in _allowed("stores_geo_source_chk", "geo_source")
     assert M.WRITE_GEO_PRECISION in _allowed("stores_geo_precision_chk", "geo_precision")
+
+
+def test_extra_row_never_overwrites_a_manual_pin():
+    rows = M.rows_from_extra([{"store_fk": "3", "lat": "32.795", "lon": "34.991", "source": "google_reviewed"}])
+    rep = M.validate(rows, STORES, CENTROIDS)
+    assert not rep["accepted"] and [c["store_fk"] for c in rep["skipped_manual"]] == [3]
+
+
+def test_extra_row_may_replace_an_existing_google_coordinate():
+    stores = {**STORES, 6: store(geo_source="google", coord_source="google_exact", geo_precision="address")}
+    rows = M.rows_from_extra([{"store_fk": "6", "lat": "32.795", "lon": "34.991", "source": "google_reviewed"}])
+    rep = M.validate(rows, stores, CENTROIDS)
+    assert [c["store_fk"] for c in rep["accepted"]] == [6]
+    assert "geo_source, '') <> 'manual'" in M.UPDATE_SQL         # the SQL guard keeps manual rows out too
