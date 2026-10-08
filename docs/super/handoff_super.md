@@ -959,4 +959,4 @@ Next free session ID: see the last line of this file (moved in SU11A-23)
 - **Rollback of this batch:** `python3 -m scripts.import_google_coordinates --rollback SU11A-23c` (restores the four rows to their pre-23c values from `stores_bak_su11a_23c`).
 - **465's stored city is wrong** (city_canonical חריש; the store is in ראשון לציון) - left for the city-resolution session.
 
-Next free session ID: SU11A-24
+Next free session ID: SU11A-25
