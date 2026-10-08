@@ -10,8 +10,8 @@
  * no-cache headers, no Referrer-Policy override), interactive use only - tiles are
  * fetched for the visible map, never prefetched, never downloaded for offline use.
  *
- * Pins come from OSM / Overture candidate points or a click on the OSM map. Google
- * Maps is linked for IDENTIFICATION ONLY: never copy coordinates from it.
+ * Pins come from OSM / Overture candidate points, a click on the map, or a Google Maps point
+ * (since 2026-10-08 the Google results are the coordinate source - CLAUDE.md "Store positions").
  */
 (function () {
   'use strict';
@@ -153,7 +153,7 @@
     $('links').innerHTML =
       '<a target="_blank" rel="noopener" href="https://www.openstreetmap.org/search?query=' + q + '">חיפוש ב-OSM</a>' +
       '<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + q + '">' +
-      'זיהוי בגוגל מפות (לזיהוי בלבד – אסור להעתיק קואורדינטות)</a>';
+      'פתיחה בגוגל מפות</a>';
     $('bExisting').disabled = !(s.lat !== null && (s.tier === 'house_unconfirmed' || s.tier === 'house_confirmed'));
 
     var bounds = [];

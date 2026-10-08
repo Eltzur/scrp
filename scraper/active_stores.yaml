@@ -946,10 +946,11 @@ chains:
   - chain_id: "7290876100000"
     name: "פרש מרקט"
     # 45 stores — exact list from Cerberus portal (session 9d-7)
+    # SU11A-23b (2026-10-08): "003" (store_fk 21838, היפר דודו שוק, Petah Tikva) removed - the store
+    # no longer exists (Dude). Row kept: is_physical=false, last_loaded_at=NULL.
     store_ids:
       - "001"
       - "002"
-      - "003"
       - "004"
       - "005"
       - "006"

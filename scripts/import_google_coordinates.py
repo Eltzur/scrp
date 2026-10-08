@@ -95,6 +95,17 @@ def rows_from_reviewed(rows: list[dict]) -> tuple[list[dict], list[tuple[dict, s
     return out, bad
 
 
+def rows_from_extra(rows: list[dict]) -> list[dict]:
+    """--extra: hand-confirmed coordinates, CSV store_fk,lat,lon,source (SU11A-23b). The source column
+    goes through the same allow-list as everything else - nothing is defaulted."""
+    out = []
+    for r in rows:
+        src = (r.get("source") or "").strip() or None
+        out.append({"store_fk": r.get("store_fk"), "lat": r.get("lat"), "lon": r.get("lon"), "source": src,
+                    "precision": "reviewed", "label": (r.get("label") or "").strip(), "origin": "X"})
+    return out
+
+
 def read_exact_csv(path: str) -> list[dict]:
     with open(path, newline="", encoding="utf-8-sig") as f:
         return list(csv.DictReader(f))
@@ -210,13 +221,16 @@ def fetch_stores(conn) -> dict[int, dict]:
     return {r["id"]: {**dict(r), "live": r["id"] in live_ids} for r in rows}
 
 
-def print_report(rep: dict, unparseable: list) -> None:
+def print_report(rep: dict, unparseable: list, extra_mode: bool = False) -> None:
     acc, rej = rep["accepted"], rep["rejected"]
     print(f"to be applied {len(acc)} | skipped manual {len(rep['skipped_manual'])} | rejected {len(rej)}")
     print("by source:", dict(Counter(c["source"] for c in acc)))
-    print(f"coverage: A and B overlap {len(rep['overlap_a_b'])} {rep['overlap_a_b'][:20]} | "
-          f"live physical stores with no row {len(rep['missing'])} {rep['missing'][:40]} | "
-          f"rows that are not live physical {len(rep['extra'])} {rep['extra'][:40]}")
+    if extra_mode:
+        print("coverage: n/a (--extra batch; only the listed stores are written)")
+    else:
+        print(f"coverage: A and B overlap {len(rep['overlap_a_b'])} {rep['overlap_a_b'][:20]} | "
+              f"live physical stores with no row {len(rep['missing'])} {rep['missing'][:40]} | "
+              f"rows that are not live physical {len(rep['extra'])} {rep['extra'][:40]}")
     for c, why in rej:
         print(f"   REJECT store_fk {c.get('store_fk')} ({c.get('origin')}): {why}")
     print("unparseable rows in the reviewed file:", len(unparseable))
@@ -276,7 +290,7 @@ def _ids(value) -> list[int]:
 def run(args, conn, stores, centroids, cands, unparseable) -> dict:
     """Validate, print, and (only with --apply / --trial) write. Dry run: no writes here."""
     rep = validate(cands, stores, centroids, args.override_manual)
-    print_report(rep, unparseable)
+    print_report(rep, unparseable, extra_mode=bool(getattr(args, "extra", None)))
     if getattr(args, "trial", False):
         trial(args, conn, rep["accepted"])
         return rep
@@ -383,6 +397,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Load Google store coordinates (dry run by default)")
     ap.add_argument("--exact", help="CSV with Exact / Lat / Lon / Precision / formatted_address")
     ap.add_argument("--reviewed", help="XLSX with the 'Review' sheet (Notes holds lat,lon)")
+    ap.add_argument("--extra", help="CSV store_fk,lat,lon,source of hand-confirmed coordinates "
+                                    "(instead of --exact/--reviewed)")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--trial", action="store_true", help="real UPDATE for one store, then ROLLBACK")
     ap.add_argument("--expect", type=int)
@@ -403,8 +419,13 @@ def main() -> None:
         if args.rollback:
             rollback(args.rollback, conn)
             return
+        if args.extra:
+            cands = rows_from_extra(read_exact_csv(args.extra))
+            print(f"extra rows: {len(cands)}")
+            run(args, conn, fetch_stores(conn), load_cbs_centroids(), cands, [])
+            return
         if not (args.exact and args.reviewed):
-            raise SystemExit("pass --exact and --reviewed")
+            raise SystemExit("pass --exact and --reviewed (or --extra)")
         cands = rows_from_exact(read_exact_csv(args.exact))
         b_rows, unparseable = rows_from_reviewed(read_reviewed_xlsx(args.reviewed))
         cands += b_rows

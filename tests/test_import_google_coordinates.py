@@ -183,3 +183,22 @@ def test_check_counts_aborts_on_any_mismatch(n, r, o):
 
 def test_check_counts_passes_exact():
     M.check_counts(908, 908, 2, 2, 1, 1)
+
+
+# ---------------------------------------------------------------------------
+# SU11A-23b: --extra (hand-confirmed coordinates)
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("src", ["google", "manual", "osm", "", None])
+def test_extra_row_with_source_outside_allow_list_rejected(src):
+    rows = M.rows_from_extra([{"store_fk": "1", "lat": "32.795", "lon": "34.991", "source": src}])
+    rep = M.validate(rows, STORES, CENTROIDS)
+    assert not rep["accepted"] and "allow-list" in reasons(rep)[1]
+
+
+def test_extra_row_values_pass_the_stores_constraints():
+    rows = M.rows_from_extra([{"store_fk": "1", "lat": "32.795", "lon": "34.991", "source": "google_reviewed"}])
+    rep = M.validate(rows, STORES, CENTROIDS)
+    assert [c["store_fk"] for c in rep["accepted"]] == [1]
+    assert rep["accepted"][0]["source"] in _allowed("stores_coord_source_check", "coord_source")
+    assert M.WRITE_GEO_SOURCE in _allowed("stores_geo_source_chk", "geo_source")
+    assert M.WRITE_GEO_PRECISION in _allowed("stores_geo_precision_chk", "geo_precision")
