@@ -884,6 +884,8 @@ chains:
     # list cross-referenced with the portal dropdown. 8 stores (21, 25, 33, 35,
     # 41, 43, 51, 88) appear in the dropdown but not in Stores XML — they
     # publish PriceFull regardless, cities provided via STORE_CITY_OVERRIDES.
+    # SU11A-23 (2026-10-08): "018" (store_fk 18805, המגיד ממעזריטש 38) and "028" (18812, ר' עקיבא 13)
+    # removed - the stores no longer exist (Dude). Rows kept: is_physical=false, last_loaded_at=NULL.
     store_ids:
       - "001"
       - "002"
@@ -892,14 +894,12 @@ chains:
       - "006"
       - "007"
       - "017"
-      - "018"
       - "019"
       - "021"
       - "022"
       - "023"
       - "025"
       - "026"
-      - "028"
       - "029"
       - "031"
       - "032"

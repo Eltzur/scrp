@@ -250,16 +250,77 @@ def print_report(rep: dict, unparseable: list) -> None:
               f"| file point {c['lat']:.6f},{c['lon']:.6f} | {d}")
 
 
+# The values this importer writes - checked against every CHECK constraint on `stores` by
+# tests/test_import_google_coordinates.py (SU11A-23b: geo_source 'google' had to be added to
+# stores_geo_source_chk; a new value must extend the constraint in the same change).
+WRITE_GEO_SOURCE = "google"
+WRITE_GEO_PRECISION = "address"
+
+UPDATE_SQL = """
+    UPDATE stores SET lat = :lat, lon = :lon, geo_precision = 'address', geo_source = 'google',
+           coord_source = :src, geo_label = :label, verified_at = now(), verified_by = :session
+    WHERE id = :fk AND is_physical
+      AND (COALESCE(geo_source, '') <> 'manual' OR :ow)
+"""
+# Closed stores (SU11A-23): off the coordinates endpoint (is_physical) and not live (last_loaded_at),
+# so prices / promos / search hide them; their ids also leave scraper/active_stores.yaml.
+RETIRE_CLOSED_SQL = "UPDATE stores SET is_physical = false, last_loaded_at = NULL WHERE id = :fk"
+# Online-only stores: off the coordinates endpoint; prices stay.
+MARK_ONLINE_SQL = "UPDATE stores SET is_physical = false WHERE id = :fk"
+
+
+def _ids(value) -> list[int]:
+    return [int(x) for x in (value or "").split(",") if x.strip()]
+
+
 def run(args, conn, stores, centroids, cands, unparseable) -> dict:
-    """Validate, print, and (only with --apply) write. Dry run: SELECTs already done, no writes here."""
+    """Validate, print, and (only with --apply / --trial) write. Dry run: no writes here."""
     rep = validate(cands, stores, centroids, args.override_manual)
     print_report(rep, unparseable)
+    if getattr(args, "trial", False):
+        trial(args, conn, rep["accepted"])
+        return rep
     if not args.apply:
         conn.rollback()
         print(f"\nDRY RUN - nothing written. To write: --apply --expect {len(rep['accepted'])} --session SU11A-23")
         return rep
     apply(args, conn, rep["accepted"])
     return rep
+
+
+def _write(conn, args, accepted: list[dict]) -> tuple[int, int, int]:
+    from sqlalchemy import text  # noqa: PLC0415
+
+    n = 0
+    for c in accepted:
+        n += conn.execute(text(UPDATE_SQL), {
+            "lat": c["lat"], "lon": c["lon"], "src": c["source"], "label": c.get("label") or None,
+            "session": args.session, "fk": c["store_fk"], "ow": args.override_manual}).rowcount
+    r = sum(conn.execute(text(RETIRE_CLOSED_SQL), {"fk": fk}).rowcount
+            for fk in _ids(getattr(args, "retire_closed", None)))
+    o = sum(conn.execute(text(MARK_ONLINE_SQL), {"fk": fk}).rowcount
+            for fk in _ids(getattr(args, "mark_online", None)))
+    return n, r, o
+
+
+def trial(args, conn, accepted: list[dict]) -> None:
+    """The real UPDATEs for ONE store (plus the retire / online statements if given), then ROLLBACK."""
+    if not accepted:
+        raise SystemExit("trial: nothing accepted")
+    try:
+        n, r, o = _write(conn, args, accepted[:1])
+        print(f"TRIAL: coordinate UPDATE rowcount {n} (store_fk {accepted[0]['store_fk']}), "
+              f"retire-closed {r}, mark-online {o} - all accepted by the database")
+    finally:
+        conn.rollback()
+        print("TRIAL: rolled back, nothing written")
+
+
+def check_counts(n: int, expect: int, r: int, want_r: int, o: int, want_o: int) -> None:
+    """Every write must hit exactly the rows planned, or the whole transaction rolls back."""
+    if n != expect or r != want_r or o != want_o:
+        raise SystemExit(f"ABORT + ROLLBACK: updated {n} (expected {expect}), "
+                         f"retired {r}/{want_r}, online {o}/{want_o}")
 
 
 def apply(args, conn, accepted: list[dict]) -> None:
@@ -285,23 +346,20 @@ def apply(args, conn, accepted: list[dict]) -> None:
         conn.rollback()
         raise SystemExit(f"ABORT: {bak} already exists; nothing written")
     conn.execute(text(f"CREATE TABLE {bak} AS SELECT * FROM stores"))
-    n = 0
-    for c in accepted:
-        n += conn.execute(text("""
-            UPDATE stores SET lat = :lat, lon = :lon, geo_precision = 'address', geo_source = 'google',
-                   coord_source = :src, geo_label = :label, verified_at = now(), verified_by = :session
-            WHERE id = :fk AND is_physical
-              AND (COALESCE(geo_source, '') <> 'manual' OR :ow)
-        """), {"lat": c["lat"], "lon": c["lon"], "src": c["source"], "label": c.get("label") or None,
-               "session": args.session, "fk": c["store_fk"], "ow": args.override_manual}).rowcount
-    if n != args.expect:
+    n, r, o = _write(conn, args, accepted)
+    try:
+        check_counts(n, args.expect, r, len(_ids(getattr(args, "retire_closed", None))),
+                     o, len(_ids(getattr(args, "mark_online", None))))
+    except SystemExit:
         conn.rollback()
-        raise SystemExit(f"ABORT + ROLLBACK: updated {n}, expected {args.expect}")
+        raise
     conn.commit()
-    print(f"COMMITTED: {n} stores; backup table {bak}")
+    print(f"COMMITTED: {n} coordinates, {r} closed stores retired, {o} marked online; backup table {bak}")
 
 
 def rollback(session: str, conn) -> None:
+    """Restore the coordinate fields of the rows this session wrote, and is_physical / last_loaded_at
+    of any row whose is_physical this session changed (the retire / online step)."""
     from sqlalchemy import text  # noqa: PLC0415
 
     bak = backup_table(session)
@@ -313,8 +371,12 @@ def rollback(session: str, conn) -> None:
                verified_at = b.verified_at, verified_by = b.verified_by
         FROM {bak} b
         WHERE s.id = b.id AND s.verified_by = :session"""), {"session": session}).rowcount
+    m = conn.execute(text(f"""
+        UPDATE stores s SET is_physical = b.is_physical, last_loaded_at = b.last_loaded_at
+        FROM {bak} b
+        WHERE s.id = b.id AND s.is_physical IS DISTINCT FROM b.is_physical""")).rowcount
     conn.commit()
-    print(f"RESTORED {n} stores from {bak}")
+    print(f"RESTORED {n} coordinates and {m} is_physical / last_loaded_at rows from {bak}")
 
 
 def main() -> None:
@@ -322,9 +384,12 @@ def main() -> None:
     ap.add_argument("--exact", help="CSV with Exact / Lat / Lon / Precision / formatted_address")
     ap.add_argument("--reviewed", help="XLSX with the 'Review' sheet (Notes holds lat,lon)")
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--trial", action="store_true", help="real UPDATE for one store, then ROLLBACK")
     ap.add_argument("--expect", type=int)
     ap.add_argument("--session", default="SU11A-23")
     ap.add_argument("--override-manual", action="store_true", help="also overwrite geo_source='manual' rows")
+    ap.add_argument("--retire-closed", metavar="FK,FK", help="closed stores: is_physical=false, last_loaded_at=NULL")
+    ap.add_argument("--mark-online", metavar="FK,FK", help="online-only stores: is_physical=false")
     ap.add_argument("--rollback", metavar="SESSION", help="restore the stores changed by SESSION from its backup table")
     args = ap.parse_args()
     if not SESSION_RE.match(args.rollback or args.session):

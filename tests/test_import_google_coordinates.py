@@ -131,3 +131,55 @@ def test_apply_refuses_wrong_expect():
     args = SimpleNamespace(apply=True, expect=5, session="SU11A-23", override_manual=False)
     with pytest.raises(SystemExit):
         M.run(args, MagicMock(), STORES, CENTROIDS, [cand(1)], [])
+
+
+# ---------------------------------------------------------------------------
+# SU11A-23b: the importer's written values satisfy every CHECK constraint on `stores`.
+# The allowed lists are read from the newest migration that (re)creates each constraint.
+# ---------------------------------------------------------------------------
+import re as _re
+from pathlib import Path as _Path
+
+_MIG = _Path(__file__).resolve().parent.parent / "db" / "migrations"
+
+
+def _allowed(constraint: str, column: str) -> set[str]:
+    files = sorted(f for f in _MIG.glob("*.sql") if f"ADD CONSTRAINT {constraint}" in f.read_text(encoding="utf-8"))
+    assert files, f"no migration creates {constraint}"
+    body = files[-1].read_text(encoding="utf-8")
+    m = _re.search(rf"ADD CONSTRAINT {constraint}\s+CHECK \({column} IS NULL OR {column} IN \(([^)]*)\)\)", body)
+    assert m, f"cannot parse {constraint} in {files[-1].name}"
+    return set(_re.findall(r"'([^']+)'", m.group(1)))
+
+
+def test_written_values_satisfy_every_check_constraint():
+    assert M.WRITE_GEO_SOURCE in _allowed("stores_geo_source_chk", "geo_source")
+    assert M.WRITE_GEO_PRECISION in _allowed("stores_geo_precision_chk", "geo_precision")
+    assert set(M.LOADABLE_SOURCES) <= _allowed("stores_coord_source_check", "coord_source")
+    assert set(M.ALLOWED_SOURCES) == _allowed("stores_coord_source_check", "coord_source")
+    # the SQL literally writes the constants checked above
+    assert f"geo_source = '{M.WRITE_GEO_SOURCE}'" in M.UPDATE_SQL
+    assert f"geo_precision = '{M.WRITE_GEO_PRECISION}'" in M.UPDATE_SQL
+    # retire / online only set is_physical (NOT NULL boolean) and last_loaded_at (nullable)
+    assert "is_physical = false" in M.RETIRE_CLOSED_SQL and "last_loaded_at = NULL" in M.RETIRE_CLOSED_SQL
+    assert M.MARK_ONLINE_SQL.count("=") == 2 and "is_physical = false" in M.MARK_ONLINE_SQL
+
+
+def test_trial_writes_one_store_then_rolls_back():
+    conn = MagicMock()
+    conn.execute.return_value.rowcount = 1
+    args = SimpleNamespace(apply=False, trial=True, expect=None, session="SU11A-23", override_manual=False,
+                           retire_closed="18805,18812", mark_online="61543")
+    M.run(args, conn, STORES, CENTROIDS, [cand(1), cand(2)], [])
+    assert conn.execute.call_count == 1 + 2 + 1          # one coordinate UPDATE, two retire, one online
+    assert conn.rollback.called and not conn.commit.called
+
+
+@pytest.mark.parametrize("n,r,o", [(907, 2, 1), (908, 1, 1), (908, 2, 0)])
+def test_check_counts_aborts_on_any_mismatch(n, r, o):
+    with pytest.raises(SystemExit):
+        M.check_counts(n, 908, r, 2, o, 1)
+
+
+def test_check_counts_passes_exact():
+    M.check_counts(908, 908, 2, 2, 1, 1)
