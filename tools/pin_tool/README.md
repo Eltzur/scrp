@@ -32,9 +32,13 @@ localStorage. **Export picks** downloads `picks_YYYYMMDD_HHMM.csv` for
 `scripts/import_manual_pins.py`.
 
 ## Sources and rules
-- Pins come only from an OSM / Overture candidate or a click on the OpenStreetMap map.
-- The Google Maps link is for **identifying** a store only. Never copy coordinates from Google
-  (its terms forbid storing them).
+- Since 2026-10-08 (SU11A-23, Dude's decision) the Google results are the source of truth for store
+  coordinates and are loaded with `scripts/import_google_coordinates.py`; OSM / Nominatim / Overture are
+  retired as coordinate sources (CLAUDE.md "Store positions"). This tool is now for single fixes.
+- A pin may come from an OSM / Overture candidate, a click on the map, or a Google Maps point. The raw
+  Google result files stay out of the repo and docs (`~/google_compare/` on the server only).
+- Every pin imported by `scripts/import_manual_pins.py` becomes `geo_source='manual'`, which no
+  automated run ever overwrites (the importer does not yet set `coord_source`; the guards key on either).
 - OSM tile usage policy: attribution stays visible; tiles load only for the visible map
   (`updateWhenIdle`), no prefetching or offline download; the browser's own User-Agent,
   Referer and cache are used. Keep use interactive and light.
