@@ -915,6 +915,8 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-21 (Oct 7) — merged Google CSV on the server.
 - SU11A-22 (Oct 7) — this docs sync.
 - SU11A-26 (Oct 8) — iOS config in app.json: bundleIdentifier, When-In-Use-only permissions, he/en localization (mobile); see handoff_mobile.md.
+- SU11A-27: account deletion design, read-only
+- SU11A-28 (Oct 9) — account deletion backend (DELETE /account, deleted_accounts, sweep), not deployed.
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
 
@@ -960,4 +962,18 @@ Next free session ID: see the last line of this file (moved in SU11A-23)
 - **Rollback of this batch:** `python3 -m scripts.import_google_coordinates --rollback SU11A-23c` (restores the four rows to their pre-23c values from `stores_bak_su11a_23c`).
 - **465's stored city is wrong** (city_canonical חריש; the store is in ראשון לציון) - left for the city-resolution session.
 
-Next free session ID: SU11A-27
+### SU11A-28 (2026-10-09) - account deletion backend, NOT deployed
+Implements the backend of in-app account deletion designed in SU11A-27 (read-only; Apple 5.1.1(v), Google Play's in-app + web deletion rule).
+- **Schema re-verified (read-only, live):** saved_baskets / favorites / ratings `user_id` TEXT, ON DELETE CASCADE to users; rating_reports `reporter_user_id` TEXT SET NULL, `rating_id` CASCADE to ratings; flights.alerts / flights.saved_searches `user_id` UUID with **no FK** (deleted explicitly). Matches the SU11A-27 design; no deviation. `users.id` is TEXT, Supabase ids are UUIDs.
+- **Built:**
+  - `db/migrations/su11a28_deleted_accounts.sql` - `deleted_accounts` (user_id uuid PK, requested_at, auth_deleted_at, attempts, last_error short code; no email column), a partial index on pending rows, grant to scrp_app. **Must be applied BEFORE the code is deployed** (api/auth.py reads it on every authenticated request).
+  - `api/supabase_admin.py` - `delete_auth_user`: hard DELETE `/auth/v1/admin/users/{id}`; key in `apikey`, plus `Authorization: Bearer` only for a legacy `eyJ...` key (Supabase API-keys docs checked 2026-10-09); 200/204/404 = success; anything else, timeout or network = failure with a short code; 10 s timeout, no retry; the key is never logged or raised.
+  - `api/routers/account.py` - `DELETE /account`: fresh sign-in (iat at most 300 s old, else 401 `reauth_required`); `DELETE_PROTECTED_USER_IDS` -> 403 `account_protected`; one transaction (record request, delete flights rows, delete the users row - the rest cascades); then the admin call -> 204, or 202 `deletion_pending` with attempts/last_error. Never a 500 for a Supabase failure. Idempotent.
+  - `api/auth.py` - one PK lookup in deleted_accounts before the users upsert: 401 `account_deleted` on `get_current_user`; `get_current_user_optional` treats a deleted account as anonymous; neither recreates the users row. `get_user_for_account_delete` skips the check (retries after a 202). `ApiCodeError` + handler in `api/main.py` answer `{"code": ...}`. No search/price/promo/basket path changed.
+  - `scripts/sweep_account_deletes.py` - retries pending auth deletes, purges rows completed more than 7 days ago; `--dry-run`. **Not scheduled.**
+  - `tests/test_account_delete.py` - 29 tests (in-memory SQLite copy of the user tables with the live FK actions; the admin API faked; never touches the production DB).
+- **Tests:** full suite 159 passed, 10 pin-tool node tests passed; the 14 `api/tests/test_smoke.py` failures are pre-existing - they need a live DATABASE_URL, which was deliberately unset. Run in a throwaway Windows venv from requirements.txt (pytest is not installed on the Windows machine).
+- **NOT done:** migration not applied; `SUPABASE_SERVICE_ROLE_KEY` not set on the server; `DELETE_PROTECTED_USER_IDS` not set (should list Dude's account and the flights test user); sweep not scheduled; nothing deployed.
+- **Remaining prompts:** (1) server enablement - migration, env additions, deploy, restart, a check with a throwaway account; (2) mobile delete-account screen; (3) web `/account/delete` page + privacy policy text (web + mobile); (4) Play Console deletion URL and App Store review notes.
+
+Next free session ID: SU11A-29

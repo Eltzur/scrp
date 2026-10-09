@@ -10,6 +10,7 @@ JWKS is cached in process memory and refreshed automatically on a kid miss
 import logging
 import os
 import threading
+import uuid
 from typing import Optional
 
 import httpx
@@ -108,12 +109,46 @@ def _decode(token: str) -> Optional[dict]:
         return None
 
 
+class ApiCodeError(Exception):
+    """An error answered as {"code": <code>} with the given status (SU11A-28).
+    The handler is registered in api/main.py."""
+
+    def __init__(self, status_code: int, code: str):
+        super().__init__(code)
+        self.status_code = status_code
+        self.code = code
+
+
 def _upsert_user(conn, user_id: str, email: str) -> None:
     conn.execute(text("""
         INSERT INTO users (id, email) VALUES (:id, :email)
         ON CONFLICT(id) DO UPDATE SET email = excluded.email
     """), {"id": user_id, "email": email})
     conn.commit()
+
+
+def _is_deleted(conn, user_id: str) -> bool:
+    """One primary-key lookup in deleted_accounts (SU11A-28). A sub that is not a
+    UUID can never be in the table, so it skips the query."""
+    try:
+        uuid.UUID(user_id)
+    except ValueError:
+        return False
+    row = conn.execute(
+        text("SELECT 1 FROM deleted_accounts WHERE user_id = CAST(:uid AS uuid)"),
+        {"uid": user_id},
+    ).first()
+    return row is not None
+
+
+def _verified_claims(credentials: HTTPAuthorizationCredentials | None) -> dict | None:
+    """Decoded payload with a `sub`, or None. May raise HTTPException(503)."""
+    if not credentials:
+        return None
+    payload = _decode(credentials.credentials)
+    if not payload or not payload.get("sub"):
+        return None
+    return payload
 
 
 def get_current_user(
@@ -129,6 +164,9 @@ def get_current_user(
     email   = payload.get("email", "")
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token payload")
+    # SU11A-28: a deleted account's still-valid token must not recreate its row.
+    if _is_deleted(conn, user_id):
+        raise ApiCodeError(401, "account_deleted")
     _upsert_user(conn, user_id, email)
     return {"id": user_id, "email": email}
 
@@ -137,14 +175,29 @@ def get_current_user_optional(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     conn=Depends(get_db),
 ) -> dict | None:
-    if not credentials:
-        return None
-    payload = _decode(credentials.credentials)   # may raise 503
+    payload = _verified_claims(credentials)       # may raise 503
     if not payload:
         return None
-    user_id = payload.get("sub")
+    user_id = payload["sub"]
     email   = payload.get("email", "")
-    if not user_id:
+    # SU11A-28: public endpoints answer a deleted account as anonymous, and its
+    # row is not recreated.
+    if _is_deleted(conn, user_id):
         return None
     _upsert_user(conn, user_id, email)
     return {"id": user_id, "email": email}
+
+
+def get_user_for_account_delete(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> dict:
+    """DELETE /account only (SU11A-28): verifies the token but skips the
+    deleted-accounts check (a retry after a 202 must get through) and does not
+    upsert the users row. Returns id and iat (None when the claim is absent)."""
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    payload = _verified_claims(credentials)       # may raise 503
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    iat = payload.get("iat")
+    return {"id": payload["sub"], "iat": iat if isinstance(iat, (int, float)) else None}

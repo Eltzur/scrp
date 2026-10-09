@@ -1,10 +1,12 @@
 """Israeli Price Comparison API."""
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from api.routers import health, catalog, search, product, basket, saved_baskets, favorites, freshness, coverage, promos, ratings, stores
+from api.auth import ApiCodeError
+from api.routers import account, health, catalog, search, product, basket, saved_baskets, favorites, freshness, coverage, promos, ratings, stores
 
 app = FastAPI(
     title="Israeli Price Comparison API",
@@ -42,3 +44,10 @@ app.include_router(coverage.router)
 app.include_router(promos.router)
 app.include_router(ratings.router)
 app.include_router(stores.router)
+app.include_router(account.router)
+
+
+@app.exception_handler(ApiCodeError)
+def _api_code_error(_request: Request, exc: ApiCodeError) -> JSONResponse:
+    """Answers {"code": ...} (SU11A-28, e.g. 401 account_deleted)."""
+    return JSONResponse(status_code=exc.status_code, content={"code": exc.code})
