@@ -917,6 +917,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-26 (Oct 8) — iOS config in app.json: bundleIdentifier, When-In-Use-only permissions, he/en localization (mobile); see handoff_mobile.md.
 - SU11A-27: account deletion design, read-only
 - SU11A-28 (Oct 9) — account deletion backend (DELETE /account, deleted_accounts, sweep), not deployed.
+- SU11A-29 (Oct 9) — e2e account-delete verification script (manual, throwaway accounts only).
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
 
@@ -976,4 +977,16 @@ Implements the backend of in-app account deletion designed in SU11A-27 (read-onl
 - **NOT done:** migration not applied; `SUPABASE_SERVICE_ROLE_KEY` not set on the server; `DELETE_PROTECTED_USER_IDS` not set (should list Dude's account and the flights test user); sweep not scheduled; nothing deployed.
 - **Remaining prompts:** (1) server enablement - migration, env additions, deploy, restart, a check with a throwaway account; (2) mobile delete-account screen; (3) web `/account/delete` page + privacy policy text (web + mobile); (4) Play Console deletion URL and App Store review notes.
 
-Next free session ID: SU11A-29
+### SU11A-29 (2026-10-09) - e2e account-delete verification script (manual, THROWAWAY ACCOUNTS ONLY)
+- **`scripts/e2e_account_delete.py`** proves on the real stack that DELETE /account removes one throwaway account and everything attached to it, and that stale tokens cannot bring it back. **Run by hand on the server only** - never by an agent, never against a real account.
+- **Checks:** (a) unauthenticated DELETE /account is 401/403 (deployed); (b) sign in via Supabase password grant (password typed hidden with getpass); (c) gates before any delete - user id not in DELETE_PROTECTED_USER_IDS, signed-in email equals --email, deleted_accounts table exists, users.tier is 'free' (no users row = never called the API = free); (d) read-only counts (users, saved_baskets, favorites, ratings, rating_reports filed by the user, flights.alerts, flights.saved_searches, deleted_accounts) - `--dry-run` stops here; (e) the email typed again as confirmation; (f) DELETE /account = 204 (202 = pending, the sweep must finish it); (g) all app rows 0 and the deleted_accounts row done (or pending); (h) signing in again fails; (i) the old token on GET /favorites is 401 and the users row stays absent; (j) a repeat DELETE with the old token is a safe 204/202 or an explained 401 (reauth_required / expired), and nothing broke.
+- **Never printed:** the password, tokens, the anon key, DATABASE_URL; errors show status codes and Supabase's short error_code only. Counts run in READ ONLY transactions. Exit 0 = all passed, 2 = deletion pending, 1 = failed or stopped by a gate.
+- **Tests:** `tests/test_e2e_account_delete.py` - 17 offline tests (argparse, no secret arguments, missing-env names only, URL normalisation, error formatting); full suite 176 passed, the 14 pre-existing `api/tests/test_smoke.py` failures need a live DATABASE_URL.
+- **Prerequisites:** the SU11A-28 deploy steps (migration, SUPABASE_SERVICE_ROLE_KEY, DELETE_PROTECTED_USER_IDS, pull, restart) and a throwaway account created in the app (free tier).
+- **Run (server; server venv is ~/scrp/venv, Python 3.12):**
+  - `cd ~/scrp && git pull origin main`
+  - `set -a && . ./.env && set +a`
+  - `venv/bin/python3 -m scripts.e2e_account_delete --email <throwaway email> --dry-run`
+  - `venv/bin/python3 -m scripts.e2e_account_delete --email <throwaway email>`
+
+Next free session ID: SU11A-30
