@@ -12,6 +12,7 @@ import MyBasketsPage from './pages/MyBasketsPage';
 import FavoritesPage from './pages/FavoritesPage';
 import MyRatingsPage from './pages/MyRatingsPage';
 import PromosPage from './pages/PromosPage';
+import DeleteAccountPage from './pages/DeleteAccountPage';
 // Portal routes — rendered without the supermarket app shell
 import PortalPage from './pages/PortalPage';
 import FashionPage from './pages/FashionPage';
@@ -50,6 +51,8 @@ function AppShell() {
           <Route path="/favorites" element={<FavoritesPage />} />
           <Route path="/my-ratings" element={<MyRatingsPage />} />
           <Route path="/promos"    element={<PromosPage />} />
+          {/* SU11A-31: public deletion URL (Google Play); the form needs sign-in. */}
+          <Route path="/account/delete" element={<DeleteAccountPage />} />
         </Routes>
         <Footer />
       </FavoritesProvider>

@@ -612,3 +612,5 @@ Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; 
     6. Correct password -> confirm dialog -> "ביטול" does nothing; again -> "מחיקה לצמיתות" -> back in Settings, signed out, "החשבון נמחק" alert.
     7. The local basket on the phone is still there; signing in again with the same email and password fails.
     8. Server, read-only: `venv/bin/python3 -m scripts.e2e_account_delete --email <throwaway> --dry-run` cannot sign in (expected now), or count rows for the user id in a READ ONLY transaction: 0 everywhere, one `deleted_accounts` row with auth_deleted_at set.
+
+- **2026-10-10 (SU11A-31, web) privacy text:** the web privacy policy now has the account-deletion section (section 8, `super.xxl.co.il/privacy#account-deletion`, not yet deployed). **The mobile privacy text is still the placeholder** (`he.legal.privacyBody`, badge "טיוטה") and must carry the same deletion and retention content before store submission. The web page `super.xxl.co.il/account/delete` is the deletion URL for the Play Console.

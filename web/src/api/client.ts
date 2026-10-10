@@ -434,3 +434,55 @@ export const reportRating = (ratingId: number, reason?: string | null): Promise<
 
 export const getMyRatings = (): Promise<MyRatingRow[]> =>
   http.get<MyRatingRow[]>('/me/ratings').then(r => r.data);
+
+// --- Account deletion (SU11A-31) --------------------------------------------
+//
+// DELETE /account (api/routers/account.py, SU11A-28). Plain fetch on purpose:
+// the axios interceptor above overwrites Authorization with the STORED session
+// token, and this call must carry the fresh token from a password re-entry
+// (the server refuses tokens older than 5 minutes). The token is never logged.
+
+export type DeleteAccountResult =
+  | { kind: 'deleted' }
+  | { kind: 'pending' }
+  | { kind: 'reauth' }
+  | { kind: 'protected' }
+  | { kind: 'error'; reason: 'timeout' | 'network' | 'http'; status?: number };
+
+/** Pure mapping of the server's answer (same rules as the mobile app). */
+export function mapDeleteAccountResponse(status: number, body: unknown): DeleteAccountResult {
+  const code =
+    body && typeof body === 'object' && typeof (body as { code?: unknown }).code === 'string'
+      ? (body as { code: string }).code
+      : null;
+  if (status === 204) return { kind: 'deleted' };
+  if (status === 202) return { kind: 'pending' };
+  // An earlier attempt already deleted the account: the goal is reached.
+  if (status === 401 && code === 'account_deleted') return { kind: 'deleted' };
+  if (status === 401 && code === 'reauth_required') return { kind: 'reauth' };
+  if (status === 403 && code === 'account_protected') return { kind: 'protected' };
+  return { kind: 'error', reason: 'http', status };
+}
+
+export async function deleteAccount(accessToken: string): Promise<DeleteAccountResult> {
+  const base = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 15_000);
+  try {
+    const res = await fetch(`${base}/account`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    const body = res.status === 204 ? null : await res.json().catch(() => null);
+    return mapDeleteAccountResponse(res.status, body);
+  } catch {
+    return { kind: 'error', reason: timedOut ? 'timeout' : 'network' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
