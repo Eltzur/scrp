@@ -918,6 +918,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-27: account deletion design, read-only
 - SU11A-28 (Oct 9) — account deletion backend (DELETE /account, deleted_accounts, sweep), not deployed.
 - SU11A-29 (Oct 9) — e2e account-delete verification script (manual, throwaway accounts only).
+- SU11A-30 (Oct 10) — in-app account deletion screen and iOS Face ID plist line (mobile); see handoff_mobile.md.
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
 
@@ -989,4 +990,4 @@ Implements the backend of in-app account deletion designed in SU11A-27 (read-onl
   - `venv/bin/python3 -m scripts.e2e_account_delete --email <throwaway email> --dry-run`
   - `venv/bin/python3 -m scripts.e2e_account_delete --email <throwaway email>`
 
-Next free session ID: SU11A-30
+Next free session ID: SU11A-31
