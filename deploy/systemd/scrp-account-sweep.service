@@ -1,0 +1,29 @@
+[Unit]
+Description=XXL — daily account-deletion sweep (retry pending auth deletes, purge old rows)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=dude
+Group=dude
+WorkingDirectory=/home/dude/scrp
+# DATABASE_URL and the Supabase admin key come from .env. systemd's
+# EnvironmentFile sets the process environment directly, unlike `source .env`.
+EnvironmentFile=/home/dude/scrp/.env
+
+# SU11A-28/SU11A-32. Retries every deleted_accounts row whose Supabase login is
+# still not deleted (a 202 from DELETE /account), then purges completed rows
+# older than 7 days. The privacy policy promises deletion completes within 24
+# hours; this daily run is what makes that hold.
+# No "-" on purpose: the script exits 1 while any retry still fails, and that
+# should surface as a failed unit in the journal. Output carries user ids,
+# counts and short error codes only, never the admin key.
+ExecStart=/home/dude/scrp/venv/bin/python3 -m scripts.sweep_account_deletes
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=scrp-account-sweep
+
+[Install]
+WantedBy=multi-user.target

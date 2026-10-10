@@ -453,9 +453,12 @@ def _notify_moderation(*, rating_id: int, item_code: str, user_email: str,
 
     RUN THIS AS A BACKGROUND TASK, never inline. See the call site.
     """
+    # No email in the log (SU11A-32): journald keeps it for weeks and it would
+    # outlive an account deletion. The rating id is enough to find the row; the
+    # author's user id is already logged once, at the auto-hide in create.
     log.warning(
-        "[MODERATION] blacklist auto-hide: rating_id=%s item_code=%s author=%s term=%r",
-        rating_id, item_code, user_email, term,
+        "[MODERATION] blacklist auto-hide: rating_id=%s item_code=%s term=%r",
+        rating_id, item_code, term,
     )
     send_email(
         subject=f"[XXL] דירוג הוסתר אוטומטית — rating #{rating_id}",
@@ -475,9 +478,10 @@ def _notify_report(*, rating_id: int, item_code: str, reporter_email: str,
     task: a report is a deliberate user action and the reporter should not wait
     on an SMTP round trip to get their confirmation.
     """
+    # No reporter email in the log (SU11A-32); rating_reports holds who reported.
     log.warning(
-        "[MODERATION] user report: rating_id=%s item_code=%s reporter=%s",
-        rating_id, item_code, reporter_email,
+        "[MODERATION] user report: rating_id=%s item_code=%s",
+        rating_id, item_code,
     )
     send_email(
         subject=f"[XXL] דיווח משתמש על ביקורת — rating #{rating_id}",

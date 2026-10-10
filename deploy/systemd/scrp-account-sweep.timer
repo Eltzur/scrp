@@ -1,0 +1,15 @@
+[Unit]
+Description=XXL — daily account-deletion sweep timer (05:30 Israel time)
+
+[Timer]
+# Inline timezone — TimeZone= is not a valid [Timer] key (SU10S-8).
+# 05:30 sits after scrp-backup (04:00) and well before scrp-cron (10:00).
+OnCalendar=*-*-* 05:30:00 Asia/Jerusalem
+# Persistent: a run missed while the server was down fires at boot. Unlike the
+# GS1 jobs there is no rate limit to protect, and a missed day would break the
+# 24-hour promise in the privacy policy.
+Persistent=true
+Unit=scrp-account-sweep.service
+
+[Install]
+WantedBy=timers.target

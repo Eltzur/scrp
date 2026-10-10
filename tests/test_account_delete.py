@@ -346,3 +346,17 @@ def test_sweep_dry_run_changes_nothing_and_calls_nothing(engine, monkeypatch):
     assert any("would retry" in line and UID in line for line in lines)
     assert any("would purge 1" in line for line in lines)
     assert da_row(engine).attempts == 0 and da_row(engine, OTHER) is not None
+
+
+@pytest.mark.parametrize("second,want", [(204, 0), (500, 1)])
+def test_sweep_main_exit_code_is_nonzero_while_a_retry_still_fails(engine, monkeypatch, second, want):
+    # SU11A-32: the systemd unit relies on this to show a failed run.
+    import db.db
+    from scripts.sweep_account_deletes import main
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.test")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", SECRET)
+    with engine.begin() as c:
+        c.execute(text("INSERT INTO deleted_accounts (user_id) VALUES (:a), (:b)"), {"a": UID, "b": OTHER})
+    use_admin(monkeypatch, 204, second)
+    monkeypatch.setattr(db.db, "connect", engine.connect)
+    assert main([]) == want
