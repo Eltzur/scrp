@@ -922,6 +922,8 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-31 (Oct 10) — web account deletion page, menu link and privacy text, not deployed.
 - SU11A-32 (Oct 10) — sweep timer, no email in moderation logs, journald 30 days, backup claim corrected; not installed or deployed.
 - SU11A-33 (Oct 11) — in-app privacy summary aligned with the web policy (mobile); B2 lifecycle confirmed; retention / account-deletion workstream closed; iOS status.
+- SU11A-34 (Oct 11) — read-only /search latency + relevance measurement script; awaiting Dude's server run.
+- SU11A-35 (Oct 11) — read-only catalog audit script for faceted category filters; awaiting Dude's server run.
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
 
@@ -1022,4 +1024,17 @@ Fixes that must land before the SU11A-31 page and privacy text go live.
 - **Deferred, non-blocking: web deletion form live test with a throwaway account; sweep twice daily instead of once; moderation mailbox (info@xxl.co.il) retention unknown; delete-account screen device test on the next batch build with a throwaway account; Play Console deletion URL (https://super.xxl.co.il/account/delete) + Data safety form and Apple App Privacy answers, both at submission time.**
 - **Open (new):** the web policy says nothing about the camera (barcode scanning) or location (nearby stores, distance computed on the phone); the in-app summary therefore does not either. Add both to the web policy, then to the app summary, before store submission.
 
-Next free session ID: SU11A-34
+### SU11A-34 (2026-10-11) - /search measurement script, NOT yet run
+- `scripts/measure_search.py` committed (`c5e7e73`), read-only: times every /search stage in-process through the real handler (candidate SQL, shelf price SQL, promo-only SQL, Python fetch + filters, grouping, rank/page, serialization), the /product/{barcode} lookup for two DB-picked barcodes, EXPLAIN (ANALYZE, BUFFERS) for חלב / חלב תנובה 3% / טחינה, top-10 relevance dumps for 12 queries, table + index sizes and Postgres memory settings. READ ONLY transactions, statement_timeout 30 s, `--dry-run` needs no DB.
+- **Code read (not measured):** /search has no location parameter; `fetch_prices` pulls every live store's price rows for every matching barcode and pages afterwards (H1, matches the Sept 24 investigation); mobile search rows render only name + manufacturer and never read the quotes, so two-stage retrieval (H3) needs no client change, but keeping today's order needs a per-barcode summary (H2: chains_count, cheapest effective price, promo-only flag over live stores). Relevance gaps: substring LIKE, tier from the first word only, case-sensitive, no typo or Hebrew normalisation, cheapest-nationwide tie-break, same product under several barcodes.
+- **Awaiting:** Dude runs `cd ~/scrp && git pull origin main && venv/bin/python3 -m scripts.measure_search --out /tmp/search_measure.json` (about 10-20 min of production load; avoid 04:00 and 10:00) and pastes the stdout summary.
+
+### SU11A-35 (2026-10-11) - catalog feasibility audit for category-based faceted filters (read-only), NOT yet run
+- Goal: KSP-style filters for registered users (pick a category, then category-specific filters such as fat %, origin, flavour, manufacturer). No category column exists (SU11A-5); the taxonomy draft is `docs/super/category_taxonomy.md` (SU11A-6/7).
+- `scripts/audit_catalog.py` (read-only; READ ONLY transaction, statement_timeout 60 s, no DDL): live items use the search definition (price > 0 at a store in `get_liveness().live_fks`), checked by EXISTS on prices(item_code, store_fk) in chunks of 5,000 codes; all analysis in Python; samples ordered by md5(item_code). Sections: 1 catalog size, 2 structured-field coverage + manufacturer normalisation + units + size-in-name-without-quantity, 3 GS1 group_name / brandname coverage, 4 ten pilots (חלב, שוקולד, פסטרמה, יוגורט, ביצים, שמן זית, קפה, קולה, טחינה, לחם) with 40-item samples, rule-based NOISE flags and ~150 attribute patterns (hit rate of all matching and of the noise-free set, 5 examples, value spreads, overlap check on mutually exclusive groups), 5 duplicates (same normalised name + manufacturer + quantity, different barcodes), 6 name hygiene and name_source.
+- Verified: py_compile; `--dry-run` without DATABASE_URL; every section run on fake rows (all patterns compile). The SQL has not run against a real DB.
+- Report (in chat) proposes a taxonomy v0 (departments + pilot types), per-pilot filter definitions, three tables (categories, item_categories, item_attributes) and how they join the SU11A-34 H2 per-barcode summary so facet counts never touch prices.
+- **Awaiting:** Dude runs `cd ~/scrp && git pull origin main && venv/bin/python3 -m scripts.audit_catalog --out /tmp/catalog_audit.json | tee /tmp/catalog_audit.txt` and pastes the stdout (or uploads /tmp/catalog_audit.txt).
+- iOS: **Enrollment for iOS on hold until DUNS arrives** (SU11A-35).
+
+Next free session ID: SU11A-36
