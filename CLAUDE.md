@@ -49,6 +49,8 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 - Typecheck: `node node_modules/typescript/bin/tsc --noEmit` takes 6-8 minutes; **exit 2 with only the 5 known `src/tw` errors is a pass**. CC runs time out on it - Dude runs it.
 - The dev client needs Metro on the laptop and the phone on the same (home) Wi-Fi; a preview APK has the JS baked in.
 - Next batch build: **1.2.1 / versionCode 5** (preview APK). iOS is parked until Android is stable.
+- **iOS (SU11A-33):** no Apple account yet (DUNS slow; individual enrollment proposed, pending Dude). Everything needing the account is blocked (App Store Connect, EAS iOS build, TestFlight, iPhone checks, App Privacy, screenshots, review notes, a demo account NOT in DELETE_PROTECTED_USER_IDS). A Mac is not needed for EAS builds.
+- **Data retention / account deletion: CLOSED (SU11A-33).** B2 lifecycle on xxl-scrp-backups `daily/` (hide 180 d, delete 1 d) matches the privacy policy; the web policy (`web/src/pages/PrivacyPolicyPage.tsx`) is the source of truth for the in-app summary.
 
 ## Parked (do not raise)
 - Store 450 and the 3 CBS-mismatch stores - parked until store accuracy reaches 98-100%.
