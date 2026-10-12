@@ -1,13 +1,18 @@
 from __future__ import annotations
+import logging
+import os
 from typing import Literal
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy.engine import Connection
 
-from api.models import SearchResult, ProductWithPrices, Product, PriceQuote
+from api.models import SearchResult, SearchResultV2, ProductWithPrices, Product, PriceQuote
 from api.dependencies import get_db
+from db import search_v2
 from db.query import find_barcodes_with_relevance, fetch_prices, group_by_product, group_by_store
 
 router = APIRouter(tags=["Search"])
+log = logging.getLogger(__name__)
 
 
 def _build_result(
@@ -135,6 +140,7 @@ def search(
     city:     list[str] | None   = Query(None, description="Filter to stores in these cities (repeat param for multiple)"),
     chain:    list[str] | None   = Query(None, description="Filter to chain_ids (repeat param for multiple)"),
     group_by: Literal["chain", "store"] = Query("chain", description="Group results by chain or individual store"),
+    engine:   str | None = Query(None, description="Search engine: 'v2' (used when SEARCH_V2=test or on) or 'v1' (forces the old engine); other values are ignored"),
     conn:     Connection = Depends(get_db),
 ):
     """
@@ -142,7 +148,63 @@ def search(
     in any order. Returns multi-chain products first, then single-chain.
     Supports pagination via offset. group_by=store returns one row per store.
     """
+    if _use_v2(_v2_mode(), engine, city, chain, group_by):
+        v2 = _search_v2(q, conn, limit, offset, city)
+        if v2 is not None:
+            return v2
     return _build_result(q, conn, limit, offset, city, chain, compare_only=False, group_by=group_by)
+
+
+# ---------------------------------------------------------------------------
+# Search v2 switch (SU11A-36)
+# ---------------------------------------------------------------------------
+# SEARCH_V2 (from the API's systemd EnvironmentFile; read per request):
+#   off  (default, also when unset or unknown) - never v2; /search is unchanged
+#   test - v2 only when the request says engine=v2
+#   on   - v2 whenever the request has no city and no chain filter and
+#          group_by=chain (what the mobile app sends); engine=v1 forces the old path
+# Requests with a city / chain filter or group_by=store always use the old path,
+# because search_items counts and ranks nationally. /compare never uses v2.
+# Rollback: set SEARCH_V2=off and restart scrp-api.
+
+def _v2_mode() -> str:
+    mode = (os.environ.get("SEARCH_V2") or "off").strip().lower()
+    return mode if mode in ("off", "test", "on") else "off"
+
+
+def _use_v2(mode: str, engine: str | None, city, chain, group_by: str) -> bool:
+    if mode == "off" or city or chain or group_by != "chain":
+        return False
+    if mode == "test":
+        return engine == "v2"
+    return engine != "v1"
+
+
+def _search_v2(q: str, conn: Connection, limit: int, offset: int, city) -> Response | None:
+    """The v2 answer, or None after logging why (the caller then uses the old path).
+
+    Runs inside a SAVEPOINT: a failed v2 statement would otherwise abort the
+    request's transaction and take the fallback down with it.
+    """
+    try:
+        with conn.begin_nested():
+            r = search_v2.run(conn, q, limit=limit, offset=offset, city=city)
+        result = SearchResultV2(
+            query=r.query,
+            total_matches=r.total_matches,
+            comparable_count=r.comparable_count,
+            has_more=r.has_more,
+            items=[_to_model(p) for p in r.products],
+            corrected_from=r.corrected_from,
+        )
+        # Returned as a Response so FastAPI does not filter it down to the
+        # SearchResult response_model (which would drop engine/corrected_from).
+        return Response(content=result.model_dump_json(), media_type="application/json")
+    except search_v2.V2Unavailable as exc:
+        log.warning("search v2 unavailable, using the old search: %s", exc)
+    except Exception as exc:  # noqa: BLE001 - v2 must never turn into a 500
+        log.warning("search v2 failed, using the old search: %s", type(exc).__name__, exc_info=True)
+    return None
 
 
 @router.get("/compare", response_model=SearchResult, summary="Cross-chain price comparison")

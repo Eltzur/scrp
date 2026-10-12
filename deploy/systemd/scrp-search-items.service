@@ -1,0 +1,31 @@
+[Unit]
+Description=XXL — rebuild search_items for search v2 (after the daily load)
+After=network-online.target postgresql.service scrp-cron.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=dude
+Group=dude
+WorkingDirectory=/home/dude/scrp
+# DATABASE_URL comes from .env. systemd's EnvironmentFile sets the process
+# environment directly, unlike `source .env`.
+EnvironmentFile=/home/dude/scrp/.env
+
+# SU11A-36. Fills search_items_next / search_lexicon_next and swaps them in
+# (one short transaction), so searches never see a half-built table. A failed
+# run leaves the previous build live; the API falls back to the old search on
+# its own once the build is older than 48 hours.
+# A separate unit, not a step at the end of scraper/cron_main.py: a build
+# failure cannot fail or slow the load, the load's memory peak is not raised,
+# and it can be run or retried by hand (systemctl start scrp-search-items).
+# After=scrp-cron.service: if the load is still running when the timer fires,
+# this start waits for it to finish.
+ExecStart=/home/dude/scrp/venv/bin/python3 -m scripts.build_search_items --apply
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=scrp-search-items
+
+[Install]
+WantedBy=multi-user.target

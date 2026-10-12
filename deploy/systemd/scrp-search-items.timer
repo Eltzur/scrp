@@ -1,0 +1,14 @@
+[Unit]
+Description=XXL — daily search_items rebuild timer (14:30 Israel time)
+
+[Timer]
+# Inline timezone — TimeZone= is not a valid [Timer] key (SU10S-8).
+# scrp-cron starts at 10:00 and has taken 1.3-3 h (4,765-10,747 s logged);
+# 14:30 leaves margin, and the service's After=scrp-cron.service makes it wait
+# if the load is still running.
+OnCalendar=*-*-* 14:30:00 Asia/Jerusalem
+Persistent=true
+Unit=scrp-search-items.service
+
+[Install]
+WantedBy=timers.target

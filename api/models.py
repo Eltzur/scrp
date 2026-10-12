@@ -91,6 +91,16 @@ class SearchResult(BaseModel):
     )
 
 
+class SearchResultV2(SearchResult):
+    """GET /search answered by search v2 (SU11A-36). Same shape plus two optional fields.
+
+    Only v2 answers carry these fields; the old path still returns plain
+    SearchResult, byte-for-byte as before.
+    """
+    engine: str               = Field("v2", description="Search engine that answered: 'v2'")
+    corrected_from: str | None = Field(None, description="The original query when a typo correction was applied, else null")
+
+
 class StatsResponse(BaseModel):
     """Database statistics snapshot."""
     chains_count: int
