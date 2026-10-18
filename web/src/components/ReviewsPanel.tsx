@@ -58,6 +58,7 @@ export default function ReviewsPanel({ itemCode }: { itemCode: string }) {
     }
   }, [itemCode]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- runs the loader, which resets its flags before fetching
   useEffect(() => { void load(); }, [load]);
 
   // Pre-fill from the caller's own ratings. /me/ratings exists precisely for
@@ -73,6 +74,7 @@ export default function ReviewsPanel({ itemCode }: { itemCode: string }) {
     }
   }, [user, itemCode]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- runs the loader, which resets its flags before fetching
   useEffect(() => { void loadMine(); }, [loadMine]);
 
   const handleReport = async (row: RatingOut) => {

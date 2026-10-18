@@ -26,6 +26,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   // Load favorites on login, clear on logout
   useEffect(() => {
     if (!user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clears the set on sign-out; the load path sets it in a callback
       setFavorited(new Set());
       return;
     }
@@ -43,7 +44,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     // Optimistic update
     setFavorited(prev => {
       const next = new Set(prev);
-      was ? next.delete(barcode) : next.add(barcode);
+      if (was) next.delete(barcode); else next.add(barcode);
       return next;
     });
 
@@ -52,14 +53,14 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
       // Sync with server truth
       setFavorited(prev => {
         const next = new Set(prev);
-        result.favorited ? next.add(barcode) : next.delete(barcode);
+        if (result.favorited) next.add(barcode); else next.delete(barcode);
         return next;
       });
     } catch {
       // Revert on error
       setFavorited(prev => {
         const next = new Set(prev);
-        was ? next.add(barcode) : next.delete(barcode);
+        if (was) next.add(barcode); else next.delete(barcode);
         return next;
       });
     }
@@ -83,6 +84,7 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- the hook lives next to its provider; fast refresh reloads this file fully
 export function useFavorites() {
   const ctx = useContext(FavoritesContext);
   if (!ctx) throw new Error('useFavorites must be inside FavoritesProvider');

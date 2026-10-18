@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: 18 Oct 2026 (SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
+> Last updated: 18 Oct 2026 (SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
 
 ## 📏 Standing rules (apply to every session)
 
@@ -66,7 +66,7 @@ xxl.co.il is an Israeli multi-vertical savings platform. The supermarket vertica
 - Reload API: `systemctl restart scrp-api.service`
 - nginx config: `/etc/nginx/sites-available/api-super.xxl.co.il` (managed by certbot)
 - Manual scrape: `cd ~/scrp && venv/bin/python -m scraper.cron_main`
-- Scheduled scrape: `systemctl start scrp-cron.service` (daily 03:00 IDT timer)
+- Scheduled scrape: `systemctl start scrp-cron.service` (daily 10:00 IDT timer)
 - Scrape logs: `journalctl -u scrp-cron.service --since "yesterday" | tail -50`
 - API logs: `journalctl -u scrp-api.service -f`
 - Postgres console: `sudo -u postgres psql xxl_super`
@@ -943,6 +943,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-44 (Oct 18) — SU11A-42 Stage 2: block user, moderation queue / hide / ban + CLI, terms page + sign-up and first-rating consent (API + migration `4166557`, web `aca4480`, mobile `8bd5068`). Migration NOT applied, nothing deployed.
 - SU11A-44b (Oct 18) — legal entity XXL Enterprises (XXL אנטרפרייזס) in the terms, privacy, accessibility and deletion pages (web + app constant); privacy section 4 names Hostinger for sign-up / reset mail; partnerships direct-load title fix. Not deployed.
 - SU11A-45 (Oct 18) — read-only verification of SU11A-36 search v2 (no code change; paging drift finding 9b) + server runbook `docs/super/su11a36_search_v2_runbook.md`.
+- SU11A-46 (Oct 18) — web SEO (sitemaps per host, robots, canonical/meta per route, og images), load-more dedup (9b), header at 390 px, lazy routes + vendor chunks, eslint 0; search coupon variants + typo 0.40; mobile terms bidi. Play Production 8 submitted. Not deployed.
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
 
@@ -1240,12 +1241,65 @@ No code, config, DB or server change. Updated: this file, `docs/handoff_mobile.m
   - Do not restart scrp-api (runbook step f) before the su11a44 migration: `git pull` brings the SU11A-44 API code.
   - Do not switch SEARCH_V2=on before 9b is decided and the timer has run 2 days.
 
+### SU11A-46 (18 Oct 2026) - web SEO, search v2 refinements, small UI fixes, tech debt; NOT deployed
+
+Commits: scrp `4a4db14` (web), `5ddc2c8` (search), the chore/docs commit; mobile `c501689`.
+
+**Status recorded this session (Dude, 18 Oct 2026)**
+- **Google Play:** listing and App content approved and published 18 Oct. Build 8 (1.2.1, versionCode 8, mobile `c2fa72d`) on internal testing, device-checked. **Production release 8 (1.2.1), full rollout, Israel, submitted for review 18 Oct.** Next build: versionCode 9.
+- **Search v2:** search_items built (132,755 rows, 612 pseudo); compare_search_v2 = GO; SEARCH_V2=test live; `scrp-search-items.timer` installed (daily 14:30). Step h (SEARCH_V2=on) waits for 2 good timer runs and this session's 9b fix being deployed.
+- **SU11A-44 migration applied**; moderation queue cleared (ratings 15 and 18 hidden + reviewed).
+
+**SEO (web)**
+- **nginx (read-only check):**
+  - `xxl.co.il` / `www.xxl.co.il`: port 80 returns 301 to `https://$host` (www stays www). 443 serves the build for both names, with no www -> apex redirect.
+  - `super.xxl.co.il` (+ www.super): port 80 returns 301 to `https://super.xxl.co.il`.
+  - Every unknown path returns index.html with status 200 (`try_files`).
+  - The two Search Console "Page with redirect" entries are almost certainly `http://xxl.co.il/` and `http://www.xxl.co.il/`, which is expected and harmless. `https://www.xxl.co.il/` serving the same page is the likely "Duplicate without user-selected canonical"; the canonical tags now point it to the apex.
+  - Optional nginx change for Dude (not applied): a 443 `server` block for `www.xxl.co.il` that returns 301 to `https://xxl.co.il$request_uri`.
+- **`web/src/utils/seoMeta.ts`:** a route table, applied from App on every route change. It sets title, description, canonical, og/twitter tags and `robots noindex`.
+  - Canonical follows the page's home host: portal pages -> xxl.co.il; supermarket pages -> super.xxl.co.il, even when opened on xxl.co.il; legal pages -> the current host.
+  - www maps to the apex, and the query string is dropped.
+  - noindex: `/login`, `/signup`, `/reset-password`, `/account/delete`, `/baskets`, `/favorites`, `/my-ratings`, `/fashion` (coming soon), `/portal-preview`, and unknown paths (which also get no canonical).
+  - The per-page title code (terms, partnerships, delete, reset) is removed. `index.html` has a static canonical plus a small inline script that sets the host and path before the first paint; GA is untouched.
+- **`web/public` files:**
+  - `sitemap-portal.xml`: xxl.co.il `/`, `/partnerships`, `/privacy`, `/disclaimer`, `/accessibility`.
+  - `sitemap-super.xml`: super.xxl.co.il `/`, `/promos`, `/privacy`, `/disclaimer`, `/accessibility`. lastmod 2026-10-18.
+  - `robots.txt`: allows all, disallows the noindex app paths, and lists both sitemaps. It is force-added because `*.txt` is gitignored.
+  - **Search Console:** the cross-host sitemap line works with a Domain property `xxl.co.il`, which covers both hosts; submit both sitemap URLs there. With URL-prefix properties instead, submit `https://xxl.co.il/sitemap-portal.xml` in `https://xxl.co.il/` and `https://super.xxl.co.il/sitemap-super.xml` in `https://super.xxl.co.il/`.
+- **OG images:** `og-portal.png` and `og-super.png` are re-encoded to 1200x630, 96-colour PNG: 5,608,671 -> 297,795 and 5,609,355 -> 273,957 bytes. Same URLs. Note that nginx sends `expires 1y` on png, so browsers that cached the old files keep them.
+
+**Web fixes**
+- **HomePage load-more (SU11A-45 finding 9b):**
+  - rows are deduped by item_code (item + store in group_by=store);
+  - the next offset counts rows the server sent, not rows rendered;
+  - an empty page with has_more triggers one retry a page further, then stops.
+  - Verified with mocked pages: offsets 0/29/59/89, 60 unique rows, the button gone at the end.
+- **Header:** at phone widths the row wraps and the logo and gaps shrink. There is no horizontal scroll at 390 px on `/`, `/account/delete`, `/promos` or `/login`; it was 397 px before, on every AppShell page. Desktop is unchanged, and so is DOM / focus order. The 🔥 מבצעים link is still `hidden sm:inline`, as before.
+- **Bundle:** lazy routes for delete, reset, fashion and the four legal / partnerships pages, plus vendor chunks in `vite.config.ts`. Main chunk 808.10 kB -> 139.38 kB; vendor-react 230.96, vendor-supabase 199.85, vendor 191.12. First-visit bytes are about the same; the gain is caching and no >500 kB chunk.
+- **ESLint:** `npx eslint src` went from 22 errors to 0.
+  - Real fixes: 3 `no-unused-expressions` (ternaries -> if/else) and 1 memo dependency in ResultsList.
+  - The other 18 (15 `set-state-in-effect`, 3 `only-export-components` on the context hooks) are line-level disables, each with its reason. No behaviour change.
+- **browserslist:** caniuse-lite updated (lockfile only); the build passes.
+
+**Search v2 (`5ddc2c8`)**
+- Coupon rule: the first token may also be `ה.נ קופון`, `ה.נ.קופון`, `ה.נ. קופון` or `הנ קופון`. Names like `שקופות`, `קופסה` and `קופסאות` stay unflagged. Takes effect at the next search_items rebuild (timer, 14:30).
+- `TYPO_MIN_SIMILARITY` 0.45 -> 0.40, so `שוקלד` -> `שוקולד` (0.444) is now eligible. Still only on 0 results. Takes effect after an API restart.
+- Not changed: `^קופו?ן` needs a final nun, so a plural first word (`קופונים...`) is not flagged.
+- Tests: `tests/test_search_v2.py` 70 passed. Full suite: 292 passed, plus the 14 known `test_smoke.py` failures (need DATABASE_URL).
+
+**Mobile (`c501689`, ships in build 9):** on the terms screen, every title and paragraph starts with an RLM (and `writingDirection: 'rtl'` on iOS), so paragraphs opening with Latin no longer flip to LTR. Explicit spacing between the version line and heading 1, and between sections. Syntax-only transpile OK; tsc is Dude's.
+
+**Deploy (Dude):**
+1. `scripts\deploy_frontend.ps1`, then submit the sitemaps.
+2. Server `git pull` + `sudo /usr/local/bin/xxl-restart.sh scrp-api` for the 0.40 threshold. The coupon variants apply at the next 14:30 build, or `build_search_items --apply` by hand.
+
 ---
 
 ## 📋 Open items / next steps (as of 18 Oct 2026)
 
-- **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44, NOT deployed.** Apply `db/migrations/su11a44_ugc_blocks_terms_moderation.sql` first, then API → web → app build 8. Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1. Lawyer review of the terms is Dude's call.
-- **SU11A-36 Search v2:** code committed (`a183e7e`, `02da17c`); migration NOT applied; SEARCH_V2 defaults to off. Verified in SU11A-45; Dude runs `docs/super/su11a36_search_v2_runbook.md` (step f needs the su11a44 migration first; decide finding 9b before SEARCH_V2=on).
+- **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1. Lawyer review of the terms is Dude's call.
+- **SU11A-36 Search v2:** built (132,755 rows, 612 pseudo), compare GO, SEARCH_V2=test live, timer installed (daily 14:30). Runbook step h (SEARCH_V2=on) after 2 good timer runs and the SU11A-46 web deploy (9b fix). SU11A-46 search changes need an API restart (threshold) and the next build (coupons).
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
 - **Catalog:**
   - category / attribute faceted filters;
@@ -1259,13 +1313,11 @@ No code, config, DB or server change. Updated: this file, `docs/handoff_mobile.m
   - Sign in with Apple is not required for email/password only.
   - Guideline 1.2 needs terms, report, block and contact info: all built (SU11A-44), not yet deployed.
 - **Play:**
-  - check the pre-launch report for build 7;
-  - promote to Production after the listing is approved;
+  - Production release 8 (1.2.1) submitted for review 18 Oct (full rollout, Israel); watch the review result.
   - plan Play Billing.
-  - Next build is versionCode 8.
-- **Privacy policy:** the policy names Hostinger only for moderation alerts. Add that it also sends the sign-up and password-reset emails (through Supabase custom SMTP); this is on the TO CONFIRM list in `docs/store_submission_checklist.md`.
-- **SEO session:** sitemap.xml, robots.txt, canonical tags, per-page title/description, Search Console sitemap and indexing requests.
+  - Next build is versionCode 9 (carries the SU11A-46 terms bidi fix).
+- **SEO:** built in SU11A-46. After the web deploy: submit the sitemaps in Search Console (see the SU11A-46 entry) and request indexing of the key pages. Optional nginx www -> apex redirect on 443.
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-46 (SU11A-37 reserved: popularity counters)
+Next free session ID: SU11A-47 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).

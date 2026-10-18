@@ -57,7 +57,9 @@ export default function RatingForm({
 
   // The caller may resolve the existing rating asynchronously (GET /me/ratings),
   // so adopt it when it lands rather than only on first mount.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- adopts a value the caller resolves asynchronously
   useEffect(() => { setPicked(initialRating); },          [initialRating]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- adopts a value the caller resolves asynchronously
   useEffect(() => { setComment(initialComment ?? ''); },  [initialComment]);
 
   useEffect(() => {

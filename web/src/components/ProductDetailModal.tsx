@@ -121,6 +121,7 @@ export default function ProductDetailModal({ item, onClose, initialTab = 'prices
   // supplementary, and the name/price view below is still fully useful.
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag for the fetch this effect starts
     setLoading(true);
     getProductDetails(barcode)
       .then(d => { if (!cancelled) setDetails(d); })

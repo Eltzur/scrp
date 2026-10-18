@@ -38,6 +38,7 @@ function MultiSelect({ options, selected, onChange, placeholder, disabled = fals
   // Clear on both edges of the transition, so a dropdown never reopens showing
   // the previous session's query (and its filtered subset) as if it were the
   // full list.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the filter text on every open/close transition
   useEffect(() => { setQuery(''); }, [open]);
 
   // localeCompare-style folding is unnecessary here: Hebrew has no case, and

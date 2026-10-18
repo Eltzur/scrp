@@ -52,6 +52,7 @@ export default function MyRatingsPage() {
     }
   }, [user]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- runs the loader, which resets its flags before fetching
   useEffect(() => { void load(); }, [load]);
 
   if (authLoading || !user) return null;

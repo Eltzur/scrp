@@ -23,6 +23,7 @@ export default function ExpiredLinkNotice() {
 
   useEffect(() => {
     if (!hasExpiredLinkHash()) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the URL hash is read once on mount (external state)
     setShow(true);
     try {
       window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);

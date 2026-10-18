@@ -5,9 +5,9 @@ Tick items as they are done. **TO CONFIRM** marks facts that are not verified ye
 
 ## Status (18 Oct 2026)
 
-- **Google Play:** organisation account. All App-content declarations and the Hebrew (iw-IL) default listing were **submitted for review on 18 Oct 2026**. The result is pending (typically hours to ~3 days).
-- **Internal testing:** v.7 (1.2.1), versionCode 7, mobile `ea64ae3`, released 18 Oct 2026 19:02. **Production release NOT requested yet.**
-- **Next build: versionCode 8.** Every `eas build` run burns a versionCode (`autoIncrement`); don't run it twice for one release.
+- **Google Play:** organisation account. All App-content declarations and the Hebrew (iw-IL) default listing were **approved and published on 18 Oct 2026**.
+- **Internal testing:** build 8 (1.2.1, versionCode 8, mobile `c2fa72d`), device-checked. **Production release 8 (1.2.1), full rollout, Israel: submitted for review 18 Oct 2026.**
+- **Next build: versionCode 9.** Every `eas build` run burns a versionCode (`autoIncrement`); don't run it twice for one release.
 - **Apple:** not started (no account yet).
 
 ## 0. Identity
@@ -143,9 +143,9 @@ Android (production AAB through internal testing track) and iPhone (TestFlight, 
 - [ ] Signed out: drawer → privacy and terms reachable.
 - [ ] Dark mode and RTL on both platforms; TalkBack / VoiceOver on the scan and delete screens.
 - [ ] Android: Play Console permissions list matches section 1. iOS: production Info.plist has no `NSLocalNetworkUsageDescription`.
-- [ ] Terms screen: real terms and sign-up / first-rating consent are built (SU11A-44, not yet in a build). Entity name filled in SU11A-44b: XXL אנטרפרייזס (XXL Enterprises).
+- [x] Terms screen: real terms and sign-up / first-rating consent are built (SU11A-44) and in build 8. The bidi / spacing fix (SU11A-46) ships in build 9. Entity name filled in SU11A-44b: XXL אנטרפרייזס (XXL Enterprises).
 - [ ] Play pre-launch report for build 7: check it, and don't give the test robot the demo credentials. Deobfuscation / R8 warnings are harmless for now.
-- [ ] After the listing is approved: promote to Production (not requested yet).
+- [x] Listing approved (18 Oct 2026); Production release 8 submitted for review 18 Oct 2026.
 
 ## 6. TO CONFIRM (do not publish until confirmed)
 

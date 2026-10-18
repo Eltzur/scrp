@@ -34,20 +34,22 @@ export default function ResultsList({
   const [promosLoading, setPromosLoading] = useState(false);
 
   // Stable key for the unique set of stores in the current result.
+  const items = result?.items;
   const storeSetKey = useMemo(() => {
-    if (!result?.items.length) return '';
+    if (!items?.length) return '';
     const pairs = new Set<string>();
-    for (const item of result.items) {
+    for (const item of items) {
       for (const q of item.quotes) {
         pairs.add(`${q.chain_id}/${q.store_id}`);
       }
     }
     return Array.from(pairs).sort().join('|');
-  }, [result?.items]);
+  }, [items]);
 
   useEffect(() => {
     // No results — clear promos and bail.
     if (!storeSetKey || !result?.items.length) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clears promos when the result set becomes empty
       setPromosByStore({});
       setPromosLoading(false);
       return;

@@ -100,6 +100,7 @@ export default function XxlLogo({
   useEffect(() => {
     if (variant !== 'hero' || forceStatic) return;
     if (!sessionStorage.getItem(SESSION_KEY)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the intro animation is chosen once per session from sessionStorage
       setAnimClass('xxl-anim');
       sessionStorage.setItem(SESSION_KEY, '1');
     }

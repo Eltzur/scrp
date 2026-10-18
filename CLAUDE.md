@@ -21,7 +21,7 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 15. **CC never deploys, never runs EAS builds, never calls `DELETE /account`, never modifies production data.** Dude runs `scripts\deploy_frontend.ps1` and EAS builds. Never delete the Supabase users x@xxl.co.il or gplay@xxl.co.il (the Play demo account); throwaway test users are created in Supabase → Authentication → Users → Add user (Auto Confirm).
 
 ## Status / next steps
-Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-46 (SU11A-37 reserved).
+Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-47 (SU11A-37 reserved).
 - RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1 on Play.
 - Legal entity: XXL Enterprises (XXL אנטרפרייזס), the Play-verified organisation; legal texts use the constant LEGAL_ENTITY_NAME in web/src/legal/terms.ts and xxl-super-mobile/src/legal/terms.ts
 - Apple track sessions use the new sub-series SU11B (first: SU11B-1)
@@ -55,7 +55,7 @@ Current status and the open-items list live at the end of `docs/super/handoff_su
 - Start the dev server with **`npm start`** (the start script writes the build-info line on the diagnostics screen; `npx expo start` skips it).
 - Typecheck: `node node_modules/typescript/bin/tsc --noEmit` takes 6-8 minutes; **exit 2 with only the 5 known `src/tw` errors is a pass**. CC runs time out on it - Dude runs it.
 - The dev client needs Metro on the laptop and the phone on the same (home) Wi-Fi; a preview APK has the JS baked in.
-- **Google Play (18 Oct 2026):** internal testing v.7 (1.2.1, versionCode 7, `ea64ae3`). The listing and App-content declarations are in review; Production is not requested yet. **Next build: versionCode 8.** Every `eas build` run burns a versionCode (`autoIncrement`), so don't run it twice for one release. iOS is parked until Android is stable.
+- **Google Play (18 Oct 2026):** listing and App content approved; build 8 (1.2.1, versionCode 8, `c2fa72d`) on internal testing; **Production release 8 submitted for review** (full rollout, Israel). **Next build: versionCode 9.** Every `eas build` run burns a versionCode (`autoIncrement`), so don't run it twice for one release. iOS is parked until Android is stable.
 - **iOS (SU11A-33):** no Apple account yet (DUNS slow; individual enrollment proposed, pending Dude). Everything needing the account is blocked (App Store Connect, EAS iOS build, TestFlight, iPhone checks, App Privacy, screenshots, review notes, a demo account NOT in DELETE_PROTECTED_USER_IDS). A Mac is not needed for EAS builds. **Enrollment for iOS on hold until DUNS arrives** (SU11A-35).
 - **Data retention / account deletion: CLOSED (SU11A-33).** B2 lifecycle on xxl-scrp-backups `daily/` (hide 180 d, delete 1 d) matches the privacy policy; the web policy (`web/src/pages/PrivacyPolicyPage.tsx`) is the source of truth for the in-app summary.
 
@@ -209,10 +209,10 @@ The flights vertical (xxl-flights repo) restarts and web-root deploys are passwo
 - DB queries: db/query.py
 - API routes: api/routers/
 
-## Current stack (June 2026)
-- 15 chains in registry
-- ~700+ stores in active_stores.yaml
+## Current stack (Oct 2026)
+- 14 chains in scraper/registry.py (`SCRAPERS`)
+- 936 store ids across those 14 chains in scraper/active_stores.yaml
 - Postgres on Kamatera, backed up to Backblaze B2 via rclone
 - Frontend: React/Vite → nginx on Kamatera (185.229.226.190), serving portal (xxl.co.il), super (super.xxl.co.il), and flights (fly.xxl.co.il). See Hosting topology above.
 - SSL: Let's Encrypt via certbot (auto-renews)
-- Cron: systemd scrp-cron, runs 03:00 IDT
+- Cron: systemd scrp-cron timer, daily 10:00 Asia/Jerusalem (deploy/systemd/scrp-cron.timer)

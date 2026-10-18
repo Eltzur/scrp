@@ -297,6 +297,7 @@ export default function PromosPage() {
   }, [qInput]);
 
   // A branch belongs to exactly one chain, so any chain change invalidates it.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- a chain change invalidates the selected branch
   useEffect(() => { setBranch(null); }, [chainId]);
 
   const filterArgs = useMemo(() => ({
@@ -312,6 +313,7 @@ export default function PromosPage() {
 
   useEffect(() => {
     if (city === null) return; // wait for city resolution
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag for the fetch this effect starts
     setLoading(true);
     setError(false);
     getGroupedPromos({ ...filterArgs, limit: PAGE_SIZE, offset: 0 })

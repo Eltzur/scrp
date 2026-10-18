@@ -118,6 +118,7 @@ export function BasketProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- the hook lives next to its provider; fast refresh reloads this file fully
 export function useBasket() {
   const ctx = useContext(BasketContext);
   if (!ctx) throw new Error('useBasket must be inside BasketProvider');
