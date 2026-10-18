@@ -927,6 +927,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-36 (Oct 12) — search v2 behind SEARCH_V2 (default off): search_items + lexicon, price-neutral ranking, prices for the page only; migration NOT applied, nothing installed.
 - SU11A-38 (Oct 15) — store privacy inventory (read-only) for Play Data safety / Apple App Privacy / web policy: docs/store_privacy_inventory.md. (SU11A-37 stays reserved for popularity counters.)
 - SU11A-39 (Oct 18) — store readiness: web privacy policy + deletion page updated (camera, location, logs, providers, device-only data), in-app summary line, app.json blockedPermissions + Hebrew iOS strings, eas.json production profile, docs/store_submission_checklist.md. Not committed, not deployed.
+- SU11A-40 (Oct 18) — partnerships page (שיתופי פעולה) at /partnerships + portal-only footer link; mailto only. Not deployed.
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
 
@@ -1068,4 +1069,14 @@ Fixes that must land before the SU11A-31 page and privacy text go live.
 - **Checklist:** `docs/store_submission_checklist.md` - listing assets, final Data safety and App Privacy answers, demo account rules, device tests, TO CONFIRM list.
 - **Awaiting (Dude):** review diffs; commit scrp (docs + web) and xxl-super-mobile; deploy the web pages; typecheck mobile; TO CONFIRM items.
 
-Next free session ID: SU11A-37 (reserved: popularity counters); after that SU11A-40
+### SU11A-40 (2026-10-18) - partnerships page (שיתופי פעולה) on the portal; NOT deployed
+
+- **Page:** `web/src/pages/PartnershipsPage.tsx`, route `/partnerships` in `App.tsx` next to the legal pages (standalone, own header strip + Footer), so it resolves on both xxl.co.il and super.xxl.co.il.
+- **Content:** open invitation for data, API, MCP/AI and business/content partnerships. Wording is "open to discussing"; it does NOT claim a public API or MCP server exists.
+- **Contact:** mailto only - `mailto:info@xxl.co.il?subject=` + URL-encoded "שיתוף פעולה עם XXL", address shown as text. No form, no backend call, no storage, no new analytics events (only the existing GA pageview after consent). No privacy-answer change.
+- **Title/meta:** set in a useEffect (`שיתופי פעולה | XXL` + description), restored on unmount because `applyHostnameMeta()` runs only once.
+- **Footer:** `components/Footer.tsx` shows "שיתופי פעולה" before "מדיניות פרטיות" only when `isPortalHostname()` (xxl.co.il, www, or localhost?portal=1).
+- **Verified:** `npm run build` (tsc -b + vite build) passes; dev server: footer link on /?portal=1 navigates, title/meta set, RTL, mailto encoded, no horizontal scroll at 390 px.
+- **Awaiting (Dude):** deploy with `scripts\deploy_frontend.ps1`; sitemap/robots left for the SEO task.
+
+Next free session ID: SU11A-37 (reserved: popularity counters); after that SU11A-41

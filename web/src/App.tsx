@@ -19,6 +19,7 @@ import FashionPage from './pages/FashionPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import DisclaimerPage from './pages/DisclaimerPage';
 import AccessibilityPage from './pages/AccessibilityPage';
+import PartnershipsPage from './pages/PartnershipsPage';
 import Footer from './components/Footer';
 // Utilities
 import { getCities } from './api/client';
@@ -91,6 +92,8 @@ export default function App() {
         <Route path="/privacy"        element={<PrivacyPolicyPage />} />
         <Route path="/disclaimer"     element={<DisclaimerPage />} />
         <Route path="/accessibility"  element={<AccessibilityPage />} />
+        {/* SU11A-40: works on both hosts; the footer links to it on the portal only. */}
+        <Route path="/partnerships"   element={<PartnershipsPage />} />
         {/* On portal hostnames (xxl.co.il, www.xxl.co.il, localhost?portal=1),
             "/" renders PortalPage. On super.xxl.co.il this Route is absent,
             so "/" falls through to the "/*" catch-all → AppShell. */}
