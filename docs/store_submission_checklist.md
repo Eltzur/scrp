@@ -1,7 +1,14 @@
 # Store submission checklist — SUPER XXL (SU11A-39)
 
-Prepared 2026-10-18 from `docs/store_privacy_inventory.md` (SU11A-38). Nothing here has been built, submitted or deployed.
+Prepared 2026-10-18 from `docs/store_privacy_inventory.md` (SU11A-38). Updated 18 Oct 2026 (SU11A-43) with the Google Play status below.
 Tick items as they are done. **TO CONFIRM** marks facts that are not verified yet; they must not go into published text until confirmed.
+
+## Status (18 Oct 2026)
+
+- **Google Play:** organisation account. All App-content declarations and the Hebrew (iw-IL) default listing were **submitted for review on 18 Oct 2026**. The result is pending (typically hours to ~3 days).
+- **Internal testing:** v.7 (1.2.1), versionCode 7, mobile `ea64ae3`, released 18 Oct 2026 19:02. **Production release NOT requested yet.**
+- **Next build: versionCode 8.** Every `eas build` run burns a versionCode (`autoIncrement`); don't run it twice for one release.
+- **Apple:** not started (no account yet).
 
 ## 0. Identity
 
@@ -16,12 +23,13 @@ Tick items as they are done. **TO CONFIRM** marks facts that are not verified ye
 | Account deletion URL | https://super.xxl.co.il/account/delete |
 | Support URL / email | https://super.xxl.co.il (or a /help page) — info@xxl.co.il |
 | Category | Shopping |
+| Target age (Play) | 18+ |
 
 ## 1. Before any store build
 
-- [ ] Deploy the web policy and deletion page (SU11A-39 changes in `web/src/pages/PrivacyPolicyPage.tsx`, `DeleteAccountPage.tsx`) — the in-app summary now restates them.
-- [ ] Commit the mobile changes (`app.json`, `eas.json`, `src/i18n/he.ts`); run the typecheck (exit 2 with only the 5 known `src/tw` errors is a pass).
-- [ ] Production build profile (`eas.json`): `developmentClient: false`, `distribution: store`, `autoIncrement: true`, Android `buildType: app-bundle` (AAB). iOS uses store distribution through the shared `distribution: store`.
+- [x] Deploy the web policy and deletion page (SU11A-39 changes in `web/src/pages/PrivacyPolicyPage.tsx`, `DeleteAccountPage.tsx`) — the in-app summary now restates them.
+- [x] Commit the mobile changes (`app.json`, `eas.json`, `src/i18n/he.ts`) (`fe67d8b`); run the typecheck (exit 2 with only the 5 known `src/tw` errors is a pass).
+- [x] Production build profile (`eas.json`): `developmentClient: false`, `distribution: store`, `autoIncrement: true`, Android `buildType: app-bundle` (AAB). iOS uses store distribution through the shared `distribution: store`.
 - [ ] Android permissions in the production build (prebuild of a temp copy + library manifests, SU11A-39):
   - kept: `INTERNET`, `CAMERA`, `ACCESS_COARSE_LOCATION`, `ACCESS_FINE_LOCATION`, `VIBRATE` (Expo default), `ACCESS_NETWORK_STATE` (from expo-image), plus AndroidX's own `il.co.xxl.supermarket.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` (signature-level, not user-facing)
   - removed by `android.blockedPermissions`: `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE` (also requested by expo-file-system / expo-image manifests, removed in the merge), `SYSTEM_ALERT_WINDOW`
@@ -36,24 +44,26 @@ Tick items as they are done. **TO CONFIRM** marks facts that are not verified ye
 
 ## 2. Google Play
 
-### Store listing
-- [ ] App icon 512×512 PNG (32-bit, no transparency issues)
-- [ ] Feature graphic 1024×500 PNG/JPG
-- [ ] At least 2 phone screenshots (recommended 4-8; 16:9 or 9:16, min side 320 px, max 3840 px) — scan, product with prices, nearby list, basket compare
-- [ ] Short description (max 80 characters, Hebrew)
-- [ ] Full description (max 4000 characters, Hebrew)
-- [ ] Contact email info@xxl.co.il; privacy policy URL
+### Store listing (submitted with the review on 18 Oct 2026)
+- [x] App icon 512×512 PNG (32-bit, no transparency issues)
+- [x] Feature graphic 1024×500 PNG/JPG
+- [x] At least 2 phone screenshots (recommended 4-8; 16:9 or 9:16, min side 320 px, max 3840 px) — scan, product with prices, nearby list, basket compare
+- [x] Tablet screenshots (7" and 10")
+- [x] Short description (max 80 characters, Hebrew)
+- [x] Full description (max 4000 characters, Hebrew)
+- [x] Contact email info@xxl.co.il; privacy policy URL
+- [x] Default language Hebrew (iw-IL); category Shopping
 - Note: untracked images in the mobile repo (`assets/images/icon.jpg`, `splash-icon gplay.png`, `splash-icon2.png`) — Dude's drafts, not touched.
 
-### App content
-- [ ] Privacy policy URL
-- [ ] Ads: **No ads**
-- [ ] App access: some features need sign-in → provide the demo account (section 4)
-- [ ] Content rating questionnaire (expected: Everyone / 3+; user-generated reviews exist and are moderated — answer "users can interact / share content": reviews are public, with blacklist + report + manual review)
-- [ ] Target audience: 18+ or 13+ (not designed for children)
-- [ ] Data safety (below)
-- [ ] Account deletion: in-app path + URL https://super.xxl.co.il/account/delete
-- [ ] Government app / financial features / health: No
+### App content (all declarations done; submitted 18 Oct 2026)
+- [x] Privacy policy URL
+- [x] Ads: **No ads**
+- [x] App access: some features need sign-in → provide the demo account (section 4)
+- [x] Content rating questionnaire (expected: Everyone / 3+; user-generated reviews exist and are moderated — answer "users can interact / share content": reviews are public, with blacklist + report + manual review)
+- [x] Target audience: **18+** (not designed for children)
+- [x] Data safety (below)
+- [x] Account deletion: in-app path + URL https://super.xxl.co.il/account/delete
+- [x] Government app / financial features / health: No
 
 ### Data safety answers (final)
 - Collects or shares required user data: **Yes**
@@ -99,37 +109,46 @@ Tick items as they are done. **TO CONFIRM** marks facts that are not verified ye
 
 ## 4. Demo reviewer account (one for Google, one for Apple, or shared)
 
-- [ ] Email + password account, created through the app's normal sign-up.
-- [ ] **Email confirmed before handing it over** — Supabase email confirmation is on, and reviewers cannot receive the mail. Sign in once on a device to prove it works.
+Google Play demo account: **gplay@xxl.co.il** (password only in the Play Console review field). Never delete it, and never delete x@xxl.co.il.
+
+
+- [x] Email + password account, created through the app's normal sign-up.
+- [x] **Email confirmed before handing it over** — Supabase email confirmation is on, and reviewers cannot receive the mail. Sign in once on a device to prove it works.
 - [ ] Normal user: tier `free`, **not** in `ADMIN_USER_EMAILS` (moderation queue), **not** in `DELETE_PROTECTED_USER_IDS` (reviewers must be able to test deletion).
-- [ ] Use a mailbox we control (e.g. an alias of info@xxl.co.il), not anyone's personal address.
+- [x] Use a mailbox we control (e.g. an alias of info@xxl.co.il), not anyone's personal address.
 - [ ] Seed it: one saved basket, one rating with a comment.
 - [ ] If a reviewer deletes it, recreate it before the next review round.
 - [ ] Put the credentials only in the store consoles' review fields — never in the repo or docs.
 
 ## 5. Pre-submission tests on real devices
 
-Android (production AAB through internal testing track) and iPhone (TestFlight, once the account exists):
-- [ ] First launch: location primer → OS dialog; deny → manual city works; allow → "קרוב אלי" lists branches.
+Android (production AAB through internal testing track) and iPhone (TestFlight, once the account exists). Android items ticked here passed on two phones with build 7 (18 Oct 2026):
+- [x] First launch: location primer → OS dialog; deny → manual city works; allow → "קרוב אלי" lists branches.
 - [ ] Approximate-only location (Android 12+ "approximate", iOS "Precise: off"): app still works, no crash, radius filter still returns results.
 - [ ] Camera: permission dialog shows the Hebrew text (iOS); deny → manual barcode entry works; scan EAN-13 and UPC-A.
 - [ ] Search, product page, basket compare with and without "nearby only".
-- [ ] Sign up → confirmation email → sign in; password reset email.
+- [ ] Sign up → confirmation email → sign in.
+- [x] Password reset by 6-digit email code, on the web and in the Android app.
+- [x] Demo sign-in (gplay@xxl.co.il) and session persistence after restart.
+- [x] Settings: version 1.2.1 / build 7, logout.
 - [ ] Rate a product, edit it, see it under "הדירוגים שלי"; report a review.
 - [ ] Privacy screen: summary shows the new camera/location line; link opens the web policy; delete-account link when signed in.
-- [ ] Account deletion with a throwaway account (not the reviewer account): signed out afterwards, sign-in fails, local basket and scan history remain on the phone (as the policy says).
+- [x] Account deletion with a throwaway account (not the reviewer account): signed out afterwards, sign-in fails, local basket and scan history remain on the phone (as the policy says).
 - [ ] Signed out: drawer → privacy and terms reachable.
 - [ ] Dark mode and RTL on both platforms; TalkBack / VoiceOver on the scan and delete screens.
 - [ ] Android: Play Console permissions list matches section 1. iOS: production Info.plist has no `NSLocalNetworkUsageDescription`.
-- [ ] Terms screen: still the placeholder (`he.legal.termsBody`) — **decide before submission** whether to publish real terms.
+- [ ] Terms screen: still the placeholder (`he.legal.termsBody`). Real terms and sign-up consent are planned in SU11A-42 Stage 2 (`docs/super/su11a42_ugc_report.md`); they are needed for Apple guideline 1.2.
+- [ ] Play pre-launch report for build 7: check it, and don't give the test robot the demo credentials. Deobfuscation / R8 warnings are harmless for now.
+- [ ] After the listing is approved: promote to Production (not requested yet).
 
 ## 6. TO CONFIRM (do not publish until confirmed)
 
 - [ ] Supabase project region
 - [ ] Supabase auth-log retention on the current plan
-- [ ] Which service sends the Supabase confirmation / reset emails (Supabase's built-in mailer or a custom SMTP)
+- [x] Which service sends the Supabase confirmation / reset emails: **custom SMTP, Hostinger mailbox noreply@xxl.co.il** (confirmed 18 Oct 2026)
+- [ ] Privacy policy section 4 names Hostinger only for moderation alerts; add that it also sends sign-up confirmation and password-reset emails (through Supabase custom SMTP)
 - [ ] Retention of moderation alerts in the info@xxl.co.il mailbox (Hostinger) — then replace the neutral wording in policy section 8
 - [ ] Kamatera data-centre region
 - [ ] Backblaze B2 bucket region
-- [ ] Legal entity name (section 0)
+- [ ] Legal entity name (section 0); the same name is needed for the terms (SU11A-42, decided by Dude)
 - [ ] SU11A-37 popularity counters: must stay aggregate (no IP, user ID or per-event timestamp); otherwise the search-history answers and the policy change

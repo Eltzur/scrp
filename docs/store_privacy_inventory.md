@@ -135,7 +135,7 @@ All in Postgres on the Kamatera VM except where noted. Deletion = `DELETE /accou
 | Kamatera | hosts the VM: Postgres (all of section 5), logs | Processor (infrastructure) | **not named in policy** |
 | Backblaze B2 (`xxl-scrp-backups`) | DB backup copies incl. user data | Processor | **not named in policy**; mentioned only as "off-site backup copy" |
 | Hostinger (SMTP `notify@xxl.co.il` → mailbox `info@xxl.co.il`) | moderation alerts: author / reporter **email**, rating id, item, comment ≤500 chars or report reason (`api/routers/ratings.py:420-491`, `api/mailer.py:82-166`) | Processor | **not named in policy**; mailbox retention unknown |
-| Supabase email (or custom SMTP, unknown) | confirmation / reset emails to the user | Processor | see E |
+| Supabase Auth via custom SMTP: Hostinger mailbox `noreply@xxl.co.il` (confirmed 18 Oct 2026) | confirmation / reset emails to the user (reset email carries a 6-digit code) | Processor | Hostinger is named in the policy for moderation alerts only; add the auth emails (see E1) |
 | Expo / EAS | build-time source + signing credentials; **no end-user data at runtime** (no updates, push or insights) | — | not user data; no disclosure needed |
 | Google Play / Apple | store distribution, their own analytics on installs | Independent (platform) | not caused by our code |
 | Google (Places/Geocoding) | **store** addresses only, server-side; no user data | — | not user data |
@@ -289,10 +289,19 @@ The in-app summary must only restate the web policy, so deploy D1 first.
 
 ## E. Open questions (code cannot answer)
 
-1. **Supabase**: project region, auth-log retention on the current plan, and whether confirmation / reset emails go through Supabase's built-in mailer or a custom SMTP (another processor to name).
+1. **Supabase**: project region and auth-log retention on the current plan. *Answered 18 Oct 2026:* confirmation / reset emails go through custom SMTP (Hostinger mailbox noreply@xxl.co.il, sender "SUPER XXL"), so Hostinger must also be named for these emails in policy section 4.
 2. **Moderation mailbox (info@xxl.co.il, Hostinger)**: retention for alert mails that contain user emails — set a period (e.g. delete after 90 days) so section 8 can state it.
 3. **Kamatera / Backblaze regions** (for section 9 "transfer abroad"): which data centre hosts the VM and the B2 bucket.
 4. **Location answer for Play**: confirm option (b) in B (declare approximate location as ephemeral) or (a) (declare nothing).
 5. **SU11A-37 popularity counters**: if they store search queries or per-item views, keep them aggregate with no IP, user ID or timestamp per event; otherwise B/C and D1 change (search history would become stored data).
 6. **Config hygiene before submission (separate code task, not done here)**: add `android.blockedPermissions` for `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE`, `SYSTEM_ALERT_WINDOW` (unused); decide whether `ACCESS_FINE_LOCATION` is needed (the app requests Balanced accuracy; only the diagnostics screen asks for High); confirm the production iOS build does not carry the English `NSLocalNetworkUsageDescription` from `expo-dev-client` (check the built Info.plist, or exclude expo-dev-client from production).
 7. **Legal entity**: the policy says `XXL בע"מ` — confirm the exact registered name matches the developer name on Google Play / Apple.
+
+## F. Updates (18 Oct 2026, SU11A-43)
+
+- **Auth email provider confirmed:** Supabase sends sign-up confirmation and password-reset emails through custom SMTP, using the Hostinger mailbox noreply@xxl.co.il (sender "SUPER XXL"). No new processor; Hostinger was already one, for moderation alerts. The policy text still has to say Hostinger also carries these emails (TO CONFIRM in `docs/store_submission_checklist.md`).
+- **Password reset** now emails a 6-digit code instead of a link (SU11A-41). No data-category change.
+- **Google Play Data safety** was submitted on 18 Oct 2026 with the answers in `docs/store_submission_checklist.md`. The review is pending.
+- **Coming with SU11A-42 Stage 2:** block lists (`user_blocks`) and a terms-consent record (`users.terms_version`, `users.terms_accepted_at`) are new account-linked data.
+  - The Data safety / App Privacy categories do not change; both fall under the existing account data and other user-generated content.
+  - The policy, the deletion page and the in-app summary must mention them when Stage 2 ships.

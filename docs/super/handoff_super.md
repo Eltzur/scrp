@@ -1,7 +1,16 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: September 24, 2026 (mobile /search latency investigation, read-only, parked; also Sept 23: GS1 catalog-value measurement + "What's Good for Europe" reform assessment)
+> Last updated: 18 Oct 2026 (SU11A-43 docs refresh: Play internal v7, email-code reset live, partnerships live, UGC report, SEO notes; see "Open items / next steps" at the end)
+
+## 📏 Standing rules (apply to every session)
+
+- **No secrets in chat or docs.** Never print or record `.env` values, passwords, keys or tokens. Account emails may be named (e.g. the Play demo account gplay@xxl.co.il), never their passwords.
+- **Monoblock CC prompts** with an environment tag above the block; **one prompt at a time**.
+- **Commits from Windows only**; the server only pulls.
+- **Read-and-report-then-STOP** before any change to scraper or city-resolution code.
+- **Never bulk-page the live API.**
+- **CC never deploys, never runs EAS builds, never calls `DELETE /account`, never modifies production data.** Dude runs `scripts\deploy_frontend.ps1` and EAS builds.
 
 ---
 
@@ -1069,6 +1078,7 @@ Fixes that must land before the SU11A-31 page and privacy text go live.
 - **Final Android permissions (release):** INTERNET, CAMERA, ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION, VIBRATE, ACCESS_NETWORK_STATE (+ AndroidX signature permission). Verified by prebuild of a temp copy outside the repo + library manifests; repo unchanged by it.
 - **Checklist:** `docs/store_submission_checklist.md` - listing assets, final Data safety and App Privacy answers, demo account rules, device tests, TO CONFIRM list.
 - **Awaiting (Dude):** review diffs; commit scrp (docs + web) and xxl-super-mobile; deploy the web pages; typecheck mobile; TO CONFIRM items.
+- **Status 18 Oct 2026:** committed (scrp `6f74fa0`, mobile `fe67d8b`); web deployed; the app config ships in Play internal build 7.
 
 ### SU11A-40 (2026-10-18) - partnerships page (שיתופי פעולה) on the portal; NOT deployed
 
@@ -1079,6 +1089,7 @@ Fixes that must land before the SU11A-31 page and privacy text go live.
 - **Footer:** `components/Footer.tsx` shows "שיתופי פעולה" before "מדיניות פרטיות" only when `isPortalHostname()` (xxl.co.il, www, or localhost?portal=1).
 - **Verified:** `npm run build` (tsc -b + vite build) passes; dev server: footer link on /?portal=1 navigates, title/meta set, RTL, mailto encoded, no horizontal scroll at 390 px.
 - **Awaiting (Dude):** deploy with `scripts\deploy_frontend.ps1`; sitemap/robots left for the SEO task.
+- **Status 18 Oct 2026:** deployed and verified at xxl.co.il/partnerships; footer link present; contact info@xxl.co.il.
 
 ### SU11A-41 (2026-10-18) - password reset via email code (web + mobile); NOT deployed, template NOT switched
 
@@ -1091,5 +1102,89 @@ Fixes that must land before the SU11A-31 page and privacy text go live.
 - **Template:** `docs/supabase_email_templates.md` - Hebrew Reset Password (`{{ .Token }}`) and Confirm Signup (link) templates. Apply ONLY after the web is deployed and the new Android build is out; check Email OTP length = 6 first.
 - **Verified:** `npm run build` passes; dev server: link order (email, password, "שכחתי סיסמה", button), prefill, reset page title, otp_expired notice + hash cleared + button to /reset-password, malformed hash no crash. Step 2 not exercised locally (needs Supabase + the new template).
 - **Awaiting (Dude):** deploy web; new Android build; then switch the template; run the manual test plan.
+- **Status 18 Oct 2026:** shipped. Web `8dd76f9` deployed (`/reset-password` live); mobile `ea64ae3` is Play internal build 7. Reset Password template switched to the Hebrew code template; Email OTP length set to 6 (was 8, which caused a mismatch). Old reset links land on the expired-link notice. Tested on web and in the Android app. Details in the SU11A-43 entry.
 
-Next free session ID: SU11A-37 (reserved: popularity counters); after that SU11A-42
+### SU11A-42 (18 Oct 2026) - UGC / block-user investigation, Stage 1 (read-only); report only
+
+- **Report:** `docs/super/su11a42_ugc_report.md` (commit `caa69c5`). Context: Apple guideline 1.2 (user-generated content needs terms, report, block and contact info).
+- **Findings:** the only shared content is ratings (1-3) with an optional comment, shown anonymously. Report exists on mobile and web but only stores a `rating_reports` row and emails info@; the rating stays public and user reports never reach `/admin/ratings/pending`. No hide or ban endpoint. **Block does not exist.** Mobile terms screen is a placeholder; web `/disclaimer` has no UGC clauses. No sign-up consent on either platform.
+- **Proposed:** `user_blocks` table; `POST /ratings/{id}/block-author`, `GET /me/blocks`, `DELETE /me/blocks/{id}`; signed-in `GET /items/{code}/ratings` filters blocked authors and adds `is_mine`; in-app terms + consent checkbox (version + timestamp via sign-up metadata into `users.terms_version` / `users.terms_accepted_at`).
+- **Decisions:** recorded in section 10 of the report (approved defaults unless Dude says otherwise). **OPEN:** legal entity name for the terms.
+- **Migration SQL in the report is NOT applied**; it must be applied before the API change. **Stage 2 (implementation) not started.**
+
+### SU11A-43 (18 Oct 2026) - handoff docs refresh; docs only
+
+No code, config, DB or server change. Updated: this file, `docs/handoff_mobile.md`, `docs/store_submission_checklist.md`, `docs/store_privacy_inventory.md`, `docs/supabase_email_templates.md`, `docs/super/su11a42_ugc_report.md` (Decisions), `CLAUDE.md`.
+
+**Google Play**
+- Organisation account; app `il.co.xxl.supermarket`, name **SUPER XXL**.
+- All App-content declarations done and **submitted for review on 18 Oct 2026** together with the Hebrew (iw-IL) default store listing: category Shopping, target age 18+, privacy policy https://super.xxl.co.il/privacy, tablet screenshots (7" and 10") added. Review result pending (typically hours to ~3 days).
+- **Internal testing:** v.7 (1.2.1), versionCode 7, from mobile commit `ea64ae3`, released 18 Oct 2026 19:02. Build 6 (1.2.1) was the previous release. On first upload Play showed "version code 7 already used", because an earlier EAS run had already uploaded 7; it was added from the library.
+- **Lesson:** every `eas build` run burns a versionCode (`autoIncrement` is on). Don't run it twice for one release. **The next build is 8.**
+- **Production release NOT yet requested.** Check the pre-launch report for build 7, and don't give the test robot the demo credentials. Deobfuscation / R8 warnings are harmless for now.
+- **Passed on two phones:**
+  - barcode scan, permission prompts;
+  - demo sign-in (gplay@xxl.co.il) and session persistence;
+  - nearby filter and prices;
+  - Settings: version 1.2.1 / build 7, logout, delete account;
+  - email-code password reset on the web and in the Android app;
+  - account deletion with a throwaway user.
+- **Throwaway test users:** create them in Supabase → Authentication → Users → Add user, with Auto Confirm. **NEVER delete x@xxl.co.il or gplay@xxl.co.il.**
+
+**Auth / email**
+- Supabase Auth email + password, with email confirmation on.
+- Password reset uses a 6-digit email code: `resetPasswordForEmail(email)` with no `redirectTo`, then `verifyOtp({ email, token, type: 'recovery' })`, then `updateUser({ password })`.
+  - SU11A-41 shipped: mobile `ea64ae3`, web `8dd76f9`; `/reset-password` is live. Old reset links land on the expired-link notice.
+- Email OTP length is 6. It was 8, which caused a mismatch; fixed.
+  - The Reset Password template is the Hebrew code template, subject "קוד לאיפוס הסיסמה ב-SUPER XXL". Confirm Signup keeps its link.
+  - A template takes effect on Save; the browser needs a hard refresh to show the saved state.
+- **Custom SMTP:** Hostinger mailbox noreply@xxl.co.il (smtp.hostinger.com:465), sender name "SUPER XXL".
+  - Raw headers show SPF pass, DKIM pass (hostingermail-a) and DMARC pass with p=NONE.
+  - Rate limits: 60 emails per hour, and at least 60 s between emails to the same user.
+  - Resend or Brevo can be swapped in through the Supabase SMTP settings with no code change.
+- Unverified test users were deleted from Supabase. Users now: eltzur@gmail.com, etokenpsm@yahoo.com, gplay@xxl.co.il (Play demo account), x@xxl.co.il.
+- **Possible refinements (not done):**
+  - The reset-request step hides real server / 429 errors behind the neutral message.
+  - Mail scanners could use up the confirm-signup link; consider a code flow later.
+
+**Web portal**
+- SU11A-40 partnerships page "שיתופי פעולה" is deployed and verified at xxl.co.il/partnerships. Footer link present; contact info@xxl.co.il.
+- The footer also has מדיניות פרטיות, תנאי שימוש וכתב ויתור (/disclaimer), צור קשר, נגישות and עוגיות.
+- **Google Search Console**, property xxl.co.il, as of the 12 Oct 2026 report:
+  - 5 known pages, 1 indexed.
+  - Not-indexed reasons: Page with redirect (2), Duplicate without user-selected canonical (1), Crawled - currently not indexed (1).
+- **TODO (SEO session):**
+  - a real sitemap.xml and robots.txt;
+  - canonical tags;
+  - a title and description per page;
+  - submit the sitemap in Search Console, then request indexing of the key pages.
+
+Next free session ID: SU11A-44 (SU11A-37 reserved: popularity counters)
+
+---
+
+## 📋 Open items / next steps (as of 18 Oct 2026)
+
+- **SU11A-42 Stage 2 (UGC, Apple 1.2):** not started. Apply the migration first, then API → web → app build. The legal entity name for the terms is OPEN (Dude). Decisions are in `docs/super/su11a42_ugc_report.md` section 10.
+- **SU11A-36 Search v2:** code committed (`a183e7e`, `02da17c`); migration NOT applied; SEARCH_V2 defaults to off. The read-only verification prompt and the server runbook are still to run.
+- **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
+- **Catalog:**
+  - category / attribute faceted filters;
+  - a switch to hide tobacco and alcohol;
+  - optionally, move the location prompt to a contextual moment.
+- **Apple:**
+  - App Store Connect record;
+  - EAS iOS build without the local-network string;
+  - TestFlight;
+  - App Privacy answers.
+  - Sign in with Apple is not required for email/password only.
+  - Guideline 1.2 needs terms, report (exists), block (missing) and contact info.
+- **Play:**
+  - check the pre-launch report for build 7;
+  - promote to Production after the listing is approved;
+  - plan Play Billing.
+  - Next build is versionCode 8.
+- **Privacy policy:** the policy names Hostinger only for moderation alerts. Add that it also sends the sign-up and password-reset emails (through Supabase custom SMTP); this is on the TO CONFIRM list in `docs/store_submission_checklist.md`.
+- **SEO session:** sitemap.xml, robots.txt, canonical tags, per-page title/description, Search Console sitemap and indexing requests.
+- **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
+- **Server:** reboot at a quiet time.

@@ -232,3 +232,24 @@ Account deletion needs no code change: `DELETE FROM users` cascades to both side
 6. Web: block button only, or also a blocked-users page on the web?
 7. Existing users: ask for consent at their first rating attempt (proposed), or on the next app open for everyone?
 8. Should the web `/disclaimer` page be renamed to "תנאי שימוש" and also get the version/date, since the app will link to it as the full terms?
+
+## 10. Decisions (18 Oct 2026)
+
+**Approved defaults unless Dude says otherwise** (answers to section 9):
+
+1. **Legal entity name: OPEN, to be decided by Dude.** The privacy page says XXL בע"מ, the accessibility page says another name, and `legal/` holds a sole-trader certificate.
+2. Terms text: the section 6 draft is the base. Lawyer review is still Dude's call.
+3. **A block also files a report** (`source = 'block'`) and emails info@.
+4. **Blocked authors' scores are NOT removed from averages**; only their comments are hidden from the blocker.
+5. **Moderation tools are added now:**
+   - actively reported ratings appear in `/admin/ratings/pending`;
+   - a hide endpoint;
+   - a `users.banned_at` column, checked on rating submit and report.
+6. **Web gets a block button only**, no blocked-users page. The list and unblock stay in the app.
+7. **Existing users are asked for terms consent at their first rating.**
+8. **Web `/disclaimer` is renamed "תנאי שימוש"** and gets the version and date.
+
+**Status:**
+- The migration SQL in section 7 is **NOT applied**. It must be applied before the API change; then API → web → app build.
+- With decision 5, the migration also adds `users.banned_at`. With decision 3, it changes the `rating_reports` source CHECK.
+- **Stage 2 (implementation) has not started.**

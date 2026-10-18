@@ -1,13 +1,14 @@
 # SU10M — Mobile Apps Handoff (super.xxl.co.il)
 
 > New sub-series. Paste at the start of each SU10M chat, alongside `docs/super/handoff_super.md` (shared backend/vision context still applies).
-> Last updated: September 26, 2026 (SU10M-3 Search + Basket + preview build; SU10R ratings/reviews — see the "DO NOT SURFACE blocked" warning)
+> Last updated: 18 Oct 2026 (SU11A-43: Play internal v7 / 1.2.1, email-code reset shipped, UGC report; earlier: SU10M-3 Search + Basket + preview build; SU10R ratings/reviews — see the "DO NOT SURFACE blocked" warning)
 
 ---
 
 ## Standing rules
 
 - Store-count escalation rule: see CLAUDE.md
+- All standing rules (no secrets, monoblock prompts, CC never deploys / runs EAS builds / calls DELETE /account): see the top of `docs/super/handoff_super.md` and CLAUDE.md.
 
 ---
 
@@ -624,3 +625,20 @@ Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; 
 - **2026-10-15 (SU11A-38) store privacy inventory:** `docs/store_privacy_inventory.md` (read-only). App side: email + password only; no analytics / crash / ads / push / expo-updates; GPS stays on the device (only in-radius store IDs in the /basket/compare body); camera sends barcode digits only; no WebView; scan history, basket, city, radius and theme are device-only and survive account deletion. Proposed Play Data safety + Apple App Privacy answers and one new Hebrew line for `he.legal.privacySummary` (add only after the web policy gets the camera / location text). Before submission (separate task): `android.blockedPermissions` for the unused READ/WRITE_EXTERNAL_STORAGE and SYSTEM_ALERT_WINDOW defaults, decide on ACCESS_FINE_LOCATION, check the expo-dev-client English NSLocalNetworkUsageDescription is not in the production iOS build.
 - **2026-10-18 (SU11A-39) store readiness (uncommitted):** `app.json` blocks READ/WRITE_EXTERNAL_STORAGE and SYSTEM_ALERT_WINDOW; iOS camera / location strings rewritten in Hebrew naming SUPER XXL (camera: barcode number only, no image; location: distance on the device, not sent); `eas.json` production = developmentClient false, distribution store, autoIncrement, Android app-bundle; `he.legal.privacySummary` gained one camera / location / no-tracking line (deploy the web policy first). ACCESS_FINE_LOCATION kept (1 km radius + shown distances need it). Release permissions: INTERNET, CAMERA, COARSE + FINE location, VIBRATE, ACCESS_NETWORK_STATE. The dev-launcher local-network string is stripped from Release builds by its own build phase - check the first production IPA. Checklist: `docs/store_submission_checklist.md`.
 - **2026-10-18 (SU11A-41) password reset by email code:** `src/app/forgot-password.tsx` is now two steps on one screen: email -> `resetPasswordForEmail` (no redirectTo) -> neutral "if an account exists" message; then 6-digit code (number pad, iOS oneTimeCode, Android sms-otp) + new password + confirm -> `verifyOtp(type 'recovery')` -> `updateUser` -> home + "הסיסמה עודכנה"; "שליחת קוד חדש" with a 60 s cooldown. Sign-in: "שכחתי סיסמה" link moved directly under the password field (text-base, semibold) and passes the typed email. `toHebrewError` adds email-not-confirmed, rate-limit (429 / over_*), same-password; code failures get "הקוד שגוי או שפג תוקפו". All user-facing "קישור" in the reset texts is now "קוד". **Manual step after deploy + new Android build:** Dude switches the Supabase Reset Password template to `{{ .Token }}` (`docs/supabase_email_templates.md`); until then the email still carries a link and the code step cannot be completed.
+- **18 Oct 2026 (SU11A-43) Google Play status:**
+  - **App and review:** app `il.co.xxl.supermarket`, SUPER XXL, organisation account. App-content declarations and the Hebrew (iw-IL) listing were submitted for review on 18 Oct 2026 (Shopping, 18+, tablet screenshots added); the result is pending.
+  - **Internal testing:** v.7 (1.2.1), versionCode 7, from `ea64ae3`, released 18 Oct 2026 19:02; the previous release was build 6. Version code 7 was already in the library from an earlier EAS run, so it was added from there.
+  - **Next build: versionCode 8.** Every `eas build` run burns a versionCode (`autoIncrement`).
+  - **Production not requested yet.** Check the pre-launch report for build 7, and don't give the robot the demo credentials. R8 / deobfuscation warnings are harmless for now.
+  - **Passed on two phones:** scan, permission prompts, demo sign-in (gplay@xxl.co.il), session persistence, nearby filter and prices, Settings (1.2.1 / build 7, logout, delete account), email-code reset in the app, and deletion with a throwaway user.
+  - **Test users:** throwaway users are created in Supabase (Add user, Auto Confirm). Never delete x@xxl.co.il or gplay@xxl.co.il.
+- **18 Oct 2026 (SU11A-41 status):** shipped in build 7. The Supabase Reset Password template is switched to the Hebrew code template and Email OTP length is 6 (it was 8). Custom SMTP sends from noreply@xxl.co.il (Hostinger). Details are in `docs/supabase_email_templates.md`.
+- **18 Oct 2026 (SU11A-42) UGC / block user:**
+  - Stage 1 report: `docs/super/su11a42_ugc_report.md` (`caa69c5`).
+  - Mobile Stage 2 work:
+    - a "⋯" menu with report + block on each comment;
+    - a "משתמשים חסומים" screen in Settings;
+    - real terms in place of the `he.legal.termsBody` placeholder;
+    - a consent checkbox at sign-up;
+    - a consent prompt at an existing user's first rating.
+  - Not started; the server migration and API come first. Build 7 keeps working: it sends no token on the ratings GET, so it sees no filtering. Terms enforcement on rating submit stays off until build 7 is replaced.

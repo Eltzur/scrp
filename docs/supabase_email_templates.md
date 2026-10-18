@@ -1,5 +1,22 @@
 # Supabase email templates — SUPER XXL (SU11A-41)
 
+## Status (18 Oct 2026)
+
+- **Applied.** Reset Password uses the Hebrew code template below (subject "קוד לאיפוס הסיסמה ב-SUPER XXL"); Confirm Signup keeps its link. Web `8dd76f9` (`/reset-password`) is deployed and Android build 7 (`ea64ae3`) is out.
+- **Email OTP length is 6.** It was 8, which caused a mismatch with the 6-digit input; fixed.
+- **Saving:** a template takes effect on Save. The dashboard needs a browser hard refresh to show the saved state.
+- **Tested:** the reset works on the web and in the Android app; old reset links land on the expired-link notice.
+- **SMTP (custom):**
+  - Hostinger mailbox noreply@xxl.co.il, smtp.hostinger.com:465, sender name "SUPER XXL". Credentials live only in the Supabase SMTP settings.
+  - Raw headers: SPF pass, DKIM pass (hostingermail-a), DMARC pass with p=NONE.
+  - Supabase rate limits: 60 emails per hour, and at least 60 s between emails to the same user.
+  - Resend or Brevo can replace it in the Supabase SMTP settings with no code change.
+- **Possible refinements (not done):**
+  - The reset-request step shows the neutral message even when the server returns an error or 429.
+  - Mail scanners could use up the Confirm Signup link; consider a code flow later.
+
+## Original instructions (SU11A-41)
+
 Where: Supabase dashboard → Authentication → Emails → Templates.
 
 **When:** only AFTER both are live:

@@ -16,8 +16,12 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 10. **Before assigning a session ID, grep docs/ and CLAUDE.md for it.** (SU10S-22 was assigned twice; the promo session was renamed SU10S-21b in SU10S-26.)
 11. **Hebrew in API tests from Windows shells is unreliable.** curl from Git Bash (and PowerShell's own encoding) can send Hebrew query strings as `???`, so `/search?q=חלב` returns 0 and looks like a broken search — check the echoed `query`. PowerShell → `ssh "..."` also mangles Hebrew. Test Hebrew from the server (interactive SSH) or URL-encode explicitly.
 12. **Handoff files too large for the Edit tool: patch with a small script and verify with `git diff --stat`.**
-13. **Never print `.env` or any secret** (keys, passwords, connection strings) - not in output, logs, tracebacks or commit messages. **Never put a user's coordinates in a query string**: a position goes only in a POST body (gunicorn and nginx log full request paths).
+13. **Never print `.env` or any secret** (keys, passwords, connection strings) - not in chat, docs, output, logs, tracebacks or commit messages. Account emails may be named (e.g. gplay@xxl.co.il), never their passwords. **Never put a user's coordinates in a query string**: a position goes only in a POST body (gunicorn and nginx log full request paths).
 14. **Commit from Windows only; the server only pulls.** Commit messages via a temp file in UTF-8 without BOM + `git commit -F`, always followed by `git push origin main`. One CC prompt at a time.
+15. **CC never deploys, never runs EAS builds, never calls `DELETE /account`, never modifies production data.** Dude runs `scripts\deploy_frontend.ps1` and EAS builds. Never delete the Supabase users x@xxl.co.il or gplay@xxl.co.il (the Play demo account); throwaway test users are created in Supabase → Authentication → Users → Add user (Auto Confirm).
+
+## Status / next steps
+Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-44 (SU11A-37 reserved).
 
 ## Store-count escalation rule (Dude, 2026-09-28)
 "if there are issues with 1 or up to 10 specific stores, please flag them for manual review cause running prompts to handle a single store issue is to costly and time consuming. the rule of thumb is that up to 10 - manual only. 10 to 50 flag is and ask if to run a fix or handle manually. over 50, try to fix 2-3 times and if not resolved, consult with me before running another prompt."
@@ -48,7 +52,7 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 - Start the dev server with **`npm start`** (the start script writes the build-info line on the diagnostics screen; `npx expo start` skips it).
 - Typecheck: `node node_modules/typescript/bin/tsc --noEmit` takes 6-8 minutes; **exit 2 with only the 5 known `src/tw` errors is a pass**. CC runs time out on it - Dude runs it.
 - The dev client needs Metro on the laptop and the phone on the same (home) Wi-Fi; a preview APK has the JS baked in.
-- Next batch build: **1.2.1 / versionCode 5** (preview APK). iOS is parked until Android is stable.
+- **Google Play (18 Oct 2026):** internal testing v.7 (1.2.1, versionCode 7, `ea64ae3`). The listing and App-content declarations are in review; Production is not requested yet. **Next build: versionCode 8.** Every `eas build` run burns a versionCode (`autoIncrement`), so don't run it twice for one release. iOS is parked until Android is stable.
 - **iOS (SU11A-33):** no Apple account yet (DUNS slow; individual enrollment proposed, pending Dude). Everything needing the account is blocked (App Store Connect, EAS iOS build, TestFlight, iPhone checks, App Privacy, screenshots, review notes, a demo account NOT in DELETE_PROTECTED_USER_IDS). A Mac is not needed for EAS builds. **Enrollment for iOS on hold until DUNS arrives** (SU11A-35).
 - **Data retention / account deletion: CLOSED (SU11A-33).** B2 lifecycle on xxl-scrp-backups `daily/` (hide 180 d, delete 1 d) matches the privacy policy; the web policy (`web/src/pages/PrivacyPolicyPage.tsx`) is the source of truth for the in-app summary.
 
