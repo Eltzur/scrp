@@ -48,7 +48,7 @@ log = logging.getLogger(__name__)
 
 MAX_AGE = timedelta(hours=48)
 EILAT = "אילת"             # stores.city_canonical (CBS 2024 name; cerberus code 2600)
-TYPO_MIN_SIMILARITY = 0.45
+TYPO_MIN_SIMILARITY = 0.40    # SU11A-46: was 0.45; שוקלד -> שוקולד scores 0.444
 _META_TTL_S = 60.0         # built_at check
 _LEXICON_TTL_S = 600.0     # aliases and Eilat store ids
 
@@ -198,7 +198,7 @@ def rank(cands: list[dict], groups: list[Group], q_norm: str) -> list[dict]:
 
 
 def choose_correction(candidates: list[tuple[str, float, int]]) -> str | None:
-    """Closest lexicon term at similarity >= 0.45; the more frequent wins a tie."""
+    """Closest lexicon term at similarity >= TYPO_MIN_SIMILARITY; the more frequent wins a tie."""
     ok = [c for c in candidates if c[1] >= TYPO_MIN_SIMILARITY]
     if not ok:
         return None

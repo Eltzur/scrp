@@ -59,6 +59,19 @@ def test_lexicon_words_strip_edges_and_skip_numbers():
     ("קופסת שימורים", None),
     ("שוקולד עם קופון בפנים", None),     # only the first word counts
     ("קופה", None),
+    # SU11A-46: a dot after the ה (7290000000435-style coupon names)
+    ("ה.נ קופון מאגדת יוגורט", "discount_coupon_first_word"),
+    ("ה.נ.קופון שוקו תנובה", "discount_coupon_first_word"),
+    ("ה.נ. קופון קוטג'", "discount_coupon_first_word"),
+    ("הנ קופון במבה", "discount_coupon_first_word"),
+    # real products that merely contain קופ...
+    ("שקופות 50 יח'", None),
+    ("שקיות שקופות לאוכל", None),
+    ("כוסות שקופות 200 מ\"ל", None),
+    ("קופסה מרובעת", None),
+    ("קופסאות אחסון 3 יח'", None),
+    ("קופסת אוכל לילדים", None),
+    ("ה.נ שקופות", None),
 ])
 def test_coupon_pattern(name, hit):
     assert coupon_pattern(normalize(name)) == hit
@@ -111,10 +124,17 @@ def test_where_clause_digit_and_like():
 # --------------------------------------------------------------------------- typo choice
 def test_choose_correction_threshold_similarity_then_freq():
     assert V.choose_correction([("תנובה", 0.5, 900), ("תנובות", 0.3, 5)]) == "תנובה"
-    assert V.choose_correction([("x", 0.44, 10_000)]) is None
+    assert V.choose_correction([("x", 0.39, 10_000)]) is None
+    assert V.choose_correction([("x", 0.40, 1)]) == "x"
     assert V.choose_correction([("a", 0.6, 1), ("b", 0.5, 1000)]) == "a"
     assert V.choose_correction([("a", 0.5, 1), ("b", 0.5, 1000)]) == "b"
     assert V.choose_correction([]) is None
+
+
+def test_typo_threshold_admits_shokolad_at_0_444():
+    # pg_trgm similarity('שוקולד', 'שוקלד') = 4/9 = 0.444: below the old 0.45, eligible at 0.40.
+    assert V.TYPO_MIN_SIMILARITY == 0.40
+    assert V.choose_correction([("שוקולד", 0.444, 5000), ("שוק", 0.30, 9000)]) == "שוקולד"
 
 
 # --------------------------------------------------------------------------- tiers + ranking

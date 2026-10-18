@@ -97,8 +97,10 @@ def lexicon_words(text_norm: str) -> list[str]:
 COUPON_PATTERNS: dict[str, re.Pattern] = {
     # קופון..., קופונים...
     "coupon_first_word": re.compile(r"^קופו?ן"),
-    # הנ.קופון / הנ קופון / הנ'קופון / הנחת קופון / הנחה קופון
-    "discount_coupon_first_word": re.compile(r"^(הנ['\".]?|הנחת|הנחה)\s?קופו?ן"),
+    # הנ.קופון / הנ קופון / הנ'קופון / הנחת קופון / הנחה קופון, and with a dot
+    # after the ה (SU11A-46): ה.נ קופון / ה.נ.קופון / ה.נ. קופון. Anchored to the
+    # start and to קופון itself, so שקופות / קופסה / קופסאות never match.
+    "discount_coupon_first_word": re.compile(r"^(ה\.?נ['\".]?|הנחת|הנחה)\s?קופו?ן"),
 }
 # Every live price of the item is below this (in NIS): 0.01-style placeholders.
 PSEUDO_MAX_PRICE = 0.05
