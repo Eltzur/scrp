@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: 18 Oct 2026 (SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
+> Last updated: 18 Oct 2026 (SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
 
 ## 📏 Standing rules (apply to every session)
 
@@ -942,6 +942,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-43 (Oct 18) — handoff docs refresh (Play internal v7, email-code reset, partnerships, UGC report, SEO notes).
 - SU11A-44 (Oct 18) — SU11A-42 Stage 2: block user, moderation queue / hide / ban + CLI, terms page + sign-up and first-rating consent (API + migration `4166557`, web `aca4480`, mobile `8bd5068`). Migration NOT applied, nothing deployed.
 - SU11A-44b (Oct 18) — legal entity XXL Enterprises (XXL אנטרפרייזס) in the terms, privacy, accessibility and deletion pages (web + app constant); privacy section 4 names Hostinger for sign-up / reset mail; partnerships direct-load title fix. Not deployed.
+- SU11A-45 (Oct 18) — read-only verification of SU11A-36 search v2 (no code change; paging drift finding 9b) + server runbook `docs/super/su11a36_search_v2_runbook.md`.
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
 
@@ -1211,12 +1212,40 @@ No code, config, DB or server change. Updated: this file, `docs/handoff_mobile.m
 - PartnershipsPage: title and description set one tick late, like the terms page, so a direct load keeps them.
 - Known, not changed: on `/account/delete` at 390 px the supermarket Header (sign-in, sign-up, English) is wider than the screen (pre-existing).
 
+### SU11A-45 (18 Oct 2026) - SU11A-36 search v2 verification (read-only) + server runbook; docs only
+
+- **Runbook:** `docs/super/su11a36_search_v2_runbook.md`. Steps: a) preflight, b) migration, c) `--report`, d) `--apply`, e) `compare_search_v2`, f) SEARCH_V2=test with curl checks, g) timer, h) on, rollback or abandon. Every step has its expected output and STOP conditions. Go/no-go thresholds for e are defined there.
+- **No code change.** No clear bug was found. Tests: `tests/test_search_v2.py` 58 passed. Full suite (`tests api/tests`, throwaway venv): 280 passed, plus the 14 known `api/tests/test_smoke.py` failures that need DATABASE_URL.
+- **PASS:**
+  1. With the flag off, the old path is unchanged. `_use_v2` returns before any DB call (`api/routers/search.py:151,175-180`), and the response stays plain `SearchResult`. The module-level `from db import search_v2` touches no DB, so a missing table cannot break the import.
+  2. v2 runs in a SAVEPOINT (`search.py:190`). Missing, empty or stale (>48 h) tables and any other exception fall back to the old path with a warning. The `exc_info` traceback can include SQL parameters, i.e. the search text; this is already declared in `docs/store_privacy_inventory.md`. It contains no tokens or emails.
+  3. The migration is idempotent (IF NOT EXISTS everywhere), with GIN trigram indexes. The four tables are `OWNER TO scrp_app` (`su11a36_search_items.sql:101-104`), so the swap's renames and the TRUNCATE work as scrp_app.
+  4. Build:
+     - The aggregation runs in SQL, and about one row per live item comes back. Python peaks at about 180 MiB, measured on 165K synthetic rows.
+     - `--report` is READ ONLY (PGOPTIONS plus SET TRANSACTION).
+     - `--apply` writes only to the `*_next` tables, then swaps in one transaction with `lock_timeout` 5 s and 3 attempts.
+     - `statement_timeout` is 10 min.
+  5. `compare_search_v2` runs in-process with no HTTP, READ ONLY and a 60 s timeout. The old path is heavy, so expect 10-25 min of DB load; run it in a quiet window under `ulimit -v`.
+  6. The timer is inline `14:30:00 Asia/Jerusalem` with `After=scrp-cron.service`. It overlaps no other unit, and has no limits, like the other units.
+  7. One normalisation, `db/search_norm.normalize`, is used by the build, the aliases and the query.
+  8. D1, D2 and D3 are implemented as written.
+  9. Mobile sends `q`, `limit` and `offset` only, so it is served by v2 when `on`. Both clients cast the JSON with no schema validation, so extra fields are ignored.
+- **Findings, not fixed:**
+  - **(9b) Paging drift.** v2 pages on search_items and skips a page item whose quotes vanished since the build (`db/search_v2.py:376`). Both clients compute the next offset from items received (`web/src/pages/HomePage.tsx` load-more, mobile `fetchedRef`), so the next page repeats up to that many items. Mobile dedupes; the web does not. If a whole page is skipped, the response is empty with has_more=true. Rare: it mostly happens in the 10:00-14:30 window between the load and the rebuild. Decide before SEARCH_V2=on: a web dedupe like mobile's, or accept it.
+  - (8b) A typed barcode returns the item even when it is a coupon pseudo-item (`search_v2.py:285`, no `NOT is_pseudo`). Harmless and arguably right.
+  - `scrp-cron.service` is not in the repo. `After=` makes the build wait only if that unit is `Type=oneshot`; runbook preflight checks this.
+  - CHECK constraint names on search_lexicon are not swapped. This is cosmetic.
+  - After the first build, `--swap-back` makes the empty table live, so v2 falls back.
+- **Do not do yet:**
+  - Do not restart scrp-api (runbook step f) before the su11a44 migration: `git pull` brings the SU11A-44 API code.
+  - Do not switch SEARCH_V2=on before 9b is decided and the timer has run 2 days.
+
 ---
 
 ## 📋 Open items / next steps (as of 18 Oct 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44, NOT deployed.** Apply `db/migrations/su11a44_ugc_blocks_terms_moderation.sql` first, then API → web → app build 8. Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1. Lawyer review of the terms is Dude's call.
-- **SU11A-36 Search v2:** code committed (`a183e7e`, `02da17c`); migration NOT applied; SEARCH_V2 defaults to off. The read-only verification prompt and the server runbook are still to run.
+- **SU11A-36 Search v2:** code committed (`a183e7e`, `02da17c`); migration NOT applied; SEARCH_V2 defaults to off. Verified in SU11A-45; Dude runs `docs/super/su11a36_search_v2_runbook.md` (step f needs the su11a44 migration first; decide finding 9b before SEARCH_V2=on).
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
 - **Catalog:**
   - category / attribute faceted filters;
@@ -1239,4 +1268,4 @@ No code, config, DB or server change. Updated: this file, `docs/handoff_mobile.m
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-45 (SU11A-37 reserved: popularity counters)
+Next free session ID: SU11A-46 (SU11A-37 reserved: popularity counters)
