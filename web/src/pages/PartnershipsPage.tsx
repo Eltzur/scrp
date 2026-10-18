@@ -40,12 +40,20 @@ export default function PartnershipsPage() {
   useEffect(() => {
     // applyHostnameMeta() only runs once on app mount, so put the previous
     // values back when leaving this page.
+    // Deferred one tick (SU11A-44b): on a direct load App's own mount effect (a
+    // parent, so it runs after this one) sets the hostname title and meta and
+    // would overwrite ours.
     const descTag = document.querySelector('meta[name="description"]');
-    const prevTitle = document.title;
-    const prevDesc = descTag?.getAttribute('content') ?? null;
-    document.title = TITLE;
-    descTag?.setAttribute('content', DESCRIPTION);
+    let prevTitle = document.title;
+    let prevDesc = descTag?.getAttribute('content') ?? null;
+    const id = window.setTimeout(() => {
+      prevTitle = document.title;
+      prevDesc = descTag?.getAttribute('content') ?? null;
+      document.title = TITLE;
+      descTag?.setAttribute('content', DESCRIPTION);
+    }, 0);
     return () => {
+      window.clearTimeout(id);
       document.title = prevTitle;
       if (prevDesc !== null) descTag?.setAttribute('content', prevDesc);
     };

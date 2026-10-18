@@ -23,7 +23,8 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 ## Status / next steps
 Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-45 (SU11A-37 reserved).
 - RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1 on Play.
-- Terms legal entity name: grep TODO(SU11A-42-ENTITY) in web and mobile — Dude must fill before go-live.
+- Legal entity: XXL Enterprises (XXL אנטרפרייזס), the Play-verified organisation; legal texts use the constant LEGAL_ENTITY_NAME in web/src/legal/terms.ts and xxl-super-mobile/src/legal/terms.ts
+- Apple track sessions use the new sub-series SU11B (first: SU11B-1)
 
 ## Store-count escalation rule (Dude, 2026-09-28)
 "if there are issues with 1 or up to 10 specific stores, please flag them for manual review cause running prompts to handle a single store issue is to costly and time consuming. the rule of thumb is that up to 10 - manual only. 10 to 50 flag is and ask if to run a fix or handle manually. over 50, try to fix 2-3 times and if not resolved, consult with me before running another prompt."

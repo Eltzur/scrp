@@ -3,6 +3,7 @@ import { Cookie } from 'lucide-react';
 import XxlLogo from '../components/XxlLogo';
 import Footer from '../components/Footer';
 import { openCookiePreferences } from '../utils/analytics';
+import { LEGAL_ENTITY_NAME } from '../legal/terms';
 
 export default function PrivacyPolicyPage() {
   return (
@@ -31,7 +32,7 @@ export default function PrivacyPolicyPage() {
 
             <section>
               <h2 className="text-xl font-semibold text-[#022C22] mb-3">1. כללי</h2>
-              <p>מדיניות זו מפרטת כיצד XXL בע"מ ("XXL", "אנחנו") אוספת, משתמשת ומגנה על מידע אישי של משתמשי האתר xxl.co.il ואתרי המשנה שלו (לרבות super.xxl.co.il ו-fly.xxl.co.il) ושל אפליקציית SUPER XXL לאנדרואיד ול-iOS (יחד: "השירות"). שימוש בשירות מהווה הסכמה למדיניות זו.</p>
+              <p>מדיניות זו מפרטת כיצד {LEGAL_ENTITY_NAME} ("XXL", "אנחנו") אוספת, משתמשת ומגנה על מידע אישי של משתמשי האתר xxl.co.il ואתרי המשנה שלו (לרבות super.xxl.co.il ו-fly.xxl.co.il) ושל אפליקציית SUPER XXL לאנדרואיד ול-iOS (יחד: "השירות"). שימוש בשירות מהווה הסכמה למדיניות זו.</p>
             </section>
 
             <section>
@@ -65,7 +66,7 @@ export default function PrivacyPolicyPage() {
                 <li><strong>Supabase</strong> — ניהול חשבונות משתמשים ואימות, ושמירת הרשמות לעדכונים מדפי "בקרוב".</li>
                 <li><strong>Kamatera</strong> — אחסון השרתים ומסד הנתונים של השירות.</li>
                 <li><strong>Backblaze</strong> — אחסון עותק הגיבוי החיצוני של מסד הנתונים.</li>
-                <li><strong>Hostinger</strong> — שירות הדואר שבאמצעותו נשלחות אלינו התראות בקרה על ביקורות.</li>
+                <li><strong>Hostinger</strong> — שירות הדואר שבאמצעותו נשלחות אלינו התראות בקרה על ביקורות, ושבאמצעותו נשלחות אליכם הודעות אימייל לאישור הרשמה ולאיפוס סיסמה (Supabase שולחת אותן דרך שרת הדואר שלנו, מהכתובת noreply@xxl.co.il).</li>
                 <li><strong>Google Analytics (Google Ireland Ltd.)</strong> — ניתוח שימוש אנונימי, בכפוף להסכמתכם לעוגיות.</li>
                 <li><strong>ספק סליקת תשלומים חיצוני מוסמך PCI-DSS</strong> (ייבחר לפני השקת תשלומים) — לעיבוד תשלומים בלבד.</li>
                 <li>מידע על מחירי טיסות מגיע מ-SerpApi/Google Flights, ומידע על מחירי סופרמרקטים מגיע מקבצי שקיפות מחירים של משרד הכלכלה — אלו מקורות מידע חד-כיווניים; אנו לא שולחים אליהם מידע אישי שלכם.</li>

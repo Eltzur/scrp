@@ -289,13 +289,13 @@ The in-app summary must only restate the web policy, so deploy D1 first.
 
 ## E. Open questions (code cannot answer)
 
-1. **Supabase**: project region and auth-log retention on the current plan. *Answered 18 Oct 2026:* confirmation / reset emails go through custom SMTP (Hostinger mailbox noreply@xxl.co.il, sender "SUPER XXL"), so Hostinger must also be named for these emails in policy section 4.
+1. **Supabase**: project region and auth-log retention on the current plan. *Answered 18 Oct 2026:* confirmation / reset emails go through custom SMTP (Hostinger mailbox noreply@xxl.co.il, sender "SUPER XXL"), so Hostinger must also be named for these emails in policy section 4. *Done in SU11A-44b:* section 4 now names Hostinger for these emails too.
 2. **Moderation mailbox (info@xxl.co.il, Hostinger)**: retention for alert mails that contain user emails — set a period (e.g. delete after 90 days) so section 8 can state it.
 3. **Kamatera / Backblaze regions** (for section 9 "transfer abroad"): which data centre hosts the VM and the B2 bucket.
 4. **Location answer for Play**: confirm option (b) in B (declare approximate location as ephemeral) or (a) (declare nothing).
 5. **SU11A-37 popularity counters**: if they store search queries or per-item views, keep them aggregate with no IP, user ID or timestamp per event; otherwise B/C and D1 change (search history would become stored data).
 6. **Config hygiene before submission (separate code task, not done here)**: add `android.blockedPermissions` for `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE`, `SYSTEM_ALERT_WINDOW` (unused); decide whether `ACCESS_FINE_LOCATION` is needed (the app requests Balanced accuracy; only the diagnostics screen asks for High); confirm the production iOS build does not carry the English `NSLocalNetworkUsageDescription` from `expo-dev-client` (check the built Info.plist, or exclude expo-dev-client from production).
-7. **Legal entity**: the policy says `XXL בע"מ` — confirm the exact registered name matches the developer name on Google Play / Apple.
+7. **Legal entity**: the policy says `XXL בע"מ` — confirm the exact registered name matches the developer name on Google Play / Apple. *Answered 18 Oct 2026 (SU11A-44b):* XXL Enterprises (XXL אנטרפרייזס), matching the verified Play organisation account (public developer name "XXL Team"). The policy, terms, accessibility and deletion pages now use it.
 
 ## F. Updates (18 Oct 2026, SU11A-43)
 

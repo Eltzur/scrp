@@ -18,7 +18,7 @@ Tick items as they are done. **TO CONFIRM** marks facts that are not verified ye
 | Android package | `il.co.xxl.supermarket` |
 | iOS bundle ID | `il.co.xxl.supermarket` |
 | Version | `1.2.1` (`app.json`); build numbers are remote (`eas.json` `appVersionSource: remote`, `autoIncrement: true`) |
-| Developer / legal name | XXL בע"מ — **TO CONFIRM** it matches the Play developer account and the Apple account exactly |
+| Developer / legal name | XXL Enterprises (XXL אנטרפרייזס); Play developer name: XXL Team. Confirmed 18 Oct 2026 from the verified Play organisation account; check the Apple account matches when it exists |
 | Privacy policy URL | https://super.xxl.co.il/privacy |
 | Account deletion URL | https://super.xxl.co.il/account/delete |
 | Support URL / email | https://super.xxl.co.il (or a /help page) — info@xxl.co.il |
@@ -143,7 +143,7 @@ Android (production AAB through internal testing track) and iPhone (TestFlight, 
 - [ ] Signed out: drawer → privacy and terms reachable.
 - [ ] Dark mode and RTL on both platforms; TalkBack / VoiceOver on the scan and delete screens.
 - [ ] Android: Play Console permissions list matches section 1. iOS: production Info.plist has no `NSLocalNetworkUsageDescription`.
-- [ ] Terms screen: real terms and sign-up / first-rating consent are built (SU11A-44, not yet in a build). **The legal entity name is still pending** (`TODO(SU11A-42-ENTITY)` in web and mobile); fill it before the web deploy and build 8.
+- [ ] Terms screen: real terms and sign-up / first-rating consent are built (SU11A-44, not yet in a build). Entity name filled in SU11A-44b: XXL אנטרפרייזס (XXL Enterprises).
 - [ ] Play pre-launch report for build 7: check it, and don't give the test robot the demo credentials. Deobfuscation / R8 warnings are harmless for now.
 - [ ] After the listing is approved: promote to Production (not requested yet).
 
@@ -152,9 +152,9 @@ Android (production AAB through internal testing track) and iPhone (TestFlight, 
 - [ ] Supabase project region
 - [ ] Supabase auth-log retention on the current plan
 - [x] Which service sends the Supabase confirmation / reset emails: **custom SMTP, Hostinger mailbox noreply@xxl.co.il** (confirmed 18 Oct 2026)
-- [ ] Privacy policy section 4 names Hostinger only for moderation alerts; add that it also sends sign-up confirmation and password-reset emails (through Supabase custom SMTP)
+- [x] Privacy policy section 4: Hostinger named for moderation alerts AND for sign-up confirmation / password-reset emails (via Supabase, from noreply@xxl.co.il) — SU11A-44b
 - [ ] Retention of moderation alerts in the info@xxl.co.il mailbox (Hostinger) — then replace the neutral wording in policy section 8
 - [ ] Kamatera data-centre region
 - [ ] Backblaze B2 bucket region
-- [ ] Legal entity name (section 0); the same name is needed for the terms (SU11A-42, decided by Dude)
+- [x] Legal entity name (section 0): XXL Enterprises (XXL אנטרפרייזס), the Play-verified organisation; used in the terms, privacy, accessibility and deletion pages (SU11A-44b)
 - [ ] SU11A-37 popularity counters: must stay aggregate (no IP, user ID or per-event timestamp); otherwise the search-history answers and the policy change

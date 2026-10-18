@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import XxlLogo from '../components/XxlLogo';
 import Footer from '../components/Footer';
+import { LEGAL_ENTITY_NAME } from '../legal/terms';
 
 export default function AccessibilityPage() {
   return (
@@ -26,7 +27,7 @@ export default function AccessibilityPage() {
 
           <div className="mt-8 space-y-6 text-gray-700 leading-relaxed">
             <p>
-              XXL אנטרפרייזס פועלת מתוך מחויבות להנגשת האתר והאפליקציה לכלל המשתמשים, לרבות אנשים
+              {LEGAL_ENTITY_NAME} פועלת מתוך מחויבות להנגשת האתר והאפליקציה לכלל המשתמשים, לרבות אנשים
               עם מוגבלות. אנו פועלים באופן שוטף לשפר את חווית השימוש ולהתאימה, ככל הניתן, לתקן
               הישראלי ת"י 5568 ולהנחיות הנגישות הבינלאומיות WCAG 2.0 ברמה AA.
             </p>

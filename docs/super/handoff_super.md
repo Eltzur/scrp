@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: 18 Oct 2026 (SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
+> Last updated: 18 Oct 2026 (SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
 
 ## 📏 Standing rules (apply to every session)
 
@@ -941,6 +941,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-42 (Oct 18) — UGC / block-user investigation, Stage 1 report (`caa69c5`).
 - SU11A-43 (Oct 18) — handoff docs refresh (Play internal v7, email-code reset, partnerships, UGC report, SEO notes).
 - SU11A-44 (Oct 18) — SU11A-42 Stage 2: block user, moderation queue / hide / ban + CLI, terms page + sign-up and first-rating consent (API + migration `4166557`, web `aca4480`, mobile `8bd5068`). Migration NOT applied, nothing deployed.
+- SU11A-44b (Oct 18) — legal entity XXL Enterprises (XXL אנטרפרייזס) in the terms, privacy, accessibility and deletion pages (web + app constant); privacy section 4 names Hostinger for sign-up / reset mail; partnerships direct-load title fix. Not deployed.
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
 
@@ -1201,11 +1202,20 @@ No code, config, DB or server change. Updated: this file, `docs/handoff_mobile.m
 - **OPEN:** the legal entity name. Search for `TODO(SU11A-42-ENTITY)` in `web/src/legal/terms.ts` and `xxl-super-mobile/src/legal/terms.ts`; Dude must fill it before the web deploy and build 8. Lawyer review of the terms text is Dude's call.
 - **Deploy order (Dude):** migration → verify (`\d user_blocks`, `\d+ users`, `\d rating_reports`, `\d ratings`) → `git pull` + `sudo /usr/local/bin/xxl-restart.sh scrp-api` → curl checks → `moderation queue` → web deploy (after the entity name) → EAS build 8 (after the entity name).
 
+### SU11A-44b (18 Oct 2026) - legal entity name, privacy Hostinger line, partnerships title; NOT deployed
+
+- **Entity (from the verified Google Play organisation account):** XXL Enterprises; Hebrew XXL אנטרפרייזס; display form "XXL אנטרפרייזס (XXL Enterprises)". The public Play developer name "XXL Team" is not used in legal text.
+- `LEGAL_ENTITY_NAME` in `web/src/legal/terms.ts` and `xxl-super-mobile/src/legal/terms.ts` is filled; the TODO is gone. TERMS_VERSION stays 2026-10-1 (the terms were never live).
+- Web pages now take the name from the constant: PrivacyPolicyPage (was XXL בע"מ), DeleteAccountPage (was XXL בע"מ), AccessibilityPage (was XXL אנטרפרייזס without the English form). The terms page already used it.
+- Privacy section 4: Hostinger is named for moderation alerts and for sign-up confirmation / password-reset emails (sent by Supabase through our mail server, from noreply@xxl.co.il). Policy date unchanged (18 Oct 2026). The in-app privacy summary names no mail provider, so it is unchanged.
+- PartnershipsPage: title and description set one tick late, like the terms page, so a direct load keeps them.
+- Known, not changed: on `/account/delete` at 390 px the supermarket Header (sign-in, sign-up, English) is wider than the screen (pre-existing).
+
 ---
 
 ## 📋 Open items / next steps (as of 18 Oct 2026)
 
-- **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44, NOT deployed.** Apply `db/migrations/su11a44_ugc_blocks_terms_moderation.sql` first, then API → web → app build 8. **Fill the legal entity name first** (`TODO(SU11A-42-ENTITY)`, web + mobile). RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1. Lawyer review of the terms is Dude's call.
+- **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44, NOT deployed.** Apply `db/migrations/su11a44_ugc_blocks_terms_moderation.sql` first, then API → web → app build 8. Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1. Lawyer review of the terms is Dude's call.
 - **SU11A-36 Search v2:** code committed (`a183e7e`, `02da17c`); migration NOT applied; SEARCH_V2 defaults to off. The read-only verification prompt and the server runbook are still to run.
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
 - **Catalog:**

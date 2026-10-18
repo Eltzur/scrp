@@ -18,6 +18,7 @@ import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Trash2 } from 'lucide-react';
 import { useAuth } from '../components/AuthContext';
+import { LEGAL_ENTITY_NAME } from '../legal/terms';
 import { deleteAccount, type DeleteAccountResult } from '../api/client';
 
 const MSG = {
@@ -119,7 +120,7 @@ export default function DeleteAccountPage() {
       <div className="bg-white rounded-2xl border border-gray-200 p-6 md:p-8">
         <h1 className="text-3xl font-bold text-[#022C22]">מחיקת חשבון SUPER XXL</h1>
         <p className="mt-3 text-gray-700 leading-relaxed">
-          עמוד זה מסביר כיצד למחוק את חשבון המשתמש שלכם בשירות SUPER XXL של XXL בע"מ — האתר
+          עמוד זה מסביר כיצד למחוק את חשבון המשתמש שלכם בשירות SUPER XXL של {LEGAL_ENTITY_NAME} — האתר
           super.xxl.co.il ואפליקציית SUPER XXL — ומה קורה למידע שלכם לאחר המחיקה.
         </p>
 

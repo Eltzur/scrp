@@ -668,3 +668,4 @@ Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; 
     6. Terms screen: RTL, dark mode, the version line, the three footer links.
     7. TalkBack / VoiceOver: the checkbox announces as a checkbox with checked state; the ⋯ button reads "פעולות על הביקורת".
     8. Build 7 (1.2.1) still loads reviews and can still rate (RATINGS_REQUIRE_TERMS off).
+  - **SU11A-44b (18 Oct 2026):** `src/legal/terms.ts` `LEGAL_ENTITY_NAME` = "XXL אנטרפרייזס (XXL Enterprises)" (the Play-verified organisation); TODO removed. No other entity mention in the app; the privacy summary names no mail provider, so it is unchanged.

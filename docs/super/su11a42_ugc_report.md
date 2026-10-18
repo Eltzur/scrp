@@ -237,7 +237,7 @@ Account deletion needs no code change: `DELETE FROM users` cascades to both side
 
 **Approved defaults unless Dude says otherwise** (answers to section 9):
 
-1. **Legal entity name: OPEN, to be decided by Dude.** The privacy page says XXL בע"מ, the accessibility page says another name, and `legal/` holds a sole-trader certificate.
+1. **Legal entity name: decided (SU11A-44b) = XXL Enterprises / XXL אנטרפרייזס**, the organisation verified on the Google Play developer account. Display form: "XXL אנטרפרייזס (XXL Enterprises)". (Before: the privacy page said XXL בע"מ, the accessibility page XXL אנטרפרייזס, and `legal/` holds a sole-trader certificate.)
 2. Terms text: the section 6 draft is the base. Lawyer review is still Dude's call.
 3. **A block also files a report** (`source = 'block'`) and emails info@.
 4. **Blocked authors' scores are NOT removed from averages**; only their comments are hidden from the blocker.
@@ -254,4 +254,4 @@ Account deletion needs no code change: `DELETE FROM users` cascades to both side
 - The migration that ships is `db/migrations/su11a44_ugc_blocks_terms_moderation.sql`, not the section 7 draft.
   - It adds `users.banned_at` and `ratings.reviewed_at`, and finds the old source CHECK by definition instead of assuming its name.
   - It is **NOT applied**, and it must be applied before the API deploy.
-- **Entity name: still OPEN.** Search for `TODO(SU11A-42-ENTITY)` in `web/src/legal/terms.ts` and `xxl-super-mobile/src/legal/terms.ts`.
+- **Entity name: filled in SU11A-44b** (`LEGAL_ENTITY_NAME` in `web/src/legal/terms.ts` and `xxl-super-mobile/src/legal/terms.ts`).
