@@ -1,7 +1,7 @@
 # SU10M — Mobile Apps Handoff (super.xxl.co.il)
 
 > New sub-series. Paste at the start of each SU10M chat, alongside `docs/super/handoff_super.md` (shared backend/vision context still applies).
-> Last updated: 18 Oct 2026 (SU11A-43: Play internal v7 / 1.2.1, email-code reset shipped, UGC report; earlier: SU10M-3 Search + Basket + preview build; SU10R ratings/reviews — see the "DO NOT SURFACE blocked" warning)
+> Last updated: 18 Oct 2026 (SU11A-44: block / report menu, blocked users, terms screen, consent — not built into an APK yet; SU11A-43: Play internal v7 / 1.2.1, email-code reset shipped, UGC report; earlier: SU10M-3 Search + Basket + preview build; SU10R ratings/reviews — see the "DO NOT SURFACE blocked" warning)
 
 ---
 
@@ -642,3 +642,29 @@ Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; 
     - a consent checkbox at sign-up;
     - a consent prompt at an existing user's first rating.
   - Not started; the server migration and API come first. Build 7 keeps working: it sends no token on the ratings GET, so it sees no filtering. Terms enforcement on rating submit stays off until build 7 is replaced.
+- **18 Oct 2026 (SU11A-44) block user, terms + consent (mobile `8bd5068`; API `4166557`, web `aca4480`):**
+  - **Product screen:** each comment that is not your own (`is_mine`) has a "⋯" button ("פעולות על הביקורת"). It opens an Alert action sheet: "דיווח על התוכן" (the existing report flow, including the iOS reason prompt), "חסימת המשתמש" (confirm, then `POST /ratings/{id}/block-author`, then refetch, then the "המשתמש נחסם…" alert) and "ביטול".
+    - Signed out: the existing sign-in prompt.
+    - `fetchRatings` now sends the token when signed in, so the server leaves out blocked authors.
+    - The `blocked` invariant in onSubmit is untouched.
+  - **First-rating consent:** before submitting, GET /me/terms is checked once per session (cached in `my-ratings-context`).
+    - If it says required: a modal with the summary line, a checkbox with links to /terms and /privacy, and "אישור" (POST /me/terms, then the rating).
+    - 403 account_banned and terms_required get Hebrew alerts.
+  - **Blocked users:** new `src/app/blocked-users.tsx` (date, item name, comment excerpt, "ביטול חסימה" with confirm, an empty state), and a Settings row "משתמשים חסומים" (signed-in only).
+  - **Terms screen:** `src/app/terms.tsx` shows the real terms from `he.legal.terms`. It is scrollable, makes no network call and has no draft badge. The footer has version + date, privacy (in-app), the full web terms (https://xxl.co.il/disclaimer) and info@.
+    - `components/legal-page.tsx`, `termsBody` and `draftBadge` are removed.
+    - Version, date and the entity placeholder live in `src/legal/terms.ts` (`TODO(SU11A-42-ENTITY)`).
+  - **Sign-up:** a required `ConsentCheckbox` (role checkbox, 48dp / 44pt target, two link Pressables that push /terms and /privacy over the form, so the form keeps its state). Submit is disabled until it is checked; `signUp` passes `options.data` {terms_version, terms_accepted_at}.
+  - **Privacy summary / delete-account list:** both mention the block list and the terms-consent record.
+  - **Checks:** syntax-only `ts.transpileModule` of the 14 touched files, all OK. **Typecheck not run (Dude):** exit 2 with only the 5 `src/tw` errors is a pass.
+    - New typed route `/blocked-users`: if tsc flags it, run `npm start` once so `.expo/types/router.d.ts` regenerates.
+    - app.json is unchanged; the next build is versionCode 8 (Dude).
+  - **Device checklist (build 8, after the migration + API deploy):**
+    1. Block from the ⋯ menu on someone else's comment: confirm, success alert; that author's comments are gone after the refetch.
+    2. Settings → משתמשים חסומים lists the block (date, product, excerpt). Unblock → confirm → the row goes; the product's comments are back on the next visit. With no blocks, the empty state shows.
+    3. Your own comment has no ⋯ button.
+    4. Sign-up: the button stays disabled until the checkbox is ticked. The terms / privacy links open and coming back keeps the typed email and password.
+    5. First rating with an account that has no consent: the modal appears once; after "אישור" the rating saves and the modal does not return in that session.
+    6. Terms screen: RTL, dark mode, the version line, the three footer links.
+    7. TalkBack / VoiceOver: the checkbox announces as a checkbox with checked state; the ⋯ button reads "פעולות על הביקורת".
+    8. Build 7 (1.2.1) still loads reviews and can still rate (RATINGS_REQUIRE_TERMS off).

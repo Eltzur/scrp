@@ -249,7 +249,9 @@ Account deletion needs no code change: `DELETE FROM users` cascades to both side
 7. **Existing users are asked for terms consent at their first rating.**
 8. **Web `/disclaimer` is renamed "תנאי שימוש"** and gets the version and date.
 
-**Status:**
-- The migration SQL in section 7 is **NOT applied**. It must be applied before the API change; then API → web → app build.
-- With decision 5, the migration also adds `users.banned_at`. With decision 3, it changes the `rating_reports` source CHECK.
-- **Stage 2 (implementation) has not started.**
+**Status (18 Oct 2026, SU11A-44):**
+- **Stage 2 is implemented in SU11A-44** (API + migration `4166557`, web `aca4480`, mobile `8bd5068`). **Nothing is deployed.**
+- The migration that ships is `db/migrations/su11a44_ugc_blocks_terms_moderation.sql`, not the section 7 draft.
+  - It adds `users.banned_at` and `ratings.reviewed_at`, and finds the old source CHECK by definition instead of assuming its name.
+  - It is **NOT applied**, and it must be applied before the API deploy.
+- **Entity name: still OPEN.** Search for `TODO(SU11A-42-ENTITY)` in `web/src/legal/terms.ts` and `xxl-super-mobile/src/legal/terms.ts`.

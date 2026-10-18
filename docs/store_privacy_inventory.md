@@ -302,6 +302,6 @@ The in-app summary must only restate the web policy, so deploy D1 first.
 - **Auth email provider confirmed:** Supabase sends sign-up confirmation and password-reset emails through custom SMTP, using the Hostinger mailbox noreply@xxl.co.il (sender "SUPER XXL"). No new processor; Hostinger was already one, for moderation alerts. The policy text still has to say Hostinger also carries these emails (TO CONFIRM in `docs/store_submission_checklist.md`).
 - **Password reset** now emails a 6-digit code instead of a link (SU11A-41). No data-category change.
 - **Google Play Data safety** was submitted on 18 Oct 2026 with the answers in `docs/store_submission_checklist.md`. The review is pending.
-- **Coming with SU11A-42 Stage 2:** block lists (`user_blocks`) and a terms-consent record (`users.terms_version`, `users.terms_accepted_at`) are new account-linked data.
+- **Block lists and the consent record now exist (SU11A-44, not deployed):** `user_blocks` and `users.terms_version` / `users.terms_accepted_at` (plus `users.banned_at`, set only by a moderator).
   - The Data safety / App Privacy categories do not change; both fall under the existing account data and other user-generated content.
-  - The policy, the deletion page and the in-app summary must mention them when Stage 2 ships.
+  - The web policy, the deletion page and the in-app summary mention them (SU11A-44). All of it is deleted with the account (FK CASCADE).

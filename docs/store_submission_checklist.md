@@ -100,6 +100,12 @@ Tick items as they are done. **TO CONFIRM** marks facts that are not verified ye
 - [ ] Sign in with Apple: not required (no third-party login; email + password only)
 - [ ] Account deletion in app: Settings → מחיקת חשבון (guideline 5.1.1(v)) — mention it in the review notes
 - [ ] Review notes: demo account, where deletion is, that location and camera are optional, that the app works signed out
+- [ ] Review notes, guideline 1.2 (SU11A-44):
+  - report and block: the ⋯ menu on each review in the product screen's reviews tab;
+  - blocked list and unblock: Settings → משתמשים חסומים;
+  - terms: drawer → תנאי שימוש, and the required checkbox at sign-up;
+  - contact: info@xxl.co.il (terms, Help, privacy);
+  - reports are reviewed within 24 hours (moderation queue + `scripts/moderation.py`).
 
 ### App Privacy answers (final)
 - **Data Used to Track You: None.** No ATT prompt.
@@ -137,7 +143,7 @@ Android (production AAB through internal testing track) and iPhone (TestFlight, 
 - [ ] Signed out: drawer → privacy and terms reachable.
 - [ ] Dark mode and RTL on both platforms; TalkBack / VoiceOver on the scan and delete screens.
 - [ ] Android: Play Console permissions list matches section 1. iOS: production Info.plist has no `NSLocalNetworkUsageDescription`.
-- [ ] Terms screen: still the placeholder (`he.legal.termsBody`). Real terms and sign-up consent are planned in SU11A-42 Stage 2 (`docs/super/su11a42_ugc_report.md`); they are needed for Apple guideline 1.2.
+- [ ] Terms screen: real terms and sign-up / first-rating consent are built (SU11A-44, not yet in a build). **The legal entity name is still pending** (`TODO(SU11A-42-ENTITY)` in web and mobile); fill it before the web deploy and build 8.
 - [ ] Play pre-launch report for build 7: check it, and don't give the test robot the demo credentials. Deobfuscation / R8 warnings are harmless for now.
 - [ ] After the listing is approved: promote to Production (not requested yet).
 

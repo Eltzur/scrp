@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: 18 Oct 2026 (SU11A-43 docs refresh: Play internal v7, email-code reset live, partnerships live, UGC report, SEO notes; see "Open items / next steps" at the end)
+> Last updated: 18 Oct 2026 (SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
 
 ## 📏 Standing rules (apply to every session)
 
@@ -938,6 +938,9 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-39 (Oct 18) — store readiness: web privacy policy + deletion page updated (camera, location, logs, providers, device-only data), in-app summary line, app.json blockedPermissions + Hebrew iOS strings, eas.json production profile, docs/store_submission_checklist.md. Not committed, not deployed.
 - SU11A-40 (Oct 18) — partnerships page (שיתופי פעולה) at /partnerships + portal-only footer link; mailto only. Not deployed.
 - SU11A-41 (Oct 18) — password reset via 6-digit email code (web /reset-password + mobile), "שכחתי סיסמה" under the password field, Hebrew auth errors, submit guards, Supabase template doc. Not deployed; template switch is manual.
+- SU11A-42 (Oct 18) — UGC / block-user investigation, Stage 1 report (`caa69c5`).
+- SU11A-43 (Oct 18) — handoff docs refresh (Play internal v7, email-code reset, partnerships, UGC report, SEO notes).
+- SU11A-44 (Oct 18) — SU11A-42 Stage 2: block user, moderation queue / hide / ban + CLI, terms page + sign-up and first-rating consent (API + migration `4166557`, web `aca4480`, mobile `8bd5068`). Migration NOT applied, nothing deployed.
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
 
@@ -1159,13 +1162,50 @@ No code, config, DB or server change. Updated: this file, `docs/handoff_mobile.m
   - a title and description per page;
   - submit the sitemap in Search Console, then request indexing of the key pages.
 
-Next free session ID: SU11A-44 (SU11A-37 reserved: popularity counters)
+### SU11A-44 (18 Oct 2026) - SU11A-42 Stage 2: block user, moderation tools, terms + consent; NOT deployed, migration NOT applied
+
+- **Spec:** `docs/super/su11a42_ugc_report.md` sections 5-7 and 10. Commits: API + migration `4166557`, web `aca4480`, mobile `8bd5068`.
+- **Migration** `db/migrations/su11a44_ugc_blocks_terms_moderation.sql` (NOT applied; one transaction, idempotent, rollback section commented out):
+  - `user_blocks`: blocker / blocked both CASCADE from users, source_rating_id SET NULL, unique pair, no self-block, index on blocked_id.
+  - `users.terms_version`, `users.terms_accepted_at`, `users.banned_at`; `ratings.reviewed_at`.
+  - The `rating_reports.source` CHECK is found by definition and dropped by its real name, then re-added as `rating_reports_source_check` with 'block'.
+  - Index `rating_reports (rating_id, created_at)`; grants on user_blocks and its sequence.
+  - **Apply BEFORE the API deploy:** `cat ~/scrp/db/migrations/su11a44_ugc_blocks_terms_moderation.sql | sudo -u postgres psql xxl_super -v ON_ERROR_STOP=1`
+- **API:**
+  - `GET /items/{code}/ratings` uses soft auth (`get_user_id_soft` in `api/auth.py`). Any token problem, including a JWKS failure, answers as anonymous, never 401/503; it never writes users.
+    - Signed in: blocked authors' comments are left out, and every row gets `is_mine`. The aggregate still counts all active ratings.
+    - With an Authorization header: `Cache-Control: private, no-store` and `Vary: Authorization`. Anonymous answers are unchanged plus `is_mine: false`.
+  - New `api/routers/blocks.py`: `POST /ratings/{id}/block-author` (400 cannot_block_self; a NEW block also files a 'block' report and emails info@; a repeat is a no-op), `GET /me/blocks` (item name + 80-char excerpt, no user ids), `DELETE /me/blocks/{id}`.
+  - Terms:
+    - `api/terms.py` holds `TERMS_VERSION = "2026-10-1"`. `_upsert_user` copies the sign-up user_metadata consent in the same statement, only while `terms_version` IS NULL.
+    - New `api/routers/terms.py`: `GET /me/terms`, and `POST /me/terms` (400 terms_version_mismatch).
+  - Bans: a banned user gets 403 account_banned on rate and report (a banned user may still block).
+  - **`RATINGS_REQUIRE_TERMS`** (EnvironmentFile; on only for 1/true/on; default OFF) makes rating answer 403 terms_required until the current terms are accepted. **Keep it off until build 8 has replaced 1.2.1 on Play.**
+  - Moderation: `api/moderation.py` is shared by the endpoints and the CLI.
+    - Queue `GET /admin/ratings/pending` (same ADMIN_USER_EMAILS gate) = non-active and not yet reviewed, OR any report newer than `reviewed_at`. Response fields are added, none renamed.
+    - `POST /admin/ratings/{id}/moderate` {action: hide|keep|restore}; `POST /admin/ratings/{id}/ban-author` {ban}. Ban hides all the author's active ratings; unban leaves them hidden.
+    - Log lines: action + rating id + item code only.
+  - DELETE /account: no change; user_blocks cascades on both sides (tested).
+- **Moderation CLI (Dude, on the server):** `cd ~/scrp && venv/bin/python3 -m scripts.moderation queue`. Then `hide|keep|restore|ban|unban <rating_id>`, which is a dry run until `--yes`. It prints no emails or user ids.
+- **Web:**
+  - `web/src/legal/terms.ts` (version, date, entity placeholder; force-added because the root `legal/` ignore rule matches it).
+  - `/disclaimer` is now "תנאי שימוש": 10 sections, version + date, the old disclaimer content kept in sections 2 and 8. The footer label is "תנאי שימוש".
+  - The signup consent checkbox gates submit; `options.data` carries the consent.
+  - ReviewsPanel: a block button next to report; both are hidden on your own comment.
+  - RatingForm: first-rating consent checkbox, plus Hebrew messages for account_banned / terms_required.
+  - Privacy and delete pages mention block lists and the consent record.
+- **Tests:**
+  - New `tests/test_ugc_blocks.py`; `tests/test_account_delete.py` gains user_blocks and a cascade test.
+  - Full suite: 280 passed, plus the 14 known `api/tests/test_smoke.py` failures (need DATABASE_URL), run in a throwaway venv outside the repo.
+  - Web: `npm run build` passes; eslint shows no new errors (the 5 react-hooks / react-refresh errors in touched files predate this).
+- **OPEN:** the legal entity name. Search for `TODO(SU11A-42-ENTITY)` in `web/src/legal/terms.ts` and `xxl-super-mobile/src/legal/terms.ts`; Dude must fill it before the web deploy and build 8. Lawyer review of the terms text is Dude's call.
+- **Deploy order (Dude):** migration → verify (`\d user_blocks`, `\d+ users`, `\d rating_reports`, `\d ratings`) → `git pull` + `sudo /usr/local/bin/xxl-restart.sh scrp-api` → curl checks → `moderation queue` → web deploy (after the entity name) → EAS build 8 (after the entity name).
 
 ---
 
 ## 📋 Open items / next steps (as of 18 Oct 2026)
 
-- **SU11A-42 Stage 2 (UGC, Apple 1.2):** not started. Apply the migration first, then API → web → app build. The legal entity name for the terms is OPEN (Dude). Decisions are in `docs/super/su11a42_ugc_report.md` section 10.
+- **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44, NOT deployed.** Apply `db/migrations/su11a44_ugc_blocks_terms_moderation.sql` first, then API → web → app build 8. **Fill the legal entity name first** (`TODO(SU11A-42-ENTITY)`, web + mobile). RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1. Lawyer review of the terms is Dude's call.
 - **SU11A-36 Search v2:** code committed (`a183e7e`, `02da17c`); migration NOT applied; SEARCH_V2 defaults to off. The read-only verification prompt and the server runbook are still to run.
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
 - **Catalog:**
@@ -1178,7 +1218,7 @@ Next free session ID: SU11A-44 (SU11A-37 reserved: popularity counters)
   - TestFlight;
   - App Privacy answers.
   - Sign in with Apple is not required for email/password only.
-  - Guideline 1.2 needs terms, report (exists), block (missing) and contact info.
+  - Guideline 1.2 needs terms, report, block and contact info: all built (SU11A-44), not yet deployed.
 - **Play:**
   - check the pre-launch report for build 7;
   - promote to Production after the listing is approved;
@@ -1188,3 +1228,5 @@ Next free session ID: SU11A-44 (SU11A-37 reserved: popularity counters)
 - **SEO session:** sitemap.xml, robots.txt, canonical tags, per-page title/description, Search Console sitemap and indexing requests.
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
+
+Next free session ID: SU11A-45 (SU11A-37 reserved: popularity counters)
