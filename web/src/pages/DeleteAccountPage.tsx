@@ -56,9 +56,6 @@ export default function DeleteAccountPage() {
   const doneRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
-    document.title = 'מחיקת חשבון | SUPER XXL';
-  }, []);
-  useEffect(() => {
     if (error) errorRef.current?.focus();
   }, [error]);
   useEffect(() => {

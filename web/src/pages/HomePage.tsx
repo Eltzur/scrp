@@ -24,6 +24,16 @@ const DEFAULT_FILTERS: FilterState = {
 
 const PAGE_SIZE = 30;
 
+/**
+ * Identity of a result row for the load-more dedupe. group_by=store returns one
+ * row per store, so the same item_code legitimately repeats there.
+ */
+function rowKey(item: ProductWithPrices, groupBy: FilterState['groupBy']): string {
+  if (groupBy !== 'store') return item.product.item_code;
+  const q = item.quotes[0];
+  return `${item.product.item_code}|${q?.chain_id ?? ''}|${q?.store_id ?? ''}`;
+}
+
 function useActiveResults(query: string, filters: FilterState) {
   const city    = filters.city?.length  ? filters.city  : undefined;
   const chain   = filters.chain?.length ? filters.chain : undefined;
@@ -45,6 +55,14 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
   const [lastQuery,   setLastQuery]   = useState('');
   const [lastFilters, setLastFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [lastHasMore, setLastHasMore] = useState(false);
+  // True once a load-more has finished, so has_more comes from the last page
+  // even when that page added nothing (extraItems.length alone can't tell).
+  const [loadedMore,  setLoadedMore]  = useState(false);
+  // Next request offset = rows the server has handed out, NOT rows rendered:
+  // the dedupe below can drop rows (SU11A-46; mirrors mobile SU10M-3). Search
+  // v2 pages on its own table and can skip an item, so a page may overlap the
+  // previous one (SU11A-45 finding 9b). null = start after the first page.
+  const nextOffset = useRef<number | null>(null);
 
   // Detect city once — fires when the cities list first populates.
   // Guarded by ref so React strict-mode double-invocation doesn't double-detect.
@@ -56,6 +74,7 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
     // 1. Prefer the city the user last used.
     const saved = storedCity(cities);
     if (saved) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- applies the saved city once the city list arrives
       setFilters(f => ({ ...f, city: [saved] }));
       return;
     }
@@ -84,6 +103,8 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
   const resetExtras = useCallback(() => {
     setExtraItems([]);
     setLoadingMore(false);
+    setLoadedMore(false);
+    nextOffset.current = null;
   }, []);
 
   const handleSearch = useCallback((q: string) => {
@@ -104,26 +125,39 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
 
   const handleLoadMore = async () => {
     if (!data || loadingMore) return;
-    const currentCount = data.items.length + extraItems.length;
     setLoadingMore(true);
     try {
-      const city  = lastFilters.city?.length  ? lastFilters.city  : undefined;
-      const chain = lastFilters.chain?.length ? lastFilters.chain : undefined;
-      const opts = filters.compareMode
-        ? { city, limit: PAGE_SIZE, offset: currentCount }
-        : { city, chain, group_by: lastFilters.groupBy, limit: PAGE_SIZE, offset: currentCount };
-      const next = filters.compareMode
-        ? await compareProducts(lastQuery, opts)
-        : await searchProducts(lastQuery, opts);
-      setExtraItems(prev => [...prev, ...next.items]);
-      setLastHasMore(next.has_more);
+      const city    = lastFilters.city?.length  ? lastFilters.city  : undefined;
+      const chain   = lastFilters.chain?.length ? lastFilters.chain : undefined;
+      const groupBy = filters.compareMode ? 'chain' : lastFilters.groupBy;
+      const fetchPage = (offset: number) => filters.compareMode
+        ? compareProducts(lastQuery, { city, limit: PAGE_SIZE, offset })
+        : searchProducts(lastQuery, { city, chain, group_by: lastFilters.groupBy, limit: PAGE_SIZE, offset });
+
+      const seen = new Set([...data.items, ...extraItems].map(it => rowKey(it, groupBy)));
+      let offset = nextOffset.current ?? data.items.length;
+      let next   = await fetchPage(offset);
+      // An empty page cannot advance the offset by its own length, so step a
+      // full page past it.
+      offset += next.items.length || PAGE_SIZE;
+      let fresh  = next.items.filter(it => !seen.has(rowKey(it, groupBy)));
+      if (fresh.length === 0 && next.has_more) {
+        // Nothing new but the server says there is more: try one more page, then stop.
+        next   = await fetchPage(offset);
+        offset += next.items.length || PAGE_SIZE;
+        fresh  = next.items.filter(it => !seen.has(rowKey(it, groupBy)));
+      }
+      nextOffset.current = offset;
+      setExtraItems(prev => [...prev, ...fresh]);
+      setLastHasMore(fresh.length > 0 && next.has_more);
+      setLoadedMore(true);
     } finally {
       setLoadingMore(false);
     }
   };
 
   const mergedResult = data
-    ? { ...data, items: [...data.items, ...extraItems], has_more: extraItems.length > 0 ? lastHasMore : (data.has_more ?? false) }
+    ? { ...data, items: [...data.items, ...extraItems], has_more: loadedMore ? lastHasMore : (data.has_more ?? false) }
     : undefined;
 
   return (

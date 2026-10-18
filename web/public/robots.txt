@@ -1,0 +1,14 @@
+# One file for xxl.co.il and super.xxl.co.il (same build). SU11A-46.
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /signup
+Disallow: /reset-password
+Disallow: /account/
+Disallow: /baskets
+Disallow: /favorites
+Disallow: /my-ratings
+Disallow: /portal-preview
+
+Sitemap: https://xxl.co.il/sitemap-portal.xml
+Sitemap: https://super.xxl.co.il/sitemap-super.xml

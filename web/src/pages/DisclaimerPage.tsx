@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import XxlLogo from '../components/XxlLogo';
 import Footer from '../components/Footer';
@@ -9,7 +9,7 @@ import { LEGAL_ENTITY_NAME, TERMS_DATE, TERMS_VERSION } from '../legal/terms';
 // same as the app's terms screen; the earlier disclaimer text (data sources, no
 // accuracy warranty, final price set by the seller) is kept in sections 2 and 8.
 
-const TITLE = 'תנאי שימוש | XXL';
+// Title, description and canonical: utils/seoMeta.ts (SU11A-46).
 
 const link = 'text-emerald-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded';
 
@@ -23,22 +23,6 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export default function DisclaimerPage() {
-  useEffect(() => {
-    // applyHostnameMeta() only runs once on app mount, so put the previous title
-    // back when leaving this page.
-    // Deferred one tick: on a direct load App's own mount effect (a parent, so
-    // it runs after this one) sets the hostname title and would overwrite ours.
-    let prevTitle = document.title;
-    const id = window.setTimeout(() => {
-      prevTitle = document.title;
-      document.title = TITLE;
-    }, 0);
-    return () => {
-      window.clearTimeout(id);
-      document.title = prevTitle;
-    };
-  }, []);
-
   return (
     <div className="min-h-screen bg-gray-50" dir="rtl">
 

@@ -42,14 +42,17 @@ export default function Header() {
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-      <div className="max-w-6xl mx-auto px-4 py-2 flex items-center justify-between">
+      {/* SU11A-46: at phone widths (390 px) the row may wrap and the logo and
+          gaps shrink, so every action stays visible without a horizontal scroll.
+          DOM order (and so focus order) is unchanged. */}
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 py-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
 
         {/* Brand logo */}
         <a href="https://xxl.co.il">
-          <XxlLogo variant="header" lang={isHe ? 'he' : 'en'} className="h-12" />
+          <XxlLogo variant="header" lang={isHe ? 'he' : 'en'} className="h-10 sm:h-12" />
         </a>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-x-1 gap-y-1 sm:gap-3">
           {/* Hot deals link */}
           <Link
             to="/promos"
@@ -132,7 +135,7 @@ export default function Header() {
             </div>
           ) : (
             /* Logged out — login + signup links */
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
               <Link
                 to="/login"
                 className="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors px-2 py-1"

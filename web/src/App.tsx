@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { BasketProvider } from './components/BasketContext';
@@ -12,21 +12,22 @@ import MyBasketsPage from './pages/MyBasketsPage';
 import FavoritesPage from './pages/FavoritesPage';
 import MyRatingsPage from './pages/MyRatingsPage';
 import PromosPage from './pages/PromosPage';
-import DeleteAccountPage from './pages/DeleteAccountPage';
-import ResetPasswordPage from './pages/ResetPasswordPage';
 // Portal routes — rendered without the supermarket app shell
 import PortalPage from './pages/PortalPage';
-import FashionPage from './pages/FashionPage';
-import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
-import DisclaimerPage from './pages/DisclaimerPage';
-import AccessibilityPage from './pages/AccessibilityPage';
-import PartnershipsPage from './pages/PartnershipsPage';
 import Footer from './components/Footer';
+// Rarely visited pages load on demand (SU11A-46) to keep the main chunk small.
+const DeleteAccountPage = lazy(() => import('./pages/DeleteAccountPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
+const FashionPage       = lazy(() => import('./pages/FashionPage'));
+const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
+const DisclaimerPage    = lazy(() => import('./pages/DisclaimerPage'));
+const AccessibilityPage = lazy(() => import('./pages/AccessibilityPage'));
+const PartnershipsPage  = lazy(() => import('./pages/PartnershipsPage'));
 // Utilities
 import { getCities } from './api/client';
 import type { CityInfo } from './api/client';
 import { isPortalHostname } from './utils/hostname';
-import { applyHostnameMeta } from './utils/seoMeta';
+import { applyRouteMeta } from './utils/seoMeta';
 import { initGA, trackPageview } from './utils/analytics';
 import CookieBanner from './components/CookieBanner';
 import ExpiredLinkNotice from './components/ExpiredLinkNotice';
@@ -46,6 +47,7 @@ function AppShell() {
         <Toaster position="top-center" duration={4000} dir="rtl" />
         <BasketDrawer />
         <Header />
+        <Suspense fallback={<div className="min-h-screen" />}>
         <Routes>
           <Route path="/"          element={<HomePage cities={cities} />} />
           <Route path="/login"     element={<LoginPage />} />
@@ -59,6 +61,7 @@ function AppShell() {
           {/* SU11A-31: public deletion URL (Google Play); the form needs sign-in. */}
           <Route path="/account/delete" element={<DeleteAccountPage />} />
         </Routes>
+        </Suspense>
         <Footer />
       </FavoritesProvider>
     </BasketProvider>
@@ -68,11 +71,15 @@ function AppShell() {
 export default function App() {
   const location = useLocation();
 
-  // Apply hostname-specific title + OG meta tags once on mount
   useEffect(() => {
-    applyHostnameMeta();
     initGA();
   }, []);
+
+  // Title, description, canonical, OG and robots for every route (SU11A-46).
+  // This parent effect runs after the pages' own effects, so it always wins.
+  useEffect(() => {
+    applyRouteMeta(location.pathname);
+  }, [location.pathname]);
 
   // Track SPA route changes (GA4 pageview per navigation).
   // Depends on `search` as well as `pathname`: the search page keeps its query
@@ -86,6 +93,7 @@ export default function App() {
     <>
       <CookieBanner />
       <ExpiredLinkNotice />
+      <Suspense fallback={<div className="min-h-screen" />}>
       <Routes>
         {/* Portal routes — standalone, no supermarket header/basket/auth providers */}
         <Route path="/portal-preview" element={<PortalPage />} />
@@ -108,6 +116,7 @@ export default function App() {
         {/* All existing supermarket app routes — untouched */}
         <Route path="/*" element={<AppShell />} />
       </Routes>
+      </Suspense>
     </>
   );
 }

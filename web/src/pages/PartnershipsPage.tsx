@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Bot, Code, Database, Handshake, Mail } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -10,8 +9,7 @@ import Footer from '../components/Footer';
 const CONTACT_EMAIL = 'info@xxl.co.il';
 const MAILTO_HREF = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('שיתוף פעולה עם XXL')}`;
 
-const TITLE = 'שיתופי פעולה | XXL';
-const DESCRIPTION = 'XXL פתוחה לשיתופי פעולה: נתונים, API, MCP ועוד.';
+// Title, description and canonical: utils/seoMeta.ts (SU11A-46).
 
 const TOPICS: { icon: LucideIcon; title: string; text: string }[] = [
   {
@@ -37,28 +35,6 @@ const TOPICS: { icon: LucideIcon; title: string; text: string }[] = [
 ];
 
 export default function PartnershipsPage() {
-  useEffect(() => {
-    // applyHostnameMeta() only runs once on app mount, so put the previous
-    // values back when leaving this page.
-    // Deferred one tick (SU11A-44b): on a direct load App's own mount effect (a
-    // parent, so it runs after this one) sets the hostname title and meta and
-    // would overwrite ours.
-    const descTag = document.querySelector('meta[name="description"]');
-    let prevTitle = document.title;
-    let prevDesc = descTag?.getAttribute('content') ?? null;
-    const id = window.setTimeout(() => {
-      prevTitle = document.title;
-      prevDesc = descTag?.getAttribute('content') ?? null;
-      document.title = TITLE;
-      descTag?.setAttribute('content', DESCRIPTION);
-    }, 0);
-    return () => {
-      window.clearTimeout(id);
-      document.title = prevTitle;
-      if (prevDesc !== null) descTag?.setAttribute('content', prevDesc);
-    };
-  }, []);
-
   return (
     <div className="min-h-screen bg-gray-50" dir="rtl">
 

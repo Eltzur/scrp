@@ -38,10 +38,6 @@ export default function ResetPasswordPage() {
   const verified = useRef(false);
 
   useEffect(() => {
-    document.title = 'איפוס סיסמה | SUPER XXL';
-  }, []);
-
-  useEffect(() => {
     if (cooldown <= 0) return;
     const id = setTimeout(() => setCooldown(s => s - 1), 1000);
     return () => clearTimeout(id);

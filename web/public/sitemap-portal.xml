@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Portal host (xxl.co.il). Indexable pages only; keep in sync with web/src/utils/seoMeta.ts. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://xxl.co.il/</loc><lastmod>2026-10-18</lastmod></url>
+  <url><loc>https://xxl.co.il/partnerships</loc><lastmod>2026-10-18</lastmod></url>
+  <url><loc>https://xxl.co.il/privacy</loc><lastmod>2026-10-18</lastmod></url>
+  <url><loc>https://xxl.co.il/disclaimer</loc><lastmod>2026-10-18</lastmod></url>
+  <url><loc>https://xxl.co.il/accessibility</loc><lastmod>2026-10-18</lastmod></url>
+</urlset>

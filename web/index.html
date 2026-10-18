@@ -8,11 +8,13 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- Primary SEO — static fallbacks default to portal (xxl.co.il).
-         Runtime override in App.tsx switches to supermarket-app values on super.xxl.co.il. -->
+    <!-- Primary SEO — static fallbacks default to portal (xxl.co.il). The inline
+         script below fixes host + path before the first paint; after that
+         src/utils/seoMeta.ts sets the exact per-route tags (SU11A-46). -->
     <title>XXL — הפורטל שהופך כסף רגיל לכסף חכם</title>
     <meta name="description" content="השוואת מחירים חכמה למצרכים, חופשות ואופנה. חוסכים בענקקק.">
     <meta name="keywords" content="השוואת מחירים, סופרמרקט, חופשות, אופנה, חיסכון, ישראל">
+    <link rel="canonical" href="https://xxl.co.il/">
 
     <!-- Open Graph -->
     <meta property="og:type"         content="website">
@@ -30,6 +32,37 @@
     <meta name="twitter:title"       content="XXL — הפורטל שהופך כסף רגיל לכסף חכם">
     <meta name="twitter:description" content="השוואת מחירים חכמה למצרכים, חופשות ואופנה.">
     <meta name="twitter:image"       content="https://xxl.co.il/og-portal.png">
+
+    <script>
+      // First-paint defaults for the host this build is served on (one build,
+      // two hosts). Canonical = production host + path, never the query string;
+      // www.xxl.co.il maps to the apex. Same host rule as utils/hostname.ts.
+      (function () {
+        try {
+          var h = location.hostname.toLowerCase();
+          var local = h === 'localhost' || h === '127.0.0.1';
+          var sup = h === 'super.xxl.co.il' || h === 'www.super.xxl.co.il' ||
+            (local && new URLSearchParams(location.search).get('portal') !== '1');
+          var origin = sup ? 'https://super.xxl.co.il' : 'https://xxl.co.il';
+          var url = origin + location.pathname;
+          var q = function (s) { return document.head.querySelector(s); };
+          q('link[rel="canonical"]').href = url;
+          q('meta[property="og:url"]').content = url;
+          if (!sup) return;
+          var t = 'XXL — השוואת מחירים בסופרמרקט · חוסכים בענקקק';
+          var d = 'השוואת מחירים בין סופרמרקטים בישראל. שופרסל, רמי לוי, יוחננוף, ויקטורי, אושר עד, קשת, קרפור. חוסכים בענקקק.';
+          var img = origin + '/og-super.png';
+          document.title = t;
+          q('meta[name="description"]').content = d;
+          q('meta[property="og:title"]').content = t;
+          q('meta[property="og:description"]').content = d;
+          q('meta[property="og:image"]').content = img;
+          q('meta[name="twitter:title"]').content = t;
+          q('meta[name="twitter:description"]').content = d;
+          q('meta[name="twitter:image"]').content = img;
+        } catch (e) { /* the app sets the same tags once it loads */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
