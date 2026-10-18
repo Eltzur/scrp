@@ -928,6 +928,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-38 (Oct 15) — store privacy inventory (read-only) for Play Data safety / Apple App Privacy / web policy: docs/store_privacy_inventory.md. (SU11A-37 stays reserved for popularity counters.)
 - SU11A-39 (Oct 18) — store readiness: web privacy policy + deletion page updated (camera, location, logs, providers, device-only data), in-app summary line, app.json blockedPermissions + Hebrew iOS strings, eas.json production profile, docs/store_submission_checklist.md. Not committed, not deployed.
 - SU11A-40 (Oct 18) — partnerships page (שיתופי פעולה) at /partnerships + portal-only footer link; mailto only. Not deployed.
+- SU11A-41 (Oct 18) — password reset via 6-digit email code (web /reset-password + mobile), "שכחתי סיסמה" under the password field, Hebrew auth errors, submit guards, Supabase template doc. Not deployed; template switch is manual.
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
 
@@ -1079,4 +1080,16 @@ Fixes that must land before the SU11A-31 page and privacy text go live.
 - **Verified:** `npm run build` (tsc -b + vite build) passes; dev server: footer link on /?portal=1 navigates, title/meta set, RTL, mailto encoded, no horizontal scroll at 390 px.
 - **Awaiting (Dude):** deploy with `scripts\deploy_frontend.ps1`; sitemap/robots left for the SEO task.
 
-Next free session ID: SU11A-37 (reserved: popularity counters); after that SU11A-41
+### SU11A-41 (2026-10-18) - password reset via email code (web + mobile); NOT deployed, template NOT switched
+
+- **Why:** the Supabase reset LINK was used up by mail scanners / double opens (`#error=access_denied&error_code=otp_expired`) and on mobile opened a browser, not the app. Now the email carries a 6-digit code typed in the app / on the web. No redirect URL, no allow-list change.
+- **Web:** new `web/src/pages/ResetPasswordPage.tsx` at `/reset-password` (inside AppShell): step 1 email -> `resetPasswordForEmail` (no redirectTo) -> same neutral message either way; step 2 code (`autoComplete=one-time-code`, digits only) + new password + confirm -> `verifyOtp(type 'recovery')` -> `updateUser` -> `/` + toast "הסיסמה עודכנה"; "שליחת קוד חדש" with 60 s cooldown. `/login` has "שכחתי סיסמה" under the password field; the typed email goes in router state (not the URL).
+- **Web errors:** new `web/src/lib/authErrors.ts` (`toHebrewAuthError`, `toHebrewCodeError`) mirrors mobile's `toHebrewError`; `AuthContext` signIn/signUp no longer return raw English `error.message`. Codes first (invalid_credentials, email_not_confirmed, over_*, same_password, weak_password), then message substrings, else the generic message.
+- **Old links:** `web/src/components/ExpiredLinkNotice.tsx` (top level in `App.tsx`): a hash with `error_code=otp_expired` shows "הקישור אינו תקף יותר. בקשו קוד חדש." + button to `/reset-password`, then clears the hash; other hashes are ignored, parsing is in try/catch.
+- **Submit guards:** login / signup / both reset steps disable the button, show a spinner and ignore a second submit while a request is in flight.
+- **Mobile:** see `docs/handoff_mobile.md` (same date).
+- **Template:** `docs/supabase_email_templates.md` - Hebrew Reset Password (`{{ .Token }}`) and Confirm Signup (link) templates. Apply ONLY after the web is deployed and the new Android build is out; check Email OTP length = 6 first.
+- **Verified:** `npm run build` passes; dev server: link order (email, password, "שכחתי סיסמה", button), prefill, reset page title, otp_expired notice + hash cleared + button to /reset-password, malformed hash no crash. Step 2 not exercised locally (needs Supabase + the new template).
+- **Awaiting (Dude):** deploy web; new Android build; then switch the template; run the manual test plan.
+
+Next free session ID: SU11A-37 (reserved: popularity counters); after that SU11A-42

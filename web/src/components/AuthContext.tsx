@@ -4,6 +4,7 @@ import {
 } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { toHebrewAuthError, toHebrewCodeError } from '../lib/authErrors';
 
 interface AuthContextType {
   user:         User | null;
@@ -12,6 +13,10 @@ interface AuthContextType {
   signUp:   (email: string, password: string) => Promise<{ error?: string }>;
   signIn:   (email: string, password: string) => Promise<{ error?: string }>;
   signOut:  () => Promise<void>;
+  /** SU11A-41: password reset by a 6-digit code from the email (no redirect URL). */
+  resetPassword:   (email: string) => Promise<{ error?: string }>;
+  verifyResetCode: (email: string, code: string) => Promise<{ error?: string }>;
+  updatePassword:  (password: string) => Promise<{ error?: string }>;
   /** SU11A-31: re-enter the password; returns a FRESH access token for DELETE /account. */
   reauthenticate: (password: string) => Promise<ReauthResult>;
   /** SU11A-31: after the account was deleted on the server - drop the local session only. */
@@ -48,12 +53,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string) => {
     const { error } = await supabase.auth.signUp({ email, password });
-    return error ? { error: error.message } : {};
+    return error ? { error: toHebrewAuthError(error) } : {};
   };
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return error ? { error: error.message } : {};
+    return error ? { error: toHebrewAuthError(error) } : {};
+  };
+
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+    return error ? { error: toHebrewAuthError(error) } : {};
+  };
+
+  // On success Supabase opens a recovery session (the user is signed in).
+  const verifyResetCode = async (email: string, code: string) => {
+    const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: code, type: 'recovery' });
+    return error ? { error: toHebrewCodeError(error) } : {};
+  };
+
+  const updatePassword = async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    return error ? { error: toHebrewAuthError(error) } : {};
   };
 
   const signOut = async () => {
@@ -110,7 +131,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isLoading, accessToken, signUp, signIn, signOut, reauthenticate, finishAccountDeletion }}
+      value={{
+        user, isLoading, accessToken, signUp, signIn, signOut,
+        resetPassword, verifyResetCode, updatePassword,
+        reauthenticate, finishAccountDeletion,
+      }}
     >
       {children}
     </AuthContext.Provider>

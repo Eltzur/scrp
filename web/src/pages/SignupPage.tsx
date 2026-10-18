@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import { useAuth } from '../components/AuthContext';
 
 export default function SignupPage() {
@@ -12,6 +13,7 @@ export default function SignupPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (loading) return; // SU11A-41: no double submit (Enter while in flight)
     setError(null);
     setLoading(true);
     const result = await signUp(email, password);
@@ -65,10 +67,13 @@ export default function SignupPage() {
           <button
             type="submit"
             disabled={loading}
+            aria-busy={loading}
             className="w-full py-2.5 bg-emerald-700 text-white rounded-xl text-sm font-semibold
                        hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
           >
-            {loading ? 'נרשם…' : 'להרשמה'}
+            {loading
+              ? <span className="inline-flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" aria-hidden="true" />נרשם…</span>
+              : 'להרשמה'}
           </button>
         </form>
 

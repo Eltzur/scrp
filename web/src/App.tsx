@@ -13,6 +13,7 @@ import FavoritesPage from './pages/FavoritesPage';
 import MyRatingsPage from './pages/MyRatingsPage';
 import PromosPage from './pages/PromosPage';
 import DeleteAccountPage from './pages/DeleteAccountPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 // Portal routes — rendered without the supermarket app shell
 import PortalPage from './pages/PortalPage';
 import FashionPage from './pages/FashionPage';
@@ -28,6 +29,7 @@ import { isPortalHostname } from './utils/hostname';
 import { applyHostnameMeta } from './utils/seoMeta';
 import { initGA, trackPageview } from './utils/analytics';
 import CookieBanner from './components/CookieBanner';
+import ExpiredLinkNotice from './components/ExpiredLinkNotice';
 
 // Supermarket app shell — all existing routes are unchanged inside here
 function AppShell() {
@@ -48,6 +50,8 @@ function AppShell() {
           <Route path="/"          element={<HomePage cities={cities} />} />
           <Route path="/login"     element={<LoginPage />} />
           <Route path="/signup"    element={<SignupPage />} />
+          {/* SU11A-41: password reset by a 6-digit email code. */}
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/baskets"   element={<MyBasketsPage />} />
           <Route path="/favorites" element={<FavoritesPage />} />
           <Route path="/my-ratings" element={<MyRatingsPage />} />
@@ -81,6 +85,7 @@ export default function App() {
   return (
     <>
       <CookieBanner />
+      <ExpiredLinkNotice />
       <Routes>
         {/* Portal routes — standalone, no supermarket header/basket/auth providers */}
         <Route path="/portal-preview" element={<PortalPage />} />

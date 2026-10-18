@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import { useAuth } from '../components/AuthContext';
 
 export default function LoginPage() {
@@ -12,6 +13,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (loading) return; // SU11A-41: no double submit (Enter while in flight)
     setError(null);
     setLoading(true);
     const result = await signIn(email, password);
@@ -54,6 +56,15 @@ export default function LoginPage() {
                          focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
               dir="ltr"
             />
+            {/* SU11A-41: reset by email code; the typed email goes along in router
+                state (never in the URL). */}
+            <Link
+              to="/reset-password"
+              state={{ email: email.trim() }}
+              className="inline-block mt-2 text-sm font-semibold text-emerald-700 hover:underline"
+            >
+              שכחתי סיסמה
+            </Link>
           </div>
 
           {error && (
@@ -65,10 +76,13 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
+            aria-busy={loading}
             className="w-full py-2.5 bg-emerald-700 text-white rounded-xl text-sm font-semibold
                        hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
           >
-            {loading ? 'מתחבר…' : 'התחברות'}
+            {loading
+              ? <span className="inline-flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" aria-hidden="true" />מתחבר…</span>
+              : 'התחברות'}
           </button>
         </form>
 
