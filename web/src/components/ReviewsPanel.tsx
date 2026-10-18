@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Flag } from 'lucide-react';
+import { Flag, UserX } from 'lucide-react';
 import { toast } from 'sonner';
-import { getMyRatings, getRatings, reportRating } from '../api/client';
+import { apiErrorCode, blockRatingAuthor, getMyRatings, getRatings, reportRating } from '../api/client';
 import type { RatingOut, RatingsResponse } from '../api/client';
 import { useAuth } from './AuthContext';
 import RatingForm from './RatingForm';
@@ -14,6 +14,12 @@ import RatingForm from './RatingForm';
  * returns {id, rating, comment, created_at, updated_at}. They are therefore
  * displayed anonymously because there is nothing to attribute them to, not as
  * a privacy choice.
+ *
+ * SU11A-44: next to Report, "block the author". The server resolves the author
+ * from the rating, so the page never learns who it is. The axios interceptor
+ * sends the token, so the list comes back already without blocked authors, and
+ * `is_mine` hides both actions on the caller's own comment. There is no
+ * blocked-users page on the web; the list and unblocking live in the app.
  */
 
 const GLYPH: Record<number, string> = { 1: 'X', 2: 'XX', 3: 'XXX' };
@@ -75,8 +81,22 @@ export default function ReviewsPanel({ itemCode }: { itemCode: string }) {
     try {
       await reportRating(row.id, reason);
       toast.success(t('ratings.reported'));
+    } catch (err) {
+      toast.error(apiErrorCode(err) === 'account_banned'
+        ? t('ratings.account_banned')
+        : t('ratings.report_failed'));
+    }
+  };
+
+  const handleBlock = async (row: RatingOut) => {
+    if (!user) { toast(t('ratings.block_sign_in')); return; }
+    if (!window.confirm(t('ratings.block_confirm'))) return;
+    try {
+      await blockRatingAuthor(row.id);
+      toast.success(t('ratings.blocked'));
+      void load();
     } catch {
-      toast.error(t('ratings.report_failed'));
+      toast.error(t('ratings.block_failed'));
     }
   };
 
@@ -127,16 +147,30 @@ export default function ReviewsPanel({ itemCode }: { itemCode: string }) {
                   <span className="text-[11px] text-gray-400">
                     {formatWhen(r.updated_at, i18n.language)}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => handleReport(r)}
-                    aria-label={t('ratings.report')}
-                    title={t('ratings.report')}
-                    className="p-1 rounded text-gray-400 hover:text-rose-600 hover:bg-rose-50
-                               focus:outline-none focus:ring-2 focus:ring-rose-400 transition-colors"
-                  >
-                    <Flag size={13} aria-hidden="true" />
-                  </button>
+                  {!r.is_mine && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleReport(r)}
+                        aria-label={t('ratings.report')}
+                        title={t('ratings.report')}
+                        className="p-1.5 rounded text-gray-500 hover:text-rose-700 hover:bg-rose-50
+                                   focus:outline-none focus:ring-2 focus:ring-rose-400 transition-colors"
+                      >
+                        <Flag size={14} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleBlock(r)}
+                        aria-label={t('ratings.block')}
+                        title={t('ratings.block')}
+                        className="p-1.5 rounded text-gray-500 hover:text-rose-700 hover:bg-rose-50
+                                   focus:outline-none focus:ring-2 focus:ring-rose-400 transition-colors"
+                      >
+                        <UserX size={14} aria-hidden="true" />
+                      </button>
+                    </>
+                  )}
                 </div>
                 <p className="text-sm text-gray-800 whitespace-pre-wrap" dir="auto">{r.comment}</p>
               </li>

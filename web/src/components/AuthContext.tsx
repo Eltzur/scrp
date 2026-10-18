@@ -5,6 +5,7 @@ import {
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { toHebrewAuthError, toHebrewCodeError } from '../lib/authErrors';
+import { TERMS_VERSION } from '../legal/terms';
 
 interface AuthContextType {
   user:         User | null;
@@ -52,7 +53,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password });
+    // SU11A-44: the terms consent rides in the auth user's metadata; the API
+    // copies it into users.terms_version / terms_accepted_at on first contact.
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString() } },
+    });
     return error ? { error: toHebrewAuthError(error) } : {};
   };
 

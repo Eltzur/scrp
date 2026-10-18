@@ -379,6 +379,8 @@ export interface RatingOut {
   comment:    string | null;
   created_at: string;
   updated_at: string;
+  /** SU11A-44: the caller's own row (signed-in requests only); hide report / block on it. */
+  is_mine?:   boolean;
 }
 
 export interface RatingsResponse {
@@ -434,6 +436,33 @@ export const reportRating = (ratingId: number, reason?: string | null): Promise<
 
 export const getMyRatings = (): Promise<MyRatingRow[]> =>
   http.get<MyRatingRow[]>('/me/ratings').then(r => r.data);
+
+// --- Blocks and terms consent (SU11A-44) ------------------------------------
+
+/** POST /ratings/{id}/block-author — the server finds the author; we never learn who. */
+export const blockRatingAuthor = (ratingId: number): Promise<void> =>
+  http.post(`/ratings/${ratingId}/block-author`).then(() => undefined);
+
+export interface TermsStatus {
+  current_version:  string;
+  accepted_version: string | null;
+  accepted_at:      string | null;
+  /** True when the caller has not accepted the current version. */
+  required:         boolean;
+}
+
+export const getMyTerms = (): Promise<TermsStatus> =>
+  http.get<TermsStatus>('/me/terms').then(r => r.data);
+
+export const acceptTerms = (version: string): Promise<void> =>
+  http.post('/me/terms', { version }).then(() => undefined);
+
+/** The `code` of an {"code": ...} error answer (e.g. account_banned), else null. */
+export function apiErrorCode(err: unknown): string | null {
+  if (!axios.isAxiosError(err)) return null;
+  const code = (err.response?.data as { code?: unknown } | undefined)?.code;
+  return typeof code === 'string' ? code : null;
+}
 
 // --- Account deletion (SU11A-31) --------------------------------------------
 //

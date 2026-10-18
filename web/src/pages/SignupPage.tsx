@@ -10,10 +10,12 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [error,    setError]    = useState<string | null>(null);
   const [loading,  setLoading]  = useState(false);
+  // SU11A-44: consent to the terms and the privacy policy is required.
+  const [agreed,   setAgreed]   = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (loading) return; // SU11A-41: no double submit (Enter while in flight)
+    if (loading || !agreed) return; // SU11A-41: no double submit (Enter while in flight)
     setError(null);
     setLoading(true);
     const result = await signUp(email, password);
@@ -32,8 +34,9 @@ export default function SignupPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">אימייל</label>
+            <label htmlFor="signup-email" className="block text-sm font-medium text-gray-700 mb-1">אימייל</label>
             <input
+              id="signup-email"
               type="email"
               required
               value={email}
@@ -45,8 +48,9 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">סיסמה</label>
+            <label htmlFor="signup-password" className="block text-sm font-medium text-gray-700 mb-1">סיסמה</label>
             <input
+              id="signup-password"
               type="password"
               required
               minLength={6}
@@ -58,6 +62,33 @@ export default function SignupPage() {
             />
           </div>
 
+          {/* SU11A-44: required consent. The links open in a new tab so the
+              form keeps what was typed. */}
+          <div className="flex items-start gap-2">
+            <input
+              id="signup-terms"
+              type="checkbox"
+              required
+              checked={agreed}
+              onChange={e => setAgreed(e.target.checked)}
+              className="mt-0.5 h-5 w-5 shrink-0 rounded border-gray-400 text-emerald-700
+                         focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            />
+            <label htmlFor="signup-terms" className="text-sm text-gray-700 leading-snug">
+              קראתי את{' '}
+              <a href="/disclaimer" target="_blank" rel="noopener noreferrer"
+                 className="text-emerald-700 font-semibold underline focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded">
+                תנאי השימוש
+              </a>
+              {' '}ואת{' '}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer"
+                 className="text-emerald-700 font-semibold underline focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded">
+                מדיניות הפרטיות
+              </a>
+              {' '}ואני מסכים/ה להם.
+            </label>
+          </div>
+
           {error && (
             <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
               {error}
@@ -66,7 +97,7 @@ export default function SignupPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !agreed}
             aria-busy={loading}
             className="w-full py-2.5 bg-emerald-700 text-white rounded-xl text-sm font-semibold
                        hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"

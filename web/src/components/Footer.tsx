@@ -16,7 +16,7 @@ export default function Footer() {
         )}
         <Link to="/privacy" className="hover:text-emerald-700 transition-colors">מדיניות פרטיות</Link>
         <span className="text-gray-500">|</span>
-        <Link to="/disclaimer" className="hover:text-emerald-700 transition-colors">תנאי שימוש וכתב ויתור</Link>
+        <Link to="/disclaimer" className="hover:text-emerald-700 transition-colors">תנאי שימוש</Link>
         <span className="text-gray-500">|</span>
         <a href="mailto:info@xxl.co.il" className="hover:text-emerald-700 transition-colors">צור קשר</a>
         <span className="text-gray-500">|</span>

@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { submitRating } from '../api/client';
+import { acceptTerms, apiErrorCode, getMyTerms, submitRating } from '../api/client';
+import { TERMS_VERSION } from '../legal/terms';
 import { useAuth } from './AuthContext';
 
 /**
@@ -14,6 +15,11 @@ import { useAuth } from './AuthContext';
  * the backend scale is 1-3 with named levels, and mobile already ships this
  * exact visual language (xxl-super-mobile product-detail.tsx). Hebrew labels
  * are taken verbatim from mobile's he.ts.
+ *
+ * SU11A-44: a user with no consent to the current terms (GET /me/terms says
+ * `required`; e.g. signed up before the consent checkbox existed) sees a required
+ * checkbox here, and the submit first records it (POST /me/terms). The server can
+ * also answer 403 terms_required (RATINGS_REQUIRE_TERMS) or account_banned.
  */
 
 const LEVELS = [
@@ -44,11 +50,25 @@ export default function RatingForm({
   const [picked,  setPicked]  = useState<number | null>(initialRating);
   const [comment, setComment] = useState(initialComment ?? '');
   const [sending, setSending] = useState(false);
+  // null = unknown (not loaded or failed): no checkbox, the server decides.
+  const [termsRequired, setTermsRequired] = useState<boolean | null>(null);
+  const [agreed,  setAgreed]  = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
 
   // The caller may resolve the existing rating asynchronously (GET /me/ratings),
   // so adopt it when it lands rather than only on first mount.
   useEffect(() => { setPicked(initialRating); },          [initialRating]);
   useEffect(() => { setComment(initialComment ?? ''); },  [initialComment]);
+
+  useEffect(() => {
+    // Signed out the form is not rendered, so a stale value does no harm.
+    if (!user) return;
+    let active = true;
+    getMyTerms()
+      .then(s => { if (active) setTermsRequired(s.required); })
+      .catch(() => { if (active) setTermsRequired(null); });
+    return () => { active = false; };
+  }, [user]);
 
   const isEdit = initialRating != null;
 
@@ -73,8 +93,19 @@ export default function RatingForm({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (picked == null || sending) return;
+    if (termsRequired && !agreed) return;
     setSending(true);
+    setError(null);
     try {
+      if (termsRequired) {
+        try {
+          await acceptTerms(TERMS_VERSION);
+        } catch {
+          setError(t('ratings.terms_failed'));
+          return;
+        }
+        setTermsRequired(false);
+      }
       // The response carries `blocked`, which is DELIBERATELY IGNORED. A
       // blacklisted submission returns 200 and must look identical to any
       // other success — telling the author would teach them which word tripped
@@ -82,12 +113,24 @@ export default function RatingForm({
       await submitRating(itemCode, { rating: picked, comment: comment.trim() || null });
       toast.success(t('ratings.saved'));
       onSaved?.();
-    } catch {
-      toast.error(t('ratings.failed'));
+    } catch (err) {
+      const code = apiErrorCode(err);
+      if (code === 'account_banned') {
+        setError(t('ratings.account_banned'));
+      } else if (code === 'terms_required') {
+        setTermsRequired(true);
+        setAgreed(false);
+        setError(t('ratings.consent_title'));
+      } else {
+        toast.error(t('ratings.failed'));
+      }
     } finally {
       setSending(false);
     }
   };
+
+  const linkClass = 'text-emerald-700 font-semibold underline focus:outline-none ' +
+    'focus-visible:ring-2 focus-visible:ring-emerald-500 rounded';
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
@@ -148,9 +191,43 @@ export default function RatingForm({
         />
       </div>
 
+      {termsRequired && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2">
+          <p className="text-sm font-semibold text-gray-900">{t('ratings.consent_title')}</p>
+          <div className="flex items-start gap-2">
+            <input
+              id={`terms-${itemCode}`}
+              type="checkbox"
+              required
+              checked={agreed}
+              onChange={e => setAgreed(e.target.checked)}
+              className="mt-0.5 h-5 w-5 shrink-0 rounded border-gray-400
+                         focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            />
+            <label htmlFor={`terms-${itemCode}`} className="text-sm text-gray-800 leading-snug">
+              {t('ratings.consent_before')}{' '}
+              <a href="/disclaimer" target="_blank" rel="noopener noreferrer" className={linkClass}>
+                {t('ratings.consent_terms')}
+              </a>
+              {' '}{t('ratings.consent_and')}{' '}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className={linkClass}>
+                {t('ratings.consent_privacy')}
+              </a>
+              {' '}{t('ratings.consent_after')}
+            </label>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <p role="alert" className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+          {error}
+        </p>
+      )}
+
       <button
         type="submit"
-        disabled={picked == null || sending}
+        disabled={picked == null || sending || (termsRequired === true && !agreed)}
         className="w-full py-2.5 bg-emerald-700 text-white rounded-xl text-sm font-semibold
                    hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed
                    transition-colors"

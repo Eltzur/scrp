@@ -118,6 +118,19 @@
     "my_empty": "You have not rated any products yet",
     "my_empty_hint": "Rate a product from its detail window.",
     "status_held": "Under review",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "block": "Block user",
+    "block_confirm": "Block this user? You will no longer see their reviews. You can unblock them in the app, in Settings.",
+    "blocked": "User blocked. You can unblock them in the app, in Settings › Blocked users.",
+    "block_failed": "Could not block the user. Please try again.",
+    "block_sign_in": "Sign in to block a user",
+    "consent_title": "To post a review, please accept the terms of use",
+    "consent_before": "I have read the",
+    "consent_terms": "terms of use",
+    "consent_and": "and the",
+    "consent_privacy": "privacy policy",
+    "consent_after": "and I agree to them.",
+    "terms_failed": "Could not record your acceptance. Please try again.",
+    "account_banned": "This account is restricted and cannot post reviews or reports. Details: info@xxl.co.il"
   }
 }
