@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.auth import ApiCodeError
-from api.routers import account, health, catalog, search, product, basket, saved_baskets, favorites, freshness, coverage, promos, ratings, stores
+from api.routers import account, blocks, health, catalog, search, product, basket, saved_baskets, favorites, freshness, coverage, promos, ratings, stores, terms
 
 app = FastAPI(
     title="Israeli Price Comparison API",
@@ -45,6 +45,8 @@ app.include_router(promos.router)
 app.include_router(ratings.router)
 app.include_router(stores.router)
 app.include_router(account.router)
+app.include_router(blocks.router)   # SU11A-44
+app.include_router(terms.router)    # SU11A-44
 
 
 @app.exception_handler(ApiCodeError)

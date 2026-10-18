@@ -28,7 +28,9 @@ SECRET = "sb_secret_TESTKEY_must_never_leak_0123456789"
 LEGACY = "eyJhbGciOiJIUzI1NiJ9.TESTLEGACYKEY.signature"
 
 SCHEMA = [
-    "CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT, display_name TEXT, tier TEXT)",
+    # terms_* / banned_at: SU11A-44 (_upsert_user writes the terms columns).
+    "CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT, display_name TEXT, tier TEXT, "
+    "terms_version TEXT NULL, terms_accepted_at TEXT NULL, banned_at TEXT NULL)",
     "CREATE TABLE saved_baskets (id INTEGER PRIMARY KEY, user_id TEXT NOT NULL "
     "REFERENCES users(id) ON DELETE CASCADE, name TEXT)",
     "CREATE TABLE favorites (user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, barcode TEXT, "
@@ -38,6 +40,12 @@ SCHEMA = [
     "REFERENCES users(id) ON DELETE CASCADE, item_code TEXT)",
     "CREATE TABLE rating_reports (id INTEGER PRIMARY KEY, rating_id INTEGER NOT NULL "
     "REFERENCES ratings(id) ON DELETE CASCADE, reporter_user_id TEXT REFERENCES users(id) ON DELETE SET NULL)",
+    # SU11A-44: both user columns CASCADE, the source rating SET NULL.
+    "CREATE TABLE user_blocks (id INTEGER PRIMARY KEY, "
+    "blocker_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, "
+    "blocked_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, "
+    "source_rating_id INTEGER NULL REFERENCES ratings(id) ON DELETE SET NULL, "
+    "UNIQUE (blocker_id, blocked_id), CHECK (blocker_id <> blocked_id))",
     "CREATE TABLE flights.alerts (id INTEGER PRIMARY KEY, user_id TEXT NOT NULL)",
     "CREATE TABLE flights.saved_searches (id INTEGER PRIMARY KEY, user_id TEXT NOT NULL)",
     "CREATE TABLE deleted_accounts (user_id TEXT PRIMARY KEY, "
@@ -267,6 +275,24 @@ def test_flights_rows_deleted_and_other_users_flights_rows_kept(client, engine, 
     assert client.delete("/account", headers=bearer(client)).status_code == 204
     assert user_rows(engine)["flights.alerts"] == 0 and user_rows(engine)["flights.saved_searches"] == 0
     assert count(engine, "SELECT count(*) FROM flights.alerts") == 1
+
+
+@pytest.mark.parametrize("side", ["blocker", "blocked"])
+def test_blocks_on_either_side_are_deleted_with_the_account(client, engine, monkeypatch, side):
+    # SU11A-44: user_blocks needs no code in DELETE /account; the FKs cascade.
+    seed(engine)
+    third = "d3d3d3d3-0000-4000-8000-000000000003"
+    with engine.begin() as c:
+        c.execute(text("INSERT INTO users (id) VALUES (:t)"), {"t": third})
+        orid = c.execute(text("SELECT id FROM ratings WHERE user_id = :o"), {"o": OTHER}).scalar()
+        pair = (UID, OTHER) if side == "blocker" else (OTHER, UID)
+        c.execute(text("INSERT INTO user_blocks (blocker_id, blocked_id, source_rating_id) VALUES (:a, :b, :r)"),
+                  {"a": pair[0], "b": pair[1], "r": orid})
+        c.execute(text("INSERT INTO user_blocks (blocker_id, blocked_id) VALUES (:o, :t)"), {"o": OTHER, "t": third})
+    use_admin(monkeypatch, 204)
+    assert client.delete("/account", headers=bearer(client)).status_code == 204
+    assert count(engine, "SELECT count(*) FROM user_blocks WHERE blocker_id = :u OR blocked_id = :u", u=UID) == 0
+    assert count(engine, "SELECT count(*) FROM user_blocks") == 1
 
 
 def test_no_token_is_401(client):

@@ -13,8 +13,13 @@ Moderation model, deliberately asymmetric:
     censorship button.
 
 Editing never launders a flagged review: an existing row keeps whatever status
-it already had. Only an explicit moderator action can move it back to active,
-and no endpoint for that exists yet by design (see the admin section).
+it already had. Only an explicit moderator action can move it back to active:
+POST /admin/ratings/{id}/moderate (SU11A-44; logic in api/moderation.py).
+
+SU11A-44 (UGC stage 2): signed-in readers do not see comments by authors they
+blocked (api/routers/blocks.py), every row says whether it is the caller's own
+(is_mine), a banned user cannot rate or report, and terms consent can be required
+for rating behind RATINGS_REQUIRE_TERMS (default off; api/terms.py).
 """
 from __future__ import annotations
 
@@ -23,14 +28,18 @@ import os
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from typing import Literal
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-from api.auth import get_current_user
+from api import moderation
+from api.auth import ApiCodeError, get_current_user, get_user_id_soft
 from api.dependencies import get_db
 from api.mailer import send_email
+from api.terms import TERMS_VERSION, require_terms_for_ratings
 from db.db import connect
 
 log = logging.getLogger(__name__)
@@ -67,6 +76,9 @@ class RatingOut(BaseModel):
     comment: str | None
     created_at: str
     updated_at: str
+    # SU11A-44: true on the caller's own row (signed-in requests only), so the
+    # clients hide report / block on it. Always false for anonymous requests.
+    is_mine: bool = False
 
 
 class RatingsResponse(BaseModel):
@@ -132,6 +144,23 @@ def _blacklist_hit(conn: Connection, comment: str | None) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# Posting rights (SU11A-44)
+# ---------------------------------------------------------------------------
+
+def _posting_state(conn: Connection, user_id: str):
+    return conn.execute(
+        text("SELECT banned_at, terms_version FROM users WHERE id = :uid"), {"uid": user_id}
+    ).mappings().first()
+
+
+def ensure_not_banned(conn: Connection, user_id: str) -> None:
+    """403 account_banned for a banned user. Checked before any write."""
+    row = _posting_state(conn, user_id)
+    if row is not None and row["banned_at"] is not None:
+        raise ApiCodeError(403, "account_banned")
+
+
+# ---------------------------------------------------------------------------
 # Submit / edit
 # ---------------------------------------------------------------------------
 
@@ -144,6 +173,13 @@ def submit_rating(
     user=Depends(get_current_user),
     conn: Connection = Depends(get_db),
 ):
+    # SU11A-44: ban first, then (only with RATINGS_REQUIRE_TERMS on) consent.
+    state = _posting_state(conn, user["id"])
+    if state is not None and state["banned_at"] is not None:
+        raise ApiCodeError(403, "account_banned")
+    if require_terms_for_ratings() and (state is None or state["terms_version"] != TERMS_VERSION):
+        raise ApiCodeError(403, "terms_required")
+
     term = _blacklist_hit(conn, body.comment)
     blocked = term is not None
 
@@ -216,6 +252,7 @@ def report_rating(
     user=Depends(get_current_user),
     conn: Connection = Depends(get_db),
 ):
+    ensure_not_banned(conn, user["id"])
     exists = conn.execute(
         text("SELECT item_code FROM ratings WHERE id = :id"), {"id": rating_id}
     ).mappings().first()
@@ -245,25 +282,67 @@ def report_rating(
 # Public read
 # ---------------------------------------------------------------------------
 
+_PUBLIC_ROWS_SQL = text("""
+    SELECT id, rating, comment,
+           to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS created_at,
+           to_char(updated_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS updated_at
+    FROM ratings
+    WHERE item_code = :code AND status = 'active'
+    ORDER BY updated_at DESC
+""")
+
+# Signed in (SU11A-44): the same rows minus authors the caller blocked, plus is_mine.
+_SIGNED_IN_ROWS_SQL = text("""
+    SELECT r.id, r.rating, r.comment,
+           to_char(r.created_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS created_at,
+           to_char(r.updated_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS updated_at,
+           (r.user_id = :uid) AS is_mine
+    FROM ratings r
+    WHERE r.item_code = :code AND r.status = 'active'
+      AND NOT EXISTS (
+            SELECT 1 FROM user_blocks b
+            WHERE b.blocker_id = :uid AND b.blocked_id = r.user_id
+      )
+    ORDER BY r.updated_at DESC
+""")
+
+
 @router.get("/items/{item_code}/ratings", response_model=RatingsResponse,
             summary="Public ratings + aggregate for one item")
-def get_ratings(item_code: str, conn: Connection = Depends(get_db)):
+def get_ratings(
+    item_code: str,
+    request: Request,
+    response: Response,
+    uid: str | None = Depends(get_user_id_soft),
+    conn: Connection = Depends(get_db),
+):
     """Active ratings only. Hidden and pending rows never appear here for
-    anyone, including their own author — this endpoint has no auth and must not
-    leak moderated content through a side channel."""
+    anyone, including their own author — this endpoint must not leak moderated
+    content through a side channel.
+
+    Auth is SOFT (SU11A-44): any token problem answers as anonymous, never
+    401/503. Signed in, comments by authors the caller blocked are left out and
+    each row carries is_mine. The aggregate always counts every active rating:
+    a block hides comments, not scores.
+    """
+    if "authorization" in request.headers:
+        # The body depends on who asks: never let a shared cache keep it.
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["Vary"] = "Authorization"
+
     agg = conn.execute(text("""
         SELECT count(*) AS n, avg(rating)::float AS mean
         FROM ratings WHERE item_code = :code AND status = 'active'
     """), {"code": item_code}).mappings().one()
 
-    rows = conn.execute(text("""
-        SELECT id, rating, comment,
-               to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS created_at,
-               to_char(updated_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS updated_at
-        FROM ratings
-        WHERE item_code = :code AND status = 'active'
-        ORDER BY updated_at DESC
-    """), {"code": item_code}).mappings().all()
+    if uid is None:
+        rows = conn.execute(_PUBLIC_ROWS_SQL, {"code": item_code}).mappings().all()
+    else:
+        rows = [
+            {**r, "is_mine": bool(r["is_mine"])}
+            for r in conn.execute(_SIGNED_IN_ROWS_SQL,
+                                  {"code": item_code, "uid": uid}).mappings().all()
+        ]
 
     mean = agg["mean"]
     return RatingsResponse(
@@ -330,7 +409,7 @@ def my_ratings(user=Depends(get_current_user), conn: Connection = Depends(get_db
 
 
 # ---------------------------------------------------------------------------
-# Moderation queue (read-only)
+# Moderation (admin allowlist)
 # ---------------------------------------------------------------------------
 
 def _admin_emails() -> set[str]:
@@ -339,7 +418,8 @@ def _admin_emails() -> set[str]:
 
 
 def require_admin(user=Depends(get_current_user)) -> dict:
-    """Allowlist gate, not a role system.
+    """Allowlist gate, not a role system. Guards the queue and, since SU11A-44,
+    the moderate / ban-author actions too.
 
     Fails CLOSED: an unset or empty ADMIN_USER_EMAILS admits nobody. The
     opposite default would silently open the queue to every signed-in user the
@@ -355,35 +435,46 @@ def require_admin(user=Depends(get_current_user)) -> dict:
 
 @router.get("/admin/ratings/pending", summary="Moderation queue (allowlisted emails only)")
 def pending_ratings(_admin=Depends(require_admin), conn: Connection = Depends(get_db)):
-    """Everything not active, newest first, with its reports attached.
+    """Ratings that need a moderator, newest first, with their reports.
 
-    VIEW ONLY. There is deliberately no endpoint to change status in this pass:
-    seeing real moderation volume first should inform what the workflow needs,
-    rather than committing to one now. That is the obvious next step.
+    SU11A-44: besides non-active ratings no moderator has reviewed yet, the queue
+    now holds ACTIVE ratings with a report newer than the last decision — user
+    reports used to reach only the mailbox. Same shape as before plus
+    report_count, latest_report_at, report_sources, report_reasons, reviewed_at.
+    See api/moderation.py for the rule.
     """
-    rows = conn.execute(text("""
-        SELECT r.id, r.user_id, r.item_code, r.rating, r.comment, r.status,
-               to_char(r.created_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS created_at,
-               to_char(r.updated_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS updated_at,
-               COALESCE(
-                   json_agg(
-                       json_build_object(
-                           'id', rep.id,
-                           'source', rep.source,
-                           'reason', rep.reason,
-                           'reporter_user_id', rep.reporter_user_id,
-                           'created_at', to_char(rep.created_at, 'YYYY-MM-DD"T"HH24:MI:SSOF')
-                       ) ORDER BY rep.created_at DESC
-                   ) FILTER (WHERE rep.id IS NOT NULL),
-                   '[]'::json
-               ) AS reports
-        FROM ratings r
-        LEFT JOIN rating_reports rep ON rep.rating_id = r.id
-        WHERE r.status <> 'active'
-        GROUP BY r.id
-        ORDER BY r.created_at DESC
-    """)).mappings().all()
-    return {"count": len(rows), "items": [dict(r) for r in rows]}
+    items = moderation.queue(conn)
+    return {"count": len(items), "items": items}
+
+
+class ModerateIn(BaseModel):
+    action: Literal["hide", "keep", "restore"]
+
+
+class BanIn(BaseModel):
+    ban: bool
+
+
+@router.post("/admin/ratings/{rating_id}/moderate",
+             summary="Hide, keep or restore a rating (allowlisted emails only)")
+def moderate_rating(rating_id: int, body: ModerateIn,
+                    _admin=Depends(require_admin), conn: Connection = Depends(get_db)):
+    result = moderation.moderate(conn, rating_id, body.action)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Rating not found")
+    return result
+
+
+@router.post("/admin/ratings/{rating_id}/ban-author",
+             summary="Ban or unban the author of a rating (allowlisted emails only)")
+def ban_rating_author(rating_id: int, body: BanIn,
+                      _admin=Depends(require_admin), conn: Connection = Depends(get_db)):
+    """Ban hides every active rating of the author; unban only clears the ban.
+    The response never names the author."""
+    result = moderation.ban_author(conn, rating_id, body.ban)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Rating not found")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -471,23 +562,27 @@ def _notify_moderation(*, rating_id: int, item_code: str, user_email: str,
 
 
 def _notify_report(*, rating_id: int, item_code: str, reporter_email: str,
-                   reason: str | None) -> None:
-    """Email on a USER report. Flags only — the row is not hidden.
+                   reason: str | None, kind: Literal["report", "block"] = "report") -> None:
+    """Email on a USER report, or on a block (SU11A-44: a block files a report
+    with source 'block'). Flags only — the row is not hidden.
 
     Same best-effort contract as _notify_moderation, and likewise a background
     task: a report is a deliberate user action and the reporter should not wait
     on an SMTP round trip to get their confirmation.
     """
     # No reporter email in the log (SU11A-32); rating_reports holds who reported.
-    log.warning(
-        "[MODERATION] user report: rating_id=%s item_code=%s",
-        rating_id, item_code,
-    )
+    if kind == "block":
+        log.warning("[MODERATION] user block: rating_id=%s item_code=%s", rating_id, item_code)
+        subject = f"[XXL] משתמש חסם את כותב הביקורת (block) — rating #{rating_id}"
+        why = "block: a user blocked the author of this rating"
+    else:
+        log.warning("[MODERATION] user report: rating_id=%s item_code=%s", rating_id, item_code)
+        subject = f"[XXL] דיווח משתמש על ביקורת — rating #{rating_id}"
+        why = (reason or "").strip() or "(reporter gave no reason)"
     send_email(
-        subject=f"[XXL] דיווח משתמש על ביקורת — rating #{rating_id}",
+        subject=subject,
         body_text=_moderation_body(
             rating_id=rating_id, item_code=item_code, user_email=reporter_email,
-            rating=None, comment=None,
-            reason=(reason or "").strip() or "(reporter gave no reason)",
+            rating=None, comment=None, reason=why,
         ),
     )

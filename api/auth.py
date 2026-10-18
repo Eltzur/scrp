@@ -14,13 +14,14 @@ import uuid
 from typing import Optional
 
 import httpx
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from jose.exceptions import ExpiredSignatureError, JWTClaimsError
 from sqlalchemy import text
 
 from api.dependencies import get_db
+from api.terms import consent_from_claims
 
 log = logging.getLogger(__name__)
 
@@ -119,11 +120,21 @@ class ApiCodeError(Exception):
         self.code = code
 
 
-def _upsert_user(conn, user_id: str, email: str) -> None:
+def _upsert_user(conn, user_id: str, email: str, payload: dict | None = None) -> None:
+    """Create or refresh the users row. SU11A-44: also copies the sign-up terms
+    consent from the token's user_metadata, in the same statement, only while
+    users.terms_version is still NULL (never overwrites; see api/terms.py)."""
+    version, accepted_at = consent_from_claims(payload)
     conn.execute(text("""
-        INSERT INTO users (id, email) VALUES (:id, :email)
-        ON CONFLICT(id) DO UPDATE SET email = excluded.email
-    """), {"id": user_id, "email": email})
+        INSERT INTO users (id, email, terms_version, terms_accepted_at)
+        VALUES (:id, :email, :tv, :ta)
+        ON CONFLICT(id) DO UPDATE SET
+            email             = excluded.email,
+            terms_accepted_at = CASE WHEN users.terms_version IS NULL
+                                     THEN excluded.terms_accepted_at
+                                     ELSE users.terms_accepted_at END,
+            terms_version     = COALESCE(users.terms_version, excluded.terms_version)
+    """), {"id": user_id, "email": email, "tv": version, "ta": accepted_at})
     conn.commit()
 
 
@@ -167,7 +178,7 @@ def get_current_user(
     # SU11A-28: a deleted account's still-valid token must not recreate its row.
     if _is_deleted(conn, user_id):
         raise ApiCodeError(401, "account_deleted")
-    _upsert_user(conn, user_id, email)
+    _upsert_user(conn, user_id, email, payload)
     return {"id": user_id, "email": email}
 
 
@@ -184,8 +195,30 @@ def get_current_user_optional(
     # row is not recreated.
     if _is_deleted(conn, user_id):
         return None
-    _upsert_user(conn, user_id, email)
+    _upsert_user(conn, user_id, email, payload)
     return {"id": user_id, "email": email}
+
+
+def get_user_id_soft(request: Request) -> str | None:
+    """The caller's user id, or None: for GET /items/{code}/ratings only (SU11A-44).
+
+    ANY token problem answers as signed out — no header, not Bearer, garbage,
+    expired, bad signature, a JWKS fetch failure (which _decode turns into 503)
+    or anything else. It never raises, never answers 401/503 and never writes
+    the users row: a Supabase hiccup must not take public reviews down for
+    signed-in users. Logged at debug level only, without the token.
+    """
+    try:
+        header = request.headers.get("authorization") or ""
+        scheme, _, token = header.partition(" ")
+        if scheme.lower() != "bearer" or not token.strip():
+            return None
+        payload = _decode(token.strip())
+        sub = (payload or {}).get("sub")
+        return sub if isinstance(sub, str) and sub else None
+    except Exception as exc:
+        log.debug("soft auth: answering as anonymous (%s)", type(exc).__name__)
+        return None
 
 
 def get_user_for_account_delete(
