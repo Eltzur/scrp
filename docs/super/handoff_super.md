@@ -925,6 +925,8 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-34 (Oct 11) — read-only /search latency + relevance measurement script; awaiting Dude's server run.
 - SU11A-35 (Oct 11) — read-only catalog audit script for faceted category filters; awaiting Dude's server run.
 - SU11A-36 (Oct 12) — search v2 behind SEARCH_V2 (default off): search_items + lexicon, price-neutral ranking, prices for the page only; migration NOT applied, nothing installed.
+- SU11A-38 (Oct 15) — store privacy inventory (read-only) for Play Data safety / Apple App Privacy / web policy: docs/store_privacy_inventory.md. (SU11A-37 stays reserved for popularity counters.)
+- SU11A-39 (Oct 18) — store readiness: web privacy policy + deletion page updated (camera, location, logs, providers, device-only data), in-app summary line, app.json blockedPermissions + Hebrew iOS strings, eas.json production profile, docs/store_submission_checklist.md. Not committed, not deployed.
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
 
@@ -1050,4 +1052,20 @@ Fixes that must land before the SU11A-31 page and privacy text go live.
 - **Awaiting (Dude, in order):** git pull; apply the migration; `build_search_items --report` (paste the output); `--apply`; `compare_search_v2` (paste); SEARCH_V2=test + restart; curl with engine=v2; install the timer. Exact commands in the SU11A-36 chat report.
 - **Next:** SU11A-37 popularity counters (D3). Categories / faceted filters after the SU11A-35 audit results.
 
-Next free session ID: SU11A-37
+### SU11A-38 (2026-10-15) - store privacy inventory (read-only), docs only
+- **Output:** `docs/store_privacy_inventory.md` - code-verified inventory (file:line for every claim), proposed Google Play Data safety and Apple App Privacy answers, Hebrew additions for the web policy and one line for the in-app summary, open questions. No code, config, DB or production changed; server facts read with read-only SSH.
+- **Findings:** sign-in is email + password only (Supabase); no analytics / crash / ads / push / expo-updates SDK in the app; device location never leaves the phone (distance computed on device; only an in-radius store-ID list goes in the /basket/compare body, not logged or stored); camera sends barcode digits only, no images; per-user server data = users (id, email, tier), saved_baskets, favorites, ratings, rating_reports, flights rows, deleted_accounts - all handled by DELETE /account; no WebView.
+- **Logs (verified on server):** journald scrp-api access log = real client IP + full path incl. search text and barcodes, 30 days (drop-in installed); nginx combined (IP, path, user agent), 14 days; account-sweep timer active. Moderation mail to info@ includes the author / reporter email.
+- **Policy gaps:** app not named in scope; no camera, location, search/barcode-in-logs, ratings in section 2, on-device data, no-tracking statement; Kamatera / Backblaze / Hostinger not named. Hebrew text in section D of the inventory.
+- **Open (Dude):** Supabase region / auth-log retention / mailer; info@ mailbox retention; Kamatera + B2 regions; Play location answer (recommend approximate, ephemeral); SU11A-37 counters must stay aggregate (no IP / user id) or the answers change; config hygiene before submission (blockedPermissions for unused storage / overlay permissions, FINE location need, expo-dev-client local-network string on iOS).
+
+### SU11A-39 (2026-10-18) - store readiness: policy, deletion page, app config, checklist; NOT committed, NOT deployed
+- **Web** `web/src/pages/PrivacyPolicyPage.tsx` (date 18 October 2026): scope names the SUPER XXL app; section 2 adds email+password-only sign-in, ratings/reviews (public without name or email; moderation mail carries the author's / reporter's email), camera (barcode number only, no image), location (position never sent, distance on the device, nearby-only store-ID list not logged or stored, no background access), search text and barcodes in server logs (IP, no user ID; 14 / 30 days), no analytics / ads / tracking in the app (GA stays web-only with consent), device-only data not removed by deletion; section 4 names Kamatera, Backblaze, Hostinger and narrows Supabase to accounts + sign-ups; section 8 aligned; section 9 points to section 4. No region, Supabase-log, Supabase-mailer or mailbox-retention claim (unconfirmed).
+- **Web** `web/src/pages/DeleteAccountPage.tsx`: numbered app steps; reports by others on your reviews are deleted; reports you filed are kept with your user ID removed; logs described (IP + URL incl. search text and barcodes, no user ID, 14 / 30 days); moderation mail includes the email; device-only data listed with how to clear it. `npm run build` passed.
+- **Mobile** (xxl-super-mobile, uncommitted): `he.legal.privacySummary` + one camera/location/no-tracking line; `app.json` `android.blockedPermissions` READ/WRITE_EXTERNAL_STORAGE + SYSTEM_ALERT_WINDOW, Hebrew iOS camera and location strings naming SUPER XXL; `eas.json` production: developmentClient false, distribution store, autoIncrement, Android app-bundle (preview / development untouched).
+- **Not changed:** ACCESS_FINE_LOCATION stays - radius goes down to 1 km, distances are shown and nearest-first sorting needs them; Android approximate location is ~2-3 km. The iOS dev-launcher local-network string is removed from non-Debug builds by expo-dev-launcher's own build phase, so no config change. VIBRATE (Expo default) left alone.
+- **Final Android permissions (release):** INTERNET, CAMERA, ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION, VIBRATE, ACCESS_NETWORK_STATE (+ AndroidX signature permission). Verified by prebuild of a temp copy outside the repo + library manifests; repo unchanged by it.
+- **Checklist:** `docs/store_submission_checklist.md` - listing assets, final Data safety and App Privacy answers, demo account rules, device tests, TO CONFIRM list.
+- **Awaiting (Dude):** review diffs; commit scrp (docs + web) and xxl-super-mobile; deploy the web pages; typecheck mobile; TO CONFIRM items.
+
+Next free session ID: SU11A-37 (reserved: popularity counters); after that SU11A-40
