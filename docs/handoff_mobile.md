@@ -672,3 +672,13 @@ Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; 
 - **2026-10-18 (SU11A-46):**
   - **Google Play:** listing and App content approved and published 18 Oct. Build 8 (1.2.1, versionCode 8, mobile `c2fa72d`) on internal testing, device-checked. **Production release 8 (1.2.1), full rollout, Israel, submitted for review 18 Oct.** Next build: versionCode 9.
   - **Terms screen bidi + spacing (`c501689`, ships in build 9):** a paragraph starting with Latin ("XXL הוא שירות...", "SerpApi...") took an LTR base direction and the Latin word jumped to the line edge. Every title and paragraph now starts with an RLM (U+200F), plus `writingDirection: 'rtl'` on iOS. Spacing is explicit `contentContainerStyle`: version line to heading 1, and between sections. JS only, no app.json change. Syntax-only transpile OK; tsc and the device check are Dude's (check RTL lines in the terms screen on Android and iOS, light and dark).
+- **2026-10-21 (SU11A-47, `bc434e8`, ships in build 9):** search tab suggestions.
+  - **Suggestions:** while the field is focused, a list under it shows `/suggest` answers for what is typed (from 1 letter; the name search still starts at 3).
+    - 160 ms debounce; the stale request is aborted; any failure keeps what is shown. The old API has no /suggest, so the list simply stays empty.
+    - Rows are buttons (48dp/44pt) labelled "text, kind".
+    - A product opens product-detail (prices tab); a brand or term fills the field and searches it at once.
+  - **Search:** the field has `accessibilityRole="search"`; search debounce 300 -> 200 ms.
+    - A new query keeps the previous rows on screen, dimmed, with a "מעדכן תוצאות…" line and a small spinner, instead of the full-screen spinner.
+    - Pagination dedup / offset unchanged. PAGE_SIZE stays 30 (web went to 20).
+  - **Strings:** `he.search.suggest*` and `updating`, with `// en:` comments.
+  - **Checks:** JS only, no app.json / version change. Syntax-only transpile OK. tsc and the device check are Dude's: type חל, then pick a term and a product; TalkBack / VoiceOver reads the rows; RTL, light and dark.

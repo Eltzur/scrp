@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: 18 Oct 2026 (SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
+> Last updated: 21 Oct 2026 (SU11A-47: search speed - precomputed page prices, /suggest type-ahead, response cache, web combobox, mobile suggestions; built, not deployed; SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
 
 ## 📏 Standing rules (apply to every session)
 
@@ -944,6 +944,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-44b (Oct 18) — legal entity XXL Enterprises (XXL אנטרפרייזס) in the terms, privacy, accessibility and deletion pages (web + app constant); privacy section 4 names Hostinger for sign-up / reset mail; partnerships direct-load title fix. Not deployed.
 - SU11A-45 (Oct 18) — read-only verification of SU11A-36 search v2 (no code change; paging drift finding 9b) + server runbook `docs/super/su11a36_search_v2_runbook.md`.
 - SU11A-46 (Oct 18) — web SEO (sitemaps per host, robots, canonical/meta per route, og images), load-more dedup (9b), header at 390 px, lazy routes + vendor chunks, eslint 0; search coupon variants + typo 0.40; mobile terms bidi. Play Production 8 submitted. Not deployed.
+- SU11A-47 (Oct 21) — search speed: search_item_prices (precomputed per-chain page prices, migration not applied), GET /suggest, per-worker response cache + Server-Timing / Cache-Control, web search combobox, mobile suggestions (build 9). Runbook `docs/super/su11a47_search_speed_runbook.md`. Not deployed.
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
 
@@ -1294,12 +1295,78 @@ Commits: scrp `4a4db14` (web), `5ddc2c8` (search), the chore/docs commit; mobile
 1. `scripts\deploy_frontend.ps1`, then submit the sitemaps.
 2. Server `git pull` + `sudo /usr/local/bin/xxl-restart.sh scrp-api` for the 0.40 threshold. The coupon variants apply at the next 14:30 build, or `build_search_items --apply` by hand.
 
+### SU11A-47 (21 Oct 2026) - search speed: precomputed prices, /suggest, cache; NOT deployed
+
+Commits: scrp `a2379ad` (API, migration, build, tests), `bc23d13` (web), the docs commit; mobile `bc434e8`. Runbook: `docs/super/su11a47_search_speed_runbook.md`.
+
+Context: SEARCH_V2=on has been live since 21 Oct 2026. v2 finds candidates in tens of ms; the rest of each request (about 0.2–1.3 s) is the live price fetch for the page from `prices` (7.9M rows, not in RAM).
+
+**What a v2 page carries (Step 0):** per item, `group_by_product` output via `_to_model`:
+- `product` (item_code, canonical_name, manufacturer, unit_of_measure, is_weighted, names_per_chain);
+- one quote per chain (its cheapest branch by effective price): chain/store ids and names, city, price, unit_price, unit_of_measure, updated_at, delta_from_cheapest, is_promo, promo_kind, shelf_price, promo_price, promo_min_qty, promo_description, promo_end, store_fk;
+- cheapest_price, most_expensive_price, chains_count.
+
+Built by `fetch_prices` (`_PRICE_SQL` + `_PROMO_PICK_SQL`, then `_PROMO_ONLY_SQL`; drops ₪0 shelf rows and non-live stores in Python), then `drop_eilat`, then `group_by_product`. The live path is forced by city, chain, group_by=store, engine=v1, and SEARCH_V2=off (or =test without engine=v2); `/compare` never uses v2. The **web** default view is compare mode with an auto-detected city, so web result pages do not use v2. The mobile app (no filters) does.
+
+**search_item_prices** (`db/migrations/su11a47_search_prices.sql`, NOT applied; additive, one transaction):
+- One row per (item_code, chain_id): exactly the row fields `group_by_product` reads for the winning quote, plus `ord` (where the chain's first row sits in the live order) and `built_at`. PK (item_code, chain_id), with `_next` twin, both owned by scrp_app. No separate item_code index (the PK leads with it). /suggest needed no new index (EXPLAIN on synthetic data: trigram GIN + lexicon key, no seq scan).
+- **Build:** `build_search_items --apply` fills `_next` from the live SQL itself (item_code IN list swapped for an item_code range; 16 ranges from `items` percentiles, `--price-chunks`), applies the same filters in SQL (shelf > 0, live stores, Eilat rule, per-chain winner and order), then swaps both tables in the existing swap transaction. Nothing is pulled into Python.
+  - Migration missing: one warning, search_items built as before.
+  - Fill failed or under 98% of the build's items: warning, search_items swapped alone.
+  - `--report` prints the upper bound (sum of chains_live). `--swap-back` swaps both.
+- **API:** an unfiltered v2 page reads its rows (`ORDER BY item_code, ord`) and feeds the same `group_by_product`. It falls back to the live fetch per request when the table is missing or empty, its built_at differs from search_items.built_at, a page item has no row, or a winning promo has ended since the build (checked in SQL).
+- **Determinism (deviation):** the live no-city fetch now orders `p.item_price, p.store_fk`, and the promo pick / promo-only pick break equal unit prices by promo_id, min_qty. These were arbitrary on ties (which branch or promo is shown, which chain names the product); without the change precomputed and live could not match byte for byte. Sort keys only, no filter or join change.
+- Data freshness: as of the last build (14:30 daily). Between the 10:00 load and the 14:30 build, v2 pages show the previous day's prices, as total_matches already did.
+
+**/suggest:** `GET /suggest?q=&limit=` (default 8, max 10), anonymous.
+- Items: `{kind: product|brand|term, text, item_code?, count?}`. Terms complete the last word (earlier words kept); brands and aliases complete the whole query; products are non-pseudo.
+- Same normalization, aliases and typo round as /search. A barcode answers that product only. Empty q gives an empty list.
+- Reads search_items + search_lexicon, plus `items.item_name` for up to 10 product display names (deviation: name_norm is lower-cased and stripped of quote marks).
+- Errors and stale builds answer an empty list, never a 500.
+
+**Cache + headers:** `api/response_cache.py`, per worker.
+- Key (endpoint, normalized q, limit, offset, group_by); LRU, 1,000 entries, 16 MB.
+- Invalidated when search_items.built_at changes (checked at most once per 60 s), plus a 10-minute TTL per entry (deviation: covers promos that end between builds).
+- Another spelling of the same key gets its own `query` echoed back; a typo-corrected answer is served only for the exact text.
+- v2 /search and /suggest send `Cache-Control: public, max-age=300` unless the request has Authorization, which gets no Cache-Control (SU11A-44 rule).
+- `Server-Timing`: `candidates;dur, prices;dur;desc=precomputed|live, total;dur`, or `cache;desc=hit, total;dur`. It never carries query text. The old path sends `total;dur` only.
+
+**Web (`bc23d13`):** the search box is a WAI-ARIA combobox.
+- /suggest after 160 ms; recent searches when empty.
+- Arrows / Enter / Escape, aria-activedescendant, 44 px rows, active outline; RTL; text #111827 / #4b5563 on #ecfdf5.
+- A product suggestion opens ProductDetailModal (via /product); a brand or term searches it.
+- Search debounce 300 -> 200 ms; React Query passes its AbortSignal to axios; previous results stay up dimmed with "מעדכן תוצאות…".
+- First page and load-more pages are 20 items (SU11A-46 dedup/offset unchanged).
+- Checked against a mock API at 390 px (no horizontal scroll) and desktop.
+
+**Tests:**
+- `tests/test_search_speed.py`: fakes, always runs. Covers the precomputed choice and fallbacks, the cache (hit/miss, echo, invalidation, TTL, LRU, bytes), headers incl. Authorization, and /suggest logic plus the endpoint.
+- `tests/test_search_prices_pg.py`: real Postgres, skipped unless `SCRP_TEST_PG_URL`. Covers the fill, byte-identical JSON against the live fetch on fixtures (promo, rate-only, 100% rate, promo-only tie, Eilat-only, Eilat cheaper, dead store, ₪0, ended promo, bundle, equal promos, coupon pseudo), the fallbacks, the missing migration, chunk count, /suggest SQL, and the compare mode.
+- Full suite: 310 passed, 8 skipped (Postgres tests), 14 known test_smoke failures. With a local Postgres 16: 318 passed.
+
+**Local measurements (synthetic, laptop, NOT production):** 20K items, 900 stores, 1.16M prices.
+- Fill: 44 s.
+- A 30-item page: live fetch median 173 ms (p90 251) against precomputed read 9.4 ms (p90 13.7), plus group_by_product 2 ms.
+- /suggest SQL on 132,755 synthetic rows in PGlite (WASM): 1–90 ms per query.
+
+**Deploy (Dude), in order:** runbook a–g:
+1. pull;
+2. migration;
+3. build `--apply` (fills both tables);
+4. `compare_search_v2 --check-precomputed 300` (0 mismatches);
+5. API restart;
+6. curl timings;
+7. web deploy (`scripts\deploy_frontend.ps1`).
+
+The 14:30 timer then maintains the table. Mobile: build 9.
+
 ---
 
-## 📋 Open items / next steps (as of 18 Oct 2026)
+## 📋 Open items / next steps (as of 21 Oct 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1. Lawyer review of the terms is Dude's call.
-- **SU11A-36 Search v2:** built (132,755 rows, 612 pseudo), compare GO, SEARCH_V2=test live, timer installed (daily 14:30). Runbook step h (SEARCH_V2=on) after 2 good timer runs and the SU11A-46 web deploy (9b fix). SU11A-46 search changes need an API restart (threshold) and the next build (coupons).
+- **SU11A-36 Search v2:** SEARCH_V2=on since 21 Oct 2026; timer daily 14:30.
+- **SU11A-47 search speed:** built, not deployed. Run `docs/super/su11a47_search_speed_runbook.md` (migration, build, check-precomputed, restart, curl), then the web deploy. Mobile suggestions ship in build 9.
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
 - **Catalog:**
   - category / attribute faceted filters;
@@ -1315,9 +1382,9 @@ Commits: scrp `4a4db14` (web), `5ddc2c8` (search), the chore/docs commit; mobile
 - **Play:**
   - Production release 8 (1.2.1) submitted for review 18 Oct (full rollout, Israel); watch the review result.
   - plan Play Billing.
-  - Next build is versionCode 9 (carries the SU11A-46 terms bidi fix).
+  - Next build is versionCode 9 (carries the SU11A-46 terms bidi fix and the SU11A-47 search suggestions).
 - **SEO:** built in SU11A-46. After the web deploy: submit the sitemaps in Search Console (see the SU11A-46 entry) and request indexing of the key pages. Optional nginx www -> apex redirect on 443.
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-47 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).
+Next free session ID: SU11A-48 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).

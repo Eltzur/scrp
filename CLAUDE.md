@@ -21,7 +21,7 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 15. **CC never deploys, never runs EAS builds, never calls `DELETE /account`, never modifies production data.** Dude runs `scripts\deploy_frontend.ps1` and EAS builds. Never delete the Supabase users x@xxl.co.il or gplay@xxl.co.il (the Play demo account); throwaway test users are created in Supabase → Authentication → Users → Add user (Auto Confirm).
 
 ## Status / next steps
-Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-47 (SU11A-37 reserved).
+Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-48 (SU11A-37 reserved).
 - RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1 on Play.
 - Legal entity: XXL Enterprises (XXL אנטרפרייזס), the Play-verified organisation; legal texts use the constant LEGAL_ENTITY_NAME in web/src/legal/terms.ts and xxl-super-mobile/src/legal/terms.ts
 - Apple track sessions use the new sub-series SU11B (first: SU11B-1)
