@@ -10,7 +10,15 @@
     "placeholder": "חפשו מוצר בעברית או באנגלית… למשל במבה, חלב, קוטג'",
     "clear": "נקה",
     "results_count": "נמצאו {{count}} מוצרים",
-    "comparable_count": "{{count}} ניתנים להשוואה בין רשתות"
+    "comparable_count": "{{count}} ניתנים להשוואה בין רשתות",
+    "suggestions_label": "הצעות חיפוש",
+    "suggest_kind_product": "מוצר",
+    "suggest_kind_brand": "מותג",
+    "suggest_kind_term": "חיפוש",
+    "updating": "מעדכן תוצאות…",
+    "recent_title": "החיפושים האחרונים שלי",
+    "recent_clear_all": "נקה הכל",
+    "recent_remove": "הסר חיפוש"
   },
   "filters": {
     "compare_mode": "מצב השוואה",

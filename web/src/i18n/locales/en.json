@@ -10,7 +10,15 @@
     "placeholder": "Search in Hebrew or English… e.g. במבה, milk, cottage",
     "clear": "Clear",
     "results_count": "{{count}} products found",
-    "comparable_count": "{{count}} comparable across chains"
+    "comparable_count": "{{count}} comparable across chains",
+    "suggestions_label": "Search suggestions",
+    "suggest_kind_product": "Product",
+    "suggest_kind_brand": "Brand",
+    "suggest_kind_term": "Search",
+    "updating": "Updating results…",
+    "recent_title": "My recent searches",
+    "recent_clear_all": "Clear all",
+    "recent_remove": "Remove search"
   },
   "filters": {
     "compare_mode": "Compare mode",

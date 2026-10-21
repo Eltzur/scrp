@@ -16,7 +16,7 @@ const STALE = 5 * 60 * 1000;
 export const useSearch = (query: string, opts: SearchOpts = {}, enabled = true) =>
   useQuery({
     queryKey: ['search', query, opts],
-    queryFn: () => searchProducts(query, opts),
+    queryFn: ({ signal }) => searchProducts(query, opts, signal),
     enabled: enabled && query.trim().length >= 2,
     staleTime: STALE,
     refetchOnWindowFocus: false,
@@ -26,7 +26,7 @@ export const useSearch = (query: string, opts: SearchOpts = {}, enabled = true) 
 export const useCompare = (query: string, opts: CompareOpts = {}, enabled = true) =>
   useQuery({
     queryKey: ['compare', query, opts],
-    queryFn: () => compareProducts(query, opts),
+    queryFn: ({ signal }) => compareProducts(query, opts, signal),
     enabled: enabled && query.trim().length >= 2,
     staleTime: STALE,
     refetchOnWindowFocus: false,

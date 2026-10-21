@@ -101,6 +101,13 @@ export default function ResultsList({
           {t('search.results_count', { count: result.total_matches })}
           {result.comparable_count > 0 && ` · ${t('search.comparable_count', { count: result.comparable_count })}`}
         </p>
+        {/* SU11A-47: the previous results stay up (dimmed) while the next query loads. */}
+        {isFetching && !isLoadingMore && (
+          <span className="flex items-center gap-1 text-xs text-gray-600" role="status">
+            <Loader2 size={10} className="animate-spin" aria-hidden="true" />
+            {t('search.updating')}
+          </span>
+        )}
         {promosLoading && (
           <span className="flex items-center gap-1 text-xs text-gray-500">
             <Loader2 size={10} className="animate-spin" />

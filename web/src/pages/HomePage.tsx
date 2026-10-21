@@ -7,8 +7,9 @@ import Filters, { type FilterState } from '../components/Filters';
 import StatsBar from '../components/StatsBar';
 import FreshnessStrip from '../components/FreshnessStrip';
 import ResultsList from '../components/ResultsList';
+import ProductDetailModal from '../components/ProductDetailModal';
 import { useSearch, useCompare } from '../api/hooks';
-import { searchProducts, compareProducts } from '../api/client';
+import { searchProducts, compareProducts, getProduct } from '../api/client';
 import type { ProductWithPrices, CityInfo } from '../api/client';
 import { defaultCity, matchIpCity, rememberCity, storedCity } from '../utils/city';
 
@@ -22,7 +23,9 @@ const DEFAULT_FILTERS: FilterState = {
 // City resolution lives in utils/city so PromosPage defaults to the same city
 // this page is searching in. Behaviour here is unchanged.
 
-const PAGE_SIZE = 30;
+// SU11A-47: 20 (was 30, the server default): a smaller first page answers
+// sooner and fills the first screen at every width; load-more pages are 20 too.
+const PAGE_SIZE = 20;
 
 /**
  * Identity of a result row for the load-more dedupe. group_by=store returns one
@@ -38,8 +41,8 @@ function useActiveResults(query: string, filters: FilterState) {
   const city    = filters.city?.length  ? filters.city  : undefined;
   const chain   = filters.chain?.length ? filters.chain : undefined;
   const groupBy = filters.groupBy;
-  const search  = useSearch(query, { city, chain, group_by: groupBy }, !filters.compareMode);
-  const compare = useCompare(query, { city }, filters.compareMode);
+  const search  = useSearch(query, { city, chain, group_by: groupBy, limit: PAGE_SIZE }, !filters.compareMode);
+  const compare = useCompare(query, { city, limit: PAGE_SIZE }, filters.compareMode);
   return filters.compareMode ? compare : search;
 }
 
@@ -63,6 +66,8 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
   // v2 pages on its own table and can skip an item, so a page may overlap the
   // previous one (SU11A-45 finding 9b). null = start after the first page.
   const nextOffset = useRef<number | null>(null);
+  // A product picked from the search box suggestions (SU11A-47).
+  const [modalItem, setModalItem] = useState<ProductWithPrices | null>(null);
 
   // Detect city once — fires when the cities list first populates.
   // Guarded by ref so React strict-mode double-invocation doesn't double-detect.
@@ -119,6 +124,15 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
     setLastFilters(f);
   }, [resetExtras]);
 
+  const handleOpenProduct = useCallback(async (itemCode: string) => {
+    try {
+      setModalItem(await getProduct(itemCode));
+      return true;
+    } catch {
+      return false;   // the search box then searches the product's name instead
+    }
+  }, []);
+
   const handleRetry = () => {
     queryClient.invalidateQueries({ queryKey: [filters.compareMode ? 'compare' : 'search'] });
   };
@@ -167,7 +181,7 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
           <XxlLogo variant="hero" lang={lang} className="w-full max-w-2xl" />
         </section>
 
-        <SearchBar onSearch={handleSearch} />
+        <SearchBar onSearch={handleSearch} onOpenProduct={handleOpenProduct} />
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Filters filters={filters} onChange={handleFiltersChange} cities={cities} />
@@ -187,6 +201,8 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
           isLoadingMore={loadingMore}
         />
       </main>
+
+      {modalItem && <ProductDetailModal item={modalItem} onClose={() => setModalItem(null)} />}
 
       <footer className="max-w-6xl mx-auto px-4 py-6 border-t border-gray-200 mt-8">
         <p className="text-xs text-gray-500 text-center">

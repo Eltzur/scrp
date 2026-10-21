@@ -50,11 +50,31 @@ export interface CompareOpts {
   city?: string[] | null;
 }
 
-export const searchProducts = (q: string, opts: SearchOpts = {}): Promise<SearchResult> =>
-  http.get<SearchResult>('/search', { params: { q, ...opts } }).then(r => r.data);
+// signal (SU11A-47): React Query aborts a superseded search, so a fast typist
+// no longer leaves a queue of slower requests running ahead of the one shown.
+export const searchProducts = (q: string, opts: SearchOpts = {}, signal?: AbortSignal): Promise<SearchResult> =>
+  http.get<SearchResult>('/search', { params: { q, ...opts }, signal }).then(r => r.data);
 
-export const compareProducts = (q: string, opts: CompareOpts = {}): Promise<SearchResult> =>
-  http.get<SearchResult>('/compare', { params: { q, ...opts } }).then(r => r.data);
+export const compareProducts = (q: string, opts: CompareOpts = {}, signal?: AbortSignal): Promise<SearchResult> =>
+  http.get<SearchResult>('/compare', { params: { q, ...opts }, signal }).then(r => r.data);
+
+/** One /suggest entry (SU11A-47). product: open it by item_code; brand / term: search for text. */
+export interface Suggestion {
+  kind: 'product' | 'brand' | 'term';
+  text: string;
+  item_code?: string;
+  count?: number;
+}
+
+export interface SuggestResult {
+  query: string;
+  corrected_from?: string;
+  items: Suggestion[];
+}
+
+/** Type-ahead for the search box: GET /suggest (no prices, cached server-side). */
+export const getSuggestions = (q: string, limit = 8, signal?: AbortSignal): Promise<SuggestResult> =>
+  http.get<SuggestResult>('/suggest', { params: { q, limit }, signal }).then(r => r.data);
 
 export const getProduct = (barcode: string): Promise<ProductWithPrices> =>
   http.get<ProductWithPrices>(`/product/${barcode}`).then(r => r.data);
