@@ -296,7 +296,9 @@ LEFT JOIN LATERAL (
     ) x
     WHERE x.promo_unit_price IS NOT NULL
       AND x.promo_unit_price < p.item_price
-    ORDER BY x.promo_unit_price ASC
+    -- promo_id and min_qty break ties between equal unit prices (SU11A-47), so
+    -- the same promo is shown every time and search_item_prices matches it.
+    ORDER BY x.promo_unit_price ASC, x.promo_id, x.promo_min_qty
     LIMIT 1
 ) pmo ON TRUE
 """
@@ -420,7 +422,7 @@ LEFT JOIN item_chain_names icn
 WHERE p.item_code IN :codes
   AND {_PROMO_ONLY_WHERE}
   /*EXTRA*/
-ORDER BY p.store_fk, p.item_code, (p.discount_price / p.min_qty) ASC
+ORDER BY p.store_fk, p.item_code, (p.discount_price / p.min_qty) ASC, p.promo_id, p.min_qty
 """
 
 _PROMO_ONLY_SQL_CITY = f"""
@@ -573,7 +575,11 @@ def _fetch_prices_all(
         sql += " AND s.store_id = :store_only"
         params["store_only"] = store_only
         po_extra += " AND s.store_id = :store_only"
-    sql += " ORDER BY p.item_price"
+    # store_fk breaks price ties (SU11A-47). Row order decides which branch wins
+    # a chain on equal prices and which chain names the product, and was
+    # arbitrary on ties; search_item_prices (scripts/build_search_items.py)
+    # reproduces this exact order. A sort key only: no filter, no join change.
+    sql += " ORDER BY p.item_price, p.store_fk"
     rows = [dict(r) for r in conn.execute(text(sql).bindparams(*expanding), params).mappings().all()]
 
     po_sql = _PROMO_ONLY_SQL.replace("/*EXTRA*/", po_extra)

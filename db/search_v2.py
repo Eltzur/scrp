@@ -27,6 +27,14 @@ Differences from the old path, on purpose:
   - total_matches / comparable_count come from search_items (as of the last
     build), not from a live price fetch.
 
+SU11A-47: the page's prices come from search_item_prices (one precomputed row
+per barcode and chain, filled by the same build from the live SQL) and go
+through the same group_by_product, so the JSON is the live fetch's as of the
+last build. The live fetch is used instead, per request, when the table is
+missing or empty, when its built_at differs from search_items.built_at, when a
+page item has no row there, or when a page item's winning promo has ended since
+the build. suggest() answers GET /suggest from search_items + search_lexicon.
+
 Pure functions (parse, aliases, tiers, ranking, correction, Eilat) take no
 database and are unit-tested in tests/test_search_v2.py.
 """
@@ -51,6 +59,8 @@ EILAT = "אילת"             # stores.city_canonical (CBS 2024 name; cerberus 
 TYPO_MIN_SIMILARITY = 0.40    # SU11A-46: was 0.45; שוקלד -> שוקולד scores 0.444
 _META_TTL_S = 60.0         # built_at check
 _LEXICON_TTL_S = 600.0     # aliases and Eilat store ids
+SUGGEST_MAX = 10
+_SUGGEST_TERMS, _SUGGEST_BRANDS = 3, 2   # per answer; products fill the rest
 
 
 class V2Unavailable(RuntimeError):
@@ -231,6 +241,7 @@ def drop_eilat(rows: list[dict], eilat_fks: frozenset, city: list[str] | None = 
 class _Cache:
     built_at: tuple[float, datetime | None] | None = None
     lexicon: tuple[float, dict, frozenset] | None = None
+    prices_built_at: tuple[float, datetime | None] | None = None
 
 
 _cache = _Cache()
@@ -257,6 +268,53 @@ def _lexicon(conn: Connection) -> tuple[dict, frozenset]:
         "SELECT id FROM stores WHERE city_canonical = :c"), {"c": EILAT}))
     _cache.lexicon = (now, aliases, eilat)
     return aliases, eilat
+
+
+def built_stamp(conn: Connection) -> datetime | None:
+    """search_items.built_at (cached _META_TTL_S): the response cache's stamp."""
+    return _built_at(conn)
+
+
+def _prices_built_at(conn: Connection) -> datetime | None:
+    """search_item_prices.built_at, None when the table is missing or empty (cached)."""
+    now = time.monotonic()
+    c = _cache.prices_built_at
+    if c is not None and now - c[0] < _META_TTL_S:
+        return c[1]
+    val = None
+    if conn.execute(text("SELECT to_regclass('public.search_item_prices') IS NOT NULL")).scalar():
+        val = conn.execute(text("SELECT built_at FROM search_item_prices LIMIT 1")).scalar()
+    _cache.prices_built_at = (now, val)
+    return val
+
+
+_PRE_COLS = ("item_code, chain_id, item_name, canonical_item_name, manufacturer_name, unit_of_measure, "
+             "is_weighted, item_price, unit_of_measure_price, price_update_date, chain_name, store_id, "
+             "store_name, city, store_fk, promo_unit_price, promo_min_qty, promo_description, promo_end")
+
+
+def _precomputed_rows(conn: Connection, codes: list[str]) -> list[dict] | None:
+    """The page's rows from search_item_prices, or None = use the live fetch.
+
+    One row per (item, chain), already filtered (shelf > 0, live stores, Eilat
+    rule) and in the live row order (ord), so group_by_product builds the same
+    products from them. None when the table is not from this build, when an item
+    has no row, or when a winning promo has ended since the build (the live
+    fetch would pick another quote).
+    """
+    pre = _prices_built_at(conn)
+    if pre is None or pre != _built_at(conn):
+        return None
+    rows = [dict(r) for r in conn.execute(text(f"""
+        SELECT {_PRE_COLS},
+               (promo_end IS NOT NULL AND CAST(promo_end AS timestamp) < NOW()) AS promo_ended
+        FROM search_item_prices
+        WHERE item_code IN :c
+        ORDER BY item_code, ord
+    """).bindparams(bindparam("c", expanding=True)), {"c": codes}).mappings()]
+    if {r["item_code"] for r in rows} != set(codes) or any(r.pop("promo_ended") for r in rows):
+        return None
+    return rows
 
 
 def check_ready(conn: Connection) -> None:
@@ -325,11 +383,16 @@ class V2Result:
     corrected_from: str | None = None
     ranked_page: list[dict] = field(default_factory=list)  # debug: the page's candidates with tier
     timings_ms: dict = field(default_factory=dict)
+    prices_source: str = "live"          # "precomputed" | "live" (SU11A-47)
 
 
 def run(conn: Connection, q: str, limit: int = 30, offset: int = 0,
-        city: list[str] | None = None) -> V2Result:
-    """The v2 search. Raises V2Unavailable (or anything else) -> caller falls back."""
+        city: list[str] | None = None, precomputed: bool = True) -> V2Result:
+    """The v2 search. Raises V2Unavailable (or anything else) -> caller falls back.
+
+    precomputed=False forces the live price fetch (compare_search_v2). A city
+    filter always does: search_item_prices is national.
+    """
     t = {"start": time.perf_counter()}
 
     def lap(name: str) -> None:
@@ -368,9 +431,14 @@ def run(conn: Connection, q: str, limit: int = 30, offset: int = 0,
     lap("rank")
 
     products: list[dict] = []
+    source = "live"
     if page:
         codes = [c["item_code"] for c in page]
-        rows = drop_eilat(fetch_prices(conn, codes), eilat_fks, city)
+        rows = _try_precomputed(conn, codes) if precomputed and not city else None
+        if rows is not None:
+            source = "precomputed"
+        else:
+            rows = drop_eilat(fetch_prices(conn, codes), eilat_fks, city)
         by_item = group_by_product(rows)
         # An item whose quotes all disappeared since the build is skipped.
         products = [by_item[c] for c in codes if c in by_item]
@@ -389,4 +457,150 @@ def run(conn: Connection, q: str, limit: int = 30, offset: int = 0,
         corrected_from=corrected_from,
         ranked_page=page,
         timings_ms=t,
+        prices_source=source,
     )
+
+
+def _try_precomputed(conn: Connection, codes: list[str]) -> list[dict] | None:
+    """_precomputed_rows in its own SAVEPOINT; any error -> None (live fetch)."""
+    try:
+        with conn.begin_nested():
+            return _precomputed_rows(conn, codes)
+    except Exception as exc:  # noqa: BLE001 - the live fetch still answers
+        log.warning("search_item_prices unreadable, using the live price fetch: %s", type(exc).__name__)
+        return None
+
+
+# ---------------------------------------------------------------------------
+# /suggest (SU11A-47)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Suggestions:
+    query: str
+    items: list[dict]
+    corrected_from: str | None = None
+    timings_ms: dict = field(default_factory=dict)
+
+
+def _lexicon_prefix(conn: Connection, prefix: str, kinds: tuple[str, ...], n: int) -> list[dict]:
+    rows = conn.execute(text("""
+        SELECT term, kind, canonical, freq FROM search_lexicon
+        WHERE term LIKE :p ESCAPE '\\' AND kind IN :k
+        ORDER BY freq DESC, term
+        LIMIT :n
+    """).bindparams(bindparam("k", expanding=True)),
+        {"p": _like_escape(prefix) + "%", "k": list(kinds), "n": n}).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def _product_names(conn: Connection, codes: list[str]) -> dict[str, str]:
+    if not codes:
+        return {}
+    return {r[0]: r[1] for r in conn.execute(text(
+        "SELECT item_code, item_name FROM items WHERE item_code IN :c").bindparams(
+        bindparam("c", expanding=True)), {"c": codes})}
+
+
+def _suggest_products(conn: Connection, groups: list[Group], q_norm: str, n: int) -> list[dict]:
+    """Best n live, non-pseudo items for the words typed so far.
+
+    One word shorter than 3 letters: names starting with it (a 2-letter
+    substring matches a large part of the catalog). Otherwise every word as a
+    substring of the name or manufacturer, like /search. Order: name starts
+    with the query, then search v2's price-neutral keys (2+ chains,
+    popularity, chains, shorter name, item_code).
+    """
+    if len(groups) == 1 and not groups[0].alias and len(groups[0].alts[0]) < 3:
+        clause, params = "name_norm LIKE :g0 ESCAPE '\\'", {"g0": _like_escape(groups[0].alts[0]) + "%"}
+    else:
+        clause, params = where_clause(groups)
+    if not clause:
+        return []
+    params.update({"starts": _like_escape(q_norm) + "%", "n": n})
+    rows = conn.execute(text(f"""
+        SELECT item_code, name_norm, chains_live FROM search_items
+        WHERE NOT is_pseudo AND {clause}
+        ORDER BY (name_norm LIKE :starts ESCAPE '\\') DESC, (chains_live >= 2) DESC, popularity DESC,
+                 chains_live DESC, length(name_norm), item_code
+        LIMIT :n
+    """), params).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def suggest(conn: Connection, q: str, limit: int = 8) -> Suggestions:
+    """Type-ahead for GET /suggest: terms, brands and products; no prices.
+
+    Same normalization, aliases and typo round as run(). Terms complete the
+    last word typed (the words before it are kept in front); brands and aliases
+    complete the whole query. A barcode (8-14 digits) answers that product
+    only, when it is a live non-pseudo item.
+    """
+    t0 = time.perf_counter()
+    limit = max(1, min(limit, SUGGEST_MAX))
+    q_norm = normalize(q)
+    out = Suggestions(query=q, items=[])
+    if not q_norm:
+        return out
+    check_ready(conn)
+    aliases, _eilat = _lexicon(conn)
+
+    variants = barcode_variants(q_norm)
+    if variants:
+        hits = [c for c in _barcode(conn, variants) if not c["is_pseudo"]][:1]
+        names = _product_names(conn, [c["item_code"] for c in hits])
+        out.items = [{"kind": "product", "text": names.get(c["item_code"]) or c["name_norm"],
+                      "item_code": c["item_code"]} for c in hits]
+        out.timings_ms = {"total": round((time.perf_counter() - t0) * 1000, 1)}
+        return out
+
+    words = q_norm.split(" ")
+    head, last = " ".join(words[:-1]), words[-1]
+    # A lone 1-letter word is not a search token (tokenize), but it is a prefix.
+    groups = apply_aliases(tokenize(q_norm), aliases) or ([Group(alts=[last])] if last else [])
+
+    def collect(groups: list[Group], last: str) -> tuple[list[dict], list[dict], list[dict]]:
+        terms = _lexicon_prefix(conn, last, ("token",), limit) if last else []
+        brands = _lexicon_prefix(conn, q_norm, ("brand", "alias"), limit)
+        products = _suggest_products(conn, groups, q_norm, limit) if groups else []
+        return terms, brands, products
+
+    terms, brands, products = collect(groups, last)
+    if not (terms or brands or products) and len(q_norm) >= 3:
+        fixed = _correct(conn, groups)
+        if fixed:
+            q_fixed = " ".join(g.alts[0] for g in fixed)
+            words = q_fixed.split(" ")
+            head, last = " ".join(words[:-1]), words[-1]
+            terms, brands, products = collect(fixed, last)
+            if terms or brands or products:
+                out.corrected_from = q
+                q_norm = q_fixed
+
+    seen: set[str] = set()
+    t_items, b_items = [], []
+    for r in terms:
+        text_ = f"{head} {r['term']}".strip()
+        if text_ not in seen:
+            seen.add(text_)
+            t_items.append({"kind": "term", "text": text_, "count": int(r["freq"])})
+    for r in brands:
+        if r["term"] not in seen:
+            seen.add(r["term"])
+            b_items.append({"kind": "brand", "text": r["term"], "count": int(r["freq"])})
+    names = _product_names(conn, [p["item_code"] for p in products])
+    p_items = [{"kind": "product", "text": names.get(p["item_code"]) or p["name_norm"], "item_code": p["item_code"]}
+               for p in products]
+
+    # Up to 3 terms and 2 brands, products fill the rest; any short group's
+    # slots go to the others (products, then terms, then brands).
+    take_t = min(len(t_items), _SUGGEST_TERMS, limit)
+    take_b = min(len(b_items), _SUGGEST_BRANDS, limit - take_t)
+    take_p = min(len(p_items), limit - take_t - take_b)
+    spare = limit - take_t - take_b - take_p
+    extra_t = min(spare, len(t_items) - take_t)
+    spare -= extra_t
+    extra_b = min(spare, len(b_items) - take_b)
+    out.items = t_items[:take_t + extra_t] + b_items[:take_b + extra_b] + p_items[:take_p]
+    out.timings_ms = {"total": round((time.perf_counter() - t0) * 1000, 1)}
+    return out

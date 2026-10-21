@@ -17,6 +17,18 @@
 --swap-back  Swaps the names back: the previous build becomes live again
           (instant rollback of a bad build). Run it once only.
 
+SU11A-47: the same --apply also fills search_item_prices_next (one row per
+(barcode, chain): the quote search v2 shows for that chain) and swaps it in
+the SAME swap transaction, so an unfiltered v2 /search reads its page prices
+from there instead of the 7.9M-row prices table. The rows come from the live
+path's own SQL (db.query._PRICE_SQL / _PROMO_ONLY_SQL with _PROMO_PICK_SQL),
+aggregated in Postgres in --price-chunks statements (item_code ranges), never
+pulled into Python. --swap-back swaps both. Without the su11a47 migration the
+build makes search_items exactly as before and logs one warning; if the price
+fill fails, search_items is still swapped in and the API keeps the live price
+fetch (it uses search_item_prices only while its built_at equals
+search_items.built_at).
+
 statement_timeout 10 min on every connection; the swap waits at most 5 s for
 its locks and is retried 3 times. Timings are printed. Needs the
 su11a36_search_items.sql migration (tables owned by scrp_app, the role in
@@ -50,6 +62,9 @@ INSERT_CHUNK = 5000
 MIN_KEEP_RATIO = 0.5   # refuse to swap in a build with < 50% of the live row count
 ALIASES = ROOT / "data" / "brand_aliases.csv"
 
+PRICE_CHUNKS = 16      # SU11A-47: search_item_prices fill statements (item_code ranges)
+MIN_PRICE_ITEMS = 0.98  # swap the prices in only when they cover >= 98% of the build's items
+
 SWAP_PAIRS = [  # (live name, staging name): tables, primary keys, indexes
     ("TABLE", "search_items", "search_items_next"),
     ("INDEX", "search_items_pkey", "search_items_next_pkey"),
@@ -59,6 +74,11 @@ SWAP_PAIRS = [  # (live name, staging name): tables, primary keys, indexes
     ("TABLE", "search_lexicon", "search_lexicon_next"),
     ("INDEX", "search_lexicon_pkey", "search_lexicon_next_pkey"),
     ("INDEX", "idx_search_lexicon_term_trgm", "idx_search_lexicon_next_term_trgm"),
+]
+PRICE_TABLES = ("search_item_prices", "search_item_prices_next")
+PRICE_SWAP_PAIRS = [  # SU11A-47; swapped together with SWAP_PAIRS
+    ("TABLE", "search_item_prices", "search_item_prices_next"),
+    ("INDEX", "search_item_prices_pkey", "search_item_prices_next_pkey"),
 ]
 
 # Per (item, chain): shelf quotes and promo-only quotes from live stores, with
@@ -108,6 +128,98 @@ SELECT u.item_code,
 FROM u
 JOIN items i ON i.item_code = u.item_code
 GROUP BY u.item_code, i.item_name, i.manufacturer_name
+"""
+
+# SU11A-47: search_item_prices columns = the row fields group_by_product reads
+# for a v2 page (see db/migrations/su11a47_search_prices.sql).
+PRICE_ROW_COLS = [
+    "item_code", "chain_id", "item_name", "canonical_item_name", "manufacturer_name", "unit_of_measure",
+    "is_weighted", "item_price", "unit_of_measure_price", "price_update_date", "chain_name", "store_id",
+    "store_name", "city", "store_fk", "promo_unit_price", "promo_min_qty", "promo_description", "promo_end",
+]
+# One chunk = an item_code range. Bounds come from the database's own ordering
+# (percentiles of items.item_code), so ranges neither overlap nor leave gaps
+# under any collation, and the planner estimates them from its statistics
+# (a hash-of-item_code filter was estimated at 0.5% and planned as per-row
+# nested loops). NULL bound = open end; psycopg2 inlines the literal and the
+# planner folds the NULL test away.
+_PRICE_PART = "(CAST(:lo AS text) IS NULL OR {col} >= :lo) AND (CAST(:hi AS text) IS NULL OR {col} < :hi)"
+
+
+def price_bounds(conn, chunks: int) -> list[tuple[str | None, str | None]]:
+    """(lo, hi) item_code ranges covering every code exactly once."""
+    from sqlalchemy import text
+    if chunks <= 1:
+        return [(None, None)]
+    fr = [k / chunks for k in range(1, chunks)]
+    cuts = conn.execute(text("SELECT percentile_disc(CAST(:f AS float8[])) WITHIN GROUP (ORDER BY item_code) "
+                             "FROM items"), {"f": fr}).scalar() or []
+    cuts = list(dict.fromkeys(c for c in cuts if c is not None))
+    edges = [None, *cuts, None]
+    return list(zip(edges[:-1], edges[1:]))
+
+
+def price_fill_sql() -> str:
+    """INSERT for one chunk of search_item_prices_next, built from the live SQL.
+
+    Rows: db.query._PRICE_SQL (shelf + _PROMO_PICK_SQL) and _PROMO_ONLY_SQL with
+    their item_code IN list swapped for an item_code range; nothing else in
+    them changes. Then, in the database, the steps the API runs in Python on
+    a page today:
+      fetch_prices     shelf price > 0, live stores only
+      drop_eilat       Eilat quotes out unless they are the item's only ones
+      group_by_product per chain, the first row with the lowest effective price
+                       (LEAST(shelf, promo)), in the live row order: shelf rows
+                       by item_price then store_fk, then promo-only rows by
+                       store_fk; ord = where the chain's first row sits in that
+                       order
+    """
+    import db.query as Q
+    shelf, po = Q._PRICE_SQL, Q._PROMO_ONLY_SQL.replace("/*EXTRA*/", "")
+    w_shelf, w_po = "WHERE icn.item_code IN :codes", "WHERE p.item_code IN :codes"
+    if shelf.count(w_shelf) != 1 or po.count(w_po) != 1:
+        raise RuntimeError("db.query price SQL changed shape - update price_fill_sql")
+    shelf = shelf.replace(w_shelf, "WHERE " + _PRICE_PART.format(col="icn.item_code")
+                          + " AND " + _PRICE_PART.format(col="p.item_code"))
+    po = po.replace(w_po, "WHERE " + _PRICE_PART.format(col="p.item_code"))
+    rcols = ", ".join("promo_unit_price::double precision AS promo_unit_price" if c == "promo_unit_price" else c
+                      for c in PRICE_ROW_COLS)
+    out = ", ".join(f"w.{c}" for c in PRICE_ROW_COLS)
+    return f"""
+INSERT INTO search_item_prices_next ({", ".join(PRICE_ROW_COLS[:2])}, ord, {", ".join(PRICE_ROW_COLS[2:])}, built_at)
+WITH shelf AS ({shelf}), po AS ({po}),
+r AS (
+    SELECT 0 AS src, {rcols} FROM shelf
+    UNION ALL
+    SELECT 1 AS src, {rcols} FROM po
+), k AS (
+    SELECT r.*, LEAST(r.item_price, r.promo_unit_price) AS eff,
+           r.store_fk = ANY(:eilat) AS is_eilat
+    FROM r
+    WHERE (r.item_price IS NULL OR r.item_price > 0)
+      AND r.store_fk = ANY(:live)
+), e AS (
+    SELECT k.*, bool_or(NOT k.is_eilat) OVER (PARTITION BY k.item_code) AS has_other
+    FROM k
+), w AS (
+    -- win = 1: the chain's quote. f_*: the chain's FIRST row in the live order,
+    -- carried on every row so ord needs no self-join (a join back to this set
+    -- planned as a nested loop on a 1-row estimate: quadratic per chunk).
+    SELECT e.*,
+           row_number() OVER (PARTITION BY e.item_code, e.chain_id
+                              ORDER BY e.eff, e.src, e.item_price, e.store_fk) AS win,
+           min(e.src)         OVER c AS f_src,
+           first_value(e.item_price) OVER (c ORDER BY e.src, e.item_price, e.store_fk) AS f_price,
+           first_value(e.store_fk)   OVER (c ORDER BY e.src, e.item_price, e.store_fk) AS f_fk
+    FROM e
+    WHERE NOT e.is_eilat OR NOT e.has_other
+    WINDOW c AS (PARTITION BY e.item_code, e.chain_id)
+)
+SELECT w.item_code, w.chain_id,
+       row_number() OVER (PARTITION BY w.item_code ORDER BY w.f_src, w.f_price, w.f_fk) AS ord,
+       {out.split(", ", 2)[2]}, CAST(:built_at AS timestamptz)
+FROM w
+WHERE w.win = 1
 """
 
 
@@ -267,7 +379,7 @@ def report(conn, inputs: dict, aliases_path: Path) -> dict:
     """), {"c": EILAT, "live": inputs["live_fks"]}).mappings().one()
 
     tables = {}
-    for t in ("search_items", "search_items_next", "search_lexicon", "search_lexicon_next"):
+    for t in ("search_items", "search_items_next", "search_lexicon", "search_lexicon_next", *PRICE_TABLES):
         if _table_exists(conn, t):
             info = conn.execute(text(f"""
                 SELECT (SELECT tableowner FROM pg_tables WHERE schemaname = 'public' AND tablename = :t) AS owner,
@@ -317,6 +429,9 @@ def report(conn, inputs: dict, aliases_path: Path) -> dict:
             "search_items_searchable (not pseudo)": len(rows) - len(pseudo),
             "search_lexicon": len(lex),
             "search_lexicon_by_kind": dict(kinds),
+            # One row per (item, live chain). An upper bound: a chain whose only
+            # quotes for an item are in Eilat is dropped when other chains sell it.
+            "search_item_prices (at most)": sum(r["chains_live"] for r in rows),
         },
         "aliases": {
             "file": aliases_path.relative_to(ROOT).as_posix(), "count": len(aliases),
@@ -354,7 +469,8 @@ def print_report(r: dict) -> None:
       f"raw stores.city values: {e['raw_city_values']}")
     x = r["expected_rows"]
     p(f"\nexpected rows: search_items {x['search_items']} (searchable {x['search_items_searchable (not pseudo)']}), "
-      f"search_lexicon {x['search_lexicon']} {x['search_lexicon_by_kind']}")
+      f"search_lexicon {x['search_lexicon']} {x['search_lexicon_by_kind']}, "
+      f"search_item_prices at most {x['search_item_prices (at most)']} (one per item and live chain)")
     a = r["aliases"]
     p(f"aliases: {a['count']} from {a['file']}; Hebrew spelling matches no live item: "
       f"{len(a['canonical_matches_nothing'])}")
@@ -374,16 +490,27 @@ def _insert(conn, table: str, cols: list[str], rows: list[dict]) -> None:
         conn.execute(sql, rows[i:i + INSERT_CHUNK])
 
 
-def swap() -> float:
-    """Swap live <-> next names (tables, pkeys, indexes) in one transaction."""
+def _price_tables_exist(conn) -> bool:
+    return all(_table_exists(conn, t) for t in PRICE_TABLES)
+
+
+def swap(with_prices: bool | None = None) -> float:
+    """Swap live <-> next names (tables, pkeys, indexes) in one transaction.
+
+    with_prices None = also the search_item_prices pair when both of its tables
+    exist (--swap-back); --apply passes False when the price fill did not succeed.
+    """
     from sqlalchemy import text
     from sqlalchemy.exc import OperationalError
     for attempt in range(1, 4):
         conn = _connect(read_only=False)
         try:
             conn.execute(text("SET LOCAL lock_timeout = '5s'"))
+            pairs = list(SWAP_PAIRS)
+            if with_prices or (with_prices is None and _price_tables_exist(conn)):
+                pairs += PRICE_SWAP_PAIRS
             t0 = time.perf_counter()
-            for kind, live, nxt in SWAP_PAIRS:
+            for kind, live, nxt in pairs:
                 tmp = f"{live}__swap"
                 conn.execute(text(f"ALTER {kind} {live} RENAME TO {tmp}"))
                 conn.execute(text(f"ALTER {kind} {nxt} RENAME TO {live}"))
@@ -399,7 +526,7 @@ def swap() -> float:
     raise SystemExit("swap failed 3 times; the live tables are unchanged")
 
 
-def apply(conn, inputs: dict, aliases_path: Path) -> dict:
+def apply(conn, inputs: dict, aliases_path: Path, price_chunks: int = PRICE_CHUNKS) -> dict:
     from sqlalchemy import text
     timings = dict(inputs["timings"])
     for t in ("search_items", "search_items_next", "search_lexicon", "search_lexicon_next"):
@@ -432,11 +559,57 @@ def apply(conn, inputs: dict, aliases_path: Path) -> dict:
     if staged != len(rows):
         raise SystemExit(f"staged {staged} rows, expected {len(rows)} - not swapping")
 
-    timings["swap_ms"] = round(swap())
+    prices = fill_prices(conn, inputs, built_at, len(rows), price_chunks)
+    timings.update(prices.pop("timings_ms", {}))
+    timings["swap_ms"] = round(swap(with_prices=prices["swapped"]))
     pseudo = sum(1 for r in rows if r["is_pseudo"])
-    return {"session": "SU11A-36", "mode": "apply", "built_at": built_at.isoformat(),
+    return {"session": "SU11A-36/47", "mode": "apply", "built_at": built_at.isoformat(),
             "search_items": len(rows), "pseudo": pseudo, "searchable": len(rows) - pseudo,
-            "search_lexicon": len(lex), "previous_live_rows": current, "timings_ms": timings}
+            "search_lexicon": len(lex), "previous_live_rows": current,
+            "search_item_prices": prices, "timings_ms": timings}
+
+
+def fill_prices(conn, inputs: dict, built_at: datetime, n_items: int, chunks: int) -> dict:
+    """SU11A-47: fill search_item_prices_next; never raises.
+
+    {"swapped": False, ...} when the tables are missing (migration not applied)
+    or the fill failed: search_items is swapped in on its own and the API keeps
+    the live price fetch, because the stamps then differ.
+    """
+    from sqlalchemy import text
+    from db.search_v2 import EILAT
+    if not _price_tables_exist(conn):
+        log("WARNING: search_item_prices is missing (db/migrations/su11a47_search_prices.sql not applied); "
+            "building search_items only - the API keeps the live price fetch")
+        return {"swapped": False, "reason": "tables missing"}
+    timings: dict = {}
+    t0 = time.perf_counter()
+    try:
+        eilat = [r[0] for r in conn.execute(text("SELECT id FROM stores WHERE city_canonical = :c"), {"c": EILAT})]
+        sql = text(price_fill_sql())
+        bounds = price_bounds(conn, chunks)
+        conn.execute(text("TRUNCATE search_item_prices_next"))
+        for k, (lo, hi) in enumerate(bounds):
+            tc = time.perf_counter()
+            conn.execute(sql, {"lo": lo, "hi": hi, "live": inputs["live_fks"], "eilat": eilat,
+                               "built_at": built_at})
+            log(f"search_item_prices chunk {k + 1}/{len(bounds)}: {round((time.perf_counter() - tc) * 1000)} ms")
+        conn.execute(text("ANALYZE search_item_prices_next"))
+        n_rows, n_codes = conn.execute(text(
+            "SELECT count(*), count(DISTINCT item_code) FROM search_item_prices_next")).one()
+        conn.commit()
+    except Exception as exc:  # noqa: BLE001 - search_items must still go live
+        conn.rollback()
+        log(f"WARNING: search_item_prices fill failed ({type(exc).__name__}: {str(exc)[:300]}); "
+            "swapping search_items only - the API keeps the live price fetch")
+        return {"swapped": False, "reason": f"fill failed: {type(exc).__name__}"}
+    timings["prices_fill_ms"] = round((time.perf_counter() - t0) * 1000)
+    out = {"rows": n_rows, "items": n_codes, "build_items": n_items, "chunks": len(bounds), "timings_ms": timings}
+    if n_codes < n_items * MIN_PRICE_ITEMS:
+        log(f"WARNING: search_item_prices covers {n_codes} of {n_items} items (< {MIN_PRICE_ITEMS:.0%}); "
+            "not swapping it in - the API keeps the live price fetch")
+        return {**out, "swapped": False, "reason": "too few items"}
+    return {**out, "swapped": True}
 
 
 # --------------------------------------------------------------------------- main
@@ -448,6 +621,8 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--swap-back", action="store_true", help="make the previous build live again")
     ap.add_argument("--aliases", default=str(ALIASES), help="alias,canonical CSV")
     ap.add_argument("--out", default=None, help="also write the result as JSON here")
+    ap.add_argument("--price-chunks", type=int, default=PRICE_CHUNKS,
+                    help="search_item_prices fill statements (SU11A-47)")
     args = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):  # Hebrew on any console
         stream.reconfigure(encoding="utf-8")
@@ -468,7 +643,7 @@ def main(argv: list[str] | None = None) -> int:
             conn.rollback()
             print_report(result)
         else:
-            result = apply(conn, inputs, Path(args.aliases))
+            result = apply(conn, inputs, Path(args.aliases), max(1, args.price_chunks))
             print(f"\n=== SU11A-36 build_search_items --apply ===\n{json.dumps(result, ensure_ascii=False, indent=1)}")
     finally:
         conn.close()

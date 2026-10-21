@@ -241,6 +241,8 @@ def fake_db(monkeypatch):
     monkeypatch.setattr(V, "_candidates", lambda conn, groups: [
         dict(c) for c in rows if not c["is_pseudo"] and _matches(c, groups)])
     monkeypatch.setattr(V, "_barcode", lambda conn, codes: [dict(c) for c in rows if c["item_code"] in codes])
+    # SU11A-47: no search_item_prices here - the page takes the live fetch below.
+    monkeypatch.setattr(V, "_try_precomputed", lambda conn, codes: None)
 
     def correct(conn, groups):
         fixed = [V.Group(alts=["תנובה"], corrected_from=g.alts[0]) if g.alts[0] == "תנובא" else g for g in groups]
@@ -347,6 +349,9 @@ def _search(**kw):
 @pytest.fixture
 def old_path(monkeypatch):
     calls = []
+    # SU11A-47: the response cache reads the build stamp first; empty cache per test.
+    monkeypatch.setattr(V, "built_stamp", lambda conn: "stamp")
+    R._cache.clear()
     monkeypatch.setattr(R, "_build_result", lambda *a, **kw: calls.append(a) or "OLD")
     return calls
 

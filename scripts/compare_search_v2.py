@@ -2,6 +2,15 @@
 
     venv/bin/python3 -m scripts.compare_search_v2 --out /tmp/search_v2_compare.json
     venv/bin/python3 -m scripts.compare_search_v2 --dry-run
+    venv/bin/python3 -m scripts.compare_search_v2 --check-precomputed 300
+
+--check-precomputed N (SU11A-47): N random live, non-pseudo items, in pages of
+30: the page's products from search_item_prices vs from the live fetch
+(fetch_prices + Eilat rule), both through group_by_product and the API's
+_to_model, compared as JSON. Prints every mismatch with the first differing
+field, and the pages search_item_prices could not serve (stale build, ended
+promo, item missing - the API takes the live fetch for those). Same read-only
+connections as the rest of this script.
 
 Runs both engines in-process, with what the apps send (limit 30, offset 0, no
 city / chain filter, group_by=chain). No HTTP, independent of SEARCH_V2:
@@ -108,6 +117,102 @@ def run_v2(V, q: str, runs: int) -> tuple[dict, object | None]:
     return {"ms": _ms(times), "error": err, "stages_ms": getattr(last, "timings_ms", None)}, last
 
 
+def _first_diff(a, b, path: str = "") -> str:
+    """Path and values of the first difference between two JSON values."""
+    if type(a) is not type(b):
+        return f"{path or '/'}: {a!r} != {b!r}"
+    if isinstance(a, dict):
+        for k in list(dict.fromkeys([*a, *b])):
+            if k not in a or k not in b:
+                return f"{path}/{k}: only in {'precomputed' if k in a else 'live'}"
+            if a[k] != b[k]:
+                return _first_diff(a[k], b[k], f"{path}/{k}")
+        return f"{path}: key order differs: {list(a)} != {list(b)}"
+    if isinstance(a, list):
+        if len(a) != len(b):
+            return f"{path}: {len(a)} entries != {len(b)}"
+        for i, (x, y) in enumerate(zip(a, b)):
+            if x != y:
+                return _first_diff(x, y, f"{path}[{i}]")
+    return f"{path or '/'}: {a!r} != {b!r}"
+
+
+def check_precomputed(n: int, out: str | None) -> int:
+    """--check-precomputed: precomputed vs live page prices for n random items."""
+    import api.routers.search as S
+    import db.query as Q
+    import db.search_v2 as V
+    from sqlalchemy import text
+
+    started = time.perf_counter()
+    Q.get_liveness()
+    with ReadOnly() as conn:
+        stamps = conn.execute(text(
+            "SELECT (SELECT built_at FROM search_items LIMIT 1), "
+            "CASE WHEN to_regclass('public.search_item_prices') IS NULL THEN NULL "
+            "ELSE (SELECT built_at FROM search_item_prices LIMIT 1) END")).one()
+        codes = [r[0] for r in conn.execute(text(
+            "SELECT item_code FROM search_items WHERE NOT is_pseudo ORDER BY random() LIMIT :n"), {"n": n})]
+        eilat = frozenset(r[0] for r in conn.execute(
+            text("SELECT id FROM stores WHERE city_canonical = :c"), {"c": V.EILAT}))
+        pre_rows = conn.execute(text("SELECT count(*) FROM search_item_prices")).scalar() \
+            if stamps[1] is not None else 0
+    print(f"search_items built_at {stamps[0]}; search_item_prices built_at {stamps[1]} ({pre_rows} rows)")
+    if stamps[1] is None or stamps[0] != stamps[1]:
+        print("STOP: search_item_prices is missing, empty or from another build - the API would not use it")
+        return 2
+
+    def as_json(products: dict, page: list[str]) -> dict[str, dict]:
+        return {c: json.loads(S._to_model(products[c]).model_dump_json()) for c in page if c in products}
+
+    checked, mismatches, unusable, ms_pre, ms_live = 0, [], [], [], []
+    for i in range(0, len(codes), 30):
+        page = codes[i:i + 30]
+        V._cache.built_at = V._cache.prices_built_at = None
+        with ReadOnly() as conn:
+            t0 = time.perf_counter()
+            rows = V._precomputed_rows(conn, page)
+            ms_pre.append((time.perf_counter() - t0) * 1000)
+            t0 = time.perf_counter()
+            live = as_json(Q.group_by_product(V.drop_eilat(Q.fetch_prices(conn, page), eilat)), page)
+            ms_live.append((time.perf_counter() - t0) * 1000)
+            if rows is None:   # find which items, one by one
+                good = []
+                for c in page:
+                    r1 = V._precomputed_rows(conn, [c])
+                    if r1 is None:
+                        unusable.append(c)
+                    else:
+                        good.extend(r1)
+                rows = good
+        pre = as_json(Q.group_by_product(rows), page)
+        for c in page:
+            if c in unusable:
+                continue
+            checked += 1
+            if pre.get(c) != live.get(c):
+                mismatches.append({"item_code": c, "diff": _first_diff(pre.get(c), live.get(c))})
+        log(f"{min(i + 30, len(codes))}/{len(codes)}: {len(mismatches)} mismatches, {len(unusable)} not served")
+
+    rep = {"session": "SU11A-47", "mode": "check-precomputed", "items": len(codes), "checked": checked,
+           "mismatches": mismatches, "not_served_by_precomputed": unusable,
+           "page_ms": {"precomputed": _ms(ms_pre), "live": _ms(ms_live)},
+           "elapsed_s": round(time.perf_counter() - started, 1)}
+    print(f"\n=== SU11A-47 precomputed vs live page prices (read-only) ===")
+    print(f"items {len(codes)}; compared {checked}; MISMATCHES {len(mismatches)}; "
+          f"not served by search_item_prices (API uses the live fetch): {len(unusable)}")
+    for m in mismatches[:30]:
+        print(f"  {m['item_code']}: {m['diff']}")
+    if unusable:
+        print(f"  not served: {', '.join(unusable[:30])}")
+    print(f"page of 30, ms min/median: precomputed {rep['page_ms']['precomputed']} | live {rep['page_ms']['live']}")
+    print(f"elapsed {rep['elapsed_s']} s")
+    if out:
+        Path(out).write_text(json.dumps(rep, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+        print(f"JSON: {out}")
+    return 1 if mismatches else 0
+
+
 def pick_upc(conn, popular: str | None) -> tuple[str | None, str]:
     from sqlalchemy import text
     if popular and len(popular) == 13 and popular.startswith("0"):
@@ -128,10 +233,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", default="/tmp/search_v2_compare.json")
     ap.add_argument("--runs", type=int, default=RUNS)
     ap.add_argument("--dry-run", action="store_true", help="list the queries; no database")
+    ap.add_argument("--check-precomputed", type=int, metavar="N", default=None,
+                    help="SU11A-47: compare search_item_prices with the live fetch for N random items")
     args = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8")
     sys.path.insert(0, str(ROOT))
+    if args.check_precomputed is not None:
+        _load_env()
+        out = args.out if args.out != ap.get_default("out") else None
+        return check_precomputed(max(1, args.check_precomputed), out)
     from scripts.measure_search import QUERIES, RELEVANCE
 
     texts = [q for _, q in QUERIES]

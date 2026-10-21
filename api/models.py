@@ -101,6 +101,21 @@ class SearchResultV2(SearchResult):
     corrected_from: str | None = Field(None, description="The original query when a typo correction was applied, else null")
 
 
+class SuggestItem(BaseModel):
+    """One type-ahead suggestion (SU11A-47)."""
+    kind: str                 = Field(description="'product' (open it), 'brand' or 'term' (search for text)")
+    text: str                 = Field(description="Product name, or the text to search for")
+    item_code: str | None     = Field(None, description="Products only: the barcode")
+    count: int | None         = Field(None, description="Brands and terms: live products containing it")
+
+
+class SuggestResponse(BaseModel):
+    """GET /suggest (SU11A-47). corrected_from is present only after a typo correction."""
+    query: str
+    corrected_from: str | None = Field(None, description="The query as typed, when a typo correction was applied")
+    items: list[SuggestItem]  = Field(default_factory=list)
+
+
 class StatsResponse(BaseModel):
     """Database statistics snapshot."""
     chains_count: int
