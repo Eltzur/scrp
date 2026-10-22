@@ -10,6 +10,36 @@ PRICE_INSERT_BATCH_SIZE = 1000
 
 _engine: Engine | None = None
 
+# Per-connection statement_timeout in ms (SU11A-49, F-01). None = no timeout,
+# which is what every script, timer and the loader get: they share this module
+# and the scrp_app role, and the loader / build_search_items run statements far
+# longer than any request should. Only the API sets it, via
+# set_statement_timeout() in api/main.py, so it never lands on the role.
+_statement_timeout_ms: int | None = None
+
+
+def set_statement_timeout(ms: int | None) -> None:
+    """Give every connection of this process's engine a statement_timeout.
+
+    Called once by the API at import time, before the first request. If an
+    engine already exists it is disposed, so the next get_engine() builds one
+    with the new setting."""
+    global _statement_timeout_ms, _engine
+    _statement_timeout_ms = ms if ms and ms > 0 else None
+    if _engine is not None:
+        _engine.dispose()
+        _engine = None
+
+
+def engine_kwargs() -> dict:
+    """Keyword arguments for create_engine (exposed for tests)."""
+    kwargs: dict = {"pool_pre_ping": True, "pool_size": 20, "max_overflow": 10}
+    if _statement_timeout_ms is not None:
+        # libpq startup option: set on the server for the whole session, so no
+        # extra round trip per request and it survives pool reuse.
+        kwargs["connect_args"] = {"options": f"-c statement_timeout={_statement_timeout_ms}"}
+    return kwargs
+
 
 def get_engine() -> Engine:
     global _engine
@@ -20,12 +50,7 @@ def get_engine() -> Engine:
         url = "postgresql://" + url[len("postgres://"):]
     if not url:
         raise RuntimeError("DATABASE_URL environment variable is not set!")
-    _engine = create_engine(
-        url,
-        pool_pre_ping=True,
-        pool_size=20,
-        max_overflow=10,
-    )
+    _engine = create_engine(url, **engine_kwargs())
     return _engine
 
 

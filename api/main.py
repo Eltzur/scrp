@@ -1,12 +1,28 @@
 """Israeli Price Comparison API."""
+import logging
 import os
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DBAPIError
 
 from api.auth import ApiCodeError
 from api.routers import account, blocks, health, catalog, search, product, basket, saved_baskets, favorites, freshness, coverage, promos, ratings, stores, terms
+from db import db as _db
+
+log = logging.getLogger(__name__)
+
+# SU11A-49 (F-01): every API connection gets a statement_timeout, so one
+# expensive anonymous request cannot hold Postgres and a worker for minutes.
+# Set here and not on the scrp_app role: the loader, build_search_items and the
+# ops scripts use the same role and must keep running long statements.
+# Env api_statement_timeout_ms (lowercase per CLAUDE.md); 0 turns it off.
+API_STATEMENT_TIMEOUT_MS = int(os.environ.get("api_statement_timeout_ms") or 15000)
+_db.set_statement_timeout(API_STATEMENT_TIMEOUT_MS)
+
+# SQLSTATE 57014 query_canceled: what statement_timeout raises.
+_QUERY_CANCELED = "57014"
 
 app = FastAPI(
     title="Israeli Price Comparison API",
@@ -53,3 +69,18 @@ app.include_router(terms.router)    # SU11A-44
 def _api_code_error(_request: Request, exc: ApiCodeError) -> JSONResponse:
     """Answers {"code": ...} (SU11A-28, e.g. 401 account_deleted)."""
     return JSONResponse(status_code=exc.status_code, content={"code": exc.code})
+
+
+@app.exception_handler(DBAPIError)
+def _db_error(request: Request, exc: DBAPIError) -> JSONResponse:
+    """A statement_timeout cancel answers 503 {"code": "query_timeout"} (SU11A-49).
+
+    The body carries no SQL, parameters or stack. The log line names the method
+    and path only - never the query string, which holds the search text.
+    Any other database error is re-raised and becomes the usual plain 500."""
+    if getattr(exc.orig, "pgcode", None) != _QUERY_CANCELED:
+        raise exc
+    log.warning("query timeout (%s ms): %s %s", API_STATEMENT_TIMEOUT_MS,
+                request.method, request.url.path)
+    return JSONResponse(status_code=503, content={"code": "query_timeout"},
+                        headers={"Retry-After": "5"})

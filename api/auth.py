@@ -6,10 +6,19 @@ Tokens are verified against the public keys published at:
 
 JWKS is cached in process memory and refreshed automatically on a kid miss
 (handles key rotation). A threading.Lock prevents thundering-herd refreshes.
+
+SU11A-49 (F-05): a kid miss refetches at most once per JWKS_MIN_REFRESH_S
+after the last successful fetch. Before, every token carrying a made-up kid
+cost one outbound call to Supabase under the global lock, so anyone could tie
+up workers with forged headers. Inside the window an unknown kid is simply an
+invalid token (401). A failed fetch is retried no sooner than
+JWKS_FAIL_BACKOFF_S later, and requests in between still answer 503 ("cannot
+verify"), as a failed fetch always did.
 """
 import logging
 import os
 import threading
+import time
 import uuid
 from typing import Optional
 
@@ -36,6 +45,12 @@ _bearer = HTTPBearer(auto_error=False)
 _jwks_cache: dict[str, dict] = {}
 _jwks_lock  = threading.Lock()
 
+JWKS_MIN_REFRESH_S = 60.0
+JWKS_FAIL_BACKOFF_S = 5.0
+# time.monotonic() of the last successful / failed fetch; None = never.
+_jwks_ok_at: float | None = None
+_jwks_fail_at: float | None = None
+
 
 def _fetch_jwks() -> dict[str, dict]:
     """Fetch JWKS from Supabase and return as {kid: jwk_dict}."""
@@ -53,7 +68,7 @@ def _get_jwk(kid: str) -> Optional[dict]:
     Raises RuntimeError / httpx.HTTPError on fetch failure (caller maps to 503).
     Uses a lock so concurrent cache-miss requests share one JWKS fetch.
     """
-    global _jwks_cache
+    global _jwks_cache, _jwks_ok_at, _jwks_fail_at
 
     if kid in _jwks_cache:          # fast path — no lock needed for reads
         return _jwks_cache[kid]
@@ -61,8 +76,23 @@ def _get_jwk(kid: str) -> Optional[dict]:
     with _jwks_lock:                # slow path — only one refresh at a time
         if kid in _jwks_cache:      # re-check: another thread may have refreshed
             return _jwks_cache[kid]
-        log.info("JWKS cache miss for kid=%s — refreshing from %s", kid, _JWKS_URL)
-        _jwks_cache = _fetch_jwks()
+        now = time.monotonic()
+        if _jwks_ok_at is not None and now - _jwks_ok_at < JWKS_MIN_REFRESH_S:
+            # Fresh set and still no such kid: not one of ours. No fetch.
+            log.debug("JWKS kid miss inside the refresh window — not refetching")
+            return None
+        if _jwks_fail_at is not None and now - _jwks_fail_at < JWKS_FAIL_BACKOFF_S:
+            raise RuntimeError("JWKS fetch backing off after a failure")
+        # The kid comes from an unverified header: never log it raw.
+        log.info("JWKS cache miss — refreshing from %s", _JWKS_URL)
+        try:
+            fresh = _fetch_jwks()
+        except Exception:
+            _jwks_fail_at = now
+            raise
+        _jwks_cache = fresh
+        _jwks_ok_at = now
+        _jwks_fail_at = None
         return _jwks_cache.get(kid)
 
 
@@ -96,7 +126,8 @@ def _decode(token: str) -> Optional[dict]:
         raise HTTPException(status_code=503, detail="Auth service temporarily unavailable")
 
     if jwk is None:
-        log.warning("No public key for kid=%s after JWKS refresh", kid)
+        # debug, not warning: forged kids would otherwise flood the journal.
+        log.debug("No public key for the token's kid")
         return None
 
     # Step 3 — verify signature, audience, and expiry

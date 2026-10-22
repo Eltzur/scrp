@@ -5,6 +5,7 @@ import time
 from typing import Literal
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
+from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from api.models import (SearchResult, SearchResultV2, ProductWithPrices, Product, PriceQuote,
@@ -34,6 +35,13 @@ def _build_result(
     if not barcodes:
         return SearchResult(query=query, total_matches=0, comparable_count=0, has_more=False, items=[])
 
+    # SU11A-49 (F-01): price at most OLD_PATH_CAP candidates. A short query
+    # matched ~30K barcodes and priced all of them before paging.
+    n_candidates = len(barcodes)
+    capped = n_candidates > OLD_PATH_CAP
+    if capped:
+        barcodes = cap_candidates(conn, barcodes, tiers)
+
     rows = fetch_prices(conn, barcodes, city=city, chain_id=chain_id)
 
     if group_by == "store":
@@ -43,7 +51,7 @@ def _build_result(
         items = [_to_model(p) for p in page]
         return SearchResult(
             query=query,
-            total_matches=total,
+            total_matches=n_candidates if capped else total,
             comparable_count=0,
             has_more=(offset + len(items)) < total,
             items=items,
@@ -88,11 +96,64 @@ def _build_result(
 
     return SearchResult(
         query=query,
-        total_matches=len(by_item),
+        # Capped: the name-match count (the true number of matching products;
+        # some may have no price in the filtered stores). comparable_count and
+        # the pages cover the priced OLD_PATH_CAP only - nothing past them.
+        total_matches=n_candidates if capped else len(by_item),
         comparable_count=len(multi),
         has_more=(offset + len(items)) < total,
         items=items,
     )
+
+
+# ---------------------------------------------------------------------------
+# Old-path candidate cap (SU11A-49, F-01)
+# ---------------------------------------------------------------------------
+# The old path (/compare, and /search with city / chain / group_by=store /
+# engine=v1) prices every name match before paging. A two-letter query matched
+# ~30K of 171K barcodes against the 7.8M-row prices table, anonymously. Above
+# OLD_PATH_CAP candidates only the best OLD_PATH_CAP are priced, chosen by the
+# same price-neutral order search v2 uses (search_v2.rank_key over
+# search_items: relevance tier, 2+ chains, popularity, chains, shorter name,
+# item_code), with this path's own tiers. Items not in search_items (no live
+# quote at the last build) come after every live one. If search_items is
+# missing, the order is tier then item_code.
+#
+# Effect: total_matches is still the full match count, the pages within the
+# cap are exactly as before (same order keys, same has_more), and there are no
+# results past item OLD_PATH_CAP (has_more turns false there).
+
+OLD_PATH_CAP = 1000
+
+_RANK_SQL = text("""
+    SELECT item_code, name_norm, chains_live, popularity
+    FROM search_items
+    WHERE item_code = ANY(CAST(:codes AS text[]))
+""")
+
+
+def cap_candidates(conn: Connection, codes: list[str], tiers: dict[str, int],
+                   cap: int = OLD_PATH_CAP) -> list[str]:
+    """The best `cap` of `codes` (all of them when there are not more)."""
+    if len(codes) <= cap:
+        return codes
+    try:
+        # SAVEPOINT: a missing search_items must not abort the request.
+        with conn.begin_nested():
+            info = {r["item_code"]: dict(r)
+                    for r in conn.execute(_RANK_SQL, {"codes": list(codes)}).mappings()}
+    except Exception as exc:  # noqa: BLE001 - fall back to the plain order
+        log.warning("old-path cap: search_items rank unavailable (%s)", type(exc).__name__)
+        info = None
+
+    def key(code: str) -> tuple:
+        tier = tiers.get(code, 3)
+        r = info.get(code) if info else None
+        if r is None:
+            return (1, tier, code)
+        return (0, *search_v2.rank_key(r, tier))
+
+    return sorted(codes, key=key)[:cap]
 
 
 def _to_model(p: dict) -> ProductWithPrices:

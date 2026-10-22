@@ -353,3 +353,55 @@ def test_chunk_count_does_not_change_the_rows(engine, live):
     with engine.connect() as c:
         seven = c.execute(text(q)).all()
     assert one == seven and len(one) > len(ITEMS)
+
+
+def test_old_path_cap_sql_on_postgres(engine, live):
+    """SU11A-49 (F-01): cap_candidates' search_items read (ANY over a text[]),
+    the v2 order, unbuilt items last, and the fallback when the table is gone."""
+    import api.routers.search as R
+    from sqlalchemy import text
+    with engine.begin() as c:
+        c.execute(text("DELETE FROM search_items"))
+        for code, chains, pop, name in [("A1", 1, 0, "x"), ("A2", 3, 0, "xx"), ("A3", 3, 5, "xxx")]:
+            c.execute(text("INSERT INTO search_items (item_code, name_norm, chains_live, popularity) "
+                           "VALUES (:c, :n, :ch, :p)"), {"c": code, "n": name, "ch": chains, "p": pop})
+    codes = ["A1", "A2", "A3", "Z9"]
+    tiers = {c: 0 for c in codes}
+    with engine.connect() as c:
+        assert R.cap_candidates(c, codes, tiers, cap=3) == ["A3", "A2", "A1"]
+        assert R.cap_candidates(c, codes + [f"Q{i:05d}" for i in range(3000)], tiers, cap=2) == ["A3", "A2"]
+    with engine.begin() as c:
+        c.execute(text("ALTER TABLE search_items RENAME TO search_items_gone"))
+    try:
+        with engine.connect() as c:
+            assert R.cap_candidates(c, codes, {"Z9": 0, "A1": 1, "A2": 1, "A3": 1}, cap=2) == ["Z9", "A1"]
+            assert c.execute(text("SELECT 1")).scalar() == 1      # savepoint kept the connection usable
+    finally:
+        with engine.begin() as c:
+            c.execute(text("ALTER TABLE search_items_gone RENAME TO search_items"))
+
+
+def test_api_statement_timeout_on_postgres(engine):
+    """SU11A-49 (F-01): the libpq startup option really cancels a long statement
+    with SQLSTATE 57014 (what api/main.py maps to 503), and a plain engine
+    (scripts, timers) has no timeout."""
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.exc import DBAPIError
+    from db import db as D
+    saved = D._statement_timeout_ms
+    try:
+        D.set_statement_timeout(200)
+        timed = create_engine(engine.url, **D.engine_kwargs())
+        with timed.connect() as c:
+            assert c.execute(text("SHOW statement_timeout")).scalar() == "200ms"
+            with pytest.raises(DBAPIError) as exc:
+                c.execute(text("SELECT pg_sleep(2)"))
+        assert exc.value.orig.pgcode == "57014"
+        timed.dispose()
+        D.set_statement_timeout(None)
+        plain = create_engine(engine.url, **D.engine_kwargs())
+        with plain.connect() as c:
+            assert c.execute(text("SHOW statement_timeout")).scalar() == "0"
+        plain.dispose()
+    finally:
+        D._statement_timeout_ms = saved
