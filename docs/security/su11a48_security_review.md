@@ -29,6 +29,18 @@ No code, config, server or data was changed. Secrets are referred to by variable
 
    On compliance, the Data Security Regulations documents are missing: security procedure, incident procedure, periodic review.
 
+## Status (updated in SU11A-49, 22 Oct 2026)
+
+| Finding | Status | Where |
+|---|---|---|
+| F-01 | **Fixed, pending deploy.** API-only 15 s `statement_timeout` (libpq startup option, set in `api/main.py`; scripts and timers unaffected), timeout answers `503 {"code":"query_timeout"}`, old path prices at most 1,000 candidates (`api/routers/search.py` `cap_candidates`) | scrp `fix(security): SU11A-49 ...` |
+| F-02 | **Fixed, pending deploy.** nginx rate-limit zones + 429 JSON (`deploy/nginx/`) | runbook `docs/security/su11a49_runbook.md` |
+| F-03 | **Fixed, pending deploy.** Security headers on all hosts, CSP Report-Only on xxl / super / fly, `server_tokens off`; http-level `ssl_protocols` edited in the runbook. CSP enforcement: later session | same runbook |
+| F-04 | **Fixed, pending deploy.** `scripts/deploy_frontend.ps1` sets dirs 755 / files 644 after upload; one-time chmod in the runbook | same runbook |
+| F-05 | **Fixed, pending deploy.** JWKS refetch at most once per 60 s; failed fetch backs off 5 s | `api/auth.py` |
+| F-06 to F-23 | Open (unchanged) | — |
+| Compliance gaps | **Drafts written (SU11A-49), for Dude / advisor review:** `docs/compliance/database_definition_he.md`, `security_procedure_he.md`, `incident_procedure_he.md`, `periodic_review_he.md` | — |
+
 ## Findings
 
 Severity is CVSS-style: attack vector, privileges needed, and impact on confidentiality / integrity / availability (C/I/A). Effort: S under half a day, M one to two days, L more.
@@ -234,16 +246,16 @@ chmod 755 /var/www/super.xxl.co.il/assets && find /var/www/super.xxl.co.il -type
 
 | Requirement (basic level) | Status | Evidence / gap |
 |---|---|---|
-| Database definition document (purposes, data types, transfers, processors) | **Partial** | `docs/store_privacy_inventory.md` (data inventory, processors, retention), `docs/compliance_amendment13.md` (thresholds). There is no single signed "database definition" document naming the database manager, its purposes, and the date of the last update. |
-| Security procedure (נוהל אבטחת מידע) | **Missing** | Rules are scattered (CLAUDE.md rules 13–15, runbooks). There is no written procedure covering access, passwords, backups, incidents and vendor use. |
+| Database definition document (purposes, data types, transfers, processors) | **Partial → draft** (`docs/compliance/database_definition_he.md`, SU11A-49) | `docs/store_privacy_inventory.md` (data inventory, processors, retention), `docs/compliance_amendment13.md` (thresholds). There is no single signed "database definition" document naming the database manager, its purposes, and the date of the last update. |
+| Security procedure (נוהל אבטחת מידע) | **Missing → draft** (`docs/compliance/security_procedure_he.md`, SU11A-49) | Rules are scattered (CLAUDE.md rules 13–15, runbooks). There is no written procedure covering access, passwords, backups, incidents and vendor use. |
 | Systems / infrastructure mapping | **Partial** | `docs/xxl-stack.md`, the handoff "Hosting topology", this report's server section. No network diagram or asset list with owners. |
 | Access control and authorized-persons list | **Partial** | SSH keys only (pending F-15 confirmation), sudo password, a single operator, a fail-closed admin allow-list (`ADMIN_USER_EMAILS`). There is no written list of who has access to what (server, DB, Supabase, B2, Hostinger, Google Cloud, Play / EAS), and no review date. |
 | Identification and authentication | **Partial** | Supabase auth for users (email confirmation on). MFA on the operator's cloud consoles is not documented. |
 | Logging / audit trail | **Partial** | journald 30 days and nginx 14 days (`deploy/systemd/journald-scrp.conf`, privacy inventory §6). Moderation actions are logged. There is no access log for DB admin actions (`log_statement none`, `log_connections` off). |
 | Backups | **Exists (gaps)** | Daily `pg_dump` to B2, lifecycle 180 days (SU11A-33). Gaps: encryption (F-08), no documented restore test. |
-| Security incident handling | **Missing** | No incident / breach procedure. `compliance_amendment13.md` lists it as "YES, applies now". |
+| Security incident handling | **Missing → draft** (`docs/compliance/incident_procedure_he.md`, SU11A-49) | No incident / breach procedure. `compliance_amendment13.md` lists it as "YES, applies now". |
 | Outsourcing / processors | **Partial** | Processors are listed in the privacy inventory §7 (Supabase, Kamatera, Backblaze, Hostinger, Google). There is no record of the DPA / terms each one was accepted under. |
-| Periodic review | **Missing** | No scheduled review. This report (SU11A-48) can serve as the first one; set a date for the next. |
+| Periodic review | **Missing → draft** (`docs/compliance/periodic_review_he.md`, SU11A-49) | No scheduled review. This report (SU11A-48) can serve as the first one; set a date for the next. |
 
 **PCI DSS:** nothing is in scope today; there are no payments. The locked decision in `docs/compliance_amendment13.md` (hosted / tokenised gateway, no card data on XXL infrastructure) points to the **SAQ-A** path:
 - the web uses a fully hosted checkout or a redirect;

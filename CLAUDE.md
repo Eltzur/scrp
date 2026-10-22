@@ -21,7 +21,7 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 15. **CC never deploys, never runs EAS builds, never calls `DELETE /account`, never modifies production data.** Dude runs `scripts\deploy_frontend.ps1` and EAS builds. Never delete the Supabase users x@xxl.co.il or gplay@xxl.co.il (the Play demo account); throwaway test users are created in Supabase → Authentication → Users → Add user (Auto Confirm).
 
 ## Status / next steps
-Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-49 (planned: search city-mode speed; SU11A-37 reserved).
+Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-50 (planned: web city-mode search speed; SU11A-37 reserved).
 - RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1 on Play.
 - Legal entity: XXL Enterprises (XXL אנטרפרייזס), the Play-verified organisation; legal texts use the constant LEGAL_ENTITY_NAME in web/src/legal/terms.ts and xxl-super-mobile/src/legal/terms.ts
 - Apple track sessions use the new sub-series SU11B (first: SU11B-1)
@@ -174,6 +174,14 @@ For all other commands, select "Yes" (one-time approval) unless the command look
   - API: api-super.xxl.co.il
 - **Hostinger (82.198.227.247) is COLD FALLBACK / DR ONLY** — it holds an older static copy and receives no live traffic. Revert path: repoint the xxl.co.il + www A records at box.co.il back to 82.198.227.247.
 - **Portal and supermarket app SHARE ONE React build (web/dist).** isPortalHostname() in web/src/utils/hostname.ts switches PortalPage vs AppShell at runtime by hostname. The xxl.co.il nginx block shares root /var/www/super.xxl.co.il, so deploying web/ updates BOTH super.xxl.co.il and xxl.co.il in a single deploy.
+
+## Security baseline (SU11A-48 / SU11A-49)
+- **Postgres listens on localhost only** (`listen_addresses='localhost'`; the pg_hba `0.0.0.0/0` line was disabled on 22 Oct 2026, backup `pg_hba.conf.bak-2026-10-22`). **Never re-open 5432.**
+- **api-super.xxl.co.il is noindex** (`/etc/nginx/snippets/api-noindex.conf`: X-Robots-Tag + robots.txt Disallow; repo record `deploy/nginx/api-noindex.conf`).
+- **Supabase: from 30 Oct 2026 any NEW table in the `public` schema needs explicit GRANTs in its migration** (`anon` / `authenticated` / `service_role`, only what the table needs, plus RLS). Existing tables are unaffected.
+- nginx rate limits, security headers and CSP Report-Only live in `deploy/nginx/` (installed by hand, `docs/security/su11a49_runbook.md`). A live nginx change is copied back there.
+- The API alone sets a 15 s DB `statement_timeout` (`api/main.py`, env `api_statement_timeout_ms`); never set it on the `scrp_app` role (the loader and build need long statements).
+- Review and open findings: `docs/security/su11a48_security_review.md`. Compliance drafts (Hebrew): `docs/compliance/`.
 
 ## Deploy frontend
 .\scripts\deploy_frontend.ps1

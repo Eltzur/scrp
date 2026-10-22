@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: 21 Oct 2026 (SU11A-47: search speed - precomputed page prices, /suggest type-ahead, response cache, web combobox, mobile suggestions; built, not deployed; SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
+> Last updated: 22 Oct 2026 (SU11A-49: security fixes F-01..F-05 built, nginx files + runbook, compliance drafts; not deployed; SU11A-48: security review; SU11A-47: search speed - precomputed page prices, /suggest type-ahead, response cache, web combobox, mobile suggestions; built, not deployed; SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
 
 ## 📏 Standing rules (apply to every session)
 
@@ -946,6 +946,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-46 (Oct 18) — web SEO (sitemaps per host, robots, canonical/meta per route, og images), load-more dedup (9b), header at 390 px, lazy routes + vendor chunks, eslint 0; search coupon variants + typo 0.40; mobile terms bidi. Play Production 8 submitted. Not deployed.
 - SU11A-47 (Oct 21) — search speed: search_item_prices (precomputed per-chain page prices, migration not applied), GET /suggest, per-worker response cache + Server-Timing / Cache-Control, web search combobox, mobile suggestions (build 9). Runbook `docs/super/su11a47_search_speed_runbook.md`. Not deployed.
 - SU11A-48 (Oct 22) — security review (read-only): `docs/security/su11a48_security_review.md`. 2 High (unbounded old-path price fetch + no DB statement timeout; no rate limiting), 6 Medium, sudo command list for Dude, Data Security Regulations gap table. No code or server change.
+- SU11A-49 (Oct 22) — security fixes from SU11A-48: old-path search cap (1,000) + API-only 15 s DB timeout (503 query_timeout), JWKS refetch throttle, nginx rate limits + security headers + CSP Report-Only (files in `deploy/nginx/`), web-root modes on deploy, Hebrew compliance drafts (`docs/compliance/`). Runbook `docs/security/su11a49_runbook.md`. Not deployed.
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
 
@@ -1361,12 +1362,39 @@ Built by `fetch_prices` (`_PRICE_SQL` + `_PROMO_PICK_SQL`, then `_PROMO_ONLY_SQL
 
 The 14:30 timer then maintains the table. Mobile: build 9.
 
+### SU11A-49 (22 Oct 2026) - security fixes F-01..F-05, compliance drafts; NOT deployed
+
+Source: `docs/security/su11a48_security_review.md` (status table at its top). Runbook for Dude: `docs/security/su11a49_runbook.md` (pull, restart, checks, nginx install with exact `sed` lines and expected diffs, curl checks, one-time chmod, web deploy, rollback).
+
+- **F-01 (High):**
+  - `db/db.py` `set_statement_timeout()` / `engine_kwargs()`. Only `api/main.py` calls it, so the timeout is 15 s for the API (libpq startup option `-c statement_timeout=15000`; env `api_statement_timeout_ms`, 0 = off). Scripts, timers, the loader and the build import `db.db` without `api.main` and keep no timeout (tested in a fresh process, and on Postgres: `SHOW statement_timeout` = `0`).
+  - SQLSTATE 57014 answers `503 {"code":"query_timeout"}` with `Retry-After: 5`, logged as method + path only.
+  - Old path (`/compare`, `/search` with city / chain / group_by=store / engine=v1): `cap_candidates()` prices at most `OLD_PATH_CAP` = 1,000 barcodes, ordered by search v2's `rank_key` over `search_items` (fallback: tier, item_code; items not in search_items last).
+  - **Deviation:** when capped, `total_matches` is the name-match count (the true number of matches; previously the count of priced matches, which is not knowable without pricing all). `comparable_count` and the pages cover the 1,000 only; nothing past item 1,000 (`has_more` false there). Below the cap nothing changes.
+- **F-05 (Medium):** `api/auth.py` refetches the JWKS on an unknown kid at most once per 60 s after a successful fetch (otherwise 401 without a fetch); a failed fetch is retried no sooner than 5 s later (503 in between, as before). Soft auth still never raises. The kid from an unverified header is no longer logged.
+- **F-02 (High) / F-03 (Medium):** `deploy/nginx/`.
+  - **Rate limits:** zones `xxl_api` 10/s burst 40 (all of api-super), `xxl_heavy` 2/s burst 10 (+ api) for `/compare`, `/basket/compare`, `/promos/grouped`, `xxl_suggest` 20/s burst 60, `xxl_img` 30/s burst 200, `xxl_serp` 10/min burst 5 for fly `/api/search|explore|flexible-dates`. 429 JSON `{"code":"rate_limited"}` with CORS for the web origins.
+  - **Headers:** HSTS (1 year, no includeSubDomains / preload), nosniff, Referrer-Policy, X-Frame-Options DENY, Permissions-Policy (camera, microphone, geolocation all off: the web uses none).
+  - **CSP:** Report-Only for xxl / super (inline-script hash) and fly.
+  - **Other:** `server_tokens off`; the runbook edits nginx.conf's http-level `ssl_protocols` to TLS 1.2 / 1.3.
+  - **Verified locally:** `nginx -t` with nginx 1.24.0 on copies of the live site files after the runbook's exact edits. A running harness confirmed the 429 JSON, CORS on the 429, the burst sizes, the fly `/api` rewrite and the headers, including super's static-asset location (add_header inheritance).
+  - **Bug found by the test:** an exact-key CORS map failed `map_hash_bucket_size`; switched to one regex.
+  - **No flights code change.** fly's frontend already handles a non-OK answer.
+- **F-04 (Medium):** `scripts/deploy_frontend.ps1` sets dirs 755 / files 644 after the upload (no sudo; dude owns the web root) and prints the count of other modes. One-time chmod in the runbook.
+- **Web (ships with the next web deploy):** a 429 / 503 on the results page shows `errors.busy` ("השרת עמוס כרגע. נסו שוב בעוד כמה שניות") instead of "לא ניתן לגשת לשרת", and is not retried (`isBusyError` in `web/src/api/client.ts`, QueryClient retry rule). **Mobile:** no change needed; every client call already maps a non-OK status to its generic error / retry state.
+- **Compliance drafts (Hebrew, marked DRAFT / לאימות):** `docs/compliance/database_definition_he.md`, `security_procedure_he.md`, `incident_procedure_he.md` (with an incident-log template; the notification duty is left to an advisor), `periodic_review_he.md` (quarterly + annual checklist, next dates).
+- **Tests:**
+  - `tests/test_security_su11a49.py` (19, fakes): engine kwargs, scripts vs API process, 503 mapping and no SQL leak, cap order / fallback / pages / true count, JWKS window / rotation / backoff / soft auth / 401.
+  - `tests/test_search_prices_pg.py` +2 (real Postgres): the cap SQL (`ANY(text[])`, savepoint fallback) and the timeout really cancelling with 57014.
+  - Full suite: 329 passed, 8 skipped (Postgres tests), 14 known `test_smoke` failures. With a local Postgres 16: all Postgres tests pass.
+
 ---
 
-## 📋 Open items / next steps (as of 21 Oct 2026)
+## 📋 Open items / next steps (as of 22 Oct 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1. Lawyer review of the terms is Dude's call.
 - **SU11A-36 Search v2:** SEARCH_V2=on since 21 Oct 2026; timer daily 14:30.
+- **SU11A-49 security fixes:** built, not deployed. Run `docs/security/su11a49_runbook.md` (after or together with the SU11A-47 runbook; both restart scrp-api), then the web deploy. Then: review the compliance drafts in `docs/compliance/` (with an advisor for the לאימות items), the sudo checks in the SU11A-48 review, CSP enforcement after a clean week, and the open findings F-06 to F-23.
 - **SU11A-47 search speed:** built, not deployed. Run `docs/super/su11a47_search_speed_runbook.md` (migration, build, check-precomputed, restart, curl), then the web deploy. Mobile suggestions ship in build 9.
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
 - **Catalog:**
@@ -1388,4 +1416,4 @@ The 14:30 timer then maintains the table. Mobile: build 9.
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-49 (planned: search city-mode speed; SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).
+Next free session ID: SU11A-50 (planned: web city-mode search speed; SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).
