@@ -21,7 +21,7 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 15. **CC never deploys, never runs EAS builds, never calls `DELETE /account`, never modifies production data.** Dude runs `scripts\deploy_frontend.ps1` and EAS builds. Never delete the Supabase users x@xxl.co.il or gplay@xxl.co.il (the Play demo account); throwaway test users are created in Supabase → Authentication → Users → Add user (Auto Confirm).
 
 ## Status / next steps
-Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-50 (planned: web city-mode search speed; SU11A-37 reserved).
+Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-51 (SU11A-37 reserved).
 - RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1 on Play.
 - Legal entity: XXL Enterprises (XXL אנטרפרייזס), the Play-verified organisation; legal texts use the constant LEGAL_ENTITY_NAME in web/src/legal/terms.ts and xxl-super-mobile/src/legal/terms.ts
 - Apple track sessions use the new sub-series SU11B (first: SU11B-1)
@@ -154,6 +154,7 @@ For all other commands, select "Yes" (one-time approval) unless the command look
 ## Environment variable conventions
 - **Default new env var names to lowercase** (e.g. `gs1_username`, not `GS1_USERNAME`), unless matching an existing convention already in the same file. Established in session SU10A-1 after a casing mismatch (`GS1_Username` set in `.env` vs `$GS1_USERNAME` read by scripts) produced identical, misleading 401s from a third-party API for an entire session — bash variable names are case-sensitive and `source` sets a mismatched-case variable with no error, so the bug looked like a server-side auth/IP problem when it was purely local.
 - **Mail (SU10S-7), names only — never commit, print or log the values:** `smtp_host`, `smtp_port`, `smtp_user`, `smtp_password`, `moderation_email_to`. Sender `notify@xxl.co.il` (Hostinger mailbox), recipient `info@xxl.co.il`. **The API reads env from systemd's `EnvironmentFile`, not `load_dotenv()` — adding a key to `.env` does nothing until `sudo /usr/local/bin/xxl-restart.sh scrp-api`.**
+- **Search flags (scrp-api EnvironmentFile, read per request, uppercase by the SU11A-36 convention):** `SEARCH_V2` (off | test | on: unfiltered `/search` on search v2) and `SEARCH_V2_FILTERED` (SU11A-50, off | test | on, default off: `/compare` and `/search` with city / chain / group_by=store on the filtered v2 path, `db/search_filtered.py`). `test` = only requests with `engine=v2`; `engine=v1` always forces the old path; an unknown value = off. Runbook: `docs/super/su11a50_runbook.md`.
 - **Never assume casing — verify it.** Before writing a script that reads any `.env` value, confirm the exact variable name (`cat -A` or `grep` the file) rather than assuming it matches what a previous instruction specified.
 
 ## Commit conventions

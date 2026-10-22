@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: 22 Oct 2026 (SU11A-49: security fixes F-01..F-05 built, nginx files + runbook, compliance drafts; not deployed; SU11A-48: security review; SU11A-47: search speed - precomputed page prices, /suggest type-ahead, response cache, web combobox, mobile suggestions; built, not deployed; SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
+> Last updated: 22 Oct 2026 (SU11A-50: filtered search (/compare, city / chain / store) on the v2 path behind SEARCH_V2_FILTERED + faster v2 candidate step; not deployed; SU11A-49: security fixes F-01..F-05 built, nginx files + runbook, compliance drafts; not deployed; SU11A-48: security review; SU11A-47: search speed - precomputed page prices, /suggest type-ahead, response cache, web combobox, mobile suggestions; built, not deployed; SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
 
 ## 📏 Standing rules (apply to every session)
 
@@ -947,6 +947,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-47 (Oct 21) — search speed: search_item_prices (precomputed per-chain page prices, migration not applied), GET /suggest, per-worker response cache + Server-Timing / Cache-Control, web search combobox, mobile suggestions (build 9). Runbook `docs/super/su11a47_search_speed_runbook.md`. Not deployed.
 - SU11A-48 (Oct 22) — security review (read-only): `docs/security/su11a48_security_review.md`. 2 High (unbounded old-path price fetch + no DB statement timeout; no rate limiting), 6 Medium, sudo command list for Dude, Data Security Regulations gap table. No code or server change.
 - SU11A-49 (Oct 22) — security fixes from SU11A-48: old-path search cap (1,000) + API-only 15 s DB timeout (503 query_timeout), JWKS refetch throttle, nginx rate limits + security headers + CSP Report-Only (files in `deploy/nginx/`), web-root modes on deploy, Hebrew compliance drafts (`docs/compliance/`). Runbook `docs/security/su11a49_runbook.md`. Not deployed.
+- SU11A-50 (Oct 22) — `/compare` and `/search` with city / chain / group_by=store on the v2 path behind `SEARCH_V2_FILTERED` (default off): v2 candidates walked in batches against the filter, only the page priced; v2 candidate step counts and orders in SQL (no token table, no migration). Runbook `docs/super/su11a50_runbook.md`. Not deployed.
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
 
@@ -1388,12 +1389,94 @@ Source: `docs/security/su11a48_security_review.md` (status table at its top). Ru
   - `tests/test_search_prices_pg.py` +2 (real Postgres): the cap SQL (`ANY(text[])`, savepoint fallback) and the timeout really cancelling with 57014.
   - Full suite: 329 passed, 8 skipped (Postgres tests), 14 known `test_smoke` failures. With a local Postgres 16: all Postgres tests pass.
 
+### SU11A-50 (22 Oct 2026) - filtered search on the v2 path, faster candidate step; NOT deployed
+
+Runbook for Dude: `docs/super/su11a50_runbook.md` (pull; no migration; SU11A-47 prerequisite check; `compare_search_v2 --filtered` go / no-go; restart, `SEARCH_V2_FILTERED=test` + curl engine=v2 vs v1; `on` + curl; rollback). Needs the SU11A-47 runbook first for the nationwide modes.
+
+**Step 0 (before):**
+- **Modes:**
+  - `/search` with no filter and group_by=chain: search v2 (SEARCH_V2=on; engine=v1 or SEARCH_V2=off/test without engine=v2 forces the old path).
+  - `/search` with city, chain or group_by=store: always the old path.
+  - `/compare` (with or without city; no chain or group_by param): always the old path.
+  - The web default view is `/compare?q=&city=<auto>&limit=20`. Mobile sends unfiltered `/search` only.
+- **Old path** (`_build_result`): `find_barcodes_with_relevance` (LIKE on items) -> SU11A-49 cap 1,000 by v2 rank -> `fetch_prices` with city (`_PRICE_SQL_CITY`, store_fks from `city_canonical`, nested loops off) or chain (`_PRICE_SQL` + chain) -> group -> order tier, multi-chain, cheapest.
+- **`/compare` fields** (SearchResult): `query`, `total_matches`, `comparable_count`, `has_more`, `items[]`. In the old path:
+  - `comparable_count` = items with 2+ chains in the filter;
+  - `items` = those plus single-chain items whose quote is promo-only;
+  - `total_matches` = every priced item (the name-match count when capped).
+  - The web shows `total_matches`, `comparable_count` (when > 0) and `has_more` (load-more).
+- **City resolution:** `stores.city_canonical = ANY(city)`, then liveness and ₪0 in Python.
+- **Eilat:** the old path never applies D2 in any mode; only v2 does (nationwide).
+- **prices indexes (repo):** `prices_pkey`, `UNIQUE (store_fk, item_code)`, `idx_prices_item_code`, `idx_prices_store_fk` (created live; listed in `docs/xxl-stack.md`), `idx_prices_item_store_cover (item_code, store_fk) INCLUDE (item_price, unit_of_measure_price, price_update_date)` (9d-10). Read-only check for Dude: `sudo -u postgres psql xxl_super -c "\d prices"`.
+
+**Built (`db/search_filtered.py`, behind `SEARCH_V2_FILTERED`):**
+- **Flag:** off | test | on, default off, read per request; `test` = engine=v2 only; engine=v1 always old; unknown = off. Unfiltered `/search` still follows SEARCH_V2. `/compare` got an optional `engine` param.
+- **Candidates and order:** search v2 (`ranked_candidates`: same normalization, aliases, pseudo items out, typo round, v2 relevance) for every mode.
+- **Walk:** batches of 200 / 400 / 800 / 1,600 candidates (ceiling 3,000), one filter statement per batch, until offset + limit + 1 items qualify.
+  - **City (± chain) and group_by=store:** semi-join on prices + promos over the live store set, with the same conditions as `fetch_prices` (shelf > 0, item_chain_names row, chains row, promo-only rule).
+  - **Chain without city:** `search_item_prices` rows of those chains.
+  - **`/compare` without city:** `search_item_prices` (2+ chains, or one chain whose winning quote is promo-only).
+  - **Compare in a city, single chain with both shelf and promo-only quotes:** priced to decide (MAYBE).
+- **Page prices:**
+  - **City:** live `fetch_prices` with the request's city / chain (same SQL, promo pick, liveness, ₪0). New `page=True` keeps nested loops on: local synthetic 4 ms vs 32 ms for 20 barcodes with them off (the hash plan seq-scans items and item_chain_names).
+  - **Nationwide:** `search_item_prices` page, with fallback to the live fetch per the SU11A-47 rules.
+  - **group_by=store:** live, store rows of the page's items.
+- **Eilat:** city mode unchanged (no D2, as the old path: אילת shows Eilat prices; other cities have no Eilat stores). Nationwide modes (chain only, `/compare` without city) apply D2 over all chains, then the chain filter, the way `search_item_prices` is built; the live chain fallback does the same. group_by=store drops nothing.
+- **Fallback:** SAVEPOINT; any error or timeout -> one warning with the exception type only (no traceback: it would carry the SQL parameters) -> the old path answers. `Unsupported` (`/compare` without city while `search_item_prices` is not usable) logs at info.
+- **Server-Timing:** `candidates;dur, filter;dur, prices;dur;desc=live|precomputed, total;dur`. The old `/compare` now sends `total;dur` too. No Cache-Control (live prices, as before).
+- **Shape:** `/compare` returns exactly SearchResult's fields. Filtered `/search` returns SearchResultV2 (adds `engine: "v2"`, `corrected_from`), like unfiltered v2.
+
+**Deviations (decided here):**
+- **Order:** v2 relevance in every mode, not "tier, multi-chain, cheapest". group_by=store: items by rank, each item's store rows by price, chain, store.
+- **Counts:** exact for the filter when the walk covered every candidate. Otherwise `total_matches` / `comparable_count` are the nationwide name-match counts from search_items, the numbers unfiltered v2 reports; for group_by=store, total = name matches. `has_more` is exact up to the ceiling. Past candidate 3,000 nothing is listed (`has_more` false), like the SU11A-49 cap at 1,000. **No web wording change**: the web already showed the name-match count for capped queries since SU11A-49.
+- **Typo correction** now also applies to `/compare` and filtered `/search`. `/compare` has no `corrected_from` field (exact shape kept); the web never displayed it anyway.
+- **Chain filter Eilat** follows v2 (D2), unlike the old path.
+- **`/compare` without a city** while `search_item_prices` is unusable -> old path.
+- **City price SQL determinism:** `_PRICE_SQL_CITY` now orders `p.item_price, p.store_fk` (it had no tie-break; equal prices came back in plan order, so the chosen branch and the order of equal quotes could differ between requests and between pricing 1,000 vs one page). A sort key only, as SU11A-47 did for the no-city SQL.
+- **No token table, no migration (Step 2).** Measured: the trigram match is cheap. PGlite (PG 17 WASM + pg_trgm, 132,755 synthetic rows), חלב with 8,602 matches:
+  - count alone 13 ms;
+  - all rows out 124 ms;
+  - counts + order + `LIMIT 300` 39 ms.
+  - Python then tiered every match (about 10 µs per row; 5.5 µs with the regexes compiled once).
+- **The Step 2 change instead:** `search_v2.Ranked`.
+  - SQL counts the matches (window counts) and orders them by `rank_key` with a coarse tier that is a lower bound of the real one (LIKE tests; `item_code COLLATE "C"`).
+  - Python takes rows in that order, computes the exact tier and releases a row once no later row can rank before it.
+  - The rows and their order are identical to `rank()` by construction. A property test covers any lower bound; Postgres tests compare against the full ranking.
+  - Fetches are 300 rows (600 for the filtered walk), then 8x.
+  - `_candidates` stays as the reference that `compare_search_v2 --filtered` checks the stream against.
+
+**Local timings (laptop, synthetic, everything in RAM, NOT production):**
+- **Candidate step, native PG16 without pg_trgm** (seq scan about 70–85 ms in both): חלב (6,993 matches) old 150–159 ms vs new 68–74 ms, so the Python share drops from about 85 ms to about 4 ms; שוקולד 4,273: 123–144 vs 68–78. Same top 30.
+- **End to end** (20K items, 900 stores in 80 cities, 120K prices; `compare_search_v2 --filtered` on that database: GO, 0 price mismatches, 0 stream differences, Eilat checks pass):
+  - `/compare` + city: new 31–171 ms (p50 60), old 64–131. The old path is fast here only because the data is tiny and in RAM; production measured 1.3–1.4 s.
+  - `/compare` without city: new 29–39 vs old 302–365.
+  - Chain filter: new 27–38 vs old 79–129.
+  - group_by=store + city: new 69–117 vs old 98–135.
+  - Page pricing 3–9 ms.
+  - The slowest new cases walk all 3,000 candidates on this deliberately sparse data (6 stores per item).
+- Production numbers come from runbook step d.
+
+**Tests:**
+- `tests/test_search_filtered.py` (39, fakes): flag values and routing (off / test / on / engine=v1, unfiltered not routed), response shapes, Server-Timing, fallback without the query in the log, stream = rank for any lower bound, early stop, the walk (batches, exhaustion, ceiling, MAYBE settle), compare verdicts.
+- `tests/test_search_filtered_pg.py` (11, real Postgres, generated data with 5 chains, 4 cities incl. Eilat, dead stores, ₪0, missing name rows, every promo kind, coupon pseudo items):
+  - the stream vs the full ranking;
+  - `run()` unchanged;
+  - city and city + chain, and `/compare` in a city: the same items and byte-identical product JSON as the old path, with exact counts;
+  - group_by=store rows identical to the old path;
+  - Eilat shown in Eilat, D2 nationwide;
+  - chain from precomputed = the live reference = the live fallback;
+  - nationwide `/compare`;
+  - Unsupported; the ceiling.
+- Fixtures that patched `_candidates` now patch `_ranked`.
+- **Full suite** (throwaway venv outside the repo, `tests api/tests`): 368 passed, 21 skipped (Postgres tests), 14 known `api/tests/test_smoke.py` failures. With a local Postgres 16 (`SCRP_TEST_PG_URL`): 389 passed + the same 14.
+
 ---
 
 ## 📋 Open items / next steps (as of 22 Oct 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1. Lawyer review of the terms is Dude's call.
 - **SU11A-36 Search v2:** SEARCH_V2=on since 21 Oct 2026; timer daily 14:30.
+- **SU11A-50 filtered search:** built, not deployed. After the SU11A-47 runbook (and SU11A-49): `docs/super/su11a50_runbook.md` (compare `--filtered` go / no-go, then `SEARCH_V2_FILTERED=test`, then `on`). No web or mobile change needed.
 - **SU11A-49 security fixes:** built, not deployed. Run `docs/security/su11a49_runbook.md` (after or together with the SU11A-47 runbook; both restart scrp-api), then the web deploy. Then: review the compliance drafts in `docs/compliance/` (with an advisor for the לאימות items), the sudo checks in the SU11A-48 review, CSP enforcement after a clean week, and the open findings F-06 to F-23.
 - **SU11A-47 search speed:** built, not deployed. Run `docs/super/su11a47_search_speed_runbook.md` (migration, build, check-precomputed, restart, curl), then the web deploy. Mobile suggestions ship in build 9.
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
@@ -1416,4 +1499,4 @@ Source: `docs/security/su11a48_security_review.md` (status table at its top). Ru
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-50 (planned: web city-mode search speed; SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).
+Next free session ID: SU11A-51 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).
