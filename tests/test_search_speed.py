@@ -42,8 +42,9 @@ def v2(monkeypatch):
     V._cache.built_at = V._cache.lexicon = V._cache.prices_built_at = None
     monkeypatch.setattr(V, "_built_at", lambda conn: BUILT)
     monkeypatch.setattr(V, "_lexicon", lambda conn: ({}, frozenset({100})))
-    monkeypatch.setattr(V, "_candidates", lambda conn, groups: [
-        dict(c) for c in CATALOG if all(any(a in c["name_norm"] for a in g.alts) for g in groups)])
+    monkeypatch.setattr(V, "_ranked", lambda conn, groups, q_norm, *_: V.Ranked.from_list([
+        dict(c) for c in CATALOG if all(any(a in c["name_norm"] for a in g.alts) for g in groups)],
+        groups, q_norm))
     monkeypatch.setattr(V, "_barcode", lambda conn, codes: [dict(c) for c in CATALOG if c["item_code"] in codes])
     monkeypatch.setattr(V, "_correct", lambda conn, groups: None)
 

@@ -12,7 +12,7 @@ from api.models import (SearchResult, SearchResultV2, ProductWithPrices, Product
                         SuggestResponse, SuggestItem)
 from api.dependencies import get_db
 from api.response_cache import ResponseCache
-from db import search_v2
+from db import search_filtered, search_v2
 from db.query import find_barcodes_with_relevance, fetch_prices, group_by_product, group_by_store
 from db.search_norm import normalize
 
@@ -220,6 +220,10 @@ def search(
         v2 = _search_v2(q, conn, limit, offset, city, _signed_in(request))
         if v2 is not None:
             return v2
+    elif (city or chain or group_by != "chain") and _use_filtered(_filtered_mode(), engine):
+        fr = _search_filtered(q, conn, limit, offset, city, chain, group_by, compare_only=False)
+        if fr is not None:
+            return fr
     result = _build_result(q, conn, limit, offset, city, chain, compare_only=False, group_by=group_by)
     if response is not None:
         response.headers["Server-Timing"] = f"total;dur={_ms(t0)}"
@@ -234,8 +238,8 @@ def search(
 #   test - v2 only when the request says engine=v2
 #   on   - v2 whenever the request has no city and no chain filter and
 #          group_by=chain (what the mobile app sends); engine=v1 forces the old path
-# Requests with a city / chain filter or group_by=store always use the old path,
-# because search_items counts and ranks nationally. /compare never uses v2.
+# Requests with a city / chain filter or group_by=store, and /compare, are not
+# SEARCH_V2's: they follow SEARCH_V2_FILTERED (SU11A-50, below).
 # Rollback: set SEARCH_V2=off and restart scrp-api.
 
 def _v2_mode() -> str:
@@ -249,6 +253,67 @@ def _use_v2(mode: str, engine: str | None, city, chain, group_by: str) -> bool:
     if mode == "test":
         return engine == "v2"
     return engine != "v1"
+
+
+# ---------------------------------------------------------------------------
+# Filtered search on the v2 path (SU11A-50)
+# ---------------------------------------------------------------------------
+# SEARCH_V2_FILTERED (scrp-api EnvironmentFile; read per request):
+#   off  (default, also when unset or unknown) - /compare and filtered /search
+#        use the old path, exactly as before
+#   test - the filtered v2 path only when the request says engine=v2
+#   on   - every /compare, and every /search with a city / chain filter or
+#          group_by=store; engine=v1 forces the old path
+# The unfiltered /search keeps following SEARCH_V2. The filtered path
+# (db/search_filtered.py) runs in a SAVEPOINT; any error or timeout there logs a
+# warning (exception type only, never the query) and the old path answers.
+# Rollback: SEARCH_V2_FILTERED=off and restart scrp-api.
+
+def _filtered_mode() -> str:
+    mode = (os.environ.get("SEARCH_V2_FILTERED") or "off").strip().lower()
+    return mode if mode in ("off", "test", "on") else "off"
+
+
+def _use_filtered(mode: str, engine: str | None) -> bool:
+    if mode == "off" or engine == "v1":
+        return False
+    if mode == "test":
+        return engine == "v2"
+    return True
+
+
+def _search_filtered(q: str, conn: Connection, limit: int, offset: int, city, chain,
+                     group_by: str, compare_only: bool) -> Response | None:
+    """The filtered v2 answer, or None (the caller then uses the old path).
+
+    /search answers carry engine="v2" and corrected_from like an unfiltered v2
+    answer; /compare answers keep /compare's exact fields. No Cache-Control:
+    the prices are live, as on the old path.
+    """
+    t0 = time.perf_counter()
+    try:
+        with conn.begin_nested():
+            r = search_filtered.run(conn, q, limit=limit, offset=offset, city=city, chain=chain,
+                                    group_by=group_by, compare_only=compare_only)
+    except search_filtered.Unsupported as exc:
+        log.info("filtered search not available here, using the old path: %s", exc)
+        return None
+    except search_v2.V2Unavailable as exc:
+        log.warning("filtered search unavailable, using the old path: %s", exc)
+        return None
+    except Exception as exc:  # noqa: BLE001 - never a 500; never log the query (no traceback: it carries the SQL parameters)
+        log.warning("filtered search failed, using the old path: %s", type(exc).__name__)
+        return None
+    fields = dict(query=r.query, total_matches=r.total_matches, comparable_count=r.comparable_count,
+                  has_more=r.has_more, items=[_to_model(p) for p in r.products])
+    if compare_only:
+        body = SearchResult(**fields).model_dump_json().encode()
+    else:
+        body = SearchResultV2(**fields, corrected_from=r.corrected_from).model_dump_json().encode()
+    tm = r.timings_ms
+    timing = (f"candidates;dur={tm.get('candidates', 0)}, filter;dur={tm.get('filter', 0)}, "
+              f"prices;dur={tm.get('prices', 0)};desc={r.prices_source}, total;dur={_ms(t0)}")
+    return Response(content=body, media_type="application/json", headers={"Server-Timing": timing})
 
 
 # ---------------------------------------------------------------------------
@@ -368,10 +433,20 @@ def compare(
     limit:  int           = Query(30, ge=1, le=100, description="Max products returned"),
     offset: int           = Query(0, ge=0, description="Pagination offset"),
     city:   list[str] | None  = Query(None, description="Filter to stores in these cities (repeat param for multiple)"),
+    engine: str | None = Query(None, description="'v2' (used when SEARCH_V2_FILTERED=test or on) or 'v1' (forces the old path); other values are ignored"),
     conn:   Connection = Depends(get_db),
+    response: Response = None,
 ):
     """
     Like /search but returns ONLY products available in 2+ chains, with
     delta_from_cheapest on each quote showing how much more expensive vs the cheapest chain.
     """
-    return _build_result(q, conn, limit, offset, city, chain_id=None, compare_only=True)
+    t0 = time.perf_counter()
+    if _use_filtered(_filtered_mode(), engine):
+        fr = _search_filtered(q, conn, limit, offset, city, None, "chain", compare_only=True)
+        if fr is not None:
+            return fr
+    result = _build_result(q, conn, limit, offset, city, chain_id=None, compare_only=True)
+    if response is not None:
+        response.headers["Server-Timing"] = f"total;dur={_ms(t0)}"
+    return result

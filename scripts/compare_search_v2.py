@@ -3,6 +3,30 @@
     venv/bin/python3 -m scripts.compare_search_v2 --out /tmp/search_v2_compare.json
     venv/bin/python3 -m scripts.compare_search_v2 --dry-run
     venv/bin/python3 -m scripts.compare_search_v2 --check-precomputed 300
+    venv/bin/python3 -m scripts.compare_search_v2 --filtered [--out /tmp/search_filtered_compare.json]
+
+--filtered (SU11A-50): the filtered v2 path (db/search_filtered.py) against the
+old path, in-process, independent of SEARCH_V2_FILTERED. Read-only, like the
+rest of this script.
+  1. Candidate step (the Ranked stream): for the 12 standard queries, the top 10
+     from the stream vs the full SU11A-36 ranking (must be identical), and the
+     candidate-step time of both.
+  2. /compare in a city: חלב לחם במבה שוקולד קפה ים x רמת גן, בני ברק, ירושלים,
+     אילת (limit 20). Old path ONCE per pair (it is the heavy one), new path 3
+     times (min / median). Overlap of the two first-20 lists, items only in
+     one of them, and PRICE MISMATCHES: every new page item that the old path
+     also priced must have the identical product JSON (must be 0). "not in
+     reference" = new items the old path did not price (it stops at its
+     1,000-candidate cap; the new walk goes to 3,000). Eilat check:
+     city=אילת shows only Eilat quotes.
+  3. Chain filter (/search?chain=, three chains) and /compare without a city
+     (two queries): the reference is the live fetch with the Eilat rule over
+     all chains, then the chain filter (what search v2 shows nationwide); the
+     old path does not apply the Eilat rule, so it is not the reference here.
+     Old path timed once. Eilat check: no Eilat quote on an item that has a
+     quote elsewhere.
+  Go/no-go (runbook step d): 0 price mismatches, 0 stream differences, new p50
+  <= 400 ms, no error / timeout in the new path, Eilat checks pass.
 
 --check-precomputed N (SU11A-47): N random live, non-pseudo items, in pages of
 30: the page's products from search_item_prices vs from the live fetch
@@ -213,6 +237,189 @@ def check_precomputed(n: int, out: str | None) -> int:
     return 1 if mismatches else 0
 
 
+FILTERED_QUERIES = ["חלב", "לחם", "במבה", "שוקולד", "קפה", "ים"]
+FILTERED_CITIES = ["רמת גן", "בני ברק", "ירושלים", "אילת"]
+FILTERED_LIMIT = 20
+
+
+def _timed(fn, runs: int) -> tuple[dict, object | None, str | None]:
+    times, last, err = [], None, None
+    for _ in range(runs):
+        try:
+            with ReadOnly() as conn:
+                t0 = time.perf_counter()
+                last = fn(conn)
+                times.append((time.perf_counter() - t0) * 1000)
+        except Exception as exc:  # noqa: BLE001 - recorded, never repeated
+            err = _err(exc)
+            break
+        gc.collect()
+    return _ms(times), last, err
+
+
+def filtered(out: str | None, runs: int) -> int:
+    """--filtered: the SU11A-50 filtered v2 path against the old path (read-only)."""
+    import api.routers.search as S
+    import db.query as Q
+    import db.search_filtered as F
+    import db.search_v2 as V
+    from db.search_norm import normalize, tokenize
+    from scripts.measure_search import RELEVANCE
+    from sqlalchemy import text
+
+    started = time.perf_counter()
+    Q.get_liveness()
+    with ReadOnly() as conn:
+        V.check_ready(conn)
+        aliases, eilat = V._lexicon(conn)
+        chains = [r[0] for r in conn.execute(text("""
+            SELECT s.chain_id FROM stores s GROUP BY s.chain_id ORDER BY count(*) DESC LIMIT 3"""))]
+        pre_ok = F.precomputed_ok(conn)
+    rep: dict = {"session": "SU11A-50", "mode": "filtered", "precomputed_usable": pre_ok, "stream": [],
+                 "city": [], "nationwide": []}
+
+    def j(p) -> dict:
+        return json.loads(S._to_model(p).model_dump_json())
+
+    # 1. the candidate stream against the full ranking
+    stream_diffs = 0
+    for q in RELEVANCE:
+        qn = normalize(q)
+        groups = V.apply_aliases(tokenize(qn), aliases)
+        with ReadOnly() as conn:
+            t0 = time.perf_counter()
+            full = V.rank(V._candidates(conn, groups), groups, qn)
+            old_ms = (time.perf_counter() - t0) * 1000
+        ms, r, err = _timed(lambda c: V._ranked(c, groups, qn).take(10), runs)
+        same = err is None and [x["item_code"] for x in r] == [x["item_code"] for x in full[:10]]
+        stream_diffs += not same
+        rep["stream"].append({"query": q, "matches": len(full), "old_ms": round(old_ms, 1), "new_ms": ms,
+                              "same_top10": same, "error": err})
+        log(f"stream {q}: {len(full)} matches, same top 10: {same}")
+
+    def check(mode, q, f, old_fn, new_fn, ref_fn=None):
+        log(f"{mode} {q} {f or ''}")
+        new_ms, new, new_err = _timed(new_fn, runs)
+        old_ms, old, old_err = _timed(old_fn, 1)
+        rec = {"mode": mode, "query": q, "filter": f, "new_ms": new_ms, "old_ms": old_ms,
+               "new_error": new_err, "old_error": old_err}
+        if new is None:
+            return rec
+        rec.update(new_mode=new.mode, walked=new.walked, total=new.total_matches, has_more=new.has_more,
+                   stages_ms={k: v for k, v in new.timings_ms.items() if k != "total"})
+        new_codes = [p["item_code"] for p in new.products]
+        old_codes = [it.product.item_code for it in old.items[:FILTERED_LIMIT]] if old else []
+        rec["overlap_first20"] = len(set(new_codes) & set(old_codes))
+        rec["only_old"] = [c for c in old_codes if c not in new_codes]
+        rec["only_new"] = [c for c in new_codes if c not in old_codes]
+        if ref_fn is not None:
+            with ReadOnly() as conn:
+                ref = ref_fn(conn, new_codes)
+        elif old is not None:
+            ref = {it.product.item_code: json.loads(it.model_dump_json()) for it in old.items}
+        else:
+            ref = {}
+        mism = [c for p, c in zip(new.products, new_codes) if c in ref and j(p) != ref[c]]
+        rec["price_mismatches"] = [{"item_code": c, "diff": _first_diff(
+            j(next(p for p in new.products if p["item_code"] == c)), ref[c])} for c in mism]
+        rec["not_in_reference"] = [c for c in new_codes if c not in ref]
+        quotes = [qt for p in new.products for qt in p["quotes"]]
+        if f == V.EILAT:
+            rec["eilat_ok"] = all(qt["store_fk"] in eilat for qt in quotes)
+        elif mode != "city":
+            rec["eilat_ok"] = all(not ({qt["store_fk"] for qt in p["quotes"]} & eilat)
+                                  or {qt["store_fk"] for qt in p["quotes"]} <= eilat for p in new.products)
+        return rec
+
+    # 2. /compare in a city: the old path is the reference
+    for q in FILTERED_QUERIES:
+        for city in FILTERED_CITIES:
+            rep["city"].append(check(
+                "city", q, city,
+                lambda c, q=q, city=city: S._build_result(q, c, 1000, 0, [city], None, compare_only=True),
+                lambda c, q=q, city=city: F.run(c, q, limit=FILTERED_LIMIT, offset=0, city=[city],
+                                                compare_only=True)))
+
+    # 3. nationwide modes: the live fetch with the Eilat rule over all chains is the reference
+    def reference(chain):
+        def ref(conn, codes):
+            rows = V.drop_eilat(Q.fetch_prices(conn, codes), eilat, None)
+            if chain:
+                rows = [r for r in rows if r["chain_id"] in chain]
+            g = Q.group_by_product(rows)
+            return {c: j(g[c]) for c in codes if c in g}
+        return ref
+
+    for q in ("חלב", "שוקולד"):
+        for ch in chains:
+            rep["nationwide"].append(check(
+                "chain", q, ch,
+                lambda c, q=q, ch=ch: S._build_result(q, c, FILTERED_LIMIT, 0, None, [ch], compare_only=False),
+                lambda c, q=q, ch=ch: F.run(c, q, limit=FILTERED_LIMIT, offset=0, chain=[ch]),
+                reference([ch])))
+    for q in ("חלב", "במבה"):
+        rep["nationwide"].append(check(
+            "compare", q, None,
+            lambda c, q=q: S._build_result(q, c, FILTERED_LIMIT, 0, None, None, compare_only=True),
+            lambda c, q=q: F.run(c, q, limit=FILTERED_LIMIT, offset=0, compare_only=True),
+            reference(None)))
+
+    rows = rep["city"] + rep["nationwide"]
+    meds = sorted(r["new_ms"]["median"] for r in rows if r.get("new_ms"))
+    p50 = meds[len(meds) // 2] if meds else None
+    n_mism = sum(len(r.get("price_mismatches", [])) for r in rows)
+    new_errors = [f"{r['mode']} {r['query']} {r['filter'] or ''}: {r['new_error']}" for r in rows if r["new_error"]]
+    eilat_bad = [f"{r['mode']} {r['query']} {r['filter'] or ''}" for r in rows if r.get("eilat_ok") is False]
+    rep["summary"] = {"stream_differences": stream_diffs, "price_mismatches": n_mism, "new_p50_ms": p50,
+                      "new_errors": new_errors, "eilat_failures": eilat_bad,
+                      "go": stream_diffs == 0 and n_mism == 0 and p50 is not None and p50 <= 400
+                      and not new_errors and not eilat_bad}
+    rep["elapsed_s"] = round(time.perf_counter() - started, 1)
+
+    p = print
+    p("\n=== SU11A-50 filtered v2 path vs old path (read-only) ===")
+    p(f"search_item_prices usable: {pre_ok}")
+    p("\n-- 1. candidate stream vs full ranking (12 standard queries) --")
+    p("query | matches | old ms (all rows + rank) | new ms min/med | same top 10")
+    for r in rep["stream"]:
+        m = r["new_ms"]
+        p(f"{r['query']} | {r['matches']} | {r['old_ms']:.0f} | "
+          f"{m.get('min', 0):.0f}/{m.get('median', 0):.0f} | {r['same_top10']}{' ' + r['error'] if r['error'] else ''}")
+
+    def line(r):
+        nm, om = r.get("new_ms") or {}, r.get("old_ms") or {}
+        errs = "; ".join(x for x in (r["new_error"] and f"new: {r['new_error']}", r["old_error"] and f"old: {r['old_error']}") if x)
+        return (f"{r['mode']} | {r['query']} | {r['filter'] or '-'} | "
+                f"{nm.get('min', 0):.0f}/{nm.get('median', 0):.0f} | {om.get('min', 0):.0f} | "
+                f"{r.get('stages_ms', '')} | {r.get('walked', '')} | {r.get('overlap_first20', '')} | "
+                f"{len(r.get('only_old', []))}/{len(r.get('only_new', []))} | {len(r.get('price_mismatches', []))} | "
+                f"{len(r.get('not_in_reference', []))} | {r.get('eilat_ok', '')} | {errs}")
+    hdr = ("mode | query | filter | new ms min/med | old ms | new stages | walked | overlap first 20 | "
+           "only old/new | PRICE MISMATCHES | not in reference | eilat ok | errors")
+    p("\n-- 2. /compare in a city (reference: the old path) --")
+    p(hdr)
+    for r in rep["city"]:
+        p(line(r))
+    p("\n-- 3. chain filter and /compare without a city (reference: live fetch + Eilat rule over all chains) --")
+    p(hdr)
+    for r in rep["nationwide"]:
+        p(line(r))
+    for r in rows:
+        for m in r.get("price_mismatches", [])[:5]:
+            p(f"  mismatch {r['mode']} {r['query']} {r['filter'] or ''}: {m['item_code']} {m['diff']}")
+    sm = rep["summary"]
+    p(f"\nSUMMARY: stream differences {sm['stream_differences']} | price mismatches {sm['price_mismatches']} | "
+      f"new p50 {sm['new_p50_ms']} ms | new errors {len(sm['new_errors'])} | Eilat failures {len(sm['eilat_failures'])}")
+    for e in sm["new_errors"] + sm["eilat_failures"]:
+        p(f"  {e}")
+    p("GO" if sm["go"] else "NO-GO")
+    p(f"elapsed {rep['elapsed_s']} s")
+    if out:
+        Path(out).write_text(json.dumps(rep, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+        p(f"JSON: {out}")
+    return 0 if sm["go"] else 1
+
+
 def pick_upc(conn, popular: str | None) -> tuple[str | None, str]:
     from sqlalchemy import text
     if popular and len(popular) == 13 and popular.startswith("0"):
@@ -235,6 +442,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="list the queries; no database")
     ap.add_argument("--check-precomputed", type=int, metavar="N", default=None,
                     help="SU11A-47: compare search_item_prices with the live fetch for N random items")
+    ap.add_argument("--filtered", action="store_true",
+                    help="SU11A-50: the filtered v2 path (/compare, city / chain filters) vs the old path")
     args = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8")
@@ -243,6 +452,16 @@ def main(argv: list[str] | None = None) -> int:
         _load_env()
         out = args.out if args.out != ap.get_default("out") else None
         return check_precomputed(max(1, args.check_precomputed), out)
+    if args.filtered:
+        if args.dry_run:
+            print(f"queries: {' | '.join(FILTERED_QUERIES)} x cities: {' | '.join(FILTERED_CITIES)} (/compare, "
+                  f"limit {FILTERED_LIMIT}); chain filter for the 3 largest chains x חלב, שוקולד; "
+                  f"/compare without a city x חלב, במבה; stream check on the 12 standard queries")
+            print(f"runs: new {args.runs}, old 1; READ ONLY, statement_timeout {TIMEOUT_MS} ms")
+            return 0
+        _load_env()
+        out = args.out if args.out != ap.get_default("out") else None
+        return filtered(out, args.runs)
     from scripts.measure_search import QUERIES, RELEVANCE
 
     texts = [q for _, q in QUERIES]

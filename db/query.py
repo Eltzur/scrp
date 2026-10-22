@@ -503,6 +503,7 @@ def _fetch_prices_all(
     city: list[str] | None = None,
     chain_id: list[str] | None = None,
     store_only: str | None = None,
+    page: bool = False,
 ) -> list[dict]:
     if not barcodes:
         return []
@@ -553,9 +554,19 @@ def _fetch_prices_all(
 
         # Disable nested loops for the price query so the planner uses BitmapAnd
         # rather than repeating 6K index scans across all stores (9d-8).
-        conn.execute(text("SET LOCAL enable_nestloop = off"))
+        #
+        # page=True (SU11A-50: the filtered v2 path prices one page, <= 100
+        # barcodes) keeps them ON: for a few barcodes the hash plan seq-scans
+        # items and item_chain_names (local synthetic: 32 ms vs 4 ms for 20
+        # barcodes). Same SQL, same rows; only the planner setting differs.
+        conn.execute(text("SET LOCAL enable_nestloop = on" if page else "SET LOCAL enable_nestloop = off"))
 
-        sql += " ORDER BY p.item_price"
+        # store_fk breaks price ties (SU11A-50, as SU11A-47 did for the no-city
+        # SQL): equal prices came back in plan order, so which branch won a chain
+        # and the order of equal quotes could differ between two requests, and
+        # between pricing 1,000 items (old path) and one page (filtered v2 path).
+        # A sort key only: no filter, no join change.
+        sql += " ORDER BY p.item_price, p.store_fk"
         rows += [dict(r) for r in conn.execute(text(sql), params).mappings().all()]
         return rows
 
@@ -1892,14 +1903,18 @@ def fetch_prices(
     city: list[str] | None = None,
     chain_id: list[str] | None = None,
     store_only: str | None = None,
+    page: bool = False,
 ) -> list[dict]:
     """Shelf quotes + promo-only quotes, from live stores only.
+
+    page=True: a page of barcodes (the filtered v2 path, SU11A-50); see
+    _fetch_prices_all.
 
     Callers (/search, /compare, /product, /basket/compare) group AFTER this,
     so total_matches, has_more, chains_count and cheapest are all computed on
     the filtered rows and stay consistent with what is returned.
     """
-    rows = _fetch_prices_all(conn, barcodes, city=city, chain_id=chain_id, store_only=store_only)
+    rows = _fetch_prices_all(conn, barcodes, city=city, chain_id=chain_id, store_only=store_only, page=page)
     # A shelf price of ₪0 is never a real price: some feeds publish 0.00 for an
     # item they do not currently price (SU10S-22: 411 live rows - Keshet 306,
     # Hazi Hinam 101, Rami Levy 4 - mostly produce and staples). Shown, it won as

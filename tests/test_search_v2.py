@@ -238,8 +238,9 @@ def fake_db(monkeypatch):
     V._cache.lexicon = None
     monkeypatch.setattr(V, "_built_at", lambda conn: datetime.now(timezone.utc) - timedelta(hours=2))
     monkeypatch.setattr(V, "_lexicon", lambda conn: ({"milka": "מילקה"}, frozenset({100})))
-    monkeypatch.setattr(V, "_candidates", lambda conn, groups: [
-        dict(c) for c in rows if not c["is_pseudo"] and _matches(c, groups)])
+    # SU11A-50: candidates come as a Ranked stream; a list source ranks in Python.
+    monkeypatch.setattr(V, "_ranked", lambda conn, groups, q_norm, *_: V.Ranked.from_list([
+        dict(c) for c in rows if not c["is_pseudo"] and _matches(c, groups)], groups, q_norm))
     monkeypatch.setattr(V, "_barcode", lambda conn, codes: [dict(c) for c in rows if c["item_code"] in codes])
     # SU11A-47: no search_item_prices here - the page takes the live fetch below.
     monkeypatch.setattr(V, "_try_precomputed", lambda conn, codes: None)

@@ -236,7 +236,8 @@ def test_run_uses_precomputed_and_matches_forced_live(engine, live, monkeypatch)
     with engine.connect() as c:
         a = V.run(c, sorted(ITEMS)[0], limit=1)
         assert a.prices_source == "precomputed"
-        monkeypatch.setattr(V, "_candidates", lambda conn, groups: [dict(p) for p in page])
+        monkeypatch.setattr(V, "_ranked", lambda conn, groups, q_norm, *_: V.Ranked.from_list(
+            [dict(p) for p in page], groups, q_norm))
         pre = V.run(c, "חלב", limit=30)
         live_ = V.run(c, "חלב", limit=30, precomputed=False)
     assert pre.prices_source == "precomputed" and live_.prices_source == "live"

@@ -35,15 +35,24 @@ missing or empty, when its built_at differs from search_items.built_at, when a
 page item has no row there, or when a page item's winning promo has ended since
 the build. suggest() answers GET /suggest from search_items + search_lexicon.
 
+SU11A-50: the candidate step counts and orders the matches in SQL and ranks
+only the rows up to the page in Python (Ranked, ranked_candidates): same rows,
+same order, without shipping every match of a broad word to Python. The
+filtered path (db/search_filtered.py: /compare, city / chain filters,
+group_by=store) walks the same stream.
+
 Pure functions (parse, aliases, tiers, ranking, correction, Eilat) take no
 database and are unit-tested in tests/test_search_v2.py.
 """
 from __future__ import annotations
 
+import heapq
 import logging
 import re
 import time
 from dataclasses import dataclass, field
+from functools import lru_cache
+from typing import Iterator
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import bindparam, text
@@ -156,16 +165,29 @@ def where_clause(groups: list[Group]) -> tuple[str, dict]:
 # Ranking (pure)
 # ---------------------------------------------------------------------------
 
-def _whole(alt: str, s: str) -> bool:
+# SU11A-50: the patterns are compiled once per alternative, not per candidate
+# (same expressions; ranking a broad word's thousands of candidates spent most
+# of its time rebuilding them).
+@lru_cache(maxsize=1024)
+def _whole_rx(alt: str) -> re.Pattern:
     if alt.isdigit():
-        return re.search(rf"(?<!\d){re.escape(alt)}(?!\d)", s) is not None
-    return re.search(rf"(?<!\w){re.escape(alt)}(?!\w)", s) is not None
+        return re.compile(rf"(?<!\d){re.escape(alt)}(?!\d)")
+    return re.compile(rf"(?<!\w){re.escape(alt)}(?!\w)")
+
+
+@lru_cache(maxsize=1024)
+def _starts_rx(alt: str) -> re.Pattern:
+    if alt.isdigit():
+        return re.compile(rf"{re.escape(alt)}(?!\d)")
+    return re.compile(rf"{re.escape(alt)}(?!\w)")
+
+
+def _whole(alt: str, s: str) -> bool:
+    return _whole_rx(alt).search(s) is not None
 
 
 def _starts(alt: str, s: str) -> bool:
-    if alt.isdigit():
-        return re.match(rf"{re.escape(alt)}(?!\d)", s) is not None
-    return re.match(rf"{re.escape(alt)}(?!\w)", s) is not None
+    return _starts_rx(alt).match(s) is not None
 
 
 def assign_tier(name: str, mfr: str, groups: list[Group], q_norm: str) -> int:
@@ -205,6 +227,123 @@ def rank(cands: list[dict], groups: list[Group], q_norm: str) -> list[dict]:
     for c in cands:
         c["tier"] = assign_tier(c["name_norm"], c["manufacturer_norm"], groups, q_norm)
     return sorted(cands, key=lambda c: rank_key(c, c["tier"]))
+
+
+# ---------------------------------------------------------------------------
+# Ranked stream (SU11A-50)
+# ---------------------------------------------------------------------------
+# A broad word (חלב, שוקולד) matches thousands of search_items rows. Before,
+# all of them came back to Python and were ranked there (assign_tier per row)
+# before the page was cut: most of the 30-200 ms candidate step. Now Postgres
+# counts the matches and sorts them by rank_key with a LOWER BOUND of the tier
+# (coarse_tier_sql: plain LIKE tests, never above assign_tier), and Python takes
+# rows in that order, computes the exact tier, and releases a row only once no
+# later row can rank before it (every later row's key is at least its SQL key).
+# Same rows, same order as rank(), but only the rows near the top are fetched
+# and tiered. Tested against rank() in tests/test_search_filtered.py.
+#
+# item_code is sorted COLLATE "C" (code point order, like Python), so the SQL
+# order and rank_key agree under any database collation.
+
+_STREAM_FIRST = 300          # rows in the first fetch (a page needs ~30-60)
+
+
+def coarse_tier_sql(groups: list[Group], q_norm: str) -> tuple[str, dict]:
+    """SQL CASE giving 0 / 1 / 3, never above assign_tier's tier for the row.
+
+    0: the name starts (LIKE prefix) with the phrase or a first-group
+       alternative, or the manufacturer is the phrase (assign_tier's tier-0
+       tests without the word-end check).
+    1: a first-group alternative is a substring of the name (tiers 1 and 2
+       both need that).
+    3: anything else (tier 3).
+    """
+    first = groups[0]
+    phrase_alts = sorted(p for p in {q_norm, " ".join(g.alts[-1] for g in groups)} if p)
+    params: dict = {}
+    zero, one = [], []
+    for i, p in enumerate(phrase_alts):
+        params[f"ctp{i}"] = _like_escape(p) + "%"
+        params[f"ctm{i}"] = p
+        zero.append(f"name_norm LIKE :ctp{i} ESCAPE '\\'")
+        zero.append(f"manufacturer_norm = :ctm{i}")
+    for i, a in enumerate(first.alts):
+        params[f"cta{i}"] = _like_escape(a) + "%"
+        params[f"ctn{i}"] = "%" + _like_escape(a) + "%"
+        zero.append(f"name_norm LIKE :cta{i} ESCAPE '\\'")
+        if len(groups) == 1:
+            params[f"cte{i}"] = a
+            zero.append(f"manufacturer_norm = :cte{i}")
+        one.append(f"name_norm LIKE :ctn{i} ESCAPE '\\'")
+    return (f"CASE WHEN {' OR '.join(zero)} THEN 0 WHEN {' OR '.join(one)} THEN 1 ELSE 3 END", params)
+
+
+class Ranked:
+    """Candidates of one query in rank order, produced lazily.
+
+    total / comparable: all matches (non-pseudo) and those with 2+ live chains,
+    as rank() + len() gave them. Iterating yields candidate dicts with "tier",
+    in rank() order. fetch(limit, offset) returns SQL rows sorted by the coarse
+    key (each with "ct"); a list source (barcodes, tests) is ranked in Python.
+    """
+
+    def __init__(self, total: int, comparable: int, fetch, groups: list[Group], q_norm: str,
+                 first: list[dict] | None = None, first_limit: int = _STREAM_FIRST):
+        self.total, self.comparable = total, comparable
+        self._fetch, self._groups, self._q = fetch, groups, q_norm
+        self._first, self._first_limit = first, first_limit
+        self._list: list[dict] | None = None
+        self._done: list[dict] = []        # released so far, in order
+        self._it: Iterator[dict] | None = None
+        self.fetched = 0      # SQL rows read so far
+        self.queries = 0      # SQL statements run
+
+    @classmethod
+    def from_list(cls, cands: list[dict], groups: list[Group], q_norm: str) -> "Ranked":
+        ranked = rank(cands, groups, q_norm) if groups else [dict(c, tier=0) for c in cands]
+        r = cls(len(ranked), sum(1 for c in ranked if c["chains_live"] >= 2), None, groups, q_norm)
+        r._list = ranked
+        return r
+
+    def _rows(self) -> Iterator[dict]:
+        rows, limit, offset = self._first, self._first_limit, 0
+        while True:
+            if rows is None:
+                rows = self._fetch(limit, offset)
+                self.queries += 1
+            self.fetched += len(rows)
+            yield from rows
+            offset += len(rows)
+            if len(rows) < limit or offset >= self.total:
+                return
+            rows, limit = None, limit * 8
+
+    def _merge(self) -> Iterator[dict]:
+        if self._list is not None:
+            yield from self._list
+            return
+        heap: list = []
+        seq = 0
+        for row in self._rows():
+            bound = rank_key(row, row.pop("ct"))
+            while heap and heap[0][0] < bound:
+                yield heapq.heappop(heap)[2]
+            row["tier"] = assign_tier(row["name_norm"], row["manufacturer_norm"], self._groups, self._q)
+            heapq.heappush(heap, (rank_key(row, row["tier"]), seq, row))
+            seq += 1
+        while heap:
+            yield heapq.heappop(heap)[2]
+
+    def take(self, n: int) -> list[dict]:
+        """The first n candidates in rank order (fewer when there are not n)."""
+        if self._it is None:
+            self._it = self._merge()
+        while len(self._done) < n:
+            nxt = next(self._it, None)
+            if nxt is None:
+                break
+            self._done.append(nxt)
+        return self._done[:n]
 
 
 def choose_correction(candidates: list[tuple[str, float, int]]) -> str | None:
@@ -331,12 +470,80 @@ _COLS = "item_code, name_norm, manufacturer_norm, chains_live, popularity, promo
 
 
 def _candidates(conn: Connection, groups: list[Group]) -> list[dict]:
+    """Every candidate, unranked (the SU11A-36 step). Kept as the reference that
+    compare_search_v2 --filtered checks the Ranked stream against."""
     clause, params = where_clause(groups)
     if not clause:
         return []
     rows = conn.execute(text(
         f"SELECT {_COLS} FROM search_items WHERE NOT is_pseudo AND {clause}"), params).mappings().all()
     return [dict(r) for r in rows]
+
+
+def _ranked(conn: Connection, groups: list[Group], q_norm: str, first_limit: int | None = None) -> Ranked:
+    """The query's candidates as a Ranked stream (SU11A-50); total 0 = no match.
+
+    first_limit: rows in the first fetch (default _STREAM_FIRST); each further
+    fetch is 8x the previous one, so a walk to 3,000 (plus the look-ahead row) needs two statements at 600.
+    """
+    clause, params = where_clause(groups)
+    if not clause:
+        return Ranked.from_list([], groups, q_norm)
+    ct, ct_params = coarse_tier_sql(groups, q_norm)
+    sql = text(f"""
+        SELECT {_COLS}, {ct} AS ct,
+               count(*) OVER () AS n_total,
+               count(*) FILTER (WHERE chains_live >= 2) OVER () AS n_comparable
+        FROM search_items
+        WHERE NOT is_pseudo AND {clause}
+        ORDER BY ct, (chains_live < 2), popularity DESC, chains_live DESC, length(name_norm),
+                 item_code COLLATE "C"
+        LIMIT :lim OFFSET :off
+    """)
+    p = {**params, **ct_params}
+    counts: list[int] = []
+
+    def fetch(limit: int, offset: int) -> list[dict]:
+        out = []
+        for r in conn.execute(sql, {**p, "lim": limit, "off": offset}).mappings():
+            d = dict(r)
+            if not counts:
+                counts.extend((int(d["n_total"]), int(d["n_comparable"])))
+            del d["n_total"], d["n_comparable"]
+            out.append(d)
+        return out
+
+    lim = first_limit or _STREAM_FIRST
+    first = fetch(lim, 0)
+    total, comparable = counts if counts else (0, 0)
+    r = Ranked(total, comparable, fetch, groups, q_norm, first=first, first_limit=lim)
+    r.queries = 1
+    return r
+
+
+def ranked_candidates(conn: Connection, q: str, aliases: dict,
+                      first_limit: int | None = None) -> tuple[Ranked, str | None]:
+    """(candidates, corrected_from): a barcode, the words, or one typo round.
+
+    The candidate step shared by run() and the filtered path (db/search_filtered.py).
+    """
+    q_norm = normalize(q)
+    variants = barcode_variants(q_norm)
+    cands = _barcode(conn, variants) if variants else []
+    if cands:
+        return Ranked.from_list(cands, [], q_norm), None
+    groups = apply_aliases(tokenize(q_norm), aliases)
+    if not groups:
+        return Ranked.from_list([], [], q_norm), None
+    ranked = _ranked(conn, groups, q_norm, first_limit)
+    if ranked.total:
+        return ranked, None
+    fixed = _correct(conn, groups)
+    if fixed:
+        again = _ranked(conn, fixed, q_norm, first_limit)
+        if again.total:
+            return again, q
+    return ranked, None
 
 
 def _barcode(conn: Connection, codes: list[str]) -> list[dict]:
@@ -407,27 +614,12 @@ def run(conn: Connection, q: str, limit: int = 30, offset: int = 0,
     if len(q_norm.replace(" ", "")) < 2:
         return empty
 
-    corrected_from = None
-    variants = barcode_variants(q_norm)
-    cands = _barcode(conn, variants) if variants else []
-    groups: list[Group] = []
-    if not cands:
-        groups = apply_aliases(tokenize(q_norm), aliases)
-        if not groups:
-            return empty
-        cands = _candidates(conn, groups)
-        if not cands:
-            fixed = _correct(conn, groups)
-            if fixed:
-                cands = _candidates(conn, fixed)
-                if cands:
-                    groups, corrected_from = fixed, q
+    ranked, corrected_from = ranked_candidates(conn, q, aliases)
     lap("candidates")
 
-    ranked = rank(cands, groups, q_norm) if groups else [dict(c, tier=0) for c in cands]
-    total = len(ranked)
-    comparable = sum(1 for c in ranked if c["chains_live"] >= 2)
-    page = ranked[offset:offset + limit]
+    # SU11A-50: counted in SQL; only the rows up to the page are ranked here.
+    total, comparable = ranked.total, ranked.comparable
+    page = ranked.take(offset + limit)[offset:]
     lap("rank")
 
     products: list[dict] = []
