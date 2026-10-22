@@ -256,6 +256,7 @@ Store_XML/
 city matcher files/
 deploy/*
 !deploy/systemd/
+!deploy/nginx/
 king_files/
 kingDL/
 screenshots/

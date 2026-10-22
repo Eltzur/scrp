@@ -13,6 +13,8 @@ interface Props {
   isLoading: boolean;
   isFetching: boolean;
   isError: boolean;
+  /** 429 / 503 from the server: "busy, try again" (SU11A-49). */
+  isBusy?: boolean;
   query: string;
   onRetry: () => void;
   onLoadMore?: () => void;
@@ -24,7 +26,7 @@ export type PromoMap = Record<string, PromoItem[]>;
 const SKELETON_COUNT = 6;
 
 export default function ResultsList({
-  result, isLoading, isFetching, isError, query, onRetry, onLoadMore, isLoadingMore,
+  result, isLoading, isFetching, isError, isBusy, query, onRetry, onLoadMore, isLoadingMore,
 }: Props) {
   const { t } = useTranslation();
 
@@ -77,7 +79,7 @@ export default function ResultsList({
     });
   }, [storeSetKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (isError) return <ErrorState onRetry={onRetry} />;
+  if (isError) return <ErrorState onRetry={onRetry} busy={isBusy} />;
 
   if (isLoading && !result) {
     return (

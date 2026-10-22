@@ -76,6 +76,17 @@ export interface SuggestResult {
 export const getSuggestions = (q: string, limit = 8, signal?: AbortSignal): Promise<SuggestResult> =>
   http.get<SuggestResult>('/suggest', { params: { q, limit }, signal }).then(r => r.data);
 
+/**
+ * The server is up but asked us to back off (SU11A-49): 429 rate_limited from
+ * nginx, or 503 query_timeout when a search ran past the API's statement
+ * timeout. Shown as "busy, try again" rather than "cannot reach the server",
+ * and never retried automatically (a retry would only add to the load).
+ */
+export function isBusyError(err: unknown): boolean {
+  const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+  return status === 429 || status === 503;
+}
+
 export const getProduct = (barcode: string): Promise<ProductWithPrices> =>
   http.get<ProductWithPrices>(`/product/${barcode}`).then(r => r.data);
 

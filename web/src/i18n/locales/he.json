@@ -84,6 +84,7 @@
   "errors": {
     "api_down": "לא ניתן לגשת לשרת",
     "api_down_hint": "ודאו ש-uvicorn api.main:app --reload פועל",
+    "busy": "השרת עמוס כרגע. נסו שוב בעוד כמה שניות",
     "retry": "נסה שוב"
   },
   "footer": {

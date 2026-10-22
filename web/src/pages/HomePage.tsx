@@ -9,7 +9,7 @@ import FreshnessStrip from '../components/FreshnessStrip';
 import ResultsList from '../components/ResultsList';
 import ProductDetailModal from '../components/ProductDetailModal';
 import { useSearch, useCompare } from '../api/hooks';
-import { searchProducts, compareProducts, getProduct } from '../api/client';
+import { searchProducts, compareProducts, getProduct, isBusyError } from '../api/client';
 import type { ProductWithPrices, CityInfo } from '../api/client';
 import { defaultCity, matchIpCity, rememberCity, storedCity } from '../utils/city';
 
@@ -103,7 +103,7 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
     }
   }, [filters.city]);
 
-  const { data, isLoading, isFetching, isError } = useActiveResults(query, filters);
+  const { data, isLoading, isFetching, isError, error } = useActiveResults(query, filters);
 
   const resetExtras = useCallback(() => {
     setExtraItems([]);
@@ -195,6 +195,7 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
           isLoading={isLoading}
           isFetching={isFetching && !loadingMore}
           isError={isError}
+          isBusy={isBusyError(error)}
           query={query}
           onRetry={handleRetry}
           onLoadMore={handleLoadMore}

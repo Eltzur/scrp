@@ -84,6 +84,7 @@
   "errors": {
     "api_down": "Could not reach the backend",
     "api_down_hint": "Make sure uvicorn api.main:app --reload is running",
+    "busy": "The server is busy right now. Please try again in a few seconds.",
     "retry": "Retry"
   },
   "footer": {

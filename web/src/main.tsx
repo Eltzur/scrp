@@ -6,13 +6,15 @@ import { AuthProvider } from './components/AuthContext';
 import './i18n/config';
 import './index.css';
 import App from './App';
+import { isBusyError } from './api/client';
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 5 * 60 * 1000,
       refetchOnWindowFocus: false,
-      retry: 1,
+      // One retry, except when the server said it is busy (SU11A-49).
+      retry: (failureCount, error) => failureCount < 1 && !isBusyError(error),
     },
   },
 });
