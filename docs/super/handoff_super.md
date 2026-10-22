@@ -945,6 +945,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-45 (Oct 18) — read-only verification of SU11A-36 search v2 (no code change; paging drift finding 9b) + server runbook `docs/super/su11a36_search_v2_runbook.md`.
 - SU11A-46 (Oct 18) — web SEO (sitemaps per host, robots, canonical/meta per route, og images), load-more dedup (9b), header at 390 px, lazy routes + vendor chunks, eslint 0; search coupon variants + typo 0.40; mobile terms bidi. Play Production 8 submitted. Not deployed.
 - SU11A-47 (Oct 21) — search speed: search_item_prices (precomputed per-chain page prices, migration not applied), GET /suggest, per-worker response cache + Server-Timing / Cache-Control, web search combobox, mobile suggestions (build 9). Runbook `docs/super/su11a47_search_speed_runbook.md`. Not deployed.
+- SU11A-48 (Oct 22) — security review (read-only): `docs/security/su11a48_security_review.md`. 2 High (unbounded old-path price fetch + no DB statement timeout; no rate limiting), 6 Medium, sudo command list for Dude, Data Security Regulations gap table. No code or server change.
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
 
@@ -1387,4 +1388,4 @@ The 14:30 timer then maintains the table. Mobile: build 9.
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-48 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).
+Next free session ID: SU11A-49 (planned: search city-mode speed; SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).
