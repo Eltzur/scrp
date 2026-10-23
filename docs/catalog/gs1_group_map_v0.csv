@@ -1,0 +1,419 @@
+gs1_group,gs1_group_he,category_id,confidence,live_items,notes
+Chocolate and Chocolate_Sugar Candy Combinations - Confectionery,שוקולד וממתקי שוקולד,D08.C01,high,744,
+Cleaning Accessories,אביזרי ניקיון,D11,medium,390,GS1 suppliers file liquid cleaners here too
+Cleansing_Washing_Soap - Body,סבון ותכשירי רחצה לגוף,D12.C04,high,333,
+Hair - Shampoo,שמפו,D12.C01,high,291,
+Biscuits_Cookies (Shelf Stable),ביסקוויטים ועוגיות (מדף),D08.C06,medium,286,wafers / crackers also land here
+Laundry Detergents,אבקות ונוזלי כביסה,D11.C01.S01,high,283,
+Drinks Flavoured - Ready to Drink,"משקאות בטעמים, מוכנים לשתייה",D09,medium,280,"spans soft drinks, juice drinks, iced tea"
+Cheese_Cheese Substitutes (Perishable),גבינות ותחליפי גבינה (קירור),D02.C02,high,241,
+Fish - Prepared_Processed (Shelf Stable),"דגים מעובדים (מדף, בעיקר שימורים)",D07.C07,high,239,mostly canned tuna / sardines
+Pasta_Noodles - Not Ready to Eat (Shelf Stable),פסטה ואטריות יבשות,D07,medium,237,pasta or noodles (C01 / C02)
+Denture_Orthodontic - Cleansing,ניקוי תותבות ויישור שיניים,D12.C09,high,225,
+Dressings_Dips (Shelf Stable),רטבים לסלט ומטבלים (מדף),D07,medium,223,"dressings (C12), sauces (C10), dips"
+Cheese_Cheese Substitutes (Shelf Stable),גבינות ותחליפי גבינה (מדף),D02.C02,high,221,
+Sugar Candy_Sugar Candy Substitutes Confectionery,סוכריות וממתקי סוכר,D08.C02,high,221,
+Antiperspirants_Deodorants,דאודורנטים,D12.C05,high,212,
+Cereal_Muesli Bars,חטיפי דגנים ומוזלי,D08.C10,medium,198,granola / muesli cereals also land here
+Cookware (Disposable),כלי בישול ואפייה חד פעמיים,D11.C10,high,192,
+Hair - Colour,צבע לשיער,D12.C02,high,189,
+Wine - Still,יין,D10.C01,high,187,
+Hair - Conditioner_Treatment,מרכך ומסכה לשיער,D12.C01,high,179,
+Fruit Juice - Ready to Drink (Shelf Stable),מיץ פירות מוכן לשתייה (מדף),D09.C04,high,178,
+Tea - Bags_Loose,תה בשקיות ותפזורת,D09.C09,high,177,
+Sauces_Spreads_Dips_Condiments Variety Packs,"רטבים, ממרחים ומטבלים — מגוון",,,176,spans D04 / D07
+Cereal_Grain_Pulse Products Variety Packs,מוצרי דגנים וקטניות — מגוון,,,165,"spans rice, pulses, cereals, snacks"
+Coffee - Beans_Ground,קפה פולים וטחון,D09.C08,high,165,capsules also land here
+Dairy By-Products,"מוצרי חלב נלווים (משקאות חלב, מעדנים)",D02,medium,165,"milk drinks, desserts, cream"
+Dental Cleansing,משחת שיניים,D12.C09,high,159,
+Beer,בירה,D10.C02,high,153,
+Nuts_Seeds - Prepared_Processed (Shelf Stable),אגוזים וגרעינים קלויים (פיצוחים),D08.C09,high,152,
+Skin Care_Moisturising Products,טיפוח עור וקרמי לחות,D12,medium,152,face (C06) or body (C07)
+Bread (Shelf Stable),לחם (מדף),D05,medium,150,"bread, pita, rolls"
+Ice Cream_Ice Novelties (Frozen),גלידות וארטיקים,D06.C03,high,150,
+Beef - Prepared_Processed,"בקר מעובד (נקניק, המבורגר, קבב...)",,,139,deli vs frozen vs raw (SU11A-6 excluded)
+Yogurt_Yogurt Substitutes (Perishable),יוגורט ותחליפי יוגורט (קירור),D02.C03,high,136,
+Nuts_Seeds - Unprepared_Unprocessed (Shelf Stable),אגוזים וזרעים לא קלויים,D08.C09,high,135,
+Flour - Cereal_Pulse (Shelf Stable),קמח,D07.C17,high,129,
+Snacks Variety Packs,חטיפים — מארזי מגוון,D08,medium,129,
+Surface Cleaners,ניקוי משטחים,D11.C03,high,112,
+Vegetables - Prepared_Processed (Shelf Stable),"ירקות מעובדים (מדף, בעיקר שימורים)",,,111,bagged fresh-cut salads and canned vegetables mixed
+Yogurt_Yogurt Substitutes (Shelf Stable),יוגורט ותחליפי יוגורט (מדף),D02.C03,high,111,
+Beef Sausages - Prepared_Processed,נקניקיות ונקניק בקר,D04.C01,high,107,
+Herbs_Spices (Shelf Stable),תבלינים ועשבי תיבול יבשים,D07.C14,high,107,
+Sun Protection Products,תכשירי הגנה מהשמש,D12.C08,high,103,
+Chicken - Prepared_Processed,"עוף מעובד (שניצל, נאגטס...)",,,102,deli vs frozen schnitzel vs raw
+Jams_Marmalades (Shelf Stable),ריבות,D07.C20,high,102,
+Fruit - Unprepared_Unprocessed (Frozen),פירות קפואים,D06.C02,high,101,
+Chutneys_Relishes (Shelf Stable),צ'אטני ורטבים חריפים (מדף),,,93,salads (D04) vs sauces (D07)
+Grains_Cereal - Not Ready to Eat - (Shelf Stable),"דגנים לבישול (אורז, בורגול, קוסקוס)",D07,medium,92,rice (C04) or grains (C06)
+Bread_Bakery Products Variety Packs,לחם ומאפים — מגוון,D05,medium,91,
+Oils Edible - Vegetable or Plant (Shelf Stable),שמנים צמחיים למאכל,D07.C13,high,91,
+Feminine Hygiene - Panty Liners,מגני תחתונים,D12.C11,high,89,
+Vegetables - Prepared_Processed (Frozen),ירקות מעובדים קפואים,D06.C01,high,89,
+Baking_Cooking Mixes (Shelf Stable),תערובות אפייה ובישול (מדף),D07.C18,medium,88,some soup / coating mixes
+Toilet Cleaning Products,ניקוי אסלה,D11.C04,high,87,
+Chewing Gum,מסטיק,D08.C03,high,86,
+Turkey - Prepared_Processed,"הודו מעובד (פרוס, שניצל...)",,,86,deli vs frozen
+Pies_Pastries - Sweet (Shelf Stable),מאפים מתוקים (מדף),D05.C06,medium,85,cakes too
+Chips_Crisps_Snack Mixes - Natural_Extruded (Shelf Stable),צ'יפס וחטיפים מלוחים,D08.C05,high,84,
+Dish Care_Protection,טיפול והגנה לכלים,D11.C02,high,81,
+Fruit - Prepared_Processed (Shelf Stable),פירות מעובדים (מדף — שימורים או מיובשים),,,80,canned vs dried (SU11A-6 excluded)
+Cleaning Aids,עזרי ניקיון,D11,medium,78,
+Fresheners_Deodorisers Other,מטהרי אוויר וריח אחרים,D11.C05,high,77,
+Cheese_Cheese Substitutes (Frozen),גבינות (מסומן כקפוא),D02.C02,high,76,flagged frozen by the supplier; chilled cheese
+Bread (Perishable),לחם טרי,D05,medium,74,
+Packaged Water,מים ארוזים,D09.C01,high,71,sparkling water also here
+Sugar_Sugar Substitutes (Shelf Stable),סוכר ותחליפי סוכר,D07.C19,high,71,
+Vegetables - Unprepared_Unprocessed (Frozen),ירקות קפואים,D06.C01,high,71,
+Confectionery Products Variety Packs,ממתקים — מארזי מגוון,D08,medium,70,
+Seasonings_Preservatives_Extracts Variety Packs,תיבול ותמציות — מגוון,D07,medium,67,"spices, soup powders, extracts"
+Pate (Perishable),פטה ומעדני כבד (קירור),D04,medium,63,
+Milk_Milk Substitutes (Shelf Stable),חלב ותחליפי חלב (מדף),D02.C01,high,62,
+Sauces - Cooking (Shelf Stable),רטבים לבישול (מדף),D07.C10,high,62,
+Dough Based Products _ Meals - Not Ready to Eat - Savoury (Frozen),"מאפים מלוחים קפואים (בורקס, בצק)",D06.C04,high,58,
+Fruit - Unprepared_Unprocessed (Shelf Stable),"פירות לא מעובדים (מדף, בעיקר מיובשים)",D01.C05,medium,58,mostly dried fruit
+Vegetables - Unprepared_Unprocessed (Shelf Stable),ירקות לא מעובדים (מדף),,,58,fresh vs canned
+Tomatoes Variety Packs,עגבניות — מגוון,,,56,fresh vs canned
+Vegetable Based Products _ Meals - Ready to Eat (Perishable),סלטי ירקות מוכנים (קירור),D04.C03,high,56,
+Baby Diapers_Accessories Other,אביזרי חיתול אחרים,D13,medium,55,
+Sweet Spreads Variety Packs,ממרחים מתוקים — מגוון,D07.C20,medium,55,
+Pickles_Relishes_Chutneys_Olives Variety Packs,חמוצים וזיתים — מגוון,D04.C05,high,53,
+Stimulants_Energy Drinks - Ready to Drink,משקאות אנרגיה,D09.C06,high,53,
+Sweetcorn,תירס,D07.C08,medium,53,canned vs fresh cobs
+Toilet Paper,נייר טואלט,D11.C08,high,53,
+Hair - Styling (Non Powered),עיצוב שיער,D12.C03,high,52,
+Insecticides_Pesticides_Rodenticides,חומרי הדברה,D11.C06,high,52,
+Sweet Bakery Products Variety Packs,מאפים מתוקים — מגוון,D05,medium,52,
+Hair Care Products Other,מוצרי שיער אחרים,D12,medium,51,
+Baby Diapers (Disposable),חיתולים חד פעמיים,D13.C01,high,50,
+Disposable Food Containers,קופסאות מזון חד פעמיות,D11.C10,high,50,
+Fats Edible - Vegetable_Plant (Shelf Stable),"שומנים צמחיים (מרגרינה, שומן לאפייה)",,,50,margarine (D02) vs baking fat
+Cereals Products - Ready to Eat (Shelf Stable),דגני בוקר,D07.C22,high,46,
+Olives (Shelf Stable),זיתים,D04.C05,high,46,
+Pasta_Noodles - Ready to Eat (Shelf Stable),"פסטה ואטריות מוכנות (מדף, אטריות אינסטנט)",D07.C02,high,46,instant noodles
+Cakes - Sweet (Shelf Stable),עוגות (מדף),D05.C05,high,45,
+Wine - Sparkling,יין מבעבע,D10.C01.S03,high,44,
+Wipes - Personal,מגבונים לחים אישיים,,,44,baby vs personal (SU11A-6 excluded)
+Alcoholic Beverages Variety Packs,משקאות אלכוהוליים — מגוון,D10,medium,42,
+Fruit_Nuts_Seeds Mixes - Prepared_Processed (Shelf Stable),תערובות פירות יבשים ואגוזים,,,41,dried fruit (D01) and nut mixes (D08) mixed
+Meat Substitutes (Frozen),תחליפי בשר קפואים,D06.C08,high,41,
+Refuse Bags,שקיות אשפה,D11.C12,high,40,
+Confectionery Based Spreads (Shelf Stable),ממרחים מתוקים (שוקולד וכד'),D07.C20,high,39,
+Feminine Hygiene - Accessories,אביזרי היגיינה נשית,D12.C11,high,38,
+Pasta_Noodles - Not Ready to Eat (Perishable),פסטה טרייה,D07.C03,high,38,
+Air Fresheners_Deodorisers (Non Powered),מטהרי אוויר (לא חשמליים),D11.C05,high,37,
+Cereal Products - Ready to Eat (Perishable),מוצרי דגנים מוכנים (קירור),,,37,unclear
+Confectionery_Sugar Sweetening Products Variety Packs,ממתקים וממתיקים — מגוון,,,37,candy vs sweeteners
+Dried Breads (Shelf Stable),"לחם יבש, קרקרים ופריכיות",D08.C08,high,37,
+Lentils,עדשים,D07.C05,high,36,
+Pet Care_Food Variety Packs,מזון וטיפוח לחיות — מגוון,D14,medium,36,
+Spirits,משקאות חריפים,D10.C03,high,35,
+Honey (Shelf Stable),דבש,D07.C21,high,34,
+Milk_Butter_Cream_Yogurts_Cheese_Eggs_Substitutes Variety Packs,מוצרי חלב וביצים — מגוון,D02,medium,34,
+Salt Sticks _ Mini Pretzels,בייגלה ומקלות מלוחים,D08.C05.S03,high,34,
+Biscuits_Cookies Variety Packs,ביסקוויטים ועוגיות — מגוון,D08.C06,medium,33,
+Fruit Juice Drinks - Ready to Drink (Shelf Stable),משקאות פירות מוכנים (מדף),D09.C04,high,33,
+Body Washing Other,רחצת גוף — אחר,D12.C04,medium,32,
+Facial Tissue_Handkerchiefs (Disposable),ממחטות נייר,D11.C09,high,32,
+Feminine Hygiene - Tampons,טמפונים,D12.C11,high,32,
+Paper Towels,מגבות נייר,D11.C08,high,32,
+Fabric Softeners_Conditioners,מרככי כביסה,D11.C01.S02,high,31,
+Shaving - Razors - Disposable (Non Powered),סכיני גילוח חד פעמיים,D12.C10,high,31,
+Beef - Unprepared_Unprocessed,בקר טרי לא מעובד,D03,high,30,
+Chickpeas,חומוס (גרגרים),D07,medium,30,dry (C05) or canned (C08)
+Dish Cleaning_Care - Hand,נוזל כלים,D11.C02.S01,high,30,
+Electronic Organisers,ארגוניות אלקטרוניות (סיווג לא ברור),,,30,unclear GS1 use
+Nuts_Seeds - Unprepared_Unprocessed (Perishable),אגוזים וזרעים לא קלויים (קירור),D08.C09,high,30,
+Shaving - Razors - Non Disposable (Non Powered),סכיני גילוח רב-פעמיים,D12.C10,high,30,
+Laundry Other,כביסה — אחר,D11.C01,high,29,
+Meat Substitutes (Shelf Stable),תחליפי בשר (מדף),D06.C08,medium,29,
+Milk_Milk Substitutes (Perishable),חלב ותחליפי חלב (קירור),D02.C01,high,29,
+Pies_Pastries_Pizzas_Quiches - Savoury (Frozen),"פשטידות, פיצות ומאפים מלוחים קפואים",D06.C04,high,29,
+Coffee - Instant,קפה נמס,D09.C08.S01,high,28,
+Dairy_Dairy Substitute Based Drinks - Ready to Drink (Perishable),משקאות חלב ותחליפי חלב (קירור),D02.C01,high,28,
+Fish - Prepared_Processed (Frozen),דגים מעובדים קפואים,D06,medium,28,
+Grain Based Products _ Meals - Not Ready to Eat - Savoury (Shelf Stable),מנות על בסיס דגנים להכנה (מדף),D07,medium,28,
+Yogurt_Yogurt Substitutes (Frozen),יוגורט (מסומן כקפוא),D02.C03,medium,28,flagged frozen by the supplier
+Disposable Tableware,כלי אוכל חד פעמיים,D11.C10,high,27,
+Fish - Unprepared_Unprocessed (Frozen),דגים קפואים לא מעובדים,D03.C08,high,27,
+Chicken Sausages - Prepared_Processed,נקניקיות ונקניק עוף,D04.C01,high,26,
+Fruit_Nuts_Seeds Combination Variety Packs,פירות יבשים ואגוזים — מגוון,,,25,dried fruit and nuts mixed
+Gherkins,מלפפונים חמוצים,D04.C05,high,24,
+Pickled Vegetables,ירקות כבושים,D04.C05,high,24,
+Fish - Prepared_Processed (Perishable),"דגים מעובדים (קירור — מעושן, כבוש)",D04.C04,high,23,
+Grains_Cereal - Ready to Eat - (Shelf Stable),דגנים מוכנים לאכילה (מדף),D07,medium,23,
+Extracts_Salt_Meat Tenderisers (Shelf Stable),"תמציות, מלח ומרככי בשר",D07,medium,22,salt (C15) or extracts (C18)
+Pies_Pastries_Pizzas_Quiches - Savoury (Shelf Stable),מאפים מלוחים (מדף),,,22,unclear
+Cleaning Variety Packs,ניקיון — מגוון,D11,medium,21,
+Oyster Mushrooms,פטריות יער (אויסטר),D01.C03,high,21,
+Fruit Herbal Infusions - Bags_Loose,חליטות פירות וצמחים,D09.C09,high,19,
+Gloves,כפפות,D11.C07,medium,19,mostly cleaning / disposable gloves
+Wild Mushrooms (Other),פטריות בר אחרות,D01.C03,high,19,
+Biscuits_Cookies (Perishable),ביסקוויטים ועוגיות (טריים),D08.C06,medium,18,
+Lima Beans,שעועית לימה,D07,medium,18,
+Mustard (Shelf Stable),חרדל,D07.C11,high,18,
+Pasta_Noodles - Ready to Eat (Perishable),פסטה מוכנה (קירור),D07,medium,18,
+Adult Incontinence - Underwear (Disposable),תחתוני ספיגה למבוגרים,D12.C15,high,17,
+Disposable Food Bags,שקיות מזון חד פעמיות,D11.C11,high,17,
+Hair Removal_Shaving - Accessories,אביזרי גילוח והסרת שיער,D12.C10,high,17,
+Oral Care - Aids (Non Powered),עזרי היגיינת פה (לא חשמליים),D12.C09,high,17,
+Popcorn (Shelf Stable),פופקורן,D08.C05.S03,high,17,
+Prepared_Preserved Foods Variety Packs,מזון משומר — מגוון,,,17,not mapped yet
+Turkey Sausages - Prepared_Processed,נקניקיות ונקניק הודו,D04.C01,high,17,
+Baking_Cooking Mixes (Perishable),תערובות אפייה (קירור),,,16,not mapped yet
+Butter_Butter Substitutes (Perishable),חמאה ותחליפי חמאה (קירור),D02.C05,high,16,
+Dressings_Dips (Perishable),מטבלים וסלטים (קירור),D04.C03,medium,16,
+Food_Beverage_Tobacco Variety Packs,"מזון, משקה וטבק — מגוון",,,16,not mapped yet
+Grain Based Products _ Meals - Ready to Eat - Savoury (Shelf Stable),מנות דגנים מוכנות (מדף),,,16,not mapped yet
+Liqueurs,ליקרים,D10.C04,high,16,
+Mayonnaise_Mayonnaise Substitutes (Shelf Stable),מיונז,D07.C11,high,16,
+Shaving Preparations,תכשירי גילוח,D12.C10,high,16,
+Depilation_Epilation (Non Powered),"הסרת שיער (שעווה, קרם)",D12.C10,high,15,
+Dough Based Products _ Meals Variety Packs,מאפים — מגוון,,,15,not mapped yet
+Drinks Flavoured - Not Ready to Drink,תרכיזי משקה בטעמים,D09.C05,high,15,
+Vegetable Based Products _ Meals - Not Ready to Eat (Frozen),מנות ירקות קפואות להכנה,D06,medium,15,
+Vegetables - Prepared_Processed (Perishable),ירקות מעובדים (קירור),,,15,not mapped yet
+Beans (Winged),שעועית (כנפית),,,14,not mapped yet
+Bleach,אקונומיקה,D11.C03,high,14,
+Bread (Frozen),לחם קפוא,D06.C04,high,14,
+Chocolate_Cocoa_Malt - Not Ready to Drink,אבקות שוקו,D09.C10,high,14,
+Cream_Cream Substitutes (Perishable),שמנת ותחליפי שמנת (קירור),D02.C06,high,14,
+Disposable Food Wrap,ניילון נצמד ונייר עטיפה,D11.C11,high,14,
+Oils_Fats Edible Variety Packs,שמנים ושומנים — מגוון,D07.C13,medium,14,
+Butter_Butter Substitutes (Shelf Stable),חמאה ותחליפי חמאה (מדף),D02.C05,high,13,
+Peas,אפונה,,,13,frozen vs canned vs dry
+Ready-Made Combination Meals - Not Ready to Eat (Shelf Stable),ארוחות להכנה (מדף),,,13,not mapped yet
+Beverages Variety Packs,משקאות — מגוון,D09,medium,12,
+Chicken - Unprepared_Unprocessed,עוף טרי לא מעובד,D03.C06,high,12,
+Fruit - Prepared_Processed (Perishable),פירות חתוכים טריים,,,12,not mapped yet
+Ready-Made Combination Meals - Ready to Eat (Shelf Stable),"ארוחות מוכנות (מדף, שימורים)",,,12,not mapped yet
+Soups - Prepared (Shelf Stable),מרקים מוכנים ואבקות מרק,D07.C16,high,12,
+Stain Removers,מסירי כתמים,D11.C01.S03,high,12,
+Syrup_Treacle_Molasses (Shelf Stable),סירופים ודבש תמרים,D07,medium,12,date syrup (C21) or syrups (C19)
+Apples,תפוחים,D01.C04,high,11,
+Baking_Cooking Mixes (Frozen),תערובות אפייה קפואות,D06.C04,medium,11,
+Body Washing Variety Packs,רחצת גוף — מגוון,D12.C04,high,11,
+Chocolate_Cocoa_Malt - Ready to Drink,משקאות שוקו מוכנים,D02.C01.S02,high,11,
+Desserts (Shelf Stable),קינוחים (מדף),,,11,pudding powder vs dessert
+Dough Based Products _ Meals - Ready to Eat - Savoury (Shelf Stable),מאפים מלוחים מוכנים (מדף),,,11,not mapped yet
+Food Preparation Equipment Other,כלי הכנת מזון אחרים,D15.C03,medium,11,
+Vinegars,חומץ,D07.C12,high,11,
+Beauty_Personal Care_Hygiene Variety Packs,טיפוח והיגיינה — מגוון,,,10,not mapped yet
+Cleaners Other,חומרי ניקוי אחרים,D11.C03,medium,10,
+Cleansing_Washing Accessories - Personal,אביזרי רחצה אישיים,,,10,not mapped yet
+Cream_Cream Substitutes (Shelf Stable),שמנת ותחליפי שמנת (מדף),D02.C06,high,10,
+Laundry Colour Care,כביסה לצבעוניים,D11.C01,high,10,
+Palm Hearts,לבבות דקל,D07.C08,high,10,
+Pepper Variety Packs,פלפלים (ירק) — מגוון,,,10,not mapped yet
+Ready-Made Combination Meals - Ready to Eat Variety Packs,ארוחות מוכנות — מגוון,,,10,not mapped yet
+Tablemats – Non Fabric_Non Textile,פליסמטים,D15.C04,high,10,
+Tomato Ketchup_Ketchup Substitutes (Shelf Stable),קטשופ,D07.C11,high,10,
+Vegetable Based Products _ Meals - Ready to Eat (Shelf Stable),סלטי ירקות מוכנים (מדף),,,10,not mapped yet
+After Shave Care,טיפוח אחרי גילוח,D12.C10,high,9,
+Air Fresheners_Deodorisers (Powered),מטהרי אוויר חשמליים,D11.C05,high,9,
+Cookware_Bakeware Accessories_Replacement Parts,אביזרי בישול ואפייה,D15,medium,9,
+Cookware_Bakeware Other,כלי בישול ואפייה אחרים,D15,medium,9,
+Dates,תמרים,D01.C05,high,9,
+Grains_Flour Variety Packs,דגנים וקמח — מגוון,D07,medium,9,
+Pet Food Shelf Stable,מזון לחיות מחמד (מדף),D14,medium,9,
+Sauces - Cooking (Perishable),רטבים לבישול (קירור),D07.C10,high,9,
+Soup Additions (Shelf Stable),"תוספות למרק (שקדי מרק, קרוטונים)",D07.C16,high,9,
+Sweeties,ממתקים,D08.C02,high,9,
+Dairy_Dairy Substitute Based Drinks - Ready to Drink (Shelf Stable),משקאות חלב ותחליפי חלב (מדף),D02.C01,high,8,
+Desserts (Frozen),קינוחים קפואים,D06.C03,medium,8,
+Dough Based Products _ Meals - Ready to Eat - Savoury (Perishable),מאפים מלוחים מוכנים (קירור),,,8,not mapped yet
+Ear_Nasal Care,טיפוח אוזניים ואף,D12,medium,8,
+Fruits_Vegetables_Nuts_Seeds Variety Packs,"פירות, ירקות ואגוזים — מגוון",,,8,not mapped yet
+Other Sauces Dipping_Condiments_Savoury Toppings_Savoury Spreads_Marinades (Perishable),"רטבים, מטבלים ומרינדות (קירור)",,,8,not mapped yet
+פסטה/אטריות – לא מוכן לאכילה (אחסון מדף),פסטה ואטריות יבשות,D07,medium,8,Hebrew-labelled GS1 group
+Alcoholic Cordials_Syrups,סירופים אלכוהוליים,D10.C04,medium,7,
+Apple_Pear Alcoholic Beverage - Still,סיידר (לא מוגז),D10.C02,high,7,
+Baby_Infant - Foods_Beverages Variety Packs,מזון ומשקאות לתינוקות — מגוון,D13,medium,7,
+Cake_Pastry Decorations_Accessories (Non Edible),קישוטי עוגות (לא אכילים),D15.C02,medium,7,
+Desserts_Dessert Toppings Variety Packs,קינוחים ותוספות — מגוון,,,7,not mapped yet
+Drain Treatments_Pipe Unblockers,פותחי סתימות,D11.C03,high,7,
+Eggs Products_Substitutes,מוצרי ביצים ותחליפים,D02.C07,medium,7,
+Grain Based Products _ Meals - Not Ready to Eat - Savoury (Perishable),מנות דגנים להכנה (קירור),,,7,not mapped yet
+Insect_Pest Control - Barriers_Traps,מלכודות מזיקים,D11.C06,high,7,
+Milk_Milk Substitutes (Frozen),חלב (מסומן כקפוא),D02.C01,medium,7,
+Pomegranates,רימונים,D01.C04,high,7,
+Sauces - Cooking (Frozen),רטבים לבישול קפואים,,,7,not mapped yet
+Vegetable Based Products _ Meals - Not Ready to Eat (Perishable),מנות ירקות להכנה (קירור),,,7,not mapped yet
+תחליפי גבינה/גבינה (מתכלה),גבינות ותחליפי גבינה (קירור),D02.C02,high,7,Hebrew-labelled GS1 group
+Aubergines,חצילים,D01.C01,high,6,
+Baby Hygiene Products,היגיינת תינוקות,D13.C05,high,6,
+Cakes - Sweet (Frozen),עוגות קפואות,D06.C04,high,6,
+Coffee - Ready to Drink,קפה מוכן לשתייה,D09.C07,high,6,
+Cotton Wool Products,צמר גפן,D12.C18,high,6,
+Fish - Unprepared_Unprocessed (Shelf Stable),דגים לא מעובדים (מדף),D07.C07,medium,6,
+Fruit - Prepared_Processed (Frozen),פירות מעובדים קפואים,D06.C02,high,6,
+Fruit Juice Drinks - Ready to Drink (Perishable),משקאות פירות (קירור),D09.C04,high,6,
+Lamb_Mutton Sausages - Prepared_Processed,נקניקיות ונקניק כבש,D04.C01,high,6,
+Lemons,לימונים,D01.C04,high,6,
+Ready-Made Combination Meals - Not Ready to Eat (Frozen),ארוחות קפואות להכנה,,,6,not mapped yet
+Seedlings - Ready to Eat,נבטים,D01.C01,high,6,
+Skin Care Other,טיפוח עור — אחר,D12,medium,6,
+מוצרים/ארוחות על בסיס בצק – לא מוכן לאכילה – מתובלים (קפוא),"מאפים מלוחים קפואים (בורקס, בצק)",D06.C04,high,6,Hebrew-labelled GS1 group
+Broad Beans,פול,,,5,not mapped yet
+Cleansers_Cosmetics Removers (Non Powered),מסירי איפור ותכשירי ניקוי פנים,D12.C06,high,5,
+Dish Cleaning_Care - Automatic,ניקוי למדיח כלים,D11.C02.S02,high,5,
+Grains_Cereal - Not Ready to Eat - (Perishable),דגנים לבישול (קירור),,,5,not mapped yet
+Nuts_Seeds - Prepared_Processed (Perishable),אגוזים וגרעינים קלויים (קירור),,,5,not mapped yet
+Pies_Pastries - Sweet (Perishable),מאפים מתוקים טריים,D05.C06,high,5,
+Aquatic Plants Prepared_Processed (Shelf Stable),אצות מעובדות,D07.C23,high,4,
+Baby_Infant - Specialised Beverages (Shelf Stable),"תמ""ל ומשקאות לתינוקות",D13.C03,high,4,
+Breath Fresheners_Mouth Rinses,מי פה ומרעננים,D12.C09,high,4,
+Butter_Butter Substitutes (Frozen),חמאה (קפואה),D02.C05,high,4,
+Dispensers for Cleaning_Hygiene Products,מתקנים לחומרי ניקוי והיגיינה,,,4,not mapped yet
+Feminine Hygiene - Towels_Pads,תחבושות היגייניות,D12.C11,high,4,
+Hair Care Products - Replacement Parts,חלקי חילוף למוצרי שיער,,,4,not mapped yet
+Lychees (Litchi),ליצ'י,D01.C04,high,4,
+Pasta_Noodles - Not Ready to Eat (Frozen),פסטה קפואה,D06,medium,4,
+Pate (Shelf Stable),פטה (מדף),,,4,not mapped yet
+Pet Food_Drinks Variety Packs,מזון ומשקה לחיות — מגוון,D14,medium,4,
+Shallots,בצל שאלוט,D01.C01,high,4,
+Tea - Ready to Drink,תה מוכן לשתייה,D09.C07,high,4,
+After-Sun Moisturisers,לחות אחרי שמש,D12.C08,high,3,
+Apple_Pear Alcoholic Beverage - Sparkling,סיידר מוגז,D10.C02,high,3,
+Aquatic Invertebrates - Prepared_Processed (Perishable),פירות ים מעובדים (קירור),D03.C09,medium,3,
+Asparagus,אספרגוס,D01.C01,high,3,
+Baby Diapers_Accessories Variety Packs,חיתולים ואביזרים — מגוון,D13,medium,3,
+Baby_Infant - Specialised Foods (Shelf Stable),מזון תינוקות ייעודי,D13.C04,high,3,
+Cranberries,חמוציות,D01.C05,medium,3,
+Desserts (Perishable),קינוחים (קירור),,,3,not mapped yet
+Disinfectants,חומרי חיטוי,D11.C03,medium,3,
+Essential Oils,שמנים אתריים,D12.C07,medium,3,
+Exfoliants_Masks,פילינג ומסכות,D12.C06,high,3,
+Fats Edible - Animal (Shelf Stable),שומן מן החי,,,3,not mapped yet
+Fats Edible Variety Packs,שומנים — מגוון,,,3,not mapped yet
+Fruit Juice Drinks - Not Ready to Drink (Shelf Stable),תרכיזי מיץ פירות,D09.C05,high,3,
+Ice Cream_Ice Novelties (Shelf Stable),גלידות (מסומן כמדף),D06.C03,high,3,
+Kitchen Storage Other,,,,3,not mapped yet
+Laundry Variety Packs,כביסה — מגוון,D11.C01,high,3,
+Leaf Vegetables - Unprepared_Unprocessed Variety Packs,ירקות עלים — מגוון,,,3,not mapped yet
+Mixed Species Sausages - Prepared_Processed,נקניקיות מעורבות,D04.C01,high,3,
+Oral Care - Accessories,אביזרי היגיינת פה,,,3,not mapped yet
+Pasta_Noodles Variety Packs,פסטה — מגוון,D07,medium,3,
+Peaches,אפרסקים,D01.C04,high,3,
+Soups - Prepared Variety Packs,מרקים — מגוון,D07.C16,high,3,
+Sugars_Sugar Substitute Products Variety Packs,סוכר ותחליפים — מגוון,D07.C19,high,3,
+Tea - Instant,תה נמס,D09.C09,high,3,
+Vegetable Juice - Ready to Drink (Shelf Stable),מיץ ירקות,D09.C04,high,3,
+Aquatic Invertebrates_Fish_Shellfish_Seafood Mixes - Prepared_Processed (Shelf Stable),"פירות ים מעובדים (מדף, שימורים)",,,2,not mapped yet
+Aquatic Plants Unprepared_Unprocessed (Shelf Stable),אצות לא מעובדות,D07.C23,high,2,
+Baby Diapers (Non Disposable),חיתולי בד,D13.C01,high,2,
+Baby Diapers Accessories,אביזרי חיתולים,D13,medium,2,
+Baking_Cooking Supplies (Shelf Stable),חומרי אפייה ובישול,,,2,not mapped yet
+Broccoli,ברוקולי,D01.C01,high,2,
+Cakes - Sweet (Perishable),עוגות טריות,D05.C05,high,2,
+Coffee Substitutes - Ready to Drink,תחליפי קפה מוכנים לשתייה,D09.C08.S04,medium,2,
+Common Chicory,עולש,D01.C01,high,2,
+Common Cultivated Mushroom (Agaricus),פטריות שמפיניון,D01.C03,high,2,
+Dairy_Egg Based Products _ Meals - Ready to Eat (Shelf Stable),מנות חלב וביצים מוכנות (מדף),,,2,not mapped yet
+Denture_Orthodontic - Care,טיפוח תותבות,,,2,not mapped yet
+Dessert Sauces_Toppings_Fillings (Shelf Stable),רטבים ומילויים לקינוחים,,,2,not mapped yet
+Dough Based Products _ Meals - Not Ready to Eat - Savoury (Shelf Stable),מוצרי בצק מלוחים להכנה (מדף),,,2,not mapped yet
+Feminine_Nursing Hygiene Other,היגיינה נשית והנקה — אחר,,,2,not mapped yet
+Food Preparation Equipment Variety Packs,כלי הכנת מזון — מגוון,D15.C03,medium,2,
+Fruit Juice - Ready to Drink (Perishable),מיץ פירות טרי,D09.C04,high,2,
+Fruits - Unprepared_Unprocessed (Fresh) Variety Packs,פירות טריים — מגוון,,,2,not mapped yet
+Garlic,שום,D01.C01,high,2,
+General Personal Hygiene Other,היגיינה אישית — אחר,,,2,not mapped yet
+Grain Based Products _ Meals - Ready to Eat - Savoury (Perishable),מנות דגנים מוכנות (קירור),,,2,not mapped yet
+Hair - Accessories,אביזרי שיער,D12.C03,high,2,
+Hair Products Variety Packs,מוצרי שיער — מגוון,D12,medium,2,
+Hair Removal_Masking Products Other,מוצרי הסרת שיער אחרים,,,2,not mapped yet
+Horseradish,חזרת,,,2,not mapped yet
+Lamb - Prepared_Processed,כבש מעובד,,,2,not mapped yet
+Lamb - Unprepared_Unprocessed,כבש טרי לא מעובד,D03.C04,high,2,
+Meat Substitutes (Perishable),תחליפי בשר (קירור),D06.C08,high,2,
+Mixed Species Meat_Poultry:Alternative Meat - Prepared_Processed,בשר מעורב מעובד,,,2,unclear
+Olives (Perishable),זיתים (קירור),,,2,not mapped yet
+Oral Care Centre - Brush_Cleanser_Storage (Powered),מברשות שיניים חשמליות,D12.C09,high,2,
+Personal Hygiene Products Variety Packs,היגיינה אישית — מגוון,,,2,not mapped yet
+Pineapples,אננס,D01.C04,high,2,
+Shoe Cleaners_Polishers,משחות וניקוי נעליים,D15,medium,2,
+Soup Additions (Perishable),תוספות למרק (קירור),D07.C16,medium,2,
+Sugar Cane,קני סוכר,,,2,not mapped yet
+Surface Care Other,טיפוח משטחים אחר,,,2,not mapped yet
+Turkey - Unprepared_Unprocessed,הודו טרי לא מעובד,D03.C07,high,2,
+Veal Sausages - Prepared_Processed,נקניקיות עגל,D04.C01,high,2,
+חרדל (אחסון מדף),חרדל,D07.C11,high,2,Hebrew-labelled GS1 group
+מנקי משטחים,,,,2,not mapped yet
+Adult Incontinence - Pads,רפידות ספיגה למבוגרים,D12.C15,high,1,
+Adult Incontinence - Supplies,ציוד ספיגה למבוגרים,D12.C15,high,1,
+Adult Incontinence - Underwear (Non Disposable),תחתוני ספיגה רב-פעמיים,D12.C15,high,1,
+Alcoholic Pre-mixed Drinks,קוקטיילים אלכוהוליים מוכנים,D10.C03,medium,1,
+Apricots,משמש,D01.C04,high,1,
+Aquatic Invertebrates - Prepared_Processed (Frozen),פירות ים מעובדים קפואים,D03.C09,medium,1,
+Aquatic Invertebrates_Fish_Shellfish_Seafood Mixes - Prepared_Processed (Frozen),תערובות פירות ים קפואות,D03.C09,medium,1,
+Bakeware_Ovenware_Grillware (Non Disposable),תבניות וכלי אפייה,D15.C02,high,1,
+Baking_Cooking Supplies (Frozen),חומרי אפייה קפואים,,,1,not mapped yet
+Bananas,בננות,D01.C04,high,1,
+Bath Additives,תוספי אמבט,D12.C04,high,1,
+Bleaching_Lightening Products,מוצרי הבהרה (שיער ועור),,,1,not mapped yet
+Celeriac,סלרי שורש,D01.C01,high,1,
+Chilli Peppers,פלפל חריף,D01.C01,high,1,
+Cleaning_Hygiene Products Variety Packs,ניקיון והיגיינה — מגוון,,,1,not mapped yet
+Coffee Substitutes - Instant,תחליפי קפה נמסים,D09.C08.S04,high,1,
+Cosmetic Aids_Accessories,,,,1,not mapped yet
+Cosmetics - Nails,לק ומוצרי ציפורניים,D12.C13,high,1,
+Cream_Cream Substitutes (Frozen),שמנת קפואה,D02.C06,medium,1,
+Dairy_Dairy Substitute Based Drinks - Not Ready to Drink (Shelf Stable),אבקות משקה חלב,D09.C10,medium,1,
+Dairy_Egg Based Products _ Meals - Ready to Eat (Perishable),מנות חלב וביצים מוכנות (קירור),,,1,not mapped yet
+Fabric Protectors,מגיני בדים,,,1,not mapped yet
+Fresheners_Deodorisers Variety Packs,מטהרי אוויר — מגוון,,,1,not mapped yet
+Fruit Herbal Infusions - Instant,חליטות נמסות,D09.C09,high,1,
+Globe Artichokes,ארטישוק,D01.C01,high,1,
+Grain Based Products _ Meals - Not Ready to Eat - Savoury (Frozen),מנות דגנים קפואות להכנה,,,1,not mapped yet
+Grains_Cereal - Ready to Eat - (Perishable),דגנים מוכנים (קירור),,,1,not mapped yet
+Hair Care Products Variety Packs,טיפוח שיער — מגוון,D12,medium,1,
+Ice,קרח,D09,medium,1,
+Lemongrass,למון גראס,D01.C02,high,1,
+Lip Balms,שפתונים לחות,D12.C12,high,1,
+Mangos,מנגו,D01.C04,high,1,
+Mould_Mildew Removers,מסירי עובש,D11.C03,high,1,
+Onions,בצל,D01.C01,high,1,
+Oral Care - Aids (Powered),עזרי היגיינת פה חשמליים,D12.C09,high,1,
+Other Sauces Dipping_Condiments_Savoury Toppings_Savoury Spreads_Marinades (Shelf Stable),"רטבים, מטבלים ומרינדות (מדף)",,,1,not mapped yet
+Pet Accessory Variety Packs,אביזרים לחיות — מגוון,D14.C03,high,1,
+Pet Housing_Bedding Non Disposable,מיטות ובתים לחיות,D14.C03,high,1,
+Pies_Pastries_Pizzas_Quiches - Savoury (Perishable),מאפים מלוחים טריים,,,1,not mapped yet
+Potatoes,תפוחי אדמה,D01.C01,high,1,
+Quark Products (Shelf Stable),גבינת קווארק,D02.C02.S02,high,1,
+Ready-Made Combination Meals - Not Ready to Eat Variety Packs,ארוחות להכנה — מגוון,,,1,not mapped yet
+Ready-Made Combination Meals - Ready to Eat (Perishable),ארוחות מוכנות (קירור),,,1,not mapped yet
+Rocket,ארוגולה,D01.C01,high,1,
+Sandwiches_Filled Rolls_Wraps Variety Packs,כריכים — מגוון,,,1,not mapped yet
+Serving_Eating_Drinking Tableware Other,כלי הגשה ואוכל אחרים,,,1,not mapped yet
+Shaving - Blades,להבי גילוח,D12.C10,high,1,
+Shaving - Razors (Powered),מכונות גילוח חשמליות,D15.C09,high,1,
+Shiitake Mushrooms,פטריות שיטאקי,D01.C03,high,1,
+Skewers_Sticks,שיפודים,D15.C12,medium,1,
+Snow Peas,אפונת שלג,D01.C01,high,1,
+Soursop,גואנבנה,,,1,not mapped yet
+Squash (Opo),דלעת,,,1,not mapped yet
+Strawberries,תותים,D01.C04,high,1,
+Tomatoes - Round,עגבניות,D01.C01,high,1,
+Veal - Prepared_Processed,עגל מעובד,,,1,not mapped yet
+Vinegars_Cooking Wines Variety Packs,חומץ ויין לבישול — מגוון,,,1,not mapped yet
+Waste Storage Products - Other,מוצרי פסולת אחרים,,,1,not mapped yet
+Water_Beverage Equipment Other,ציוד מים ומשקאות,,,1,not mapped yet
+ארוחות משולבות מוכנות מראש – לא מוכן לאכילה (אחסון מדף),ארוחות להכנה (מדף),,,1,not mapped yet
+בסקויטים/עוגיות (אחסון מדף),ביסקוויטים ועוגיות (מדף),D08.C06,medium,1,Hebrew-labelled GS1 group
+דג – לא מוכן/לא מעובד (קפוא),דגים קפואים לא מעובדים,D03.C08,high,1,Hebrew-labelled GS1 group
+דג – מוכן/מעובד (קפוא),דגים מעובדים קפואים,,,1,not mapped yet
+הודו – מוכן/מעובד,הודו מעובד,,,1,not mapped yet
+חלב/תחליפי חלב (אחסון מדף),חלב ותחליפי חלב (מדף),D02.C01,high,1,Hebrew-labelled GS1 group
+טיפול/מרכך שיער,,,,1,not mapped yet
+מוצרי מאפייה מתוקים מארז משולב,מאפים מתוקים — מגוון,,,1,not mapped yet
+מתוקים,ממתקים,D08,medium,1,Hebrew-labelled GS1 group
+ניקוי/שטיפה/סבון – גוף,,,,1,not mapped yet
+פסטה/אטריות – מוכן לאכילה (מתכלים),פסטה מוכנה (קירור),,,1,not mapped yet
+פרי – מוכן/מעובד (מתכלה),פירות חתוכים טריים,,,1,not mapped yet
+שקיות אשפה,שקיות אשפה,D11.C12,high,1,Hebrew-labelled GS1 group
+תחליפי בשר (מתכלים),תחליפי בשר (קירור),D06.C08,high,1,Hebrew-labelled GS1 group
+תחליפי חמאה/חמאה (אחסון מדף),חמאה ותחליפי חמאה (מדף),D02.C05,high,1,Hebrew-labelled GS1 group
+תחליפי חמאה/חמאה (מתכלה),חמאה ותחליפי חמאה (קירור),D02.C05,high,1,Hebrew-labelled GS1 group
+תמציות/מלח/מרככי בשר (אחסון מדף),"תמציות, מלח ומרככי בשר",D07,medium,1,Hebrew-labelled GS1 group

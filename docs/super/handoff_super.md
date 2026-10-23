@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: 22 Oct 2026 (SU11A-50: filtered search (/compare, city / chain / store) on the v2 path behind SEARCH_V2_FILTERED + faster v2 candidate step; not deployed; SU11A-49: security fixes F-01..F-05 built, nginx files + runbook, compliance drafts; not deployed; SU11A-48: security review; SU11A-47: search speed - precomputed page prices, /suggest type-ahead, response cache, web combobox, mobile suggestions; built, not deployed; SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
+> Last updated: 23 Oct 2026 (SU11A-51: catalogue study, taxonomy v0 (16 departments / 151 categories), rule classifier prototype + 400-item review sample; offline, no schema; SU11A-50: filtered search (/compare, city / chain / store) on the v2 path behind SEARCH_V2_FILTERED + faster v2 candidate step; not deployed; SU11A-49: security fixes F-01..F-05 built, nginx files + runbook, compliance drafts; not deployed; SU11A-48: security review; SU11A-47: search speed - precomputed page prices, /suggest type-ahead, response cache, web combobox, mobile suggestions; built, not deployed; SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
 
 ## 📏 Standing rules (apply to every session)
 
@@ -948,6 +948,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-48 (Oct 22) — security review (read-only): `docs/security/su11a48_security_review.md`. 2 High (unbounded old-path price fetch + no DB statement timeout; no rate limiting), 6 Medium, sudo command list for Dude, Data Security Regulations gap table. No code or server change.
 - SU11A-49 (Oct 22) — security fixes from SU11A-48: old-path search cap (1,000) + API-only 15 s DB timeout (503 query_timeout), JWKS refetch throttle, nginx rate limits + security headers + CSP Report-Only (files in `deploy/nginx/`), web-root modes on deploy, Hebrew compliance drafts (`docs/compliance/`). Runbook `docs/security/su11a49_runbook.md`. Not deployed.
 - SU11A-50 (Oct 22) — `/compare` and `/search` with city / chain / group_by=store on the v2 path behind `SEARCH_V2_FILTERED` (default off): v2 candidates walked in batches against the filter, only the page priced; v2 candidate step counts and orders in SQL (no token table, no migration). Runbook `docs/super/su11a50_runbook.md`. Not deployed.
+- SU11A-51 (Oct 23) — catalogue study + taxonomy v0 (16 departments, 151 categories, 34 sub-types) + offline rule classifier prototype (rules + GS1: 89.5% classified; 80% department agreement with GS1) + 400-item review sample for Dude, all in `docs/catalog/`. No schema, nothing deployed.
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
 
@@ -1470,9 +1471,65 @@ Runbook for Dude: `docs/super/su11a50_runbook.md` (pull; no migration; SU11A-47 
 - Fixtures that patched `_candidates` now patch `_ranked`.
 - **Full suite** (throwaway venv outside the repo, `tests api/tests`): 368 passed, 21 skipped (Postgres tests), 14 known `api/tests/test_smoke.py` failures. With a local Postgres 16 (`SCRP_TEST_PG_URL`): 389 passed + the same 14.
 
+### SU11A-51 (23 Oct 2026) - catalogue study, taxonomy v0, rule classifier prototype; offline, no schema
+
+Report: `docs/catalog/su11a51_catalog_study.md`. Production was only read: one read-only export over ssh (READ ONLY, statement_timeout 60 s, `ulimit -v 1500000`, 21 s). The export (124,974 rows) stays outside the repo. No schema, migration, API, web or mobile change. The SU11A-35 audit script was never run; this study replaces it as the data basis.
+
+**Data (live, non-pseudo search_items = 124,974):**
+- **Chains:** 66% of items are sold by 1 chain, 20% by 2–4, 13% by 5+.
+- **GS1:** 12.3% of items have a GS1 group (56% of 5+-chain items). Detail fill: ingredients 11.4%, nutrition 7.4%, allergens 6.4%, kashrut 12.2%.
+- **Manufacturer is a placeholder on 85.1% of items** (לא ידוע / empty / כללי).
+- **Names:** 216 first words cover 50% of items, 3,677 cover 95%.
+- **Data issues found:**
+  - 1,355 live items have an empty name;
+  - 77 service rows (פיקדון, משלוח) should be hidden like coupons.
+
+**Built:**
+- `docs/catalog/taxonomy_v0.csv`: 16 departments, 151 categories, 34 sub-types, with keyword / negative rules and inherited attributes.
+- `docs/catalog/attributes_v0.csv`: 20 attributes.
+- `docs/catalog/gs1_group_map_v0.csv`: 418 groups, 314 mapped.
+- `docs/catalog/leading_words_top300_v0.csv`.
+- `scripts/catalog/classify_rules.py`:
+  - offline;
+  - precedence: head before tail, then earliest content word, then longer keyword, then deeper node;
+  - negatives veto the node and its descendants;
+  - the GS1 map is combined with the rules;
+  - manufacturer priors break ties only;
+  - attribute extraction.
+- `tests/test_classify_rules.py`: 53 tests.
+- `docs/catalog/review_sample_v0.csv`: 400 items with an empty `correct_category_id`.
+
+The CSVs are force-added (`*.csv` is gitignored).
+
+**Results:**
+- **Coverage, rules + GS1:**
+
+  | Confidence | Items | Weighted by chains |
+  |---|---:|---:|
+  | high | 64.7% | 65.0% |
+  | medium | 23.0% | 24.6% |
+  | low | 1.8% | 3.4% |
+  | unclassified | 10.5% | 7.0% |
+
+- **Agreement with GS1, rules alone:** 70.1% by category, 80.4% by department.
+- **Hand audits:** about half of the GS1 disagreements are GS1 filing errors or taxonomy choices, so true category accuracy on GS1 items is about 82%. On items without GS1, about 88% of high-confidence and 73% of medium-confidence predictions are correct.
+- Full suite: 421 passed, 21 skipped, plus the 14 known `test_smoke` failures.
+
+**Review points for Dude:**
+- 16 departments (general merchandise split into D15 home / D16 clothing, leisure and party) vs ~15;
+- frozen fruit moves to D06 (changes the SU11A-7 rule);
+- hummus / tahini as deli;
+- tobacco inside D10;
+- liqueurs as their own category.
+
+**Next:**
+- Dude grades the review sample and the taxonomy points.
+- Then an AI-assisted pass over the unclassified, low and medium items (about 43K; cost basis in the report, section 4).
+- Storage tables (`categories`, `item_categories`, `item_attributes`) need an approved migration session.
+
 ---
 
-## 📋 Open items / next steps (as of 22 Oct 2026)
+## 📋 Open items / next steps (as of 23 Oct 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1. Lawyer review of the terms is Dude's call.
 - **SU11A-36 Search v2:** SEARCH_V2=on since 21 Oct 2026; timer daily 14:30.
@@ -1481,6 +1538,8 @@ Runbook for Dude: `docs/super/su11a50_runbook.md` (pull; no migration; SU11A-47 
 - **SU11A-47 search speed:** built, not deployed. Run `docs/super/su11a47_search_speed_runbook.md` (migration, build, check-precomputed, restart, curl), then the web deploy. Mobile suggestions ship in build 9.
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
 - **Catalog:**
+  - **SU11A-51 taxonomy v0: Dude grades `docs/catalog/review_sample_v0.csv`** (fill `correct_category_id` where wrong) and answers the review points in `docs/catalog/su11a51_catalog_study.md` section 2; then the AI-assisted classification pass, then a migration session for the category tables;
+  - hide the 77 service rows (פיקדון, משלוח) like coupons, and look at the 1,355 live items with an empty name;
   - category / attribute faceted filters;
   - a switch to hide tobacco and alcohol;
   - optionally, move the location prompt to a contextual moment.
@@ -1499,4 +1558,4 @@ Runbook for Dude: `docs/super/su11a50_runbook.md` (pull; no migration; SU11A-47 
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-51 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).
+Next free session ID: SU11A-52 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).
