@@ -1,12 +1,13 @@
 # Store submission checklist — SUPER XXL (SU11A-39)
 
-Prepared 2026-10-18 from `docs/store_privacy_inventory.md` (SU11A-38). Updated 18 Oct 2026 (SU11A-43) with the Google Play status below.
+Prepared 2026-10-18 from `docs/store_privacy_inventory.md` (SU11A-38). Updated 18 Oct 2026 (SU11A-43) and 24 Oct 2026 (SU11A-53) with the Google Play status below.
 Tick items as they are done. **TO CONFIRM** marks facts that are not verified yet; they must not go into published text until confirmed.
 
-## Status (18 Oct 2026)
+## Status (24 Oct 2026)
 
 - **Google Play:** organisation account. All App-content declarations and the Hebrew (iw-IL) default listing were **approved and published on 18 Oct 2026**.
-- **Internal testing:** build 8 (1.2.1, versionCode 8, mobile `c2fa72d`), device-checked. **Production release 8 (1.2.1), full rollout, Israel: submitted for review 18 Oct 2026.**
+- **Production: LIVE since 23 Oct 2026.** Build 8 (1.2.1, versionCode 8, mobile `c2fa72d`), full rollout, Israel; developer name "XXL Team"; content rating IARC / PEGI 3.
+- **Website:** the official Hebrew Play badge links to the listing (SU11A-53). The iPhone label is text only: Apple's badge and logo appear only after the iOS app is live (`IOS_APP_URL` in `web/src/config/apps.ts`).
 - **Next build: versionCode 9.** Every `eas build` run burns a versionCode (`autoIncrement`); don't run it twice for one release.
 - **Apple:** not started (no account yet).
 
@@ -145,7 +146,7 @@ Android (production AAB through internal testing track) and iPhone (TestFlight, 
 - [ ] Android: Play Console permissions list matches section 1. iOS: production Info.plist has no `NSLocalNetworkUsageDescription`.
 - [x] Terms screen: real terms and sign-up / first-rating consent are built (SU11A-44) and in build 8. The bidi / spacing fix (SU11A-46) ships in build 9. Entity name filled in SU11A-44b: XXL אנטרפרייזס (XXL Enterprises).
 - [ ] Play pre-launch report for build 7: check it, and don't give the test robot the demo credentials. Deobfuscation / R8 warnings are harmless for now.
-- [x] Listing approved (18 Oct 2026); Production release 8 submitted for review 18 Oct 2026.
+- [x] Listing approved (18 Oct 2026); Production release 8 submitted for review 18 Oct 2026; **live 23 Oct 2026**.
 
 ## 6. TO CONFIRM (do not publish until confirmed)
 

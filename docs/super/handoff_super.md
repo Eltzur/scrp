@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: 24 Oct 2026 (SU11A-52: catalog categories v1 - taxonomy v1, category tables (migration not applied), AI labels for 44K uncertain items, server import + daily new-barcode classification, service rows hidden, nameless-item fallback names; nothing applied or deployed; SU11A-51: catalogue study, taxonomy v0 (16 departments / 151 categories), rule classifier prototype + 400-item review sample; offline, no schema; SU11A-50: filtered search (/compare, city / chain / store) on the v2 path behind SEARCH_V2_FILTERED + faster v2 candidate step; not deployed; SU11A-49: security fixes F-01..F-05 built, nginx files + runbook, compliance drafts; not deployed; SU11A-48: security review; SU11A-47: search speed - precomputed page prices, /suggest type-ahead, response cache, web combobox, mobile suggestions; built, not deployed; SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
+> Last updated: 24 Oct 2026 (SU11A-53: Google Play badge + "coming soon for iPhone" + platform app banner on the website, built, not deployed; Play Production LIVE 23 Oct; RATINGS_REQUIRE_TERMS on 24 Oct; SU11A-52: catalog categories v1 - taxonomy v1, category tables (migration not applied), AI labels for 44K uncertain items, server import + daily new-barcode classification, service rows hidden, nameless-item fallback names; nothing applied or deployed; SU11A-51: catalogue study, taxonomy v0 (16 departments / 151 categories), rule classifier prototype + 400-item review sample; offline, no schema; SU11A-50: filtered search (/compare, city / chain / store) on the v2 path behind SEARCH_V2_FILTERED + faster v2 candidate step; not deployed; SU11A-49: security fixes F-01..F-05 built, nginx files + runbook, compliance drafts; not deployed; SU11A-48: security review; SU11A-47: search speed - precomputed page prices, /suggest type-ahead, response cache, web combobox, mobile suggestions; built, not deployed; SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
 
 ## 📏 Standing rules (apply to every session)
 
@@ -948,6 +948,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-48 (Oct 22) — security review (read-only): `docs/security/su11a48_security_review.md`. 2 High (unbounded old-path price fetch + no DB statement timeout; no rate limiting), 6 Medium, sudo command list for Dude, Data Security Regulations gap table. No code or server change.
 - SU11A-49 (Oct 22) — security fixes from SU11A-48: old-path search cap (1,000) + API-only 15 s DB timeout (503 query_timeout), JWKS refetch throttle, nginx rate limits + security headers + CSP Report-Only (files in `deploy/nginx/`), web-root modes on deploy, Hebrew compliance drafts (`docs/compliance/`). Runbook `docs/security/su11a49_runbook.md`. Not deployed.
 - SU11A-50 (Oct 22) — `/compare` and `/search` with city / chain / group_by=store on the v2 path behind `SEARCH_V2_FILTERED` (default off): v2 candidates walked in batches against the filter, only the page priced; v2 candidate step counts and orders in SQL (no token table, no migration). Runbook `docs/super/su11a50_runbook.md`. Not deployed.
+- SU11A-53 (Oct 24) — website: official Hebrew Google Play badge (home section, super footer, portal card), "בקרוב גם ל-iPhone" text label behind `IOS_APP_URL`, Android / iPhone app banner, google-play-app meta + SoftwareApplication JSON-LD (`8bb81c6`, not deployed). Records: Play Production LIVE 23 Oct 2026; RATINGS_REQUIRE_TERMS on 24 Oct; unused ANTHROPIC_API_KEY removed from the server .env.
 - SU11A-52 (Oct 24) — catalog categories v1: taxonomy v1 + brand hints, migration `su11a52_catalog.sql` (categories / item_categories / item_attributes, NOT applied), precedence manual > ai > gs1 > rule, AI labels (Claude Haiku 5.5, 44,362 items, ~$1.16), server import (dry run default), build hook for new barcodes, service rows pseudo, nameless fallback names. Final coverage 82.6% high / 5.5% medium / 10.4% low / 1.4% unclassified. Runbook `docs/catalog/su11a52_runbook.md`.
 - SU11A-51 (Oct 23) — catalogue study + taxonomy v0 (16 departments, 151 categories, 34 sub-types) + offline rule classifier prototype (rules + GS1: 89.5% classified; 80% department agreement with GS1) + 400-item review sample for Dude, all in `docs/catalog/`. No schema, nothing deployed.
 
@@ -1698,9 +1699,83 @@ Then: facet UI and API (separate session), and the alcohol / tobacco hide switch
 
 ---
 
+### SU11A-53 (24 Oct 2026) - Google Play badge + "coming soon for iPhone" on the website; Play launch records; NOT deployed
+
+Web only (commit `8bb81c6`). No server, API or mobile change. Dude deploys with `.\scripts\deploy_frontend.ps1`.
+
+**Launch records:**
+- **Google Play Production is LIVE since 23 Oct 2026:**
+  - build 8, version 1.2.1, versionCode 8;
+  - Israel, full rollout;
+  - developer name "XXL Team";
+  - content rating IARC / PEGI 3.
+  - **Next Android build: versionCode 9.**
+- **`RATINGS_REQUIRE_TERMS=on` since 24 Oct 2026.** Verified:
+  - a rating from an account that accepted the terms is saved;
+  - blacklist auto-hide and the moderator mail work;
+  - rating 38 was reviewed.
+- **`~/scrp/.env`:** the old, unused `ANTHROPIC_API_KEY` line was removed on 24 Oct 2026, and the `scrp-cat-poc` key is revoked. Server code does not use that variable.
+
+**Badge:**
+- The badge is Google's official Hebrew "Get it on Google Play" artwork ("כעת ב- Google Play"). It is used unaltered: not redrawn, recoloured or cropped.
+  - Source: `https://play.google.com/intl/en_us/badges/static/images/badges/iw_badge_web_generic.png`, the file Google's badge page serves for the Hebrew locale. Downloaded 24 Oct 2026.
+  - Stored as `web/public/badges/google-play-he.png` (646×250), with its source in `web/public/badges/SOURCE.txt`. There is no third-party request; CSP `img-src 'self'` covers it.
+  - The PNG already includes Google's clear space. It is shown at 60 px (home) or 48 px (footer, portal), never below 40 px.
+- **Link:** `https://play.google.com/store/apps/details?id=il.co.xxl.supermarket&hl=iw`, `target="_blank"`, `rel="noopener"`, alt "הורידו את SUPER XXL מ-Google Play".
+
+**iPhone label:**
+- "בקרוב גם ל-iPhone" ("Coming soon for iPhone") is a plain text label: not a link, not a button.
+  - Styled gray-700 on gray-100 (contrast about 9:1), with a border.
+  - Same height as the visible badge body (40 / 32 px).
+- **No Apple artwork:** the App Store badge and the Apple logo may only be used for an app that is live on the App Store.
+- **One switch:** `web/src/config/apps.ts` holds `IOS_APP_URL = null`. Setting it, and adding Apple's official badge at `APP_STORE_BADGE_SRC`, turns the label into the badge everywhere and makes the iPhone banner a store link.
+
+**Placements:**
+- **super.xxl.co.il home:** a section "SUPER XXL באפליקציה" under the search box, with the badge and the iPhone label. It shows on the start screen only; the results take its place.
+- **Footer on every super page:** the badge and label, small. Not on the portal footer.
+- **xxl.co.il portal:** inside the מצרכים / SUPER XXL card. The card became a div holding the old button plus the badges, so the links are not nested inside a button.
+
+**Banner** (`AppBanner`, at the top of the super pages, above the header):
+- Android user agent: "SUPER XXL זמינה לאנדרואיד — הורידו מ-Google Play", with the Play link.
+- iPhone / iPad (including iPadOS reporting a Mac user agent with touch): "אפליקציית SUPER XXL ל-iPhone תגיע בקרוב. בינתיים אפשר להשתמש באתר.", no link.
+- Desktop: no banner.
+- **Behaviour:**
+  - it sits in the page flow (never an interstitial) and renders in the first paint with a fixed min-height, so nothing shifts;
+  - the close button is a `<button aria-label="סגירה">` with a visible focus ring;
+  - dismissal is stored in localStorage `xxl_app_banner_dismissed` (try/catch);
+  - at most one banner.
+- All strings are in `he.json` / `en.json` under `apps.*`. The i18n key parity check passes (125 keys).
+
+**SEO:**
+- **Every page on the super host** carries `<meta name="google-play-app" content="app-id=il.co.xxl.supermarket">`.
+- **The super home** carries this JSON-LD, which is valid JSON with schema.org types:
+
+      {"@context":"https://schema.org","@type":"SoftwareApplication","name":"SUPER XXL","operatingSystem":"ANDROID","applicationCategory":"ShoppingApplication","url":"https://play.google.com/store/apps/details?id=il.co.xxl.supermarket&hl=iw","offers":{"@type":"Offer","price":"0","priceCurrency":"ILS"},"publisher":{"@type":"Organization","name":"XXL Team"}}
+
+- **Neither on the portal.** No `apple-itunes-app` meta.
+- **CSP:** the tags are set by `seoMeta.ts`. The inline script in `index.html` is unchanged, so its CSP hash stays valid. A JSON-LD data block is not script, so it needs no `script-src` entry.
+
+**Checks:**
+- `npm run build` OK; `npx eslint src` 0 problems.
+- **Dev server, rendered DOM** (headless Chrome with Android / iPhone / desktop user agents):
+
+  | Page | Banner | Play links | iPhone label | Meta and JSON-LD |
+  |---|---|---|---|---|
+  | Android | yes | 3 (banner, home, footer) | yes | yes |
+  | iPhone | coming soon, no link | 2 | yes | yes |
+  | Desktop | none | 2 | yes | yes |
+  | Portal | none | 1 | yes | none |
+
+- **Chrome at 390 px:** home, portal, promos and privacy have no horizontal overflow (scrollWidth 375 ≤ 390). The banner is 57 px tall at 390 px.
+- **Dismissal:** closing sets the flag, and a reload shows no banner.
+
+**Commits:** `8bb81c6` (web), docs (this entry, handoff_mobile, checklist, CLAUDE.md).
+
+---
+
 ## 📋 Open items / next steps (as of 24 Oct 2026)
 
-- **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1. Lawyer review of the terms is Dude's call.
+- **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (verified, SU11A-53). Lawyer review of the terms is Dude's call.
 - **SU11A-36 Search v2:** SEARCH_V2=on since 21 Oct 2026; timer daily 14:30.
 - **SU11A-50 filtered search:** built, not deployed. After the SU11A-47 runbook (and SU11A-49): `docs/super/su11a50_runbook.md` (compare `--filtered` go / no-go, then `SEARCH_V2_FILTERED=test`, then `on`). No web or mobile change needed.
 - **SU11A-49 security fixes:** built, not deployed. Run `docs/security/su11a49_runbook.md` (after or together with the SU11A-47 runbook; both restart scrp-api), then the web deploy. Then: review the compliance drafts in `docs/compliance/` (with an advisor for the לאימות items), the sudo checks in the SU11A-48 review, CSP enforcement after a clean week, and the open findings F-06 to F-23.
@@ -1719,11 +1794,11 @@ Then: facet UI and API (separate session), and the alcohol / tobacco hide switch
   - Sign in with Apple is not required for email/password only.
   - Guideline 1.2 needs terms, report, block and contact info: all built (SU11A-44), not yet deployed.
 - **Play:**
-  - Production release 8 (1.2.1) submitted for review 18 Oct (full rollout, Israel); watch the review result.
+  - **Production LIVE since 23 Oct 2026** (build 8, 1.2.1, Israel, "XXL Team", IARC / PEGI 3). The website badge and banner (SU11A-53) are built; Dude deploys the web.
   - plan Play Billing.
   - Next build is versionCode 9 (carries the SU11A-46 terms bidi fix and the SU11A-47 search suggestions).
 - **SEO:** built in SU11A-46. After the web deploy: submit the sitemaps in Search Console (see the SU11A-46 entry) and request indexing of the key pages. Optional nginx www -> apex redirect on 443.
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-53 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).
+Next free session ID: SU11A-54 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).

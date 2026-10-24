@@ -21,9 +21,10 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 15. **CC never deploys, never runs EAS builds, never calls `DELETE /account`, never modifies production data.** Dude runs `scripts\deploy_frontend.ps1` and EAS builds. Never delete the Supabase users x@xxl.co.il or gplay@xxl.co.il (the Play demo account); throwaway test users are created in Supabase → Authentication → Users → Add user (Auto Confirm).
 
 ## Status / next steps
-Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-53 (SU11A-37 reserved).
+Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-54 (SU11A-37 reserved).
 - Catalog categories: manual > ai > gs1 > rule; automated runs never overwrite manual/reviewed (enforced in `scripts/catalog/store.py`; tables in `db/migrations/su11a52_catalog.sql`).
-- RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1 on Play.
+- RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (build 8 live on Play).
+- **Apple App Store badge / Apple logo only after the iOS app is live on the App Store.** Until then the web shows the text label "בקרוב גם ל-iPhone"; the switch is `IOS_APP_URL` in `web/src/config/apps.ts` (SU11A-53).
 - Legal entity: XXL Enterprises (XXL אנטרפרייזס), the Play-verified organisation; legal texts use the constant LEGAL_ENTITY_NAME in web/src/legal/terms.ts and xxl-super-mobile/src/legal/terms.ts
 - Apple track sessions use the new sub-series SU11B (first: SU11B-1)
 
@@ -56,7 +57,7 @@ Current status and the open-items list live at the end of `docs/super/handoff_su
 - Start the dev server with **`npm start`** (the start script writes the build-info line on the diagnostics screen; `npx expo start` skips it).
 - Typecheck: `node node_modules/typescript/bin/tsc --noEmit` takes 6-8 minutes; **exit 2 with only the 5 known `src/tw` errors is a pass**. CC runs time out on it - Dude runs it.
 - The dev client needs Metro on the laptop and the phone on the same (home) Wi-Fi; a preview APK has the JS baked in.
-- **Google Play (18 Oct 2026):** listing and App content approved; build 8 (1.2.1, versionCode 8, `c2fa72d`) on internal testing; **Production release 8 submitted for review** (full rollout, Israel). **Next build: versionCode 9.** Every `eas build` run burns a versionCode (`autoIncrement`), so don't run it twice for one release. iOS is parked until Android is stable.
+- **Google Play:** **Production LIVE since 23 Oct 2026**: build 8 (1.2.1, versionCode 8, `c2fa72d`), full rollout, Israel, developer "XXL Team", IARC / PEGI 3. The website links to it with the official badge (SU11A-53). **Next build: versionCode 9.** Every `eas build` run burns a versionCode (`autoIncrement`), so don't run it twice for one release. iOS is parked until Android is stable.
 - **iOS (SU11A-33):** no Apple account yet (DUNS slow; individual enrollment proposed, pending Dude). Everything needing the account is blocked (App Store Connect, EAS iOS build, TestFlight, iPhone checks, App Privacy, screenshots, review notes, a demo account NOT in DELETE_PROTECTED_USER_IDS). A Mac is not needed for EAS builds. **Enrollment for iOS on hold until DUNS arrives** (SU11A-35).
 - **Data retention / account deletion: CLOSED (SU11A-33).** B2 lifecycle on xxl-scrp-backups `daily/` (hide 180 d, delete 1 d) matches the privacy policy; the web policy (`web/src/pages/PrivacyPolicyPage.tsx`) is the source of truth for the in-app summary.
 

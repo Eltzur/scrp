@@ -682,3 +682,14 @@ Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; 
     - Pagination dedup / offset unchanged. PAGE_SIZE stays 30 (web went to 20).
   - **Strings:** `he.search.suggest*` and `updating`, with `// en:` comments.
   - **Checks:** JS only, no app.json / version change. Syntax-only transpile OK. tsc and the device check are Dude's: type חל, then pick a term and a product; TalkBack / VoiceOver reads the rows; RTL, light and dark.
+
+- **2026-10-24 (SU11A-53, web + records):**
+  - **Google Play Production LIVE since 23 Oct 2026:**
+    - build 8, 1.2.1, versionCode 8;
+    - Israel, full rollout;
+    - developer "XXL Team";
+    - IARC / PEGI 3.
+    - **Next Android build: versionCode 9.** It carries the SU11A-46 terms bidi fix and the SU11A-47 suggestions.
+  - **RATINGS_REQUIRE_TERMS=on since 24 Oct 2026** (verified on the server). Build 7 (1.2.1 before consent) can no longer rate without accepting the terms.
+  - **Website:** super.xxl.co.il and the portal now show the official Hebrew Google Play badge and the text label "בקרוב גם ל-iPhone". Android visitors get a dismissible banner linking to Play.
+  - **iOS badge swap:** when the iOS app is live, set `IOS_APP_URL` in `web/src/config/apps.ts` and add Apple's official App Store badge at `/badges/app-store-he.svg`. The label then becomes the badge, and the iPhone banner becomes a store link. Until then, no Apple badge or logo anywhere.
