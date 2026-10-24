@@ -17,7 +17,7 @@ Everything else is kept as it is: digits, %, '.', ',' and the rest of the
 punctuation, so "3%" and "1.5" still match the way the old search matches them.
 
 Also: tokenize() (query tokens) and lexicon_words() (words for search_lexicon),
-plus the coupon pseudo-item rule, all pure functions so they are unit-tested
+plus the coupon and service pseudo-item rules, all pure functions so they are unit-tested
 without a database.
 """
 from __future__ import annotations
@@ -102,6 +102,21 @@ COUPON_PATTERNS: dict[str, re.Pattern] = {
     # start and to קופון itself, so שקופות / קופסה / קופסאות never match.
     "discount_coupon_first_word": re.compile(r"^(ה\.?נ['\".]?|הנחת|הנחה)\s?קופו?ן"),
 }
+# Service rows (SU11A-52): deposits, delivery and fees that chains publish as
+# items. Hidden like coupons. Same caution: anchored to the start of the name,
+# so a product that mentions a deposit later ("נביעות + תפוח 1.5 ליטר פיקדון")
+# stays, and Purim baskets ("משלוח מנות ...") and products such as "דמי מייקאפ"
+# are not services.
+SERVICE_PATTERNS: dict[str, re.Pattern] = {
+    # פיקדון / פקדון ..., החזר / זיכוי פיקדון ..., ארגז פקדון ...
+    "deposit_first_word": re.compile(r"^((החזר|זיכוי|ארגז) )?פי?קדו?ן(?!\S)"),
+    # משלוח / משלוחים / משלוח/הובלה ..., not משלוח מנות; הובלה ...
+    "delivery_first_word": re.compile(r"^(משלוח(ים)?(?=$|[\s/\\])(?! מנות)|הובלה(?!\S))"),
+    # דמי טיפול / משלוח / הובלה / שירות / חניה, עמלת ..., תשלום על / עבור ..., מיחזור אריזה ...
+    "fee_first_word": re.compile(r"^(דמי (טיפול|משלוח|הובלה|שירות|חניה)(?!\S)|עמלת(?!\S)|תשלום (על|עבור)(?!\S)"
+                                 r"|מיחזור אריזה(?!\S))"),
+}
+PSEUDO_PATTERNS: dict[str, re.Pattern] = {**COUPON_PATTERNS, **SERVICE_PATTERNS}
 # Every live price of the item is below this (in NIS): 0.01-style placeholders.
 PSEUDO_MAX_PRICE = 0.05
 
@@ -114,8 +129,16 @@ def coupon_pattern(name_norm: str) -> str | None:
     return None
 
 
+def pseudo_pattern(name_norm: str) -> str | None:
+    """Name of the coupon or service pattern the normalized name matches, or None."""
+    for key, rx in PSEUDO_PATTERNS.items():
+        if rx.search(name_norm):
+            return key
+    return None
+
+
 def is_pseudo(name_norm: str, max_live_price: float | None) -> bool:
-    """D1 rule: coupon-like first word, OR every live price below 0.05."""
-    if coupon_pattern(name_norm):
+    """D1 rule: coupon-like or service first word(s), OR every live price below 0.05."""
+    if pseudo_pattern(name_norm):
         return True
     return max_live_price is not None and max_live_price < PSEUDO_MAX_PRICE

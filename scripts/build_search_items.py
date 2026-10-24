@@ -29,6 +29,20 @@ fill fails, search_items is still swapped in and the API keeps the live price
 fetch (it uses search_item_prices only while its built_at equals
 search_items.built_at).
 
+SU11A-52:
+  - Service rows (פיקדון / משלוח / fees) are pseudo items like coupons
+    (db/search_norm.SERVICE_PATTERNS); --report lists them per pattern.
+  - Nameless items: when items.item_name is empty, name_norm falls back to the
+    most common non-empty item_chain_names name, then the GS1 product name
+    (read_fallback_names: one small query per source for those codes only). The
+    API's display name already falls back to the chain's own name.
+  - Categories: after the swap, NEW live barcodes (no item_categories row yet)
+    are classified by the v1 rules + GS1 group map and inserted with source rule
+    or gs1 (ON CONFLICT DO NOTHING: an existing row - ai, manual, reviewed or
+    an older rule row - is never touched). Skipped with one warning while the
+    su11a52 tables are missing or categories is empty; a failure there never
+    fails the build. --no-categories turns it off.
+
 statement_timeout 10 min on every connection; the swap waits at most 5 s for
 its locks and is retried 3 times. Timings are printed. Needs the
 su11a36_search_items.sql migration (tables owned by scrp_app, the role in
@@ -266,11 +280,14 @@ def load_aliases(path: Path) -> list[tuple[str, str]]:
     return out
 
 
-def build_rows(agg: list[dict], popularity: dict[str, int], built_at: datetime) -> list[dict]:
+def build_rows(agg: list[dict], popularity: dict[str, int], built_at: datetime,
+               fallback: dict[str, str] | None = None) -> list[dict]:
+    """fallback: item_code -> name for items whose items.item_name is empty (SU11A-52)."""
     from db.search_norm import is_pseudo, normalize
+    fallback = fallback or {}
     rows = []
     for r in agg:
-        name = normalize(r["item_name"])
+        name = normalize(r["item_name"]) or normalize(fallback.get(r["item_code"]))
         mfr = normalize(r["manufacturer_name"])
         rows.append({
             "item_code": r["item_code"], "name_norm": name, "manufacturer_norm": mfr,
@@ -320,12 +337,62 @@ def read_inputs(conn) -> dict:
     agg = [dict(r) for r in conn.execute(text(AGG_SQL), {"live": live}).mappings()]
     timings["aggregate_ms"] = round((time.perf_counter() - t0) * 1000)
     log(f"live items: {len(agg)} in {timings['aggregate_ms']} ms")
-    return {"live_fks": live, "agg": agg, "timings": timings}
+    t0 = time.perf_counter()
+    fallback, name_stats = read_fallback_names(conn, nameless_codes(agg))
+    timings["fallback_names_ms"] = round((time.perf_counter() - t0) * 1000)
+    log(f"nameless items: {name_stats}")
+    return {"live_fks": live, "agg": agg, "timings": timings, "fallback": fallback, "name_stats": name_stats}
 
 
 def _table_exists(conn, name: str) -> bool:
     from sqlalchemy import text
-    return conn.execute(text("SELECT to_regclass(:n) IS NOT NULL"), {"n": f"public.{name}"}).scalar()
+    qualified = name if "." in name else f"public.{name}"
+    return conn.execute(text("SELECT to_regclass(:n) IS NOT NULL"), {"n": qualified}).scalar()
+
+
+def nameless_codes(agg: list[dict]) -> list[str]:
+    from db.search_norm import normalize
+    return [r["item_code"] for r in agg if not normalize(r["item_name"])]
+
+
+# SU11A-52: fallback names for nameless items, for those codes only.
+_ICN_NAME_SQL = """
+SELECT DISTINCT ON (item_code) item_code, item_name
+FROM (SELECT item_code, item_name, count(*) AS n
+      FROM item_chain_names
+      WHERE item_code = ANY(:codes) AND btrim(coalesce(item_name, '')) <> ''
+      GROUP BY item_code, item_name) x
+ORDER BY item_code, n DESC, length(item_name) DESC, item_name
+"""
+_GS1_NAME_SQL = """
+SELECT DISTINCT ON (gtin) gtin AS item_code, trade_item_description AS item_name
+FROM gs1.products
+WHERE gtin = ANY(:codes) AND product_status = 'פעיל'
+  AND btrim(coalesce(trade_item_description, '')) <> ''
+ORDER BY gtin, modification_timestamp DESC NULLS LAST, id DESC
+"""
+
+
+def read_fallback_names(conn, codes: list[str]) -> tuple[dict[str, str], dict]:
+    """item_code -> best non-empty name: item_chain_names first, then GS1. Plus counts."""
+    from sqlalchemy import text
+    from db.search_norm import normalize
+    out: dict[str, str] = {}
+    stats = {"nameless": len(codes), "from_item_chain_names": 0, "from_gs1": 0}
+    if not codes:
+        return out, stats
+    for r in conn.execute(text(_ICN_NAME_SQL), {"codes": codes}):
+        if normalize(r[1]):
+            out[r[0]] = r[1]
+    stats["from_item_chain_names"] = len(out)
+    left = [c for c in codes if c not in out]
+    if left and _table_exists(conn, "gs1.products"):
+        for r in conn.execute(text(_GS1_NAME_SQL), {"codes": left}):
+            if normalize(r[1]) and r[0] not in out:
+                out[r[0]] = r[1]
+                stats["from_gs1"] += 1
+    stats["still_nameless"] = len(codes) - len(out)
+    return out, stats
 
 
 def read_popularity(conn) -> dict[str, int]:
@@ -339,12 +406,12 @@ def read_popularity(conn) -> dict[str, int]:
 # --------------------------------------------------------------------------- report
 def report(conn, inputs: dict, aliases_path: Path) -> dict:
     from sqlalchemy import text
-    from db.search_norm import COUPON_PATTERNS, PSEUDO_MAX_PRICE, coupon_pattern, normalize
+    from db.search_norm import PSEUDO_MAX_PRICE, PSEUDO_PATTERNS, normalize, pseudo_pattern
     from db.search_v2 import EILAT
 
     agg = inputs["agg"]
     built_at = datetime.now(timezone.utc)
-    rows = build_rows(agg, read_popularity(conn), built_at)
+    rows = build_rows(agg, read_popularity(conn), built_at, inputs.get("fallback"))
     raw = {r["item_code"]: r for r in agg}
     aliases = load_aliases(aliases_path)
     lex = build_lexicon(rows, aliases)
@@ -357,11 +424,11 @@ def report(conn, inputs: dict, aliases_path: Path) -> dict:
                        f"max price {a['max_price']}")
         return out
 
-    by_pattern: dict[str, list[str]] = {k: [] for k in COUPON_PATTERNS}
+    by_pattern: dict[str, list[str]] = {k: [] for k in PSEUDO_PATTERNS}
     price_rule: list[str] = []
     mention_not_flagged: list[str] = []
     for r in rows:
-        k = coupon_pattern(r["name_norm"])
+        k = pseudo_pattern(r["name_norm"])
         if k:
             by_pattern[k].append(r["item_code"])
         mp = raw[r["item_code"]]["max_price"]
@@ -412,6 +479,7 @@ def report(conn, inputs: dict, aliases_path: Path) -> dict:
         "multi_chain_items": sum(1 for r in rows if r["chains_live"] >= 2),
         "promo_only_items": sum(1 for r in rows if r["promo_only"]),
         "names_changed_by_normalize_beyond_case_and_spaces": changed,
+        "nameless_items": inputs.get("name_stats", {}),
         "pseudo": {
             "total": len(pseudo),
             "coupon_rule_total": len(coupon_codes),
@@ -451,8 +519,9 @@ def print_report(r: dict) -> None:
     p(f"live stores {r['live_stores']} | live items {r['live_items']} | 2+ chains {r['multi_chain_items']} | "
       f"promo-only {r['promo_only_items']}")
     p(f"names changed by normalize (quotes / hyphens / niqqud): {r['names_changed_by_normalize_beyond_case_and_spaces']}")
+    p(f"nameless items (items.item_name empty) and their fallback names: {r.get('nameless_items')}")
     ps = r["pseudo"]
-    p(f"\npseudo items: {ps['total']} (coupon rule {ps['coupon_rule_total']}, price rule {ps['price_rule_total']}, "
+    p(f"\npseudo items: {ps['total']} (name rules {ps['coupon_rule_total']}, price rule {ps['price_rule_total']}, "
       f"both {ps['both_rules']}); by pattern: {ps['by_pattern']}")
     for k, lines in ps["samples"].items():
         p(f"\n[{k}] first {SAMPLE} by md5(item_code): code | name | manufacturer | chains | max live price")
@@ -526,7 +595,8 @@ def swap(with_prices: bool | None = None) -> float:
     raise SystemExit("swap failed 3 times; the live tables are unchanged")
 
 
-def apply(conn, inputs: dict, aliases_path: Path, price_chunks: int = PRICE_CHUNKS) -> dict:
+def apply(conn, inputs: dict, aliases_path: Path, price_chunks: int = PRICE_CHUNKS,
+          categories: bool = True) -> dict:
     from sqlalchemy import text
     timings = dict(inputs["timings"])
     for t in ("search_items", "search_items_next", "search_lexicon", "search_lexicon_next"):
@@ -536,7 +606,7 @@ def apply(conn, inputs: dict, aliases_path: Path, price_chunks: int = PRICE_CHUN
 
     t0 = time.perf_counter()
     built_at = datetime.now(timezone.utc)
-    rows = build_rows(inputs["agg"], read_popularity(conn), built_at)
+    rows = build_rows(inputs["agg"], read_popularity(conn), built_at, inputs.get("fallback"))
     lex = build_lexicon(rows, load_aliases(aliases_path))
     timings["python_build_ms"] = round((time.perf_counter() - t0) * 1000)
 
@@ -563,10 +633,93 @@ def apply(conn, inputs: dict, aliases_path: Path, price_chunks: int = PRICE_CHUN
     timings.update(prices.pop("timings_ms", {}))
     timings["swap_ms"] = round(swap(with_prices=prices["swapped"]))
     pseudo = sum(1 for r in rows if r["is_pseudo"])
-    return {"session": "SU11A-36/47", "mode": "apply", "built_at": built_at.isoformat(),
+    cats = classify_new_items(conn, rows) if categories else {"skipped": "--no-categories"}
+    timings.update(cats.pop("timings_ms", {}))
+    return {"session": "SU11A-36/47/52", "mode": "apply", "built_at": built_at.isoformat(),
             "search_items": len(rows), "pseudo": pseudo, "searchable": len(rows) - pseudo,
             "search_lexicon": len(lex), "previous_live_rows": current,
-            "search_item_prices": prices, "timings_ms": timings}
+            "nameless_items": inputs.get("name_stats", {}),
+            "search_item_prices": prices, "item_categories": cats, "timings_ms": timings}
+
+
+CATEGORY_TABLES = ("categories", "item_categories")
+CATEGORY_CHUNK = 2000
+
+_GS1_GROUP_SQL = """
+SELECT DISTINCT ON (gtin) gtin, group_name
+FROM gs1.products
+WHERE gtin = ANY(:codes) AND product_status = 'פעיל' AND group_name IS NOT NULL
+ORDER BY gtin, (full_content IS NOT NULL) DESC, modification_timestamp DESC NULLS LAST, id DESC
+"""
+
+
+def category_rows(rows: list[dict], gs1_groups: dict[str, str], valid_ids: set[str]) -> list[dict]:
+    """SU11A-52: v1 rules (+ GS1 group map) for new barcodes -> item_categories rows.
+
+    Pure (no database). Pseudo rows, unclassified items and ids missing from
+    the stored taxonomy are left out. source = gs1 when the GS1 group decided or
+    confirmed the category, else rule.
+    """
+    import scripts.catalog.classify_rules as C
+    tax = C.load_taxonomy()
+    gmap = C.load_gs1_map()
+    hints = C.load_brand_hints()
+    out = []
+    for r in rows:
+        if r["is_pseudo"] or not r["name_norm"]:
+            continue
+        res = C.classify_rules(tax, r["name_norm"], hints)
+        res = C.combine_gs1(tax, res, gmap.get(gs1_groups.get(r["item_code"]) or ""))
+        if not res.category_id or res.category_id not in valid_ids:
+            continue
+        gs1 = res.reason in ("gs1", "rule+gs1")
+        detail = res.reason + (f": {res.keyword}" if res.keyword else "")
+        if gs1:
+            detail += f" | gs1: {gs1_groups.get(r['item_code'])}"
+        out.append({"item_code": r["item_code"], "category_id": res.category_id, "confidence": res.confidence,
+                    "source": "gs1" if gs1 else "rule", "detail": detail[:300], "model": None,
+                    "taxonomy_version": C.TAXONOMY_VERSION, "reviewed": False})
+    return out
+
+
+def classify_new_items(conn, rows: list[dict]) -> dict:
+    """SU11A-52: insert rule / gs1 categories for live barcodes without a row; never raises."""
+    from sqlalchemy import text
+    from scripts.catalog.store import INSERT_NEW_ITEM_CATEGORIES_SQL
+    t0 = time.perf_counter()
+    try:
+        if not all(_table_exists(conn, t) for t in CATEGORY_TABLES):
+            log("WARNING: item_categories is missing (db/migrations/su11a52_catalog.sql not applied); "
+                "skipping the category step")
+            return {"skipped": "tables missing"}
+        valid = {r[0] for r in conn.execute(text("SELECT id FROM categories WHERE active"))}
+        if not valid:
+            log("WARNING: categories is empty (run scripts/catalog/import_categories.py --apply); "
+                "skipping the category step")
+            return {"skipped": "categories empty"}
+        have = {r[0] for r in conn.execute(text("SELECT item_code FROM item_categories"))}
+        new = [r for r in rows if r["item_code"] not in have and not r["is_pseudo"]]
+        groups: dict[str, str] = {}
+        if new and _table_exists(conn, "gs1.products"):
+            codes = [r["item_code"] for r in new]
+            for i in range(0, len(codes), 20000):
+                groups.update({g: n for g, n in conn.execute(text(_GS1_GROUP_SQL), {"codes": codes[i:i + 20000]})})
+        cat = category_rows(new, groups, valid)
+        sql = text(INSERT_NEW_ITEM_CATEGORIES_SQL)
+        for i in range(0, len(cat), CATEGORY_CHUNK):
+            conn.execute(sql, cat[i:i + CATEGORY_CHUNK])
+        # executemany gives no reliable rowcount: count the table instead.
+        inserted = conn.execute(text("SELECT count(*) FROM item_categories")).scalar() - len(have)
+        conn.commit()
+    except Exception as exc:  # noqa: BLE001 - the search build is already live
+        conn.rollback()
+        log(f"WARNING: category step failed ({type(exc).__name__}: {str(exc)[:300]}); search_items is unaffected")
+        return {"skipped": f"failed: {type(exc).__name__}"}
+    by = Counter((c["source"], c["confidence"]) for c in cat)
+    return {"new_live_barcodes": len(new), "classified": len(cat), "inserted": inserted,
+            "unclassified": len(new) - len(cat),
+            "by_source_confidence": {f"{s}/{c}": n for (s, c), n in sorted(by.items())},
+            "timings_ms": {"categories_ms": round((time.perf_counter() - t0) * 1000)}}
 
 
 def fill_prices(conn, inputs: dict, built_at: datetime, n_items: int, chunks: int) -> dict:
@@ -623,6 +776,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", default=None, help="also write the result as JSON here")
     ap.add_argument("--price-chunks", type=int, default=PRICE_CHUNKS,
                     help="search_item_prices fill statements (SU11A-47)")
+    ap.add_argument("--no-categories", action="store_true",
+                    help="skip classifying new barcodes into item_categories (SU11A-52)")
     args = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):  # Hebrew on any console
         stream.reconfigure(encoding="utf-8")
@@ -643,7 +798,8 @@ def main(argv: list[str] | None = None) -> int:
             conn.rollback()
             print_report(result)
         else:
-            result = apply(conn, inputs, Path(args.aliases), max(1, args.price_chunks))
+            result = apply(conn, inputs, Path(args.aliases), max(1, args.price_chunks),
+                           categories=not args.no_categories)
             print(f"\n=== SU11A-36 build_search_items --apply ===\n{json.dumps(result, ensure_ascii=False, indent=1)}")
     finally:
         conn.close()

@@ -1,0 +1,21 @@
+key,name_he,type,unit,parse_hints,applies_to
+brand,מותג,text,,"GS1 brandname when present; else the cleaned manufacturer (85% of live items carry a placeholder, so mostly empty); a brand lexicon from names is a later step",all
+size_value,גודל / תכולה,number,g|ml|unit,"number + unit in the name (500 גרם, 1.5 ל', 750 מ""ל, 1 ק""ג); fallback items.quantity + unit_qty; GS1 Main_Fields.Net_Content",all
+size_unit,יחידת מידה,enum,g|ml|unit,"גרם/גר'/ג'/ג -> g; ק""ג/קג/קילו -> g x1000; מ""ל/מל -> ml; ליטר/ל'/ל -> ml x1000; יח' -> unit",all
+pack_count,יחידות במארז,integer,,"N*M / NxM (first number when the second is a size), זוג=2, שלישיית=3, רביעיית=4, שישיית=6, 'N יח'' / 'N יחידות'; מארז alone gives no count",all
+fat_pct,אחוז שומן,number,%,"N% (1-45) in dairy / minced-meat names, 'N% שומן'; GS1 Additional_Information.Fat_Percentage_in_Product (2% of GS1 items)",D02; D03.C03
+cocoa_pct,אחוז מוצקי קקאו,number,%,N% next to קקאו / מריר in chocolate names,D08.C01
+alcohol_pct,אחוז אלכוהול,number,%,N% / N% vol / 'N% כוהל' in alcohol names; GS1 Alcohol_Percentage_in_Product,D10
+kosher_level,רמת כשרות,enum,,"name markers: בד""צ/בדץ, מהדרין/למהדרין, named boards (רובין, לנדא, חתם סופר, שארית, העדה החרדית); 'חלק' (glatt) only in D03/D04; GS1 Kashrut Board_of_Supervision / Rabbinate",food (D01-D10)
+kosher_type,חלבי / בשרי / פרווה,enum,חלבי|בשרי|פרווה,GS1 Kashrut.Kosher_Supervision_Type only (99.9% of GS1 items carry a kashrut block),food (D01-D10)
+kosher_passover,כשר לפסח,bool,,'כשר לפסח' / 'לפסח' in name; GS1 Kosher_for_Passover,food (D01-D10)
+organic,אורגני,bool,,אורגני/אורגנית/אורגניים/אורגניות/organic; NOT 'ביו' (matches inside names such as סיביו),food (D01-D10)
+gluten_free,ללא גלוטן,bool,,ללא גלוטן / נטול גלוטן / גלוטן פרי; GS1 Diet_Information 'ללא גלוטן',food (D01-D10)
+vegan,טבעוני,bool,,טבעוני/טבעונית/vegan/על בסיס צמחי; GS1 Diet 'טבעוני' / 'ויגן פרנדלי'; NOT bare 'צמחי' (שמן צמחי),food (D01-D10)
+sugar_free,ללא סוכר,bool,,ללא סוכר / ללא תוספת סוכר / נטול סוכר / דיאט / זירו / zero as whole words; GS1 Diet,food (D01-D10)
+reduced,דל / מופחת / לייט,bool,,"דל/דלת/מופחת/מופחתת/לייט/light as whole words; NOT bare 'קל' (משקה קל, פתח קל)",food (D01-D10)
+lactose_free,ללא לקטוז,bool,,ללא לקטוז / נטול לקטוז / דל לקטוז; GS1 Diet 'ללא לקטוז',D02
+flavour,טעם,text,,the 1-2 words after 'בטעם' / 'בטעמי',food (D01-D10)
+state,טרי / קפוא / מעושן,enum,fresh|frozen|smoked,טרי/טרייה/טריים -> fresh; קפוא/קפואה/מוקפא -> frozen; מעושן -> smoked,D03
+weighted,נמכר במשקל,bool,,"items.is_weighted = 1, or 'במשקל' / 'לק""ג' in the name",D01; D03
+scent,ניחוח,text,,the 1-2 words after 'בניחוח' / 'ריח',D11; D12

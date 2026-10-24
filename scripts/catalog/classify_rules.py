@@ -1,16 +1,19 @@
-"""Rule-based catalogue classifier prototype (SU11A-51). Offline: reads a local
-export, writes local files, never touches a database.
+"""Rule-based catalogue classifier (SU11A-51, v1 in SU11A-52). Offline: reads a
+local export, writes local files, never touches a database. The same functions
+classify new barcodes in scripts/build_search_items.py (SU11A-52).
 
     python -m scripts.catalog.classify_rules --input EXPORT.csv.gz --out-dir DIR \
-        [--review-sample docs/catalog/review_sample_v0.csv] [--no-gs1]
+        [--review-sample docs/catalog/review_sample_v1.csv] [--no-gs1] \
+        [--taxonomy docs/catalog/taxonomy_v0.csv --gs1-map ... --brand-hints ""]
 
 Input: the SU11A-51 export (one row per live, non-pseudo search_items row; columns
 item_code, name, manufacturer, manufacturer_norm, chains_live, gs1_group, gs1_brand,
 gs1_kosher, gs1_diet, is_weighted, ...). Output in DIR: predictions.csv.gz (one row
 per item), report.json and report.txt (evaluation), unclassified_leading.tsv.
 
-Rules come from docs/catalog/taxonomy_v0.csv (keywords_he / negative_keywords_he)
-and docs/catalog/gs1_group_map_v0.csv. Names are normalised with db.search_norm.
+Rules come from docs/catalog/taxonomy_v1.csv (keywords_he / negative_keywords_he),
+docs/catalog/gs1_group_map_v1.csv and docs/catalog/brand_category_hints_v1.csv.
+Names are normalised with db.search_norm.
 
 Keyword grammar (one keyword per '|' item, matched on whole tokens):
   - "a b"      a phrase: consecutive tokens a then b
@@ -34,6 +37,18 @@ GS1 (unless --no-gs1): a mapped group that agrees with the rule (same lineage)
 -> the deeper id, high, reason rule+gs1; no rule match -> the GS1 id (high when
 the map row is high, else medium); a disagreement with a high map row -> the
 GS1 id at medium. Manufacturer priors are used only to break ties.
+
+Brand hints (SU11A-52, docs/catalog/brand_category_hints_v1.csv): when a hinted
+brand occurs in the name (as the first content word for position=first,
+anywhere for position=any):
+  - the plain rule result stands when it is already in the brand's department
+    (the brand may itself be a keyword: לנור, האגיס);
+  - otherwise the brand's words are removed and the rules run on the rest, so a
+    brand word cannot fire as a keyword elsewhere (שמיר is a hummus brand, not
+    dill; טבע דלי is not a bucket);
+  - when neither matches and the hint has fallback=yes, the brand's category is
+    used (reason "brand", at most medium);
+  - a name that is only the brand word keeps the plain rule result.
 """
 from __future__ import annotations
 
@@ -54,8 +69,10 @@ if str(ROOT) not in sys.path:
 
 from db.search_norm import normalize  # noqa: E402
 
-TAXONOMY = ROOT / "docs" / "catalog" / "taxonomy_v0.csv"
-GS1_MAP = ROOT / "docs" / "catalog" / "gs1_group_map_v0.csv"
+TAXONOMY_VERSION = "v1"
+TAXONOMY = ROOT / "docs" / "catalog" / "taxonomy_v1.csv"
+GS1_MAP = ROOT / "docs" / "catalog" / "gs1_group_map_v1.csv"
+BRAND_HINTS = ROOT / "docs" / "catalog" / "brand_category_hints_v1.csv"
 
 _EDGE = "\"'.,;:!?()[]{}<>/\\|*+=#&@^~_%`"
 # Pack / marketing words: they do not count as a content position.
@@ -265,6 +282,46 @@ def load_taxonomy(path: Path = TAXONOMY) -> Taxonomy:
     return tax
 
 
+@dataclass(frozen=True)
+class BrandHint:
+    brand: str                       # as written in the CSV (also the brand attribute)
+    toks: tuple[str, ...]            # normalised tokens
+    category_id: str
+    confidence: str                  # high / medium / low; capped at medium when used
+    first_only: bool
+    fallback: bool = True            # use category_id when the rest of the name matches nothing
+
+
+def load_brand_hints(path: Path | None = BRAND_HINTS) -> dict[str, list[BrandHint]]:
+    """First token -> hints (longest brand first). Missing / empty path -> {}."""
+    out: dict[str, list[BrandHint]] = defaultdict(list)
+    if not path or not Path(path).is_file():
+        return {}
+    with open(path, encoding="utf-8", newline="") as fh:
+        for row in csv.DictReader(fh):
+            toks = tuple(tokens(row["brand"]))
+            if toks:
+                out[toks[0]].append(BrandHint(row["brand"].strip(), toks, row["category_id"].strip(),
+                                              (row.get("confidence") or "medium").strip(),
+                                              (row.get("position") or "any").strip() == "first",
+                                              (row.get("fallback") or "yes").strip() != "no"))
+    for v in out.values():
+        v.sort(key=lambda h: -len(h.toks))
+    return dict(out)
+
+
+def find_brand(hints: dict[str, list[BrandHint]], toks: list[str]) -> tuple[BrandHint, int] | None:
+    """The first hinted brand in toks: (hint, start index)."""
+    if not hints:
+        return None
+    first_content = next((i for i, t in enumerate(toks) if t not in SKIP_WORDS and not _NUM.match(t)), None)
+    for i, t in enumerate(toks):
+        for h in hints.get(t, ()):
+            if tuple(toks[i:i + len(h.toks)]) == h.toks and (not h.first_only or i == first_content):
+                return h, i
+    return None
+
+
 def load_gs1_map(path: Path = GS1_MAP) -> dict[str, tuple[str, str]]:
     out = {}
     with open(path, encoding="utf-8", newline="") as fh:
@@ -283,12 +340,36 @@ class Result:
     keyword: str = ""
     tied: tuple[str, ...] = ()       # categories tied with the winner (for priors)
     rule_id: str = ""                # what the rules alone said
+    brand: str = ""                  # brand hint found in the name (SU11A-52)
 
 
-def classify_rules(tax: Taxonomy, name: str) -> Result:
+def classify_rules(tax: Taxonomy, name: str, hints: dict[str, list[BrandHint]] | None = None) -> Result:
     toks = tokens(name)
     if not toks:
         return Result()
+    hit = find_brand(hints, toks) if hints else None
+    if not hit:
+        return _classify_tokens(tax, toks)
+    h, i = hit
+    dept = h.category_id.split(".")[0]
+    full = _classify_tokens(tax, toks)
+    rest = toks[:i] + toks[i + len(h.toks):]
+    if full.category_id.split(".")[0] == dept or not any(t not in SKIP_WORDS and not _NUM.match(t) for t in rest):
+        res = full                               # agrees with the brand, or the name is only the brand
+    else:
+        res = _classify_tokens(tax, rest)
+        if not res.category_id:
+            # full matched (if at all) only through the brand's own words
+            if h.fallback and h.category_id in tax.nodes:
+                conf = "low" if h.confidence == "low" else "medium"
+                res = Result(h.category_id, conf, "brand", h.brand, (), h.category_id)
+            else:
+                res = full
+    res.brand = h.brand
+    return res
+
+
+def _classify_tokens(tax: Taxonomy, toks: list[str]) -> Result:
     eff, head_end = content_index(toks)
     vetoed = set()
     for ri in tax.candidates(toks, negative=True):
@@ -351,13 +432,13 @@ def combine_gs1(tax: Taxonomy, res: Result, gs1: tuple[str, str] | None) -> Resu
         return res
     gid, gconf = gs1
     if not res.category_id:
-        return Result(gid, "high" if gconf == "high" else "medium", "gs1", "", (), "")
+        return Result(gid, "high" if gconf == "high" else "medium", "gs1", "", (), "", res.brand)
     if related(res.category_id, gid):
         deeper = res.category_id if res.category_id.count(".") >= gid.count(".") else gid
-        return Result(deeper, "high", "rule+gs1", res.keyword, (), res.rule_id)
+        return Result(deeper, "high", "rule+gs1", res.keyword, (), res.rule_id, res.brand)
     if gconf == "high":
-        return Result(gid, "medium", "gs1", res.keyword, (), res.rule_id)
-    return Result(res.category_id, "low", "rule", res.keyword, res.tied, res.rule_id)
+        return Result(gid, "medium", "gs1", res.keyword, (), res.rule_id, res.brand)
+    return Result(res.category_id, "low", res.reason, res.keyword, res.tied, res.rule_id, res.brand)
 
 
 def apply_prior(tax: Taxonomy, res: Result, prior: Counter | None) -> Result:
@@ -374,7 +455,7 @@ def apply_prior(tax: Taxonomy, res: Result, prior: Counter | None) -> Result:
         return res
     nid = res.category_id if tax.category_of(res.category_id) == cat else cat
     conf = "medium" if n / total >= 0.8 and total >= 10 else "low"
-    return Result(nid, conf, "prior", res.keyword, res.tied, res.rule_id)
+    return Result(nid, conf, "prior", res.keyword, res.tied, res.rule_id, res.brand)
 
 
 # --------------------------------------------------------------------------- attributes
@@ -444,8 +525,12 @@ def parse_pack(name_norm: str) -> int | None:
     return None
 
 
-def extract_attributes(tax: Taxonomy | None, node_id: str, name: str, row: dict | None = None) -> dict:
-    """Attributes for one item, filtered to those its node offers (all when unclassified)."""
+def extract_attributes(tax: Taxonomy | None, node_id: str, name: str, row: dict | None = None,
+                       brand_hint: str = "") -> dict:
+    """Attributes for one item, filtered to those its node offers (all when unclassified).
+
+    brand: GS1 brand, else a real manufacturer, else the brand hint found in the name.
+    """
     row = row or {}
     n = normalize(name)
     allowed = set(tax.attrs_for(node_id)) if (tax and node_id) else None
@@ -454,6 +539,7 @@ def extract_attributes(tax: Taxonomy | None, node_id: str, name: str, row: dict 
     if not brand:
         m = normalize(row.get("manufacturer") or "").strip(" .,-'\"")
         brand = "" if PLACEHOLDER_MFR.match(m) else (row.get("manufacturer") or "").strip()
+    brand = brand or brand_hint
     if brand:
         out["brand"] = brand
     size = parse_size(n)
@@ -529,10 +615,17 @@ def leading_token(name: str) -> str:
     return ""
 
 
-def classify_all(tax: Taxonomy, rows: list[dict], gmap: dict | None) -> list[Result]:
+def item_name(r: dict) -> str:
+    """The name to classify: items.item_name, else search_items.name_norm, else the
+    item_chain_names fallback (SU11A-52 export column icn_name)."""
+    return r.get("name") or r.get("name_norm") or r.get("icn_name") or ""
+
+
+def classify_all(tax: Taxonomy, rows: list[dict], gmap: dict | None,
+                 hints: dict[str, list[BrandHint]] | None = None) -> list[Result]:
     first = []
     for r in rows:
-        res = classify_rules(tax, r["name"] or r.get("name_norm") or "")
+        res = classify_rules(tax, item_name(r), hints)
         g = gmap.get(r.get("gs1_group") or "") if gmap else None
         first.append(combine_gs1(tax, res, g))
     prior: dict[str, Counter] = defaultdict(Counter)
@@ -617,7 +710,7 @@ def evaluate(tax: Taxonomy, rows: list[dict], final: list[Result], rule_only: li
                             "rule_he": tax.path_he(b) if b in tax.nodes else b}
                            for (a, b), c in confusion.most_common(20)],
     }
-    lead = Counter(leading_token(r["name"]) for r, x in zip(rows, final) if not x.category_id)
+    lead = Counter(leading_token(item_name(r)) for r, x in zip(rows, final) if not x.category_id)
     rep["unclassified_leading_top50"] = lead.most_common(50)
     dept = Counter()
     for r, x in zip(rows, final):
@@ -683,24 +776,26 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out-dir", required=True, type=Path)
     ap.add_argument("--taxonomy", type=Path, default=TAXONOMY)
     ap.add_argument("--gs1-map", type=Path, default=GS1_MAP)
+    ap.add_argument("--brand-hints", default=str(BRAND_HINTS), help='brand hints CSV; "" = none')
     ap.add_argument("--review-sample", type=Path)
     ap.add_argument("--no-gs1", action="store_true", help="rules and priors only")
     a = ap.parse_args(argv)
     tax = load_taxonomy(a.taxonomy)
     gmap = load_gs1_map(a.gs1_map)
+    hints = load_brand_hints(Path(a.brand_hints)) if a.brand_hints else {}
     rows = read_export(a.input)
-    rule_only = classify_all(tax, rows, None)
-    final = rule_only if a.no_gs1 else classify_all(tax, rows, gmap)
+    rule_only = classify_all(tax, rows, None, hints)
+    final = rule_only if a.no_gs1 else classify_all(tax, rows, gmap, hints)
     a.out_dir.mkdir(parents=True, exist_ok=True)
     with gzip.open(a.out_dir / "predictions.csv.gz", "wt", encoding="utf-8", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["item_code", "name", "category_id", "path_he", "confidence", "reason", "keyword",
-                    "rule_category_id", "chains_live", "gs1_group", "attributes"])
+                    "rule_category_id", "chains_live", "gs1_group", "brand_hint", "attributes"])
         for r, x in zip(rows, final):
-            attrs = extract_attributes(tax, x.category_id, r["name"], r)
-            w.writerow([r["item_code"], r["name"], x.category_id, tax.path_he(x.category_id) if x.category_id else "",
+            attrs = extract_attributes(tax, x.category_id, item_name(r), r, x.brand)
+            w.writerow([r["item_code"], item_name(r), x.category_id, tax.path_he(x.category_id) if x.category_id else "",
                         x.confidence, x.reason, x.keyword, x.rule_id, r.get("chains_live", ""),
-                        r.get("gs1_group", ""), json.dumps(attrs, ensure_ascii=False)])
+                        r.get("gs1_group", ""), x.brand, json.dumps(attrs, ensure_ascii=False)])
     rep = evaluate(tax, rows, final, rule_only, gmap)
     (a.out_dir / "report.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
     with open(a.out_dir / "unclassified_leading.tsv", "w", encoding="utf-8") as fh:

@@ -1,0 +1,81 @@
+brand,category_id,confidence,position,fallback,notes
+שמיר,D04.C02,medium,first,no,"Shamir Salads (hummus, tahini, salads). As the only word of a name it stays the herb (D01.C02)."
+צבר,D04,medium,first,no,Salads and hummus brand; צבר is also prickly pear
+אחלה,D04,medium,first,yes,Hummus and salads brand
+זוגלובק,D04.C01,medium,any,yes,Cold cuts
+טירת צבי,D04.C01,medium,any,yes,Cold cuts
+סלטי המסעדה,D04.C03,medium,any,yes,Chilled salads and dips
+טבע דלי,D06.C08,medium,any,yes,Plant-based burgers and seitan; דלי is not a bucket here
+מעדנות,D06.C04,medium,any,yes,Frozen pastries and pizza
+סנפרוסט,D06,medium,any,yes,Frozen fruit and vegetables
+פלדמן,D06.C03,medium,any,yes,Ice cream
+גולון,D08.C06,medium,any,yes,Biscuits
+מוראטו,D08.C06,medium,any,yes,Biscuits
+דוסי,D08.C06,medium,any,yes,Biscuits
+לאגו,D08.C06,medium,any,yes,Biscuits
+עבאדי,D08.C06,medium,any,yes,Biscuits
+רגוסה,D08.C01,medium,any,yes,Chocolate
+היידי,D08.C01,medium,any,yes,Chocolate
+לינדט,D08.C01,medium,any,yes,Chocolate
+ריטר ספורט,D08.C01,medium,any,yes,Chocolate
+מרסי,D08.C01,medium,any,yes,Chocolate
+מנטוס,D08.C02,medium,any,yes,Candy (GS1 files it as gum)
+לוקיטוס,D08.C02,medium,any,yes,Lollipops
+מעיין,D08.C02,medium,first,yes,"Candy maker (sprays, rollers, lollipops)"
+קורני,D08.C10,medium,any,yes,Cereal bars
+פרוטאין מקס,D08.C10,medium,any,yes,Protein bars
+מוגו מוגו,D09,medium,any,yes,Drinks
+מירינדה,D09.C03.S02,medium,any,yes,Flavoured soft drink
+נשר מאלט,D09.C03,medium,any,yes,Malt drink
+סאן בנדטו,D09.C01,medium,any,yes,Water
+פרייה,D09.C01,medium,any,yes,Water
+פפסי,D09.C03.S01,medium,any,yes,Cola
+לוואצה,D09.C08,medium,any,yes,Coffee
+קפה עלית,D09.C08,medium,any,yes,Coffee
+פומפדור,D09.C09,medium,any,yes,Tea
+יקבי כרמל,D10.C01,medium,any,yes,Wine
+תנובה,D02,medium,any,yes,Dairy
+יטבתה,D02,medium,any,yes,Dairy
+פיראוס,D02,medium,any,yes,Dairy
+מחלבות רמת הגולן,D02,medium,any,yes,Dairy
+איל דה פרנס,D02.C02,medium,any,yes,Cheese
+סוגת,D07,medium,any,yes,"Rice, pulses, sugar"
+מזרח ומערב,D07,medium,any,yes,"Asian and world foods, sauces"
+הררית,D07,medium,any,yes,Pantry
+מלח הארץ,D07.C15,medium,any,yes,Salt
+סוכרזית,D07.C19,medium,any,yes,Sweetener
+כרגיל,D07.C18,medium,any,yes,Baking aids
+ריו מרה,D07.C07,medium,any,yes,Canned fish
+אנג'ל,D05,medium,any,yes,Bakery
+דוידוביץ,D05,medium,any,yes,Bakery
+סנו,D11,medium,any,yes,Cleaning
+יעקבי,D11,medium,any,yes,Cleaning
+טאצ,D11,medium,any,yes,Cleaning
+סנט מוריץ,D11,medium,any,yes,Cleaning
+tnx,D11,medium,any,yes,Cleaning
+xpo,D11,medium,any,yes,Cleaning
+ניקול,D11,medium,any,yes,Paper and cleaning
+אריאל,D11.C01,medium,any,yes,Laundry
+לנור,D11.C01,medium,any,yes,Laundry
+ספירה,D11.C06,medium,any,yes,Pest control
+"ד""ר פישר",D12,medium,any,yes,Personal care
+קרמה,D12,medium,any,yes,Personal care
+קרליין,D12,medium,any,yes,Personal care
+ספיד סטיק,D12.C05,medium,any,yes,Deodorant
+פלמוליב,D12.C04,medium,any,yes,Soap and bath
+אולוויז,D12.C11,medium,any,yes,Feminine hygiene
+טמפקס,D12.C11,medium,any,yes,Feminine hygiene
+סנסודיין,D12.C09,medium,any,yes,Oral care
+אורל בי,D12.C09,medium,any,yes,Oral care
+ג'ילט,D12.C10,medium,any,yes,Shaving
+מגע הדבש,D12.C10,medium,any,yes,Hair removal
+פאלטה,D12.C02,medium,any,yes,Hair colour
+got2b,D12.C03,medium,any,yes,Hair styling
+סאיוס,D12.C03,medium,any,yes,Hair styling
+סקין גארד,D12,medium,any,yes,Personal care
+דאב,D12,medium,any,yes,Personal care (Dove)
+נקסקר,D12.C15,medium,any,yes,Plasters and first aid
+hy,D12.C12,medium,first,yes,HY-GLAM / HY-SCULPT make-up
+ג'ונסון בייבי,D13.C05,medium,any,yes,Baby toiletries are baby (SU11A-7)
+בייבי כיף,D13.C05,medium,any,yes,Baby toiletries are baby (SU11A-7)
+האגיס,D13,medium,any,yes,Baby
