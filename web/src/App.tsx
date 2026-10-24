@@ -24,10 +24,12 @@ const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
 const DisclaimerPage    = lazy(() => import('./pages/DisclaimerPage'));
 const AccessibilityPage = lazy(() => import('./pages/AccessibilityPage'));
 const PartnershipsPage  = lazy(() => import('./pages/PartnershipsPage'));
+// SU11A-54: the admin console, its own chunk; only admin.xxl.co.il loads it.
+const AdminApp          = lazy(() => import('./admin/AdminApp'));
 // Utilities
 import { getCities } from './api/client';
 import type { CityInfo } from './api/client';
-import { isPortalHostname } from './utils/hostname';
+import { isAdminHostname, isPortalHostname } from './utils/hostname';
 import { applyRouteMeta } from './utils/seoMeta';
 import { initGA, trackPageview } from './utils/analytics';
 import CookieBanner from './components/CookieBanner';
@@ -71,7 +73,20 @@ function AppShell() {
   );
 }
 
+// SU11A-54: admin.xxl.co.il (localhost?admin=1) serves ONLY the admin app: no
+// shop routes, header, cookie banner or analytics. Decided once per page load.
 export default function App() {
+  if (isAdminHostname()) {
+    return (
+      <Suspense fallback={<div className="min-h-screen" />}>
+        <AdminApp />
+      </Suspense>
+    );
+  }
+  return <SiteApp />;
+}
+
+function SiteApp() {
   const location = useLocation();
 
   useEffect(() => {
