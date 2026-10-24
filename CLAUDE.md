@@ -21,7 +21,8 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 15. **CC never deploys, never runs EAS builds, never calls `DELETE /account`, never modifies production data.** Dude runs `scripts\deploy_frontend.ps1` and EAS builds. Never delete the Supabase users x@xxl.co.il or gplay@xxl.co.il (the Play demo account); throwaway test users are created in Supabase → Authentication → Users → Add user (Auto Confirm).
 
 ## Status / next steps
-Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-52 (SU11A-37 reserved).
+Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-53 (SU11A-37 reserved).
+- Catalog categories: manual > ai > gs1 > rule; automated runs never overwrite manual/reviewed (enforced in `scripts/catalog/store.py`; tables in `db/migrations/su11a52_catalog.sql`).
 - RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1 on Play.
 - Legal entity: XXL Enterprises (XXL אנטרפרייזס), the Play-verified organisation; legal texts use the constant LEGAL_ENTITY_NAME in web/src/legal/terms.ts and xxl-super-mobile/src/legal/terms.ts
 - Apple track sessions use the new sub-series SU11B (first: SU11B-1)
@@ -61,7 +62,7 @@ Current status and the open-items list live at the end of `docs/super/handoff_su
 
 ## Parked (do not raise)
 - Store 450 and the 3 CBS-mismatch stores - parked until store accuracy reaches 98-100%.
-- The manufacturer outreach email (after Sukkot). (Category classification / taxonomy was unparked 2026-10-11 for faceted filters: SU11A-35 design; SU11A-51 taxonomy v0 + rule classifier in `docs/catalog/`, awaiting Dude's review.)
+- The manufacturer outreach email (after Sukkot). (Category classification / taxonomy was unparked 2026-10-11 for faceted filters: SU11A-35 design; SU11A-51 taxonomy v0; SU11A-52 taxonomy v1, category tables, AI labels and import in `docs/catalog/` - built, not applied: `docs/catalog/su11a52_runbook.md`.)
 
 ## Repo layout policy (established SU10M-2)
 - **C:\scrp is the root for the entire XXL codebase family**, not just the supermarket vertical. Every XXL-related repo lives as a subfolder under it.

@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: 23 Oct 2026 (SU11A-51: catalogue study, taxonomy v0 (16 departments / 151 categories), rule classifier prototype + 400-item review sample; offline, no schema; SU11A-50: filtered search (/compare, city / chain / store) on the v2 path behind SEARCH_V2_FILTERED + faster v2 candidate step; not deployed; SU11A-49: security fixes F-01..F-05 built, nginx files + runbook, compliance drafts; not deployed; SU11A-48: security review; SU11A-47: search speed - precomputed page prices, /suggest type-ahead, response cache, web combobox, mobile suggestions; built, not deployed; SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
+> Last updated: 24 Oct 2026 (SU11A-52: catalog categories v1 - taxonomy v1, category tables (migration not applied), AI labels for 44K uncertain items, server import + daily new-barcode classification, service rows hidden, nameless-item fallback names; nothing applied or deployed; SU11A-51: catalogue study, taxonomy v0 (16 departments / 151 categories), rule classifier prototype + 400-item review sample; offline, no schema; SU11A-50: filtered search (/compare, city / chain / store) on the v2 path behind SEARCH_V2_FILTERED + faster v2 candidate step; not deployed; SU11A-49: security fixes F-01..F-05 built, nginx files + runbook, compliance drafts; not deployed; SU11A-48: security review; SU11A-47: search speed - precomputed page prices, /suggest type-ahead, response cache, web combobox, mobile suggestions; built, not deployed; SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
 
 ## 📏 Standing rules (apply to every session)
 
@@ -948,6 +948,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-48 (Oct 22) — security review (read-only): `docs/security/su11a48_security_review.md`. 2 High (unbounded old-path price fetch + no DB statement timeout; no rate limiting), 6 Medium, sudo command list for Dude, Data Security Regulations gap table. No code or server change.
 - SU11A-49 (Oct 22) — security fixes from SU11A-48: old-path search cap (1,000) + API-only 15 s DB timeout (503 query_timeout), JWKS refetch throttle, nginx rate limits + security headers + CSP Report-Only (files in `deploy/nginx/`), web-root modes on deploy, Hebrew compliance drafts (`docs/compliance/`). Runbook `docs/security/su11a49_runbook.md`. Not deployed.
 - SU11A-50 (Oct 22) — `/compare` and `/search` with city / chain / group_by=store on the v2 path behind `SEARCH_V2_FILTERED` (default off): v2 candidates walked in batches against the filter, only the page priced; v2 candidate step counts and orders in SQL (no token table, no migration). Runbook `docs/super/su11a50_runbook.md`. Not deployed.
+- SU11A-52 (Oct 24) — catalog categories v1: taxonomy v1 + brand hints, migration `su11a52_catalog.sql` (categories / item_categories / item_attributes, NOT applied), precedence manual > ai > gs1 > rule, AI labels (Claude Haiku 5.5, 44,362 items, ~$1.16), server import (dry run default), build hook for new barcodes, service rows pseudo, nameless fallback names. Final coverage 82.6% high / 5.5% medium / 10.4% low / 1.4% unclassified. Runbook `docs/catalog/su11a52_runbook.md`.
 - SU11A-51 (Oct 23) — catalogue study + taxonomy v0 (16 departments, 151 categories, 34 sub-types) + offline rule classifier prototype (rules + GS1: 89.5% classified; 80% department agreement with GS1) + 400-item review sample for Dude, all in `docs/catalog/`. No schema, nothing deployed.
 
 Next free session ID: see the last line of this file (moved in SU11A-23)
@@ -1529,7 +1530,175 @@ The CSVs are force-added (`*.csv` is gitignored).
 
 ---
 
-## 📋 Open items / next steps (as of 23 Oct 2026)
+### SU11A-52 (24 Oct 2026) - catalog categories v1: taxonomy v1, storage, AI labels, import; NOTHING applied or deployed
+
+Runbook for Dude: `docs/catalog/su11a52_runbook.md`. Production was only read: one read-only export over ssh (as dude, READ ONLY transaction, statement_timeout 60 s, `ulimit -v 1500000`, 19 s; 131,324 live non-pseudo rows, kept outside the repo). No migration applied, no production write, no API / web / mobile change, no new endpoint. The AI key came from `XXL_CAT_AI_KEY` only and appears in no file, log or commit.
+
+**Taxonomy v1** (Dude's decisions, 24 Oct). All v0 ids are kept, with the same parents and levels.
+- **Structure:**
+  - 16 departments, 201 nodes;
+  - frozen fruit in D06.C02;
+  - tobacco is its own category, D10.C05, and liqueurs are D10.C04, so a hide switch can target alcohol and tobacco separately.
+- **Renamed nodes:**
+  - D04.C02 is now "חומוס וטחינה מוכנה": prepared hummus and tahini, deli;
+  - D07.C20 is now "ממרחים, ריבות וטחינה גולמית": raw tahini paste moved here, next to the nut butters (pantry spreads).
+- **Keyword additions** come from the top unclassified words. Among them:
+  - perfumes (אדפ / אדט);
+  - contact lenses;
+  - "חטיף X" (crisps, cheese sticks, seaweed, pet treats);
+  - frozen brands (סנפרוסט) and ice-lolly names;
+  - plant-based "מן הצומח";
+  - "פילה עוף / הודו" (previously fish);
+  - turkey necks, chicken steak, carbonated drinks;
+  - tobacco brands and פקט;
+  - household items.
+- **Over-broad negatives removed:**
+  - D05 "בטעם" / "קרם" vetoed real cakes;
+  - D03 "פרוס" vetoed raw sliced cuts;
+  - D02.C02 "חטיף*";
+  - D09.C05 "תות".
+- **New file `brand_category_hints_v1.csv`** (80 brands). If the plain result is already in the brand's department, it stands. Otherwise the brand's words are removed and the rules run on the rest, so שמיר hummus is no longer dill and טבע דלי is no longer a bucket. When nothing matches, the brand's category is used at medium.
+- **GS1 map v1:** "Fish - Prepared_Processed (Frozen)" is unmapped. Its v0 id D06 contradicted the rule that raw frozen fish stays in D03.
+- **Rules + GS1 on the refreshed export:**
+
+  | | high | medium | low | unclassified | Agreement with GS1 (category / department) |
+  |---|---:|---:|---:|---:|---|
+  | v0 | 64.2% | 22.9% | 1.7% | 11.2% | 70.2% / 80.4% |
+  | v1 | 66.1% | 23.7% | 1.7% | 8.5% | 70.9% / 81.3% |
+
+  Chains-weighted unclassified fell from 7.4% to 5.8%.
+
+**Storage** (`db/migrations/su11a52_catalog.sql`, NOT applied):
+- tables `categories`, `item_categories` (FK to categories; CHECKs on confidence and source) and `item_attributes`;
+- indexes on category and attribute lookups; no triggers;
+- additive, idempotent, one transaction, OWNER scrp_app.
+- **Precedence: manual > ai > gs1 > rule** (`scripts/catalog/store.py`).
+  - Automated writes never overwrite a manual row, never replace a row of a higher source, and never touch `reviewed = true`.
+  - The rule is enforced in the upsert's ON CONFLICT ... WHERE (and in Python for the dry-run counts).
+
+**Cleanup** (in `db/search_norm.py` + `scripts/build_search_items.py`):
+- **Service rows are pseudo items** like coupons. Patterns, all anchored to the start of the name:
+  - `deposit_first_word`: פיקדון / פקדון, החזר / זיכוי / ארגז פקדון;
+  - `delivery_first_word`: משלוח / משלוחים / הובלה, but not "משלוח מנות";
+  - `fee_first_word`: דמי טיפול / משלוח / ..., עמלת, תשלום על, מיחזור אריזה.
+  - On the export: 0 are hidden today. The rule hides 95 on today's names, or 99 with the name fallback (deposit 50, delivery 36, fees 13). No false positives in the list.
+- **Nameless items:** 1,366 live items have an empty `items.item_name`. 1,230 get a name from `item_chain_names` (the most common non-empty name); GS1 adds 0 on the export. `name_norm` uses the fallback. The API's display name already falls back to the chain's own name.
+
+**AI pass** (`scripts/catalog/classify_ai.py`, run locally):
+- **Input:** the v1 unclassified / low / medium items with a name, not pseudo: 44,362 items in 888 batches of 50.
+- **Per item:** index, normalised name, real manufacturer, GS1 group.
+- **Request setup:**
+  - cached system prompt: the v1 tree + the overlap rules, about 9.2K tokens;
+  - structured output with an enum of the v1 ids + "unknown", and every id validated again in the script;
+  - concurrency 4, SDK retries;
+  - checkpoint and resume;
+  - a hard `--max-requests` budget and a consecutive-error breaker;
+  - a run log with token usage and estimated cost.
+- **Pilot A** (100 GS1-mapped items, sent with the GS1 group hidden):
+  - These are by construction the cases where the rules and GS1 disagreed.
+  - **Agreement with GS1:**
+
+    | | Category | Department |
+    |---|---:|---:|
+    | AI | 23% | 51% |
+    | Rules alone | 1% | 34% |
+
+  - Hand review of the AI-vs-GS1 disagreements found about 38 of 76 to be GS1 filing errors or taxonomy choices, so true AI accuracy on this slice is about 60%.
+  - **Variants on the same 100 items:**
+
+    | Variant | Category / department vs GS1 | Cost |
+    |---|---|---|
+    | Haiku, thinking off | 23% / 51% | $0.005 |
+    | Haiku, adaptive thinking at low effort | 20% / 51% | $0.004 |
+    | Sonnet 5.5, low effort | 28% / 54% | $0.07 (about $32 for the full set) |
+
+    The two Haiku runs agree on only 62% of labels, mostly on low-confidence answers.
+- **Pilot B** (100 items without GS1; a 50-item hand check by Claude, ±10 points):
+  - AI 35/50 (70%) vs rules 24/50 (48%) on the same items;
+  - by AI confidence: high 30/32, medium 5/13, low 0/4.
+- **Gate:** passed, so the full set ran on Haiku with thinking off.
+- **Full run:**
+  - 888/888 requests, 0 failed, 0 missing;
+  - tokens: 1.64M uncached input, 8.20M cache reads, 1.83M output;
+  - estimated cost **$1.16**, 29 minutes;
+  - AI confidence: high 25,493, medium 11,271, low 7,598 (unknown 2,431);
+  - output `docs/catalog/ai_labels_v1.csv`.
+- **Combination** (`scripts/catalog/combine.py`; the same function runs in the server import):
+  - a high rule / GS1 result stands;
+  - AI high or medium replaces a low or unclassified rule result;
+  - when the AI agrees with a medium rule result (same lineage or the same category), the result is high;
+  - a disagreement at medium / high is marked low, taking the AI id when the AI is high and otherwise the rule id. These go to `docs/catalog/disagreements_v1.csv` (top 300 by chains_live).
+
+**Final coverage** (131,225 items):
+
+| | high | medium | low | unclassified |
+|---|---:|---:|---:|---:|
+| Items | 82.6% | 5.5% | 10.4% | 1.4% |
+| Chains-weighted | 83.4% | 4.7% | 11.1% | 0.8% |
+
+- **By source:**
+
+  | Source | high | medium | low |
+  |---|---:|---:|---:|
+  | rule | 91,362 | 3,213 | 4,607 |
+  | gs1 | 10,781 | 114 | 288 |
+  | ai | 6,294 | 3,883 | 8,809 |
+
+- **Disagreements:** 11,106, of which 4,575 stay in the same department. Top patterns:
+  - disposables / tableware vs party goods;
+  - beef for grilling vs for cooking;
+  - offal vs cooking cuts;
+  - juice vs soft drinks;
+  - chocolate vs candy / cookies / wafers;
+  - make-up / body care vs face care;
+  - turkey vs chicken.
+- **Known AI weak spot:** smoked fish goes to D03 against the taxonomy (D04.C04). Rule fixes are applied for the clear rule errors.
+
+**Server scripts** (Dude runs them):
+- `scripts/catalog/import_categories.py`:
+  - computes rules + GS1 from `search_items` / `gs1.products` and combines them with the AI labels;
+  - dry run by default (READ ONLY): counts per source / confidence and insert / update / unchanged / protected;
+  - `--apply` writes everything in one transaction, in chunks of 2,000;
+  - `--manual REVIEWED.csv` turns filled `correct_category_id` rows into manual, reviewed rows;
+  - refuses to run when the migration is missing.
+- `build_search_items.py --apply` classifies **new** live barcodes into `item_categories`:
+  - source rule or gs1, ON CONFLICT DO NOTHING;
+  - skips with one warning when the tables are missing or `categories` is empty;
+  - never fails the build; `--no-categories` turns it off.
+- **Review sample:** `docs/catalog/review_sample_v1.csv`, 150 rows (the 100 most widely sold + 50 random) with an empty `correct_category_id`.
+
+**Tests:**
+- `tests/test_catalog_su11a52.py`: 101 tests covering:
+  - precedence, the service patterns, the fallback name and brand hints;
+  - v1 integrity and rule pins;
+  - AI validation, budget, breaker, resume and the key never in files, with a mocked API;
+  - combine, the build hook and import planning.
+- `tests/test_catalog_su11a52_pg.py`: 6 Postgres tests:
+  - the migration twice, owners, no triggers;
+  - dry run writes nothing, then apply;
+  - precedence in the database and manual override;
+  - refusal without the migration;
+  - the build hook and the fallback-name SQL.
+- **Full suite** (throwaway venv outside the repo, local Postgres 16): **548 passed**, plus the 14 known `api/tests/test_smoke.py` failures (they need a live DATABASE_URL).
+
+**Commits:**
+- `bb511e9` feat (taxonomy v1, storage, import, cleanup);
+- `6bd1efa` data (AI labels, disagreements, review sample, small rule / combine follow-ups);
+- docs (this entry, runbook).
+
+**Next (Dude):**
+1. Apply the migration.
+2. Pull.
+3. Let the build run once.
+4. Import with `--dry-run`, then `--apply` (runbook).
+5. Grade `review_sample_v1.csv` and `disagreements_v1.csv`, then import them with `--manual`.
+6. Decide: Sonnet 5.5 for a second opinion on the 13.7K low rows (about $10), or rely on the reviews.
+
+Then: facet UI and API (separate session), and the alcohol / tobacco hide switch.
+
+---
+
+## 📋 Open items / next steps (as of 24 Oct 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS stays off until build 8 has replaced 1.2.1. Lawyer review of the terms is Dude's call.
 - **SU11A-36 Search v2:** SEARCH_V2=on since 21 Oct 2026; timer daily 14:30.
@@ -1538,8 +1707,7 @@ The CSVs are force-added (`*.csv` is gitignored).
 - **SU11A-47 search speed:** built, not deployed. Run `docs/super/su11a47_search_speed_runbook.md` (migration, build, check-precomputed, restart, curl), then the web deploy. Mobile suggestions ship in build 9.
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
 - **Catalog:**
-  - **SU11A-51 taxonomy v0: Dude grades `docs/catalog/review_sample_v0.csv`** (fill `correct_category_id` where wrong) and answers the review points in `docs/catalog/su11a51_catalog_study.md` section 2; then the AI-assisted classification pass, then a migration session for the category tables;
-  - hide the 77 service rows (פיקדון, משלוח) like coupons, and look at the 1,355 live items with an empty name;
+  - **SU11A-52 catalog v1: built, NOT applied.** Run `docs/catalog/su11a52_runbook.md` (migration, pull, one build, import dry run then apply). Then grade `docs/catalog/review_sample_v1.csv` and `disagreements_v1.csv` and import them with `--manual`. Service rows and nameless names are handled by the same build;
   - category / attribute faceted filters;
   - a switch to hide tobacco and alcohol;
   - optionally, move the location prompt to a contextual moment.
@@ -1558,4 +1726,4 @@ The CSVs are force-added (`*.csv` is gitignored).
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-52 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).
+Next free session ID: SU11A-53 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).
