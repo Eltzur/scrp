@@ -141,5 +141,21 @@
     "consent_after": "ואני מסכים/ה להם.",
     "terms_failed": "אישור התנאים נכשל. נסו שוב.",
     "account_banned": "החשבון הוגבל ואינו יכול לפרסם ביקורות או דיווחים. לפרטים: info@xxl.co.il"
+  },
+  "apps": {
+    "section_title": "SUPER XXL באפליקציה",
+    "section_sub": "השוואת מחירים מהטלפון, עם סריקת ברקוד בסופר",
+    "play_alt": "הורידו את SUPER XXL מ-Google Play",
+    "ios_soon": "בקרוב גם ל-iPhone",
+    "ios_store_alt": "הורידו את SUPER XXL מ-App Store",
+    "footer_title": "האפליקציה",
+    "banner_label": "אפליקציית SUPER XXL",
+    "banner_android": "SUPER XXL זמינה לאנדרואיד —",
+    "banner_android_link": "הורידו מ-Google Play",
+    "banner_ios": "אפליקציית SUPER XXL ל-iPhone תגיע בקרוב.",
+    "banner_ios_sub": "בינתיים אפשר להשתמש באתר.",
+    "banner_ios_live": "SUPER XXL זמינה ל-iPhone —",
+    "banner_ios_link": "הורידו מ-App Store",
+    "banner_close": "סגירה"
   }
 }

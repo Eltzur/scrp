@@ -4,6 +4,7 @@ import { Search, ShoppingCart, Sun, Shirt, Gift, Clock, Sparkles } from 'lucide-
 import XxlLogo from '../components/XxlLogo';
 import XxlLogoPortal from '../components/XxlLogoPortal';
 import Footer from '../components/Footer';
+import AppBadges from '../components/AppBadges';
 import { classifyAndRoute } from '../utils/portalSearchRouter';
 
 const PLACEHOLDERS = [
@@ -102,18 +103,22 @@ export default function PortalPage() {
       <section className="max-w-4xl mx-auto px-4 mt-16">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-          {/* מצרכים — LIVE */}
-          <button
-            onClick={() => { window.location.href = 'https://super.xxl.co.il'; }}
-            className="bg-white border-2 border-emerald-600 rounded-2xl p-6 text-center hover:shadow-lg hover:-translate-y-1 transition-all relative cursor-pointer"
-          >
-            <span className="absolute top-3 left-3 bg-emerald-700 text-white text-xs font-medium px-2 py-1 rounded">
-              LIVE
-            </span>
-            <ShoppingCart size={40} className="text-emerald-700 mx-auto" />
-            <p className="text-lg font-semibold text-[#022C22] mt-3">מצרכים</p>
-            <p className="text-sm text-gray-600 mt-1">השוואת מחירי סופר</p>
-          </button>
+          {/* מצרכים — LIVE. SU11A-53: a card (not one button) so the app badges
+              can sit inside it as their own links. */}
+          <div className="bg-white border-2 border-emerald-600 rounded-2xl text-center hover:shadow-lg hover:-translate-y-1 transition-all relative">
+            <button
+              onClick={() => { window.location.href = 'https://super.xxl.co.il'; }}
+              className="w-full p-6 pb-3 rounded-2xl cursor-pointer"
+            >
+              <span className="absolute top-3 left-3 bg-emerald-700 text-white text-xs font-medium px-2 py-1 rounded">
+                LIVE
+              </span>
+              <ShoppingCart size={40} className="text-emerald-700 mx-auto" />
+              <p className="text-lg font-semibold text-[#022C22] mt-3">מצרכים</p>
+              <p className="text-sm text-gray-600 mt-1">השוואת מחירי סופר</p>
+            </button>
+            <AppBadges size="sm" className="px-4 pb-5" />
+          </div>
 
           {/* חופשות — LIVE */}
           <button

@@ -8,6 +8,7 @@ import StatsBar from '../components/StatsBar';
 import FreshnessStrip from '../components/FreshnessStrip';
 import ResultsList from '../components/ResultsList';
 import ProductDetailModal from '../components/ProductDetailModal';
+import AppBadges from '../components/AppBadges';
 import { useSearch, useCompare } from '../api/hooks';
 import { searchProducts, compareProducts, getProduct, isBusyError } from '../api/client';
 import type { ProductWithPrices, CityInfo } from '../api/client';
@@ -182,6 +183,15 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
         </section>
 
         <SearchBar onSearch={handleSearch} onOpenProduct={handleOpenProduct} />
+
+        {/* SU11A-53: the app section, on the start screen only (results take its place) */}
+        {!query && (
+          <section aria-labelledby="app-section-title" className="text-center py-3">
+            <h2 id="app-section-title" className="text-lg font-bold text-[#022C22]">{t('apps.section_title')}</h2>
+            <p className="text-sm text-gray-600 mt-1">{t('apps.section_sub')}</p>
+            <AppBadges size="md" className="mt-3" />
+          </section>
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Filters filters={filters} onChange={handleFiltersChange} cities={cities} />

@@ -1,0 +1,10 @@
+google-play-he.png
+  Official Google Play badge, Hebrew ("iw"), "Get it on Google Play" (כעת ב- Google Play), 646 x 250 PNG.
+  Source: https://play.google.com/intl/en_us/badges/static/images/badges/iw_badge_web_generic.png
+  (the file Google's badge page https://play.google.com/intl/en_us/badges/ serves for the Hebrew locale)
+  Downloaded 24 Oct 2026 (SU11A-53). Used as is: not redrawn, recoloured, cropped or altered.
+  The PNG already contains Google's clear space around the badge; display it no smaller than 40 px tall
+  (web/src/components/AppBadges.tsx). Google Play and the Google Play logo are trademarks of Google LLC.
+
+No Apple artwork here: the App Store badge and the Apple logo may only be used once the iOS app is live
+on the App Store (see IOS_APP_URL in web/src/config/apps.ts).

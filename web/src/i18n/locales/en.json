@@ -141,5 +141,21 @@
     "consent_after": "and I agree to them.",
     "terms_failed": "Could not record your acceptance. Please try again.",
     "account_banned": "This account is restricted and cannot post reviews or reports. Details: info@xxl.co.il"
+  },
+  "apps": {
+    "section_title": "SUPER XXL app",
+    "section_sub": "Compare prices on your phone, with barcode scanning in the store",
+    "play_alt": "Get SUPER XXL on Google Play",
+    "ios_soon": "Coming soon for iPhone",
+    "ios_store_alt": "Download SUPER XXL on the App Store",
+    "footer_title": "The app",
+    "banner_label": "SUPER XXL app",
+    "banner_android": "SUPER XXL is available for Android —",
+    "banner_android_link": "get it on Google Play",
+    "banner_ios": "The SUPER XXL iPhone app is coming soon.",
+    "banner_ios_sub": "Meanwhile, you can use the website.",
+    "banner_ios_live": "SUPER XXL is available for iPhone —",
+    "banner_ios_link": "download on the App Store",
+    "banner_close": "Close"
   }
 }

@@ -15,6 +15,7 @@ import PromosPage from './pages/PromosPage';
 // Portal routes — rendered without the supermarket app shell
 import PortalPage from './pages/PortalPage';
 import Footer from './components/Footer';
+import AppBanner from './components/AppBanner';
 // Rarely visited pages load on demand (SU11A-46) to keep the main chunk small.
 const DeleteAccountPage = lazy(() => import('./pages/DeleteAccountPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
@@ -46,6 +47,8 @@ function AppShell() {
       <FavoritesProvider>
         <Toaster position="top-center" duration={4000} dir="rtl" />
         <BasketDrawer />
+        {/* SU11A-53: Android / iPhone app banner (none on desktop), above the header */}
+        <AppBanner />
         <Header />
         <Suspense fallback={<div className="min-h-screen" />}>
         <Routes>

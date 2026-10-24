@@ -1,4 +1,5 @@
 import { isPortalHostname } from './hostname';
+import { PLAY_APP_ID, PLAY_STORE_URL } from '../config/apps';
 
 /**
  * Per-route head tags (SU11A-46): title, description, canonical, Open Graph /
@@ -18,6 +19,13 @@ import { isPortalHostname } from './hostname';
  * www.xxl.co.il always canonicalises to the apex; the query string is dropped.
  * localhost maps to the production host it simulates (?portal=1 = portal).
  * The sitemaps in web/public list exactly the indexable URLs below.
+ *
+ * SU11A-53: every page served on the super host carries
+ * <meta name="google-play-app" content="app-id=...">, and the super home adds
+ * a SoftwareApplication JSON-LD block for the Android app. No apple-itunes-app
+ * meta until the iOS app is live. (Head tags only: the inline script in
+ * index.html is untouched, its CSP hash stays valid; a JSON-LD data block is
+ * not script and needs no script-src entry.)
  */
 
 const PORTAL_ORIGIN = 'https://xxl.co.il';
@@ -80,7 +88,23 @@ export interface ResolvedMeta {
   canonical: string | null;
   noindex: boolean;
   image: string;
+  /** content of <meta name="google-play-app">, or null (portal host). */
+  playApp: string | null;
+  /** SoftwareApplication JSON-LD for the super home, else null. */
+  jsonLd: Record<string, unknown> | null;
 }
+
+/** The Android app, as schema.org SoftwareApplication (super home only). */
+export const APP_JSON_LD: Record<string, unknown> = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'SUPER XXL',
+  operatingSystem: 'ANDROID',
+  applicationCategory: 'ShoppingApplication',
+  url: PLAY_STORE_URL,
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'ILS' },
+  publisher: { '@type': 'Organization', name: 'XXL Team' },
+};
 
 /** Pure: the head tags for a path on the given kind of host. */
 export function resolveRouteMeta(pathname: string, portalHost: boolean): ResolvedMeta {
@@ -95,6 +119,8 @@ export function resolveRouteMeta(pathname: string, portalHost: boolean): Resolve
     meta = standaloneMeta(path, brand) ?? SUPER_ROUTES[path] ?? null;
   }
   const currentOrigin = portalHost ? PORTAL_ORIGIN : SUPER_ORIGIN;
+  const playApp = portalHost ? null : `app-id=${PLAY_APP_ID}`;
+  const jsonLd = !portalHost && path === '/' ? APP_JSON_LD : null;
   if (!meta) {
     // Unknown path: the SPA fallback answers 200 with the app shell. Keep it
     // out of the index and give it no canonical.
@@ -104,6 +130,8 @@ export function resolveRouteMeta(pathname: string, portalHost: boolean): Resolve
       canonical: null,
       noindex: true,
       image: `${currentOrigin}/${portalHost ? 'og-portal.png' : 'og-super.png'}`,
+      playApp,
+      jsonLd: null,
     };
   }
   const origin = meta.home === 'portal' ? PORTAL_ORIGIN : meta.home === 'super' ? SUPER_ORIGIN : currentOrigin;
@@ -113,6 +141,8 @@ export function resolveRouteMeta(pathname: string, portalHost: boolean): Resolve
     canonical: origin + (path === '/' ? '/' : path),
     noindex: !!meta.noindex,
     image: `${origin}/${origin === PORTAL_ORIGIN ? 'og-portal.png' : 'og-super.png'}`,
+    playApp,
+    jsonLd,
   };
 }
 
@@ -155,4 +185,20 @@ export function applyRouteMeta(pathname: string): void {
   const robots = document.head.querySelector('meta[name="robots"]');
   if (m.noindex) setMeta('name', 'robots', 'noindex');
   else robots?.remove();
+
+  if (m.playApp) setMeta('name', 'google-play-app', m.playApp);
+  else document.head.querySelector('meta[name="google-play-app"]')?.remove();
+
+  let ld = document.head.querySelector<HTMLScriptElement>('script#ld-app');
+  if (m.jsonLd) {
+    if (!ld) {
+      ld = document.createElement('script');
+      ld.type = 'application/ld+json';
+      ld.id = 'ld-app';
+      document.head.appendChild(ld);
+    }
+    ld.textContent = JSON.stringify(m.jsonLd);
+  } else {
+    ld?.remove();
+  }
 }
