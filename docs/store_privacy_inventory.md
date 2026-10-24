@@ -110,6 +110,7 @@ All in Postgres on the Kamatera VM except where noted. Deletion = `DELETE /accou
 | `rating_reports` (filed by the user) | reporter_user_id, reason (≤1000) | moderation | indefinite | Row kept, `reporter_user_id` SET NULL (`db/migrations/su10r1_ratings.sql:68`) |
 | `rating_reports` (about the user's ratings) | rating_id, reason | moderation | indefinite | CASCADE via `ratings` (`db/migrations/su10r1_ratings.sql:67`) |
 | `flights.alerts`, `flights.saved_searches` | user_id + flight search params | XXL Flights (shared account) | until deletion | Deleted explicitly (`api/routers/account.py:43-44`) |
+| `admin_audit` (SU11A-54) | actor_hash = sha256(salt + admin's user id), ip_hash = sha256(salt + IP); no email, no raw id; action, rating id, item code | record of admin actions (moderation) | proposed 1 year (no purge job yet) | Not linked: the hash cannot be reversed to the account; concerns admins, not app users |
 | `deleted_accounts` | user_id (UUID), timestamps, attempts, short error code; no email | block reuse of a deleted account's token, drive retries | purged 7 days after completion (`scripts/sweep_account_deletes.py:23, 34`) | It *is* the deletion record |
 | `portal_email_signups` (Supabase) | email, vertical, user agent, referrer | web "coming soon" sign-ups — **web only, not the app** | indefinite | Not linked to the account (policy section 8 says so) |
 | Search / scan history | — | **not stored per user** on the server; no search-log table (grep of `api/`, `db/`) | — | — |
@@ -305,3 +306,13 @@ The in-app summary must only restate the web policy, so deploy D1 first.
 - **Block lists and the consent record now exist (SU11A-44, not deployed):** `user_blocks` and `users.terms_version` / `users.terms_accepted_at` (plus `users.banned_at`, set only by a moderator).
   - The Data safety / App Privacy categories do not change; both fall under the existing account data and other user-generated content.
   - The web policy, the deletion page and the in-app summary mention them (SU11A-44). All of it is deleted with the account (FK CASCADE).
+
+## G. Updates (25 Oct 2026, SU11A-54)
+
+- **Admin console** (`admin.xxl.co.il`, not deployed). It adds one table, `admin_audit` (section 5), for the admins' own actions.
+  - The actor and the IP are salted sha256 hashes; there is no email and no raw id.
+  - Proposed retention: 1 year.
+- **No new user data category:**
+  - The console reads ratings, reports and ban flags that already exist, and shows no user email or id.
+  - The moderation queue API stopped returning user ids.
+  - The Data safety / App Privacy answers do not change.

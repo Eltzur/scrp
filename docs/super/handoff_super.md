@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: 24 Oct 2026 (SU11A-53: Google Play badge + "coming soon for iPhone" + platform app banner on the website, built, not deployed; Play Production LIVE 23 Oct; RATINGS_REQUIRE_TERMS on 24 Oct; SU11A-52: catalog categories v1 - taxonomy v1, category tables (migration not applied), AI labels for 44K uncertain items, server import + daily new-barcode classification, service rows hidden, nameless-item fallback names; nothing applied or deployed; SU11A-51: catalogue study, taxonomy v0 (16 departments / 151 categories), rule classifier prototype + 400-item review sample; offline, no schema; SU11A-50: filtered search (/compare, city / chain / store) on the v2 path behind SEARCH_V2_FILTERED + faster v2 candidate step; not deployed; SU11A-49: security fixes F-01..F-05 built, nginx files + runbook, compliance drafts; not deployed; SU11A-48: security review; SU11A-47: search speed - precomputed page prices, /suggest type-ahead, response cache, web combobox, mobile suggestions; built, not deployed; SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
+> Last updated: 25 Oct 2026 (SU11A-54: admin console phase 1 on admin.xxl.co.il - moderation, status, audit log, mandatory TOTP; existing /admin endpoints now need 2FA; built, not deployed; SU11A-53: Google Play badge + "coming soon for iPhone" + platform app banner on the website, built, not deployed; Play Production LIVE 23 Oct; RATINGS_REQUIRE_TERMS on 24 Oct; SU11A-52: catalog categories v1 - taxonomy v1, category tables (migration not applied), AI labels for 44K uncertain items, server import + daily new-barcode classification, service rows hidden, nameless-item fallback names; nothing applied or deployed; SU11A-51: catalogue study, taxonomy v0 (16 departments / 151 categories), rule classifier prototype + 400-item review sample; offline, no schema; SU11A-50: filtered search (/compare, city / chain / store) on the v2 path behind SEARCH_V2_FILTERED + faster v2 candidate step; not deployed; SU11A-49: security fixes F-01..F-05 built, nginx files + runbook, compliance drafts; not deployed; SU11A-48: security review; SU11A-47: search speed - precomputed page prices, /suggest type-ahead, response cache, web combobox, mobile suggestions; built, not deployed; SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
 
 ## 📏 Standing rules (apply to every session)
 
@@ -948,6 +948,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-48 (Oct 22) — security review (read-only): `docs/security/su11a48_security_review.md`. 2 High (unbounded old-path price fetch + no DB statement timeout; no rate limiting), 6 Medium, sudo command list for Dude, Data Security Regulations gap table. No code or server change.
 - SU11A-49 (Oct 22) — security fixes from SU11A-48: old-path search cap (1,000) + API-only 15 s DB timeout (503 query_timeout), JWKS refetch throttle, nginx rate limits + security headers + CSP Report-Only (files in `deploy/nginx/`), web-root modes on deploy, Hebrew compliance drafts (`docs/compliance/`). Runbook `docs/security/su11a49_runbook.md`. Not deployed.
 - SU11A-50 (Oct 22) — `/compare` and `/search` with city / chain / group_by=store on the v2 path behind `SEARCH_V2_FILTERED` (default off): v2 candidates walked in batches against the filter, only the page priced; v2 candidate step counts and orders in SQL (no token table, no migration). Runbook `docs/super/su11a50_runbook.md`. Not deployed.
+- SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
 - SU11A-53 (Oct 24) — website: official Hebrew Google Play badge (home section, super footer, portal card), "בקרוב גם ל-iPhone" text label behind `IOS_APP_URL`, Android / iPhone app banner, google-play-app meta + SoftwareApplication JSON-LD (`8bb81c6`, not deployed). Records: Play Production LIVE 23 Oct 2026; RATINGS_REQUIRE_TERMS on 24 Oct; unused ANTHROPIC_API_KEY removed from the server .env.
 - SU11A-52 (Oct 24) — catalog categories v1: taxonomy v1 + brand hints, migration `su11a52_catalog.sql` (categories / item_categories / item_attributes, NOT applied), precedence manual > ai > gs1 > rule, AI labels (Claude Haiku 5.5, 44,362 items, ~$1.16), server import (dry run default), build hook for new barcodes, service rows pseudo, nameless fallback names. Final coverage 82.6% high / 5.5% medium / 10.4% low / 1.4% unclassified. Runbook `docs/catalog/su11a52_runbook.md`.
 - SU11A-51 (Oct 23) — catalogue study + taxonomy v0 (16 departments, 151 categories, 34 sub-types) + offline rule classifier prototype (rules + GS1: 89.5% classified; 80% department agreement with GS1) + 400-item review sample for Dude, all in `docs/catalog/`. No schema, nothing deployed.
@@ -1773,13 +1774,133 @@ Web only (commit `8bb81c6`). No server, API or mobile change. Dude deploys with 
 
 ---
 
-## 📋 Open items / next steps (as of 24 Oct 2026)
+### SU11A-54 (25 Oct 2026) - admin console phase 1 on admin.xxl.co.il (moderation, platform status, audit log), 2FA mandatory; NOT deployed
+
+Built in three commits; nothing applied or deployed. Dude runs `docs/admin/su11a54_runbook.md`.
+
+**Principles:**
+- The console never edits secrets or `.env`, never runs shell commands or deploys, and never reaches the DB from the browser.
+- Every action is an authenticated API call into the same functions as `scripts/moderation.py` (`api/moderation.py`).
+- No user email or user id is shown or returned.
+- Every write is audited.
+
+**Gate:** `api/auth.py` `require_admin_mfa`, on every `/admin/*` endpoint, old and new. It needs all of:
+- a valid Supabase token;
+- an email in `ADMIN_USER_EMAILS` (fail closed) and an account that is not deleted;
+- the claim `aal == "aal2"`.
+
+Answers:
+- a failure of either of the first two -> 403 `{"code":"admin_required"}`;
+- no TOTP -> 403 `{"code":"mfa_required"}`;
+- a JWKS outage stays 503.
+
+The allowlist is checked first, so a non-admin never sees TOTP setup. The gate never writes the `users` row.
+
+**Behaviour change for the existing endpoints** (`GET /admin/ratings/pending`, `POST .../moderate`, `POST .../ban-author`):
+- 403 with a code instead of 404;
+- 2FA is required, so the x@ test account loses admin unless it enrols TOTP and is listed;
+- the queue no longer returns `user_id` / `reporter_user_id`, and gains `item_name`.
+
+**Migration** `db/migrations/su11a54_admin.sql` (NOT applied):
+- table `admin_audit`: id, at, actor_hash, action, target_type, target_id, detail jsonb, ip_hash;
+- indexes on `at DESC` and on `(target_type, target_id, at DESC)`;
+- `scrp_app` gets SELECT and INSERT only, so the API cannot rewrite the log.
+
+`actor_hash` and `ip_hash` are sha256 of a fixed salt plus the Supabase user id / client IP (`api/admin_audit.py`). There is no raw id, IP or email. The audit row is written on the same connection and before the commit of the change, so if the audit insert fails, the change rolls back.
+
+**Endpoints** (all admin + 2FA, `Cache-Control: no-store`, `Server-Timing`, JSON 500 `{"code":"server_error"}` without a stack; nginx rate limit and X-Robots-Tag as for every api-super path):
+- `GET /admin/me` returns `{is_admin, mfa}`.
+- `GET /admin/ratings/pending`, `POST /admin/ratings/{id}/moderate`, `POST /admin/ratings/{id}/ban-author`: the writes are audited as `rating.hide` / `rating.keep` / `rating.restore` / `rating.ban_author` / `rating.unban_author`.
+- `GET /admin/ratings/history?limit&before&before_id`: decisions by `reviewed_at`, with the last audited action. CLI decisions have none.
+- `GET /admin/ratings/{id}`:
+  - the rating and all its reports (source, reason, date; no reporter);
+  - the author as banned yes/no plus a count of active ratings;
+  - the audit trail.
+- `GET /admin/status` (cached 30 s):
+  - per-chain last price update (same source as `/freshness`) and live stores over 72 h (as `/coverage`);
+  - `search_items` / `search_item_prices` `built_at` and approximate rows;
+  - moderation pending / hidden in 7 days / banned users;
+  - DB size, disk free, process RSS and server memory (`/proc`, no sudo);
+  - per-worker 24 h counters (`api/metrics.py`): requests, 5xx, query_timeout, the app's own 429s. nginx 429s are not seen by the app.
+  - Anything unreadable is null.
+- `GET /admin/audit?limit&before`: the actor is shown as the first 10 hex characters of its hash; `ip_hash` is never returned.
+- **CORS:** `https://admin.xxl.co.il` is always allowed (`api/main.py` `ADMIN_ORIGIN`) and added to the nginx 429 CORS map.
+
+**Web** (same build; `web/src/admin/`, lazy):
+- **Hosts:** `isAdminHostname()` covers `admin.xxl.co.il` and, for dev, localhost `?admin=1`. On those hosts `App.tsx` renders only the admin app: no shop routes, header, cookie banner or GA. The page title is "XXL Admin", with `robots noindex,nofollow`, and the canonical / OG / app tags are removed.
+- **Login:** email + password, then `/admin/me` decides:
+  - not listed -> "אין הרשאת ניהול", no QR;
+  - no factor yet -> enrolment (QR as a `data:` SVG plus the manual key, `mfa.enroll`; stale unverified factors are removed first) -> 6-digit code (`mfa.challengeAndVerify`) -> aal2;
+  - already enrolled -> the 6-digit code only.
+  - Sign-out is available. The session is per origin.
+- **Screens** (Hebrew RTL, mobile first, 44/48 px targets, native `<dialog>` confirms, toasts):
+  - **לוח בקרה:** chain table with dot plus text (today green / yesterday amber / older red), build stamps, counters, server;
+  - **ביקורות לטיפול:** list, auto-refresh 60 s -> detail with comment and reports; הסתרה / השארה / שחזור / חסימת הכותב / ביטול חסימה, each confirmed;
+  - **היסטוריה;**
+  - **יומן פעולות;**
+  - the placeholder line "בקרוב: קטגוריות, הגדרות, סניפים".
+- **Strings:** 121 `admin.*` keys in `he.json` / `en.json` (246 keys total, parity OK).
+- **Bundle:** the admin code is in its own chunks (AdminApp about 14 kB plus four screen chunks). `npm run check:admin-chunk` reads a `--manifest` build and fails if any admin module is in the entry's static graph. It passed, and it failed as it should on a doctored manifest. The shop's main chunk did not change size (157.76 kB).
+
+**nginx + runbook (files only):**
+- `deploy/nginx/admin.xxl.co.il.conf`:
+  - layout copied from the live super site;
+  - 80 -> 301;
+  - 443 serves the same web root with `try_files`, the security headers, `X-Robots-Tag noindex`, `Cache-Control: no-store`, and a Report-Only CSP (self, Supabase, api-super, fonts; `data:` images for the QR; no analytics; frame-ancestors none);
+  - its own `robots.txt` with Disallow all;
+  - `limit_req zone=xxl_api`.
+- `admin.xxl.co.il.bootstrap.conf` exists only for `certbot certonly --nginx`.
+- `docs/admin/su11a54_runbook.md` covers:
+  - DNS;
+  - the Supabase TOTP / user checks;
+  - `.env` allowlist (count only);
+  - migration;
+  - restart;
+  - certificate, site and CORS map, with backups;
+  - web deploy with the hash check;
+  - curl checks, including `mfa_required` for an aal1 session;
+  - first TOTP enrolment;
+  - rollback.
+
+**Tests:**
+- `tests/test_admin_su11a54.py`, 27 tests:
+  - the three-check matrix on all 8 endpoints (no token / bad token / non-admin / admin aal1 / admin without aal / admin aal2);
+  - empty allowlist, deleted admin, no users-row write, JWKS 503;
+  - an audit row for every action, with no email, id or IP;
+  - audit-failure rollback;
+  - audit paging, history paging, detail without identities;
+  - status shape with unavailable sections null, the 30 s cache;
+  - `/admin/*` headers;
+  - CORS for the admin origin and the nginx map regex;
+  - nginx site contents;
+  - counter window.
+- `tests/test_admin_su11a54_pg.py`: 2 tests on a throwaway Postgres (migration twice, grants, jsonb insert, history cursor over tied timestamps, status on PG).
+- `tests/test_ugc_blocks.py` updated for the gate.
+- **Full suite** (throwaway venv): 549 passed, 29 skipped, 14 failed. The 14 are `api/tests/test_smoke.py`, which needs the server DB, the same as before the session.
+- **Web:** `npm run build` OK; `npx eslint src` 0 problems.
+- **Dev check** (real API on a seeded local Postgres, dev token):
+  - desktop and 390 px: no horizontal scroll on any screen, no button under 44 px;
+  - ban -> confirm -> toast -> the audit row and the history entry appear;
+  - a non-admin gets "אין הרשאת ניהול";
+  - the shop at `/` loads no admin module.
+
+**Deferred:**
+- phase 2/3 screens (categories, settings, stores);
+- audits for `scripts/moderation.py` writes;
+- a purge job for the 1-year audit retention;
+- switching the admin CSP from Report-Only to enforced;
+- nginx 429 counts in the status.
+
+---
+
+## 📋 Open items / next steps (as of 25 Oct 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (verified, SU11A-53). Lawyer review of the terms is Dude's call.
 - **SU11A-36 Search v2:** SEARCH_V2=on since 21 Oct 2026; timer daily 14:30.
 - **SU11A-50 filtered search:** built, not deployed. After the SU11A-47 runbook (and SU11A-49): `docs/super/su11a50_runbook.md` (compare `--filtered` go / no-go, then `SEARCH_V2_FILTERED=test`, then `on`). No web or mobile change needed.
 - **SU11A-49 security fixes:** built, not deployed. Run `docs/security/su11a49_runbook.md` (after or together with the SU11A-47 runbook; both restart scrp-api), then the web deploy. Then: review the compliance drafts in `docs/compliance/` (with an advisor for the לאימות items), the sudo checks in the SU11A-48 review, CSP enforcement after a clean week, and the open findings F-06 to F-23.
 - **SU11A-47 search speed:** built, not deployed. Run `docs/super/su11a47_search_speed_runbook.md` (migration, build, check-precomputed, restart, curl), then the web deploy. Mobile suggestions ship in build 9.
+- **SU11A-54 admin console:** built, not deployed. Run `docs/admin/su11a54_runbook.md` (DNS, Supabase TOTP, allowlist, migration, restart, certificate + site, web deploy, first TOTP enrolment). From then on every /admin call needs 2FA. Next phases: categories (SU11A-52 review), settings, stores.
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
 - **Catalog:**
   - **SU11A-52 catalog v1: built, NOT applied.** Run `docs/catalog/su11a52_runbook.md` (migration, pull, one build, import dry run then apply). Then grade `docs/catalog/review_sample_v1.csv` and `disagreements_v1.csv` and import them with `--manual`. Service rows and nameless names are handled by the same build;
@@ -1801,4 +1922,4 @@ Web only (commit `8bb81c6`). No server, API or mobile change. Dude deploys with 
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-54 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).
+Next free session ID: SU11A-55 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).
