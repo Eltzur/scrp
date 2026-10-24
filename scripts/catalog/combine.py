@@ -13,6 +13,9 @@ server, so the local report and the imported rows follow one rule:
   unclassified           low                     AI at low
   medium                 high / medium, same     the deeper of the two ids, high
                          lineage                 (source of the id that is used)
+  medium                 high / medium, sibling  the shared category id, high
+                         sub-type of the same
+                         category
   medium                 high / medium, other    DISAGREEMENT: low; the AI id when the
                          lineage                 AI is high, else the rule id; listed in
                                                  disagreements_v1.csv
@@ -51,6 +54,10 @@ def _depth(nid: str) -> int:
     return nid.count(".")
 
 
+def _category(nid: str) -> str:
+    return ".".join(nid.split(".")[:2])
+
+
 def combine_label(rule: dict, ai: dict | None, valid_ids: set[str] | None = None) -> dict | None:
     """Final label for one item, or None when it stays unclassified.
 
@@ -80,6 +87,11 @@ def combine_label(rule: dict, ai: dict | None, valid_ids: set[str] | None = None
         if _depth(aid) > _depth(rid):
             return {**as_ai, "confidence": "high", "detail": f"{adetail} | agrees with {src} {rid}"[:300]}
         return {**base, "confidence": "high", "detail": f"{detail} | ai agrees ({aid})"[:300], "ai_category_id": aid}
+    cat = _category(rid)
+    if cat == _category(aid) and "." in cat:
+        # sibling sub-types of one category: both agree on the category
+        return {**base, "category_id": cat, "confidence": "high",
+                "detail": f"{detail} | ai agrees on the category ({aid})"[:300], "ai_category_id": aid}
     if aconf == "high":
         return {**as_ai, "confidence": "low", "disagreement": True,
                 "detail": f"{adetail} | DISAGREES with {src} {rid}"[:300]}

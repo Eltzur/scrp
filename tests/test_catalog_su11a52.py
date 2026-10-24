@@ -388,6 +388,8 @@ def ai(cid, conf):
     (R_MED, ai("D05.C05", "high"), ("D05.C05", "low", "ai", True)),               # disagree, AI high
     (R_MED, ai("D05.C05", "medium"), ("D08.C01", "low", "rule", True)),           # disagree, AI medium
     (R_GS1, ai("D09.C04", "high"), ("D09.C04", "high", "gs1", False)),
+    ({**R_MED, "category_id": "D08.C01.S02"}, ai("D08.C01.S01", "high"),
+     ("D08.C01", "high", "rule", False)),                                       # sibling sub-types: the category
     (R_MED, ai("D99.C01", "high"), ("D08.C01", "medium", "rule", False)),         # invalid AI id ignored
 ])
 def test_combine_label(v1, rule, a, want):
