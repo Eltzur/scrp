@@ -1,14 +1,17 @@
 """Israeli Price Comparison API."""
+import json
 import logging
 import os
+import time
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import DBAPIError
 
+from api import metrics
 from api.auth import ApiCodeError
-from api.routers import account, blocks, health, catalog, search, product, basket, saved_baskets, favorites, freshness, coverage, promos, ratings, stores, terms
+from api.routers import account, admin, blocks, health, catalog, search, product, basket, saved_baskets, favorites, freshness, coverage, promos, ratings, stores, terms
 from db import db as _db
 
 log = logging.getLogger(__name__)
@@ -40,7 +43,66 @@ ALLOWED_ORIGINS = [
     for o in os.environ.get("ALLOWED_ORIGINS", _DEFAULT_ORIGINS).split(",")
     if o.strip()
 ]
+# SU11A-54: the admin console's origin is always allowed, whatever the env
+# list says, so enabling the console needs no .env edit. CORS only lets that
+# page read answers; every /admin/* call still needs admin + 2FA.
+ADMIN_ORIGIN = "https://admin.xxl.co.il"
+if ADMIN_ORIGIN not in ALLOWED_ORIGINS:
+    ALLOWED_ORIGINS.append(ADMIN_ORIGIN)
 
+
+class RequestMetricsMiddleware:
+    """Plain ASGI (no BaseHTTPMiddleware). SU11A-54:
+      - every HTTP answer feeds api/metrics.py (requests, 5xx, 429);
+      - /admin/* answers get Cache-Control: no-store and a Server-Timing total,
+        and an unhandled error there answers 500 {"code":"server_error"}
+        (JSON, no stack) instead of the plain-text 500. Other paths keep the
+        plain 500.
+    Added before CORSMiddleware, so CORS wraps it and the JSON 500 carries the
+    CORS headers the console needs to read it."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        is_admin = scope.get("path", "").startswith("/admin/")
+        t0 = time.perf_counter()
+        started = False
+
+        async def _send(message):
+            nonlocal started
+            if message["type"] == "http.response.start":
+                started = True
+                metrics.record_status(message["status"])
+                if is_admin:
+                    dur = round((time.perf_counter() - t0) * 1000, 1)
+                    headers = [(k, v) for k, v in message.get("headers", [])
+                               if k.lower() not in (b"cache-control", b"server-timing")]
+                    headers += [(b"cache-control", b"no-store"),
+                                (b"server-timing", f"total;dur={dur}".encode())]
+                    message = {**message, "headers": headers}
+            await send(message)
+
+        try:
+            await self.app(scope, receive, _send)
+        except Exception as exc:
+            if not is_admin or started:
+                if not started:
+                    metrics.record_status(500)
+                raise
+            log.error("admin request failed: %s %s (%s)", scope.get("method"),
+                      scope.get("path"), type(exc).__name__)
+            body = json.dumps({"code": "server_error"}).encode()
+            await _send({"type": "http.response.start", "status": 500, "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(body)).encode())]})
+            await send({"type": "http.response.body", "body": body})
+
+
+app.add_middleware(RequestMetricsMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -63,6 +125,7 @@ app.include_router(stores.router)
 app.include_router(account.router)
 app.include_router(blocks.router)   # SU11A-44
 app.include_router(terms.router)    # SU11A-44
+app.include_router(admin.router)    # SU11A-54 (after ratings: /admin/ratings/pending is there)
 
 
 @app.exception_handler(ApiCodeError)
@@ -80,6 +143,7 @@ def _db_error(request: Request, exc: DBAPIError) -> JSONResponse:
     Any other database error is re-raised and becomes the usual plain 500."""
     if getattr(exc.orig, "pgcode", None) != _QUERY_CANCELED:
         raise exc
+    metrics.inc("query_timeout")
     log.warning("query timeout (%s ms): %s %s", API_STATEMENT_TIMEOUT_MS,
                 request.method, request.url.path)
     return JSONResponse(status_code=503, content={"code": "query_timeout"},

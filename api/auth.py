@@ -265,3 +265,46 @@ def get_user_for_account_delete(
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     iat = payload.get("iat")
     return {"id": payload["sub"], "iat": iat if isinstance(iat, (int, float)) else None}
+
+
+# ---------------------------------------------------------------------------
+# Admin gate (SU11A-54)
+# ---------------------------------------------------------------------------
+# Comma-separated emails allowed into the admin endpoints. Deliberately NOT a
+# role system: users is a Supabase UUID + email with no role column.
+ADMIN_EMAILS_ENV = "ADMIN_USER_EMAILS"
+
+
+def admin_emails() -> set[str]:
+    raw = os.environ.get(ADMIN_EMAILS_ENV, "")
+    return {e.strip().casefold() for e in raw.split(",") if e.strip()}
+
+
+def require_admin_mfa(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    conn=Depends(get_db),
+) -> dict:
+    """Every /admin/* endpoint (SU11A-54). ALL of:
+      1. a valid Supabase token (same verification as every other endpoint);
+      2. its email in ADMIN_USER_EMAILS — fails CLOSED: unset or empty admits
+         nobody — and the account not deleted;
+      3. the claim aal == "aal2": the session passed a TOTP check.
+    1 or 2 missing -> 403 {"code":"admin_required"}; 3 missing -> 403
+    {"code":"mfa_required"}. The allowlist is checked first, so a non-admin
+    never learns that a second factor exists. A JWKS fetch failure stays 503.
+
+    Never writes the users row (an admin needs none) and returns the user id
+    only: callers must not get the email in hand to log it.
+    """
+    payload = _verified_claims(credentials)       # may raise 503
+    if not payload:
+        raise ApiCodeError(403, "admin_required")
+    allowed = admin_emails()
+    email = (payload.get("email") or "").casefold()
+    if not allowed or not email or email not in allowed:
+        raise ApiCodeError(403, "admin_required")
+    if _is_deleted(conn, payload["sub"]):
+        raise ApiCodeError(403, "admin_required")
+    if payload.get("aal") != "aal2":
+        raise ApiCodeError(403, "mfa_required")
+    return {"id": payload["sub"]}

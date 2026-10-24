@@ -53,6 +53,10 @@ SCHEMA = [
     "CONSTRAINT user_blocks_pair_uniq UNIQUE (blocker_id, blocked_id), "
     "CONSTRAINT user_blocks_not_self CHECK (blocker_id <> blocked_id))",
     "CREATE TABLE deleted_accounts (user_id TEXT PRIMARY KEY)",
+    # SU11A-54: admin writes insert an audit row in the same transaction.
+    "CREATE TABLE admin_audit (id INTEGER PRIMARY KEY, "
+    f"at TEXT NOT NULL DEFAULT ({_TS}), actor_hash TEXT NOT NULL, action TEXT NOT NULL, "
+    "target_type TEXT, target_id TEXT, detail TEXT, ip_hash TEXT)",
 ]
 
 sqlite3.register_adapter(
@@ -73,7 +77,8 @@ def engine():
 
     @event.listens_for(eng, "before_cursor_execute", retval=True)
     def _pg_to_sqlite(_conn, _cur, statement, params, _ctx, _many):
-        return statement.replace("CAST(? AS uuid)", "?").replace("::float", ""), params
+        return (statement.replace("CAST(? AS uuid)", "?").replace("CAST(? AS jsonb)", "?")
+                .replace("::float", "")), params
 
     with eng.begin() as c:
         for ddl in SCHEMA:
@@ -117,8 +122,8 @@ def client(engine, monkeypatch, mails):
     app.dependency_overrides.clear()
 
 
-def bearer(client, uid, email=None, meta=None):
-    payload = {"sub": uid, "email": email or f"{uid[:4]}@example.test"}
+def bearer(client, uid, email=None, meta=None, aal="aal1"):
+    payload = {"sub": uid, "email": email or f"{uid[:4]}@example.test", "aal": aal}
     if meta is not None:
         payload["user_metadata"] = meta
     tok = f"tok-{uid}-{len(client.tokens)}"
@@ -127,7 +132,8 @@ def bearer(client, uid, email=None, meta=None):
 
 
 def admin(client):
-    return bearer(client, ADMIN, email="admin@example.test")
+    # SU11A-54: admin endpoints need a TOTP-verified (aal2) session.
+    return bearer(client, ADMIN, email="admin@example.test", aal="aal2")
 
 
 def add_rating(engine, uid, comment="nice", rating=3, item=ITEM, status="active"):
@@ -387,9 +393,15 @@ def _queue(client):
 
 
 def test_queue_needs_admin(client):
-    assert client.get("/admin/ratings/pending", headers=bearer(client, READER)).status_code == 404
-    assert client.post("/admin/ratings/1/moderate", json={"action": "hide"},
-                       headers=bearer(client, READER)).status_code == 404
+    # SU11A-54: 403 with a code (was 404), and the allowlist alone is not enough.
+    r = client.get("/admin/ratings/pending", headers=bearer(client, READER))
+    assert (r.status_code, r.json()) == (403, {"code": "admin_required"})
+    r = client.post("/admin/ratings/1/moderate", json={"action": "hide"},
+                    headers=bearer(client, READER, aal="aal2"))
+    assert (r.status_code, r.json()) == (403, {"code": "admin_required"})
+    r = client.get("/admin/ratings/pending",
+                   headers=bearer(client, ADMIN, email="admin@example.test", aal="aal1"))
+    assert (r.status_code, r.json()) == (403, {"code": "mfa_required"})
 
 
 def test_queue_includes_active_reported_rating_and_keep_drops_it(client, engine):
@@ -401,6 +413,9 @@ def test_queue_includes_active_reported_rating_and_keep_drops_it(client, engine)
     assert item["status"] == "active" and item["report_count"] == 1
     assert item["report_sources"] == ["user"] and item["report_reasons"] == ["spam"]
     assert item["latest_report_at"] and item["reports"][0]["reason"] == "spam"
+    # SU11A-54: no user ids in the queue, the item name instead.
+    assert "user_id" not in item and "reporter_user_id" not in item["reports"][0]
+    assert item["item_name"] == "Milk 3%"
 
     r = client.post(f"/admin/ratings/{rid}/moderate", json={"action": "keep"}, headers=admin(client))
     assert r.status_code == 200 and r.json()["status"] == "active"

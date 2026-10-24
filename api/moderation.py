@@ -10,11 +10,18 @@ reported-but-fine rating out of the queue and a later report puts it back.
 
 Log lines carry the action, the rating id and the item code only — never an
 email (SU11A-32) and never the author's user id.
+
+SU11A-54 (admin console): the queue no longer returns the author's user_id or
+the reporters' ids (nothing used them; the console shows no user identifiers),
+and gains item_name. moderate() / ban_author() take an optional `audit`
+callback, run on the same connection after the change and before the commit,
+so an admin write and its admin_audit row commit together. The CLI passes none.
 """
 from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import Callable
 
 from sqlalchemy import bindparam, text
 
@@ -25,11 +32,12 @@ ACTIONS = ("hide", "keep", "restore")
 _TS = "'YYYY-MM-DD\"T\"HH24:MI:SSOF'"
 
 QUEUE_SQL = text(f"""
-    SELECT r.id, r.user_id, r.item_code, r.rating, r.comment, r.status,
+    SELECT r.id, r.item_code, i.item_name, r.rating, r.comment, r.status,
            to_char(r.created_at, {_TS}) AS created_at,
            to_char(r.updated_at, {_TS}) AS updated_at,
            to_char(r.reviewed_at, {_TS}) AS reviewed_at
     FROM ratings r
+    LEFT JOIN items i ON i.item_code = r.item_code
     WHERE (r.status <> 'active' AND r.reviewed_at IS NULL)
        OR EXISTS (
             SELECT 1 FROM rating_reports rep
@@ -40,7 +48,7 @@ QUEUE_SQL = text(f"""
 """)
 
 REPORTS_SQL = text(f"""
-    SELECT rep.id, rep.rating_id, rep.source, rep.reason, rep.reporter_user_id,
+    SELECT rep.id, rep.rating_id, rep.source, rep.reason,
            to_char(rep.created_at, {_TS}) AS created_at
     FROM rating_reports rep
     WHERE rep.rating_id IN :ids
@@ -55,8 +63,9 @@ def _now() -> datetime:
 def queue(conn) -> list[dict]:
     """Ratings that need a moderator, newest first, each with its reports.
 
-    Keeps every field the SU10R-1 queue returned (including `reports`) and adds
-    report_count, latest_report_at, report_sources, report_reasons, reviewed_at.
+    Keeps the SU10R-1 fields (including `reports`) except the user ids (dropped
+    in SU11A-54) and adds report_count, latest_report_at, report_sources,
+    report_reasons, reviewed_at, item_name.
     """
     rows = [dict(r) for r in conn.execute(QUEUE_SQL).mappings().all()]
     if not rows:
@@ -67,7 +76,6 @@ def queue(conn) -> list[dict]:
             "id": rep["id"],
             "source": rep["source"],
             "reason": rep["reason"],
-            "reporter_user_id": rep["reporter_user_id"],
             "created_at": rep["created_at"],
         })
     for r in rows:
@@ -80,12 +88,25 @@ def queue(conn) -> list[dict]:
     return rows
 
 
-def moderate(conn, rating_id: int, action: str) -> dict | None:
+Audit = Callable[[object, dict], None]
+
+
+def reports_for(conn, rating_id: int) -> list[dict]:
+    """All reports on one rating, newest first, without reporter ids."""
+    return [{"id": r["id"], "source": r["source"], "reason": r["reason"],
+             "created_at": r["created_at"]}
+            for r in conn.execute(REPORTS_SQL, {"ids": [rating_id]}).mappings().all()]
+
+
+def moderate(conn, rating_id: int, action: str, audit: Audit | None = None) -> dict | None:
     """hide -> status 'hidden'; keep -> status unchanged; restore -> 'active'.
-    All three stamp reviewed_at. None when the rating does not exist."""
+    All three stamp reviewed_at. None when the rating does not exist.
+    `audit(conn, info)` runs before the commit; if it raises, nothing changes."""
     if action not in ACTIONS:
         raise ValueError(f"unknown action {action!r}")
     status_sql = {"hide": "'hidden'", "keep": "status", "restore": "'active'"}[action]
+    before = conn.execute(text("SELECT status FROM ratings WHERE id = :id"),
+                          {"id": rating_id}).scalar()
     row = conn.execute(text(f"""
         UPDATE ratings SET status = {status_sql}, reviewed_at = :now
         WHERE id = :id
@@ -94,6 +115,13 @@ def moderate(conn, rating_id: int, action: str) -> dict | None:
     if row is None:
         conn.rollback()
         return None
+    if audit is not None:
+        try:
+            audit(conn, {"item_code": row["item_code"], "status_before": before,
+                         "status_after": row["status"]})
+        except Exception:
+            conn.rollback()
+            raise
     conn.commit()
     log.warning("[MODERATION] admin %s: rating_id=%s item_code=%s",
                 action, row["id"], row["item_code"])
@@ -117,13 +145,14 @@ def author_preview(conn, rating_id: int) -> dict | None:
             "active_ratings": int(row["active_ratings"] or 0)}
 
 
-def ban_author(conn, rating_id: int, ban: bool) -> dict | None:
+def ban_author(conn, rating_id: int, ban: bool, audit: Audit | None = None) -> dict | None:
     """Ban (or unban) the author of a rating, found server-side.
 
     Ban: users.banned_at = now (kept if already set) and every ACTIVE rating of the
     author goes to 'hidden' with reviewed_at = now. Unban: banned_at = NULL only;
     hidden ratings stay hidden and are restored one by one. The response never
     carries the author's id or email. None when the rating does not exist.
+    `audit(conn, info)` runs before the commit; if it raises, nothing changes.
     """
     found = conn.execute(
         text("SELECT user_id, item_code FROM ratings WHERE id = :id"), {"id": rating_id}
@@ -148,6 +177,12 @@ def ban_author(conn, rating_id: int, ban: bool) -> dict | None:
     else:
         conn.execute(text("UPDATE users SET banned_at = NULL WHERE id = :uid"),
                      {"uid": found["user_id"]})
+    if audit is not None:
+        try:
+            audit(conn, {"item_code": found["item_code"], "ratings_hidden": hidden})
+        except Exception:
+            conn.rollback()
+            raise
     conn.commit()
     log.warning("[MODERATION] admin %s: rating_id=%s item_code=%s ratings_hidden=%s",
                 "ban-author" if ban else "unban-author", rating_id, found["item_code"], hidden)

@@ -20,11 +20,14 @@ SU11A-44 (UGC stage 2): signed-in readers do not see comments by authors they
 blocked (api/routers/blocks.py), every row says whether it is the caller's own
 (is_mine), a banned user cannot rate or report, and terms consent can be required
 for rating behind RATINGS_REQUIRE_TERMS (default off; api/terms.py).
+
+SU11A-54: the admin endpoints below require the allowlist AND a TOTP-verified
+session (api/auth.py require_admin_mfa), answer 403 {"code": ...} instead of
+404, and every write records an admin_audit row (api/admin_audit.py).
 """
 from __future__ import annotations
 
 import logging
-import os
 import re
 from datetime import datetime, timezone
 
@@ -35,8 +38,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-from api import moderation
-from api.auth import ApiCodeError, get_current_user, get_user_id_soft
+from api import admin_audit, moderation
+from api.auth import ApiCodeError, get_current_user, get_user_id_soft, require_admin_mfa
 from api.dependencies import get_db
 from api.mailer import send_email
 from api.terms import TERMS_VERSION, require_terms_for_ratings
@@ -47,12 +50,6 @@ log = logging.getLogger(__name__)
 router = APIRouter(tags=["Ratings"])
 
 MIN_RATING, MAX_RATING = 1, 3
-
-# Comma-separated emails allowed to read the moderation queue. Deliberately NOT
-# a role system: users is a Supabase UUID + email with no role column, and
-# inventing RBAC for one read-only endpoint is not worth it. Revisit if the
-# moderation surface grows past viewing.
-_ADMIN_EMAILS_ENV = "ADMIN_USER_EMAILS"
 
 
 # ---------------------------------------------------------------------------
@@ -409,38 +406,27 @@ def my_ratings(user=Depends(get_current_user), conn: Connection = Depends(get_db
 
 
 # ---------------------------------------------------------------------------
-# Moderation (admin allowlist)
+# Moderation (admin allowlist + TOTP, SU11A-54)
 # ---------------------------------------------------------------------------
 
-def _admin_emails() -> set[str]:
-    raw = os.environ.get(_ADMIN_EMAILS_ENV, "")
-    return {e.strip().casefold() for e in raw.split(",") if e.strip()}
+def _audit(request: Request, admin: dict, action: str, rating_id: int, extra: dict | None = None):
+    """The audit callback api/moderation.py runs before its commit."""
+    def _write(conn, info: dict) -> None:
+        admin_audit.record(conn, actor_id=admin["id"], action=action,
+                           target_type="rating", target_id=rating_id,
+                           detail={**(extra or {}), **info}, ip=admin_audit.client_ip(request))
+    return _write
 
 
-def require_admin(user=Depends(get_current_user)) -> dict:
-    """Allowlist gate, not a role system. Guards the queue and, since SU11A-44,
-    the moderate / ban-author actions too.
-
-    Fails CLOSED: an unset or empty ADMIN_USER_EMAILS admits nobody. The
-    opposite default would silently open the queue to every signed-in user the
-    moment the env var went missing.
-    """
-    allowed = _admin_emails()
-    email = (user.get("email") or "").casefold()
-    if not allowed or email not in allowed:
-        # 404, not 403 — do not confirm the endpoint exists to non-admins.
-        raise HTTPException(status_code=404)
-    return user
-
-
-@router.get("/admin/ratings/pending", summary="Moderation queue (allowlisted emails only)")
-def pending_ratings(_admin=Depends(require_admin), conn: Connection = Depends(get_db)):
+@router.get("/admin/ratings/pending", summary="Moderation queue (admin + 2FA)")
+def pending_ratings(_admin=Depends(require_admin_mfa), conn: Connection = Depends(get_db)):
     """Ratings that need a moderator, newest first, with their reports.
 
     SU11A-44: besides non-active ratings no moderator has reviewed yet, the queue
     now holds ACTIVE ratings with a report newer than the last decision — user
     reports used to reach only the mailbox. Same shape as before plus
     report_count, latest_report_at, report_sources, report_reasons, reviewed_at.
+    SU11A-54: no user ids (author or reporters); item_name added.
     See api/moderation.py for the rule.
     """
     items = moderation.queue(conn)
@@ -456,22 +442,25 @@ class BanIn(BaseModel):
 
 
 @router.post("/admin/ratings/{rating_id}/moderate",
-             summary="Hide, keep or restore a rating (allowlisted emails only)")
-def moderate_rating(rating_id: int, body: ModerateIn,
-                    _admin=Depends(require_admin), conn: Connection = Depends(get_db)):
-    result = moderation.moderate(conn, rating_id, body.action)
+             summary="Hide, keep or restore a rating (admin + 2FA)")
+def moderate_rating(rating_id: int, body: ModerateIn, request: Request,
+                    admin=Depends(require_admin_mfa), conn: Connection = Depends(get_db)):
+    result = moderation.moderate(conn, rating_id, body.action,
+                                 audit=_audit(request, admin, f"rating.{body.action}", rating_id))
     if result is None:
         raise HTTPException(status_code=404, detail="Rating not found")
     return result
 
 
 @router.post("/admin/ratings/{rating_id}/ban-author",
-             summary="Ban or unban the author of a rating (allowlisted emails only)")
-def ban_rating_author(rating_id: int, body: BanIn,
-                      _admin=Depends(require_admin), conn: Connection = Depends(get_db)):
+             summary="Ban or unban the author of a rating (admin + 2FA)")
+def ban_rating_author(rating_id: int, body: BanIn, request: Request,
+                      admin=Depends(require_admin_mfa), conn: Connection = Depends(get_db)):
     """Ban hides every active rating of the author; unban only clears the ban.
-    The response never names the author."""
-    result = moderation.ban_author(conn, rating_id, body.ban)
+    The response never names the author, and neither does the audit row."""
+    action = "rating.ban_author" if body.ban else "rating.unban_author"
+    result = moderation.ban_author(conn, rating_id, body.ban,
+                                   audit=_audit(request, admin, action, rating_id))
     if result is None:
         raise HTTPException(status_code=404, detail="Rating not found")
     return result
@@ -527,7 +516,7 @@ def _moderation_body(*, rating_id: int, item_code: str, user_email: str,
         "comment:",
         f"  {text_comment}",
         "",
-        "Queue: GET /admin/ratings/pending  (ADMIN_USER_EMAILS allowlist)",
+        "Queue: https://admin.xxl.co.il (ADMIN_USER_EMAILS allowlist + 2FA)",
     ])
 
 
