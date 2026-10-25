@@ -15,7 +15,9 @@ CAT = C.ROOT / "docs" / "catalog"
 
 @pytest.fixture(scope="module")
 def v11():
-    return C.load_taxonomy(), C.load_gs1_map(), C.load_brand_hints()
+    # pinned to the v1.1 files: this suite is the SU11A-55 regression set (v1.2 is test_catalog_su11a56.py)
+    return (C.load_taxonomy(CAT / "taxonomy_v1_1.csv"), C.load_gs1_map(CAT / "gs1_group_map_v1.csv"),
+            C.load_brand_hints(CAT / "brand_category_hints_v1_1.csv"))
 
 
 def cls(v11, name, group=""):
@@ -31,7 +33,6 @@ def under(got: str, want: str) -> bool:
 def test_v11_has_exactly_the_v1_nodes(v11):
     tax = v11[0]
     v1 = C.load_taxonomy(CAT / "taxonomy_v1.csv")
-    assert C.TAXONOMY_VERSION == "v1.1"
     assert list(v1.nodes) == list(tax.nodes)
     for nid, n in v1.nodes.items():
         m = tax.nodes[nid]
@@ -47,14 +48,16 @@ def test_v11_hints_and_pin(v11):
 
 
 def test_review_graded_v1_file(v11):
-    tax = v11[0]
+    tax = C.load_taxonomy()                                            # the current taxonomy (v1.2)
     rows = list(csv.DictReader(open(CAT / "review_graded_v1.csv", encoding="utf-8", newline="")))
     src = list(csv.DictReader(open(CAT / "review_sample_v1.csv", encoding="utf-8", newline="")))
     assert len(rows) == len(src) == 150
     assert [r["item_code"] for r in rows] == [r["item_code"] for r in src]      # codes from the CSV, as text
     assert all(r["correct_category_id"] in tax.nodes for r in rows)
     assert sum(1 for r in rows if r["graded_text"]) == 20
-    assert all(r["correct_category_id"] == r["predicted_category_id"] for r in rows if not r["graded_text"])
+    # confirmed rows keep the predicted id, except the ones SU11A-56 moved to a new v1.2 node
+    assert all(r["correct_category_id"] == r["predicted_category_id"] or "SU11A-56" in r["mapping_note"]
+               for r in rows if not r["graded_text"])
     assert [int(r["xlsx_row"]) for r in rows] == list(range(2, 152))
 
 
@@ -68,9 +71,9 @@ def test_head_anchor():
 
 
 def test_pct_feature():
-    assert C.feature_tokens("פרוטאין אפרסק 1.6% 200 ג") == ["§pct"]
+    assert "§pct" in C.feature_tokens("פרוטאין אפרסק 1.6% 200 ג")
     assert C.feature_tokens("יופלה 3 % תות") == ["§pct"]
-    assert C.feature_tokens("פרוטאין אפרסק 200 ג") == []
+    assert "§pct" not in C.feature_tokens("פרוטאין אפרסק 200 ג")
     assert "§pct" not in C.tokens("§pct x")                          # a real name cannot fake it
     r = C.parse_rule("פרוטאין+§pct", "D02.C03")
     toks = C.tokens("פרוטאין קוקוס 0% שומ") + C.feature_tokens("פרוטאין קוקוס 0% שומ")

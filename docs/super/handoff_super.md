@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: 25 Oct 2026 (SU11A-55: catalog review loaded (review_graded_v1.csv, 150 manual rows), rules v1.1 fixing the 20 graded errors, AI-label audit sample; nothing applied; SU11A-54: admin console phase 1 on admin.xxl.co.il - moderation, status, audit log, mandatory TOTP; existing /admin endpoints now need 2FA; built, not deployed; SU11A-53: Google Play badge + "coming soon for iPhone" + platform app banner on the website, built, not deployed; Play Production LIVE 23 Oct; RATINGS_REQUIRE_TERMS on 24 Oct; SU11A-52: catalog categories v1 - taxonomy v1, category tables (migration not applied), AI labels for 44K uncertain items, server import + daily new-barcode classification, service rows hidden, nameless-item fallback names; nothing applied or deployed; SU11A-51: catalogue study, taxonomy v0 (16 departments / 151 categories), rule classifier prototype + 400-item review sample; offline, no schema; SU11A-50: filtered search (/compare, city / chain / store) on the v2 path behind SEARCH_V2_FILTERED + faster v2 candidate step; not deployed; SU11A-49: security fixes F-01..F-05 built, nginx files + runbook, compliance drafts; not deployed; SU11A-48: security review; SU11A-47: search speed - precomputed page prices, /suggest type-ahead, response cache, web combobox, mobile suggestions; built, not deployed; SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
+> Last updated: 25 Oct 2026 (SU11A-56: taxonomy v1.2 - still soft drinks, newspapers, shelf-stable pickles/olives; Sonnet 5.5 pilot failed its gate, no re-check; nothing applied; SU11A-55: catalog review loaded (review_graded_v1.csv, 150 manual rows), rules v1.1 fixing the 20 graded errors, AI-label audit sample; nothing applied; SU11A-54: admin console phase 1 on admin.xxl.co.il - moderation, status, audit log, mandatory TOTP; existing /admin endpoints now need 2FA; built, not deployed; SU11A-53: Google Play badge + "coming soon for iPhone" + platform app banner on the website, built, not deployed; Play Production LIVE 23 Oct; RATINGS_REQUIRE_TERMS on 24 Oct; SU11A-52: catalog categories v1 - taxonomy v1, category tables (migration not applied), AI labels for 44K uncertain items, server import + daily new-barcode classification, service rows hidden, nameless-item fallback names; nothing applied or deployed; SU11A-51: catalogue study, taxonomy v0 (16 departments / 151 categories), rule classifier prototype + 400-item review sample; offline, no schema; SU11A-50: filtered search (/compare, city / chain / store) on the v2 path behind SEARCH_V2_FILTERED + faster v2 candidate step; not deployed; SU11A-49: security fixes F-01..F-05 built, nginx files + runbook, compliance drafts; not deployed; SU11A-48: security review; SU11A-47: search speed - precomputed page prices, /suggest type-ahead, response cache, web combobox, mobile suggestions; built, not deployed; SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
 
 ## 📏 Standing rules (apply to every session)
 
@@ -948,6 +948,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-48 (Oct 22) — security review (read-only): `docs/security/su11a48_security_review.md`. 2 High (unbounded old-path price fetch + no DB statement timeout; no rate limiting), 6 Medium, sudo command list for Dude, Data Security Regulations gap table. No code or server change.
 - SU11A-49 (Oct 22) — security fixes from SU11A-48: old-path search cap (1,000) + API-only 15 s DB timeout (503 query_timeout), JWKS refetch throttle, nginx rate limits + security headers + CSP Report-Only (files in `deploy/nginx/`), web-root modes on deploy, Hebrew compliance drafts (`docs/compliance/`). Runbook `docs/security/su11a49_runbook.md`. Not deployed.
 - SU11A-50 (Oct 22) — `/compare` and `/search` with city / chain / group_by=store on the v2 path behind `SEARCH_V2_FILTERED` (default off): v2 candidates walked in batches against the filter, only the page priced; v2 candidate step counts and orders in SQL (no token table, no migration). Runbook `docs/super/su11a50_runbook.md`. Not deployed.
+- SU11A-56 (Oct 25) — catalog taxonomy v1.2 (`taxonomy_v1_2.csv`, `gs1_group_map_v1_2.csv`: D09.C11, D16.C08, D07.C08.S01 storage split), Sonnet 5.5 pilot on the graded AI audit (53% vs Haiku 64%: gate failed, no full re-check). Not applied.
 - SU11A-55 (Oct 25) — catalog: Dude's review as `docs/catalog/review_graded_v1.csv` (150 manual rows), taxonomy/rules v1.1 (`taxonomy_v1_1.csv`, `brand_category_hints_v1_1.csv`; head anchor, %, hard negatives, brand pin), AI audit sample `ai_audit_sample_v1.xlsx`. Not applied.
 - SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
 - SU11A-53 (Oct 24) — website: official Hebrew Google Play badge (home section, super footer, portal card), "בקרוב גם ל-iPhone" text label behind `IOS_APP_URL`, Android / iPhone app banner, google-play-app meta + SoftwareApplication JSON-LD (`8bb81c6`, not deployed). Records: Play Production LIVE 23 Oct 2026; RATINGS_REQUIRE_TERMS on 24 Oct; unused ANTHROPIC_API_KEY removed from the server .env.
@@ -1953,6 +1954,50 @@ Dude graded the 150-row `review_sample_v1` (130 confirmed, 20 corrected).
 
 ---
 
+### SU11A-56 (25 Oct 2026) - taxonomy v1.2 (Dude's P1-P4), Sonnet 5.5 pilot (gate failed, no full re-check); nothing applied
+
+**Taxonomy v1.2:**
+- `docs/catalog/taxonomy_v1_2.csv` and `gs1_group_map_v1_2.csv`; v1 / v1.1 untouched; every id kept, three added. `classify_rules.py` points to them (`TAXONOMY_VERSION = "v1.2"`).
+- **P1 yes:** D09.C11 משקאות קלים לא מוגזים (flavoured water, still fruit drinks: Spring, Tapuzina, משקה קל / משקה פירות, Mogu Mogu).
+  - Nectar and juice words are hard negatives (they stay in D09.C04).
+  - A new GS1-only negative `~` keeps the GS1 juice group from pulling Spring back.
+  - The GS1 Fruit Juice Drinks groups map to D09.C11.
+  - About 270 items on the export.
+- **P2 yes:** D16.C08 עיתונים ומגזינים, out of D16.C07 (55 items).
+- **P3:** D07.C08.S01 חמוצים וזיתים בשימורים, a storage split of D04.C05 results (`storage_of` / `split_storage`, also applied to GS1 and AI ids):
+  - **deli evidence:** weighed row or store code, שקיל / במשקל / מעדנייה, salad brands;
+  - **shelf evidence:** pack size, imported GTIN, jar / can words, shelf brands;
+  - deli wins and no evidence means deli; the count grade is not used.
+  - Result: 621 shelf-stable, 534 stay deli (269 with evidence, 265 by default).
+  - GS1 "Olives (Shelf Stable)" maps to D07.C08.S01.
+- **P4 no:** no dragée node. Dragées stay D08.C01, and dragée words are negatives of frozen fruit. Frozen chocolate-coated fruit stays D06.C02 (question for Dude).
+- `review_graded_v1.csv` updated:
+  - rows 39 and 113 -> D09.C11; 103 -> D16.C08; 54 -> D07.C08.S01;
+  - rows 28, 29, 78 and 100 (Spring / Tapuzina, confirmed as juice before P1 existed) -> D09.C11, flagged in `mapping_note`.
+- Per-change counts, samples, the P3 split both ways and the pilot table: `docs/catalog/su11a56_v1_2_report.md`.
+
+**AI-audit grades:** `docs/catalog/ai_audit_sample_v1_graded.xlsx` (Dude's file, not committed). 100 of 100 filled, plus the 4 overrides from the prompt. The free text is mapped to v1.2 ids; two have no good node (shoe polish -> D16.C02, phone headset -> D15.C08).
+
+**Sonnet 5.5 pilot:**
+- 100 items, thinking off (`between_tools`: Sonnet 5.5 rejects `disabled`), the classify_ai prompt with the v1.2 rules, $0.07.
+- **Exact-id accuracy:** Haiku 64% (high 82 / medium 64 / low 45); Sonnet 53% (62 / 39 / 58).
+- Where Sonnet disagreed with Haiku: Sonnet right 28%, Haiku right 47%.
+- **Gate failed**, so no full re-check was run and no `ai_labels_v2.csv` exists; the AI source stays `ai_labels_v1.csv`.
+- Caveat: the grading started from Haiku's answer, which favours Haiku on near-equivalent ids (biscuits vs wafers, white vs red wine).
+
+**Coverage, v1.1 -> v1.2:**
+- high 108,660 -> 108,525;
+- medium 7,126 -> 7,282;
+- low 13,286 -> 13,265;
+- unclassified 2,153 = 2,153;
+- disagreements 10,655 -> 10,637 (`disagreements_v1.csv` regenerated; it had no grades).
+
+The runbook (section 6) has the new expected counts.
+
+**Tests:** `tests/test_catalog_su11a56.py`. The SU11A-55 suite is pinned to the v1.1 files.
+
+---
+
 ## 📋 Open items / next steps (as of 25 Oct 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (verified, SU11A-53). Lawyer review of the terms is Dude's call.
@@ -1963,7 +2008,7 @@ Dude graded the 150-row `review_sample_v1` (130 confirmed, 20 corrected).
 - **SU11A-54 admin console:** built, not deployed. Run `docs/admin/su11a54_runbook.md` (DNS, Supabase TOTP, allowlist, migration, restart, certificate + site, web deploy, first TOTP enrolment). From then on every /admin call needs 2FA. Next phases: categories (SU11A-52 review), settings, stores.
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
 - **Catalog:**
-  - **SU11A-52 catalog (rules v1.1 since SU11A-55): built, NOT applied.** Run `docs/catalog/su11a52_runbook.md` (migration, pull, one build, import dry run then apply), then `--manual docs/catalog/review_graded_v1.csv` (Dude's 150 graded rows). Next to grade: `docs/catalog/ai_audit_sample_v1.xlsx` (100 AI-only labels) and `disagreements_v1.csv`. Decide taxonomy proposals P1-P4 (SU11A-55 entry). Service rows and nameless names are handled by the same build;
+  - **SU11A-52 catalog (rules v1.1 since SU11A-55): built, NOT applied.** Run `docs/catalog/su11a52_runbook.md` (migration, pull, one build, import dry run then apply), then `--manual docs/catalog/review_graded_v1.csv` (Dude's 150 graded rows). Taxonomy is v1.2 (SU11A-56). Next to grade: `disagreements_v1.csv` (regenerated for v1.2). Open: frozen chocolate-coated fruit (D06.C02 or D08.C01?); the 265 D04.C05 pickles without storage evidence; whether a better AI pass is worth it (Sonnet lost the pilot). Service rows and nameless names are handled by the same build;
   - category / attribute faceted filters;
   - a switch to hide tobacco and alcohol;
   - optionally, move the location prompt to a contextual moment.
@@ -1982,4 +2027,4 @@ Dude graded the 150-row `review_sample_v1` (130 confirmed, 20 corrected).
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-56 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).
+Next free session ID: SU11A-57 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).

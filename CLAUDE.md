@@ -21,7 +21,7 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 15. **CC never deploys, never runs EAS builds, never calls `DELETE /account`, never modifies production data.** Dude runs `scripts\deploy_frontend.ps1` and EAS builds. Never delete the Supabase users x@xxl.co.il or gplay@xxl.co.il (the Play demo account); throwaway test users are created in Supabase → Authentication → Users → Add user (Auto Confirm).
 
 ## Status / next steps
-Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-56 (SU11A-37 reserved).
+Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-57 (SU11A-37 reserved).
 - Catalog categories: manual > ai > gs1 > rule; automated runs never overwrite manual/reviewed (enforced in `scripts/catalog/store.py`; tables in `db/migrations/su11a52_catalog.sql`).
 - RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (build 8 live on Play).
 - **Admin console: https://admin.xxl.co.il (SU11A-54).** 2FA (TOTP, aal2) is mandatory on every /admin/* endpoint, on top of ADMIN_USER_EMAILS. The console never edits secrets/.env, never runs shell commands or deploys, and never touches the DB from the browser: only authenticated API calls into the same functions as the scripts. It shows no user emails or ids, and every admin write goes to `admin_audit` (hashed actor).
@@ -64,7 +64,7 @@ Current status and the open-items list live at the end of `docs/super/handoff_su
 
 ## Parked (do not raise)
 - Store 450 and the 3 CBS-mismatch stores - parked until store accuracy reaches 98-100%.
-- The manufacturer outreach email (after Sukkot). (Category classification / taxonomy was unparked 2026-10-11 for faceted filters: SU11A-35 design; SU11A-51 taxonomy v0; SU11A-52 taxonomy v1, category tables, AI labels and import in `docs/catalog/` - built, not applied: `docs/catalog/su11a52_runbook.md`; SU11A-55 rules v1.1 (`taxonomy_v1_1.csv`, same ids) and Dude's graded review `review_graded_v1.csv`.)
+- The manufacturer outreach email (after Sukkot). (Category classification / taxonomy was unparked 2026-10-11 for faceted filters: SU11A-35 design; SU11A-51 taxonomy v0; SU11A-52 taxonomy v1, category tables, AI labels and import in `docs/catalog/` - built, not applied: `docs/catalog/su11a52_runbook.md`; SU11A-55 rules v1.1 (`taxonomy_v1_1.csv`, same ids) and Dude's graded review `review_graded_v1.csv`; SU11A-56 taxonomy v1.2 (`taxonomy_v1_2.csv`, three new nodes). Sonnet 5.5 needs `thinking: between_tools` to turn thinking off.)
 
 ## Repo layout policy (established SU10M-2)
 - **C:\scrp is the root for the entire XXL codebase family**, not just the supermarket vertical. Every XXL-related repo lives as a subfolder under it.

@@ -668,7 +668,7 @@ def category_rows(rows: list[dict], gs1_groups: dict[str, str], valid_ids: set[s
     for r in rows:
         if r["is_pseudo"] or not r["name_norm"]:
             continue
-        res = C.classify_rules(tax, r["name_norm"], hints)
+        res = C.classify_rules(tax, r["name_norm"], hints, C.row_features(r["item_code"]))
         res = C.combine_gs1(tax, res, gmap.get(gs1_groups.get(r["item_code"]) or ""))
         if not res.category_id or res.category_id not in valid_ids:
             continue

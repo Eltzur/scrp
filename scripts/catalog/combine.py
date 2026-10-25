@@ -22,6 +22,8 @@ server, so the local report and the imported rows follow one rule:
   low / medium           low                     rule / gs1 as is
   (any)                  none / "unknown"        rule / gs1 as is (unclassified stays so)
   pinned brand dept      outside that department rule / gs1 as is (SU11A-55: טבעול is frozen)
+Storage split (SU11A-56): with rule["storage"] == "shelf", a pickle / olive id D04.C05 (the
+rule's or the AI's) is read as D07.C08.S01, before the comparison above.
 
 source: gs1 when the GS1 group decided or confirmed the rule result (reason gs1
 or rule+gs1), rule otherwise (rule / brand / prior), ai for AI ids.
@@ -73,6 +75,8 @@ def combine_label(rule: dict, ai: dict | None, valid_ids: set[str] | None = None
     base = ({"category_id": rid, "confidence": rconf, "source": src, "detail": detail[:300], "model": None,
              "disagreement": False, "ai_category_id": "", "rule_category_id": rid} if rid else None)
     aid = (ai or {}).get("category_id") or ""
+    if valid_ids is not None:
+        aid = C.split_storage(aid, rule.get("storage") or "", valid_ids)
     if not aid or aid == UNKNOWN or (valid_ids is not None and aid not in valid_ids) or rconf == "high":
         return base
     if rule.get("pinned") and aid.split(".")[0] != rule["pinned"]:

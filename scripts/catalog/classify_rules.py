@@ -11,9 +11,12 @@ item_code, name, manufacturer, manufacturer_norm, chains_live, gs1_group, gs1_br
 gs1_kosher, gs1_diet, is_weighted, ...). Output in DIR: predictions.csv.gz (one row
 per item), report.json and report.txt (evaluation), unclassified_leading.tsv.
 
-Rules come from docs/catalog/taxonomy_v1_1.csv (keywords_he / negative_keywords_he),
-docs/catalog/gs1_group_map_v1.csv and docs/catalog/brand_category_hints_v1_1.csv
-(v1.1, SU11A-55: same node ids as taxonomy_v1.csv, fixed keywords; v1 kept as the record).
+Rules come from docs/catalog/taxonomy_v1_2.csv (keywords_he / negative_keywords_he),
+docs/catalog/gs1_group_map_v1_2.csv and docs/catalog/brand_category_hints_v1_1.csv
+(v1.1, SU11A-55: same node ids as taxonomy_v1.csv, fixed keywords; v1.2, SU11A-56: three
+nodes added; v1 and v1.1 kept as the record). Pickles and olives are split by storage
+evidence after classification (storage_of / split_storage: deli D04.C05, shelf-stable
+D07.C08.S01); row_features() adds §weighed / §import from the barcode and is_weighted.
 Names are normalised with db.search_norm.
 
 Keyword grammar (one keyword per '|' item, matched on whole tokens):
@@ -26,7 +29,9 @@ Keyword grammar (one keyword per '|' item, matched on whole tokens):
   - "§pct"     feature token (SU11A-55): the name has a percentage (3%, 1.6 %);
                used inside conjunctions ("פרוטאין+§pct")
 Negatives use the same grammar; a negative of a node (or of any ancestor) that
-occurs anywhere in the name vetoes that node. A hard negative ("!רסק", SU11A-55)
+occurs anywhere in the name vetoes that node. A GS1-only negative ("~ספרינג",
+SU11A-56) does not stop keywords; it only refuses the node when the GS1 group map
+proposes it (Spring is a still fruit drink even in the GS1 juice group). A hard negative ("!רסק", SU11A-55)
 also refuses the node when the GS1 group map proposes it: "רסק תפוחים" in the
 GS1 group Apples is not fresh fruit. Plain negatives only stop keyword matches
 (they were written for that, and many GS1 rows are right where they would veto).
@@ -82,10 +87,16 @@ if str(ROOT) not in sys.path:
 from db.search_norm import normalize  # noqa: E402
 
 # v1.1 (SU11A-55): same 201 node ids as v1; keywords, negatives and brand hints changed.
-TAXONOMY_VERSION = "v1.1"
-TAXONOMY = ROOT / "docs" / "catalog" / "taxonomy_v1_1.csv"
-GS1_MAP = ROOT / "docs" / "catalog" / "gs1_group_map_v1.csv"
+# v1.2 (SU11A-56): every v1.1 id kept, three nodes added (D09.C11 still soft drinks,
+# D16.C08 newspapers and magazines, D07.C08.S01 shelf-stable pickles and olives).
+TAXONOMY_VERSION = "v1.2"
+TAXONOMY = ROOT / "docs" / "catalog" / "taxonomy_v1_2.csv"
+GS1_MAP = ROOT / "docs" / "catalog" / "gs1_group_map_v1_2.csv"
 BRAND_HINTS = ROOT / "docs" / "catalog" / "brand_category_hints_v1_1.csv"
+
+# Storage split (SU11A-56): a pickle / olive result (DELI_PICKLES) moves to the shelf-stable
+# sub-type when the name (or the row) shows packed storage and nothing shows deli storage.
+DELI_PICKLES, SHELF_PICKLES = "D04.C05", "D07.C08.S01"
 
 _EDGE = "\"'.,;:!?()[]{}<>/\\|*+=#&@^~_%`"
 # Pack / marketing words: they do not count as a content position.
@@ -135,7 +146,55 @@ _PCT_FEATURE = re.compile(r"(?<![\d.,])\d{1,3}(?:[.,]\d+)?\s?%")
 
 
 def feature_tokens(name: str) -> list[str]:
-    return [FEATURE + "pct"] if _PCT_FEATURE.search(normalize(name)) else []
+    n = normalize(name)
+    out = [FEATURE + "pct"] if _PCT_FEATURE.search(n) else []
+    if parse_size(n):
+        out.append(FEATURE + "size")     # a pack size with a unit (540 גרם, 1.5 ל, 3 ק"ג)
+    return out
+
+
+def row_features(item_code: str = "", is_weighted=None) -> list[str]:
+    """Feature tokens from the row, not the name: §weighed for a weighed item or a store's
+    own short code (7 digits or fewer: in-store packing, deli counter, produce); §import for
+    a foreign GTIN (8+ digits not starting 729: imported goods travel ambient)."""
+    code = (item_code or "").strip()
+    if str(is_weighted or "") in ("1", "True", "true") or (code.isdigit() and len(code) <= 7):
+        return [FEATURE + "weighed"]
+    if code.isdigit() and len(code) >= 8 and not code.startswith("729"):
+        return [FEATURE + "import"]
+    return []
+
+
+# Evidence for the storage split (normalised tokens / phrases).
+_DELI_EVIDENCE = [tuple(normalize(p).split()) for p in """
+§weighed|שקיל|שקילה|שקילים|במשקל|לפי משקל|לק"ג|תפזורת|מעדנייה|מעדניה|מעדני|דלי|בדלי|טרי|טריים|
+ברדה|שמיר|צבר|אחלה|סלטי""".replace("\n", "").split("|") if p.strip()]
+_SHELF_EVIDENCE = [tuple(normalize(p).split()) for p in """
+§size|§import|צנצנת|בצנצנת|צנצנות|פחית|בפחית|פח|בפח|קופסה|בקופסה|קופסת|שימורי|שימורים|משומר|משומרים|
+יכין|פרי הגליל|גפן|ויליפוד|זיתא|זאדונא|ולאסיק|יבנה|בית השיטה|מוטולה|דון פרננדו|איליאדה|סבא חביב|ביכורי השדה""".replace("\n", "").split("|") if p.strip()]
+
+
+def _has(toks: list[str], phrases: list[tuple[str, ...]]) -> str:
+    for ph in phrases:
+        for i in range(len(toks) - len(ph) + 1):
+            if tuple(toks[i:i + len(ph)]) == ph:
+                return " ".join(ph)
+    return ""
+
+
+def storage_of(toks: list[str]) -> str:
+    """"deli" when anything shows deli / weighed storage, else "shelf" when anything shows
+    packed storage (a pack size, jar / can words, a shelf brand), else ""."""
+    if _has(toks, _DELI_EVIDENCE):
+        return "deli"
+    return "shelf" if _has(toks, _SHELF_EVIDENCE) else ""
+
+
+def split_storage(category_id: str, storage: str, valid) -> str:
+    """D04.C05 -> D07.C08.S01 for shelf-stable pickles and olives (when the taxonomy has it)."""
+    if category_id == DELI_PICKLES and storage == "shelf" and SHELF_PICKLES in valid:
+        return SHELF_PICKLES
+    return category_id
 
 
 def is_content(t: str) -> bool:
@@ -182,6 +241,7 @@ class Rule:
     parts: list[list[Phrase]]
     negative: bool = False
     hard: bool = False               # "!": a negative that also refuses the GS1 id (SU11A-55)
+    gs1_only: bool = False           # "~": refuses the GS1 id only, keywords still match (SU11A-56)
 
     @property
     def size(self) -> int:
@@ -204,13 +264,14 @@ def parse_phrase(s: str) -> Phrase | None:
 
 def parse_rule(text: str, node: str, negative: bool = False) -> Rule | None:
     parts = []
-    hard = negative and text.startswith("!")
-    for part in text.lstrip("!").split("+"):
+    hard = negative and text[:1] in "!~"
+    gs1_only = negative and text.startswith("~")
+    for part in text.lstrip("!~").split("+"):
         alts = [p for p in (parse_phrase(a) for a in part.split(",")) if p]
         if not alts:
             return None
         parts.append(alts)
-    return Rule(text, node, parts, negative, hard) if parts else None
+    return Rule(text, node, parts, negative, hard, gs1_only) if parts else None
 
 
 def match_rule(rule: Rule, toks: list[str], eff: list[int] | None = None) -> tuple[int, int] | None:
@@ -384,13 +445,25 @@ class Result:
     brand: str = ""                  # brand hint found in the name (SU11A-52)
     vetoed: frozenset = frozenset()  # nodes vetoed by a hard negative ("!"): refused for GS1 too (SU11A-55)
     pinned: str = ""                 # department pinned by a brand hint (SU11A-55)
+    storage: str = ""                # "shelf" / "deli" / "" storage evidence (SU11A-56)
 
 
-def classify_rules(tax: Taxonomy, name: str, hints: dict[str, list[BrandHint]] | None = None) -> Result:
+def classify_rules(tax: Taxonomy, name: str, hints: dict[str, list[BrandHint]] | None = None,
+                   extra: list[str] | tuple = ()) -> Result:
+    """extra: row feature tokens (row_features), appended like the name's own feature tokens."""
     toks = tokens(name)
     if not toks:
         return Result()
-    toks += feature_tokens(name)
+    toks += feature_tokens(name) + list(extra)
+    res = _classify_name(tax, toks, hints)
+    res.storage = storage_of(toks)
+    sid = split_storage(res.category_id, res.storage, tax.nodes)
+    if sid != res.category_id:
+        res = replace(res, category_id=sid, rule_id=sid if res.rule_id == DELI_PICKLES else res.rule_id)
+    return res
+
+
+def _classify_name(tax: Taxonomy, toks: list[str], hints: dict[str, list[BrandHint]] | None) -> Result:
     hit = find_brand(hints, toks) if hints else None
     if not hit:
         return _classify_tokens(tax, toks)
@@ -431,7 +504,8 @@ def _classify_tokens(tax: Taxonomy, toks: list[str], only: str = "") -> Result:
     for ri in tax.candidates(toks, negative=True):
         r = tax.negatives[ri]
         if match_rule(r, toks, eff):
-            vetoed.add(r.node)
+            if not r.gs1_only:
+                vetoed.add(r.node)
             if r.hard:
                 hard.add(r.node)
     best: dict[str, tuple] = {}   # node -> (key, keyword)
@@ -488,6 +562,12 @@ def related(a: str, b: str) -> bool:
 
 
 def combine_gs1(tax: Taxonomy, res: Result, gs1: tuple[str, str] | None) -> Result:
+    out = _combine_gs1(tax, res, gs1)
+    sid = split_storage(out.category_id, out.storage, tax.nodes)
+    return out if sid == out.category_id else replace(out, category_id=sid)
+
+
+def _combine_gs1(tax: Taxonomy, res: Result, gs1: tuple[str, str] | None) -> Result:
     if not gs1:
         return res
     gid, gconf = gs1
@@ -690,7 +770,7 @@ def classify_all(tax: Taxonomy, rows: list[dict], gmap: dict | None,
                  hints: dict[str, list[BrandHint]] | None = None) -> list[Result]:
     first = []
     for r in rows:
-        res = classify_rules(tax, item_name(r), hints)
+        res = classify_rules(tax, item_name(r), hints, row_features(r.get("item_code", ""), r.get("is_weighted")))
         g = gmap.get(r.get("gs1_group") or "") if gmap else None
         first.append(combine_gs1(tax, res, g))
     prior: dict[str, Counter] = defaultdict(Counter)
@@ -855,12 +935,14 @@ def main(argv: list[str] | None = None) -> int:
     with gzip.open(a.out_dir / "predictions.csv.gz", "wt", encoding="utf-8", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["item_code", "name", "category_id", "path_he", "confidence", "reason", "keyword",
-                    "rule_category_id", "chains_live", "gs1_group", "brand_hint", "attributes", "pinned"])
+                    "rule_category_id", "chains_live", "gs1_group", "brand_hint", "attributes", "pinned",
+                    "storage"])
         for r, x in zip(rows, final):
             attrs = extract_attributes(tax, x.category_id, item_name(r), r, x.brand)
             w.writerow([r["item_code"], item_name(r), x.category_id, tax.path_he(x.category_id) if x.category_id else "",
                         x.confidence, x.reason, x.keyword, x.rule_id, r.get("chains_live", ""),
-                        r.get("gs1_group", ""), x.brand, json.dumps(attrs, ensure_ascii=False), x.pinned])
+                        r.get("gs1_group", ""), x.brand, json.dumps(attrs, ensure_ascii=False), x.pinned,
+                        x.storage])
     rep = evaluate(tax, rows, final, rule_only, gmap)
     (a.out_dir / "report.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
     with open(a.out_dir / "unclassified_leading.tsv", "w", encoding="utf-8") as fh:

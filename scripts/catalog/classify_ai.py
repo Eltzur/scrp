@@ -86,10 +86,12 @@ Rules of the tree (decisions of the shop owner):
 - Frozen products go to the freezer department D06 (frozen fruit is D06.C02, frozen vegetables D06.C01, frozen bakery and pizza D06.C04, schnitzel and nuggets D06.C05), except raw frozen meat, poultry and fish, which stay in D03.
 - Crackers and cookies are snacks (D08). Ice-cream bars are ice cream (D06.C03).
 - Baby toiletries, baby food and baby gear are baby (D13). Toilet blocks are cleaning (D11.C04).
-- Pickles and olives are deli (D04.C05). Ready hummus, masabacha and prepared tahini salads are deli (D04.C02); raw tahini paste and nut butters are pantry spreads (D07.C20). Dry chickpeas are pantry pulses (D07.C05).
+- Pickles and olives: jarred or canned (shelf-stable) ones are D07.C08.S01; refrigerated, deli-counter or weighed ones are D04.C05. Ready hummus, masabacha and prepared tahini salads are deli (D04.C02); raw tahini paste and nut butters are pantry spreads (D07.C20). Dry chickpeas are pantry pulses (D07.C05).
 - Cooking sauces (D07.C10) and table condiments such as ketchup, mayonnaise and mustard (D07.C11) are separate; salad dressings and vinegar are D07.C12.
 - Sliced and smoked deli meat, sausages and hot dogs are D04.C01; raw meat is D03.
 - Tobacco and smoking products are D10.C05; liqueurs are D10.C04.
+- Drinks: still soft drinks - flavoured water and still fruit drinks that are not juice or nectar - are D09.C11; carbonated soft drinks D09.C03; juices and nectars D09.C04; plain and mineral water D09.C01; iced tea and ready coffee D09.C07.
+- Newspapers and magazines are D16.C08 (books and stationery D16.C07). Chocolate-coated sweets and dragées are chocolate (D08.C01).
 - Non-food: household goods and kitchenware are D15; clothing, toys, party goods, candles, Judaica and stationery are D16; personal care and pharmacy are D12.
 - "צ'יפס" alone is French fries (frozen, D06.C06); crisps are D08.C05.S01.
 
@@ -220,7 +222,9 @@ def call_batch(client, model: str, system: str, schema: dict, payload: list[dict
     effort "" = thinking off (the default); low / medium / high = adaptive
     thinking at that effort.
     """
-    thinking = {"type": "adaptive"} if effort else {"type": "disabled"}
+    # Claude Sonnet 5.5 rejects {"type": "disabled"}: its lowest setting is "between_tools" (SU11A-56)
+    off = {"type": "between_tools"} if model.startswith("claude-sonnet-5-5") else {"type": "disabled"}
+    thinking = {"type": "adaptive"} if effort else off
     output_config = {"format": {"type": "json_schema", "schema": schema}}
     if effort:
         output_config["effort"] = effort
