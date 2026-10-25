@@ -488,6 +488,31 @@ export const getMyTerms = (): Promise<TermsStatus> =>
 export const acceptTerms = (version: string): Promise<void> =>
   http.post('/me/terms', { version }).then(() => undefined);
 
+// --- Categories (SU11A-57) --------------------------------------------------
+
+export interface CategoryNode {
+  id: string; parent_id: string | null; level: number; name_he: string; name_en: string;
+}
+
+export interface CategoryPathStep { id: string; name_he: string; name_en: string; level: number }
+
+/** GET /items/{code}/category. partial: low confidence, only the department is shown. */
+export interface ItemCategory {
+  item_code: string; category_id: string | null; path: CategoryPathStep[]; partial: boolean;
+}
+
+export const getItemCategory = (itemCode: string): Promise<ItemCategory> =>
+  http.get<ItemCategory>(`/items/${encodeURIComponent(itemCode)}/category`).then(r => r.data);
+
+export const getCategoryTree = (): Promise<{ version: string | null; nodes: CategoryNode[] }> =>
+  http.get<{ version: string | null; nodes: CategoryNode[] }>('/categories/tree').then(r => r.data);
+
+/** Errors carry {"code"}: login_required, terms_required, account_banned, daily_limit,
+ *  already_suggested, invalid_category, same_category, item_not_found. */
+export const suggestCategory = (itemCode: string, body: { category_id: string; comment: string | null }) =>
+  http.post<{ id: number; status: string }>(`/items/${encodeURIComponent(itemCode)}/category-suggestions`, body)
+    .then(r => r.data);
+
 /** The `code` of an {"code": ...} error answer (e.g. account_banned), else null. */
 export function apiErrorCode(err: unknown): string | null {
   if (!axios.isAxiosError(err)) return null;

@@ -142,6 +142,15 @@
     "terms_failed": "אישור התנאים נכשל. נסו שוב.",
     "account_banned": "החשבון הוגבל ואינו יכול לפרסם ביקורות או דיווחים. לפרטים: info@xxl.co.il"
   },
+  "category": {
+    "label": "קטגוריה",
+    "loading": "טוען…",
+    "none": "המוצר עדיין לא סווג",
+    "suggest_button": "הצעת עדכון קטגוריה",
+    "registered_only": "האפשרות זמינה למשתמשים רשומים בלבד",
+    "sign_in": "התחברות",
+    "sign_up": "הרשמה"
+  },
   "apps": {
     "section_title": "SUPER XXL באפליקציה",
     "section_sub": "השוואת מחירים מהטלפון, עם סריקת ברקוד בסופר",
@@ -201,7 +210,8 @@
       "queue": "ביקורות לטיפול",
       "history": "היסטוריה",
       "audit": "יומן פעולות",
-      "soon": "בקרוב: קטגוריות, הגדרות, סניפים"
+      "categories": "קטגוריות",
+      "soon": "בקרוב: הגדרות, סניפים"
     },
     "status": {
       "title": "לוח בקרה",
@@ -233,7 +243,10 @@
       "db_size": "גודל מסד הנתונים",
       "disk_free": "מקום פנוי בדיסק",
       "process_rss": "זיכרון תהליך ה־API",
-      "system_memory": "זיכרון פנוי בשרת"
+      "system_memory": "זיכרון פנוי בשרת",
+      "categories": "קטגוריות",
+      "pending_suggestions": "הצעות קטגוריה ממתינות",
+      "pending_items": "מוצרים עם הצעות"
     },
     "rating": {
       "score": "דירוג {{n}} מתוך 3",
@@ -295,8 +308,18 @@
         "rating_keep": "השארה",
         "rating_restore": "שחזור",
         "rating_ban_author": "חסימת כותב",
-        "rating_unban_author": "ביטול חסימה"
-      }
+        "rating_unban_author": "ביטול חסימה",
+        "category_set": "שינוי קטגוריה",
+        "category_confirm": "אישור קטגוריה",
+        "category_bulk": "העברה מרוכזת",
+        "category_revert": "ביטול שינוי קטגוריה",
+        "category_suggestion_accept": "אישור הצעת קטגוריה",
+        "category_suggestion_reject": "דחיית הצעת קטגוריה"
+      },
+      "old_new": "{{old}} ← {{new}}"
+    },
+    "categories": {
+      "title": "קטגוריות"
     }
   }
 }

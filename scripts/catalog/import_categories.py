@@ -46,8 +46,8 @@ if str(ROOT) not in sys.path:
 
 import scripts.catalog.classify_rules as C  # noqa: E402
 from scripts.catalog.combine import combine_label  # noqa: E402
-from scripts.catalog.store import (ITEM_ATTRIBUTE_COLS, ITEM_CATEGORY_COLS, attribute_rows, may_write,  # noqa: E402
-                                   upsert_item_attributes_sql, upsert_item_categories_sql)
+from scripts.catalog.store import (ITEM_ATTRIBUTE_COLS, ITEM_CATEGORY_COLS, attribute_rows, manual_row,  # noqa: E402
+                                   may_write, upsert_item_attributes_sql, upsert_item_categories_sql)
 
 AI_LABELS = ROOT / "docs" / "catalog" / "ai_labels_v1.csv"
 TABLES = ("categories", "item_categories", "item_attributes")
@@ -121,9 +121,7 @@ def manual_rows(path: Path, valid: set[str]) -> tuple[list[dict], list[str]]:
             if cid not in valid:
                 bad.append(f"{r.get('item_code')}: {cid}")
                 continue
-            out.append({"item_code": r["item_code"].strip(), "category_id": cid, "confidence": "high",
-                        "source": "manual", "detail": f"manual: {path.name}", "model": None,
-                        "taxonomy_version": C.TAXONOMY_VERSION, "reviewed": True})
+            out.append(manual_row(r["item_code"].strip(), cid, C.TAXONOMY_VERSION, f"manual: {path.name}"))
     return out, bad
 
 

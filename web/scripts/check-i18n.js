@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from 'fs';
+import { readdirSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -36,5 +36,21 @@ if (missingInEn.length) {
   failed = true;
 }
 
+// SU11A-57: lazy string bundles (<dir>/<name>.he.json / <name>.en.json) ship
+// with their own chunk; they must have the same keys too.
+let lazyKeys = 0;
+for (const dir of ['src/admin/i18n', 'src/components/category']) {
+const lazyDir = join(__dirname, '..', dir);
+for (const f of readdirSync(lazyDir).filter(f => f.endsWith('.he.json'))) {
+  const base = `${dir}/${f.slice(0, -'.he.json'.length)}`;
+  const name = f.slice(0, -'.he.json'.length);
+  const lh = new Set(getKeys(JSON.parse(readFileSync(join(lazyDir, f), 'utf8'))));
+  const le = new Set(getKeys(JSON.parse(readFileSync(join(lazyDir, `${name}.en.json`), 'utf8'))));
+  for (const k of lh) if (!le.has(k)) { console.error(`${base}: missing in en: ${k}`); failed = true; }
+  for (const k of le) if (!lh.has(k)) { console.error(`${base}: missing in he: ${k}`); failed = true; }
+  lazyKeys += lh.size;
+}
+}
+
 if (failed) process.exit(1);
-console.log(`i18n key parity OK (${enKeys.size} keys in both locales)`);
+console.log(`i18n key parity OK (${enKeys.size} keys in both locales; ${lazyKeys} in lazy bundles)`);

@@ -1,7 +1,7 @@
 # SCRP — Project Handoff
 
 > A living document. Update at the end of each session. Paste at the start of each new chat.
-> Last updated: 25 Oct 2026 (SU11A-56: taxonomy v1.2 - still soft drinks, newspapers, shelf-stable pickles/olives; Sonnet 5.5 pilot failed its gate, no re-check; nothing applied; SU11A-55: catalog review loaded (review_graded_v1.csv, 150 manual rows), rules v1.1 fixing the 20 graded errors, AI-label audit sample; nothing applied; SU11A-54: admin console phase 1 on admin.xxl.co.il - moderation, status, audit log, mandatory TOTP; existing /admin endpoints now need 2FA; built, not deployed; SU11A-53: Google Play badge + "coming soon for iPhone" + platform app banner on the website, built, not deployed; Play Production LIVE 23 Oct; RATINGS_REQUIRE_TERMS on 24 Oct; SU11A-52: catalog categories v1 - taxonomy v1, category tables (migration not applied), AI labels for 44K uncertain items, server import + daily new-barcode classification, service rows hidden, nameless-item fallback names; nothing applied or deployed; SU11A-51: catalogue study, taxonomy v0 (16 departments / 151 categories), rule classifier prototype + 400-item review sample; offline, no schema; SU11A-50: filtered search (/compare, city / chain / store) on the v2 path behind SEARCH_V2_FILTERED + faster v2 candidate step; not deployed; SU11A-49: security fixes F-01..F-05 built, nginx files + runbook, compliance drafts; not deployed; SU11A-48: security review; SU11A-47: search speed - precomputed page prices, /suggest type-ahead, response cache, web combobox, mobile suggestions; built, not deployed; SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
+> Last updated: 25 Oct 2026 (SU11A-57: categories tab in the admin console (search, queues, bulk, undo) + user category suggestions on web and app, migration + runbook; built, not deployed; SU11A-56: taxonomy v1.2 - still soft drinks, newspapers, shelf-stable pickles/olives; Sonnet 5.5 pilot failed its gate, no re-check; nothing applied; SU11A-55: catalog review loaded (review_graded_v1.csv, 150 manual rows), rules v1.1 fixing the 20 graded errors, AI-label audit sample; nothing applied; SU11A-54: admin console phase 1 on admin.xxl.co.il - moderation, status, audit log, mandatory TOTP; existing /admin endpoints now need 2FA; built, not deployed; SU11A-53: Google Play badge + "coming soon for iPhone" + platform app banner on the website, built, not deployed; Play Production LIVE 23 Oct; RATINGS_REQUIRE_TERMS on 24 Oct; SU11A-52: catalog categories v1 - taxonomy v1, category tables (migration not applied), AI labels for 44K uncertain items, server import + daily new-barcode classification, service rows hidden, nameless-item fallback names; nothing applied or deployed; SU11A-51: catalogue study, taxonomy v0 (16 departments / 151 categories), rule classifier prototype + 400-item review sample; offline, no schema; SU11A-50: filtered search (/compare, city / chain / store) on the v2 path behind SEARCH_V2_FILTERED + faster v2 candidate step; not deployed; SU11A-49: security fixes F-01..F-05 built, nginx files + runbook, compliance drafts; not deployed; SU11A-48: security review; SU11A-47: search speed - precomputed page prices, /suggest type-ahead, response cache, web combobox, mobile suggestions; built, not deployed; SU11A-46: SEO sitemaps/canonical/meta, load-more dedup, header, search coupon variants + typo 0.40, Play Production 8 submitted; SU11A-45: search v2 verified read-only + server runbook; SU11A-44b: legal entity XXL Enterprises filled, privacy Hostinger auth mail; SU11A-44: block user, moderation tools, terms + consent built, not deployed; SU11A-43 docs refresh; see "Open items / next steps" at the end)
 
 ## 📏 Standing rules (apply to every session)
 
@@ -948,6 +948,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-48 (Oct 22) — security review (read-only): `docs/security/su11a48_security_review.md`. 2 High (unbounded old-path price fetch + no DB statement timeout; no rate limiting), 6 Medium, sudo command list for Dude, Data Security Regulations gap table. No code or server change.
 - SU11A-49 (Oct 22) — security fixes from SU11A-48: old-path search cap (1,000) + API-only 15 s DB timeout (503 query_timeout), JWKS refetch throttle, nginx rate limits + security headers + CSP Report-Only (files in `deploy/nginx/`), web-root modes on deploy, Hebrew compliance drafts (`docs/compliance/`). Runbook `docs/security/su11a49_runbook.md`. Not deployed.
 - SU11A-50 (Oct 22) — `/compare` and `/search` with city / chain / group_by=store on the v2 path behind `SEARCH_V2_FILTERED` (default off): v2 candidates walked in batches against the filter, only the page priced; v2 candidate step counts and orders in SQL (no token table, no migration). Runbook `docs/super/su11a50_runbook.md`. Not deployed.
+- SU11A-57 (Oct 25) — admin console categories tab + user category suggestions (`category_suggestions`, `docs/admin/su11a57_runbook.md`); AI-audit grades as manual rows (`ai_audit_graded_v1.csv`). Not deployed.
 - SU11A-56 (Oct 25) — catalog taxonomy v1.2 (`taxonomy_v1_2.csv`, `gs1_group_map_v1_2.csv`: D09.C11, D16.C08, D07.C08.S01 storage split), Sonnet 5.5 pilot on the graded AI audit (53% vs Haiku 64%: gate failed, no full re-check). Not applied.
 - SU11A-55 (Oct 25) — catalog: Dude's review as `docs/catalog/review_graded_v1.csv` (150 manual rows), taxonomy/rules v1.1 (`taxonomy_v1_1.csv`, `brand_category_hints_v1_1.csv`; head anchor, %, hard negatives, brand pin), AI audit sample `ai_audit_sample_v1.xlsx`. Not applied.
 - SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
@@ -1998,6 +1999,57 @@ The runbook (section 6) has the new expected counts.
 
 ---
 
+### SU11A-57 (25 Oct 2026) - categories in the admin console + user category suggestions; built, not deployed
+
+**Data:** `docs/catalog/ai_audit_graded_v1.csv`, Dude's 100 graded AI-only labels in the `--manual` format. It carries the four overrides and the SU11A-56 free-text mapping; item_code comes from `ai_audit_sample_v1.xlsx`. Local dry run: `manual_rows: 100`, `manual_bad_ids: []`. Listed in section 5 of the su11a52 runbook.
+
+**DB:** `db/migrations/su11a57_category_suggestions.sql`, not applied. It creates `category_suggestions`:
+- `user_id` references users with ON DELETE CASCADE, so `DELETE /account` removes the rows;
+- one open suggestion per user and item (a partial unique index);
+- comments up to 200 characters; open / accepted / rejected.
+
+The migration needs su11a52 first and checks for it. The table is in `docs/store_privacy_inventory.md`.
+
+**API:**
+- `api/categories.py` holds the tree cache, paths and the label writes. All writes use `scripts/catalog/store.py` (`manual_row`, manual upsert, confirm, restore), not a copy of its rules.
+- **Public:** `GET /categories/tree` (cached) and `GET /items/{code}/category`. Low confidence shows the department only.
+- **Signed in:** `POST /items/{code}/category-suggestions`, gates in this order:
+  - 401 `login_required`;
+  - banned;
+  - terms (always required here);
+  - 20 per 24 h (429 `daily_limit`);
+  - 409 `already_suggested`;
+  - an active id that differs from the current one.
+  - A blacklisted comment is dropped silently (`comment_blocked`).
+- **Admin** (aal2; every write audited with the old / new label; `api/routers/admin_categories.py`):
+  - search;
+  - item detail;
+  - set (manual row);
+  - confirm (reviewed);
+  - bulk (up to 100);
+  - revert from an audit row (409 `changed_since` when the label moved on);
+  - four queues (low / disagreements / unclassified / suggestions, by chains_live);
+  - accept or reject suggestions.
+  - `GET /admin/status` gains `category_suggestions`.
+
+**Web:**
+- **Product dialog:** the category path and **הצעת עדכון קטגוריה**.
+  - Signed out: a "registered only" note with sign-in / sign-up links.
+  - Signed in: a lazy dialog with the picker, an optional comment, terms consent when needed, and the error states.
+- **Size:** the main JS grew by 3.8 kB (0.9 kB gzip). The picker and dialog strings ship in their lazy chunks.
+- **Admin:** the קטגוריות tab replaces that part of the "בקרוב" note. It is a lazy chunk with its own strings, has five sub-tabs, a searchable tree picker, bulk move with confirm, and undo per change.
+- `check:admin-chunk` also guards the category admin paths; `test:i18n` also checks the lazy string bundles.
+
+**Mobile:** the same button and behaviour on product-detail (`src/components/category-suggest.tsx`). Code only; it ships in build 9 (`docs/handoff_mobile.md`).
+
+**Tests:**
+- `tests/test_categories_su11a57.py`: 50 tests. They cover every gate, the aal2 matrix on all 12 admin endpoints, audit rows without identities, precedence after rule / gs1 / ai imports and the build hook, revert, and account deletion.
+- `tests/test_categories_su11a57_pg.py`: the migration twice, the prerequisite check, constraints, end to end on Postgres, and the FK cascade.
+
+**Runbook:** `docs/admin/su11a57_runbook.md`. Steps: catalog check, pull, migration, restart, web deploy, the two manual-row imports, checks, rollback.
+
+---
+
 ## 📋 Open items / next steps (as of 25 Oct 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (verified, SU11A-53). Lawyer review of the terms is Dude's call.
@@ -2005,10 +2057,11 @@ The runbook (section 6) has the new expected counts.
 - **SU11A-50 filtered search:** built, not deployed. After the SU11A-47 runbook (and SU11A-49): `docs/super/su11a50_runbook.md` (compare `--filtered` go / no-go, then `SEARCH_V2_FILTERED=test`, then `on`). No web or mobile change needed.
 - **SU11A-49 security fixes:** built, not deployed. Run `docs/security/su11a49_runbook.md` (after or together with the SU11A-47 runbook; both restart scrp-api), then the web deploy. Then: review the compliance drafts in `docs/compliance/` (with an advisor for the לאימות items), the sudo checks in the SU11A-48 review, CSP enforcement after a clean week, and the open findings F-06 to F-23.
 - **SU11A-47 search speed:** built, not deployed. Run `docs/super/su11a47_search_speed_runbook.md` (migration, build, check-precomputed, restart, curl), then the web deploy. Mobile suggestions ship in build 9.
-- **SU11A-54 admin console:** built, not deployed. Run `docs/admin/su11a54_runbook.md` (DNS, Supabase TOTP, allowlist, migration, restart, certificate + site, web deploy, first TOTP enrolment). From then on every /admin call needs 2FA. Next phases: categories (SU11A-52 review), settings, stores.
+- **SU11A-54 admin console:** built, not deployed. Run `docs/admin/su11a54_runbook.md` (DNS, Supabase TOTP, allowlist, migration, restart, certificate + site, web deploy, first TOTP enrolment). From then on every /admin call needs 2FA. Next phases: settings, stores (categories: SU11A-57).
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
 - **Catalog:**
-  - **SU11A-52 catalog (rules v1.1 since SU11A-55): built, NOT applied.** Run `docs/catalog/su11a52_runbook.md` (migration, pull, one build, import dry run then apply), then `--manual docs/catalog/review_graded_v1.csv` (Dude's 150 graded rows). Taxonomy is v1.2 (SU11A-56). Next to grade: `disagreements_v1.csv` (regenerated for v1.2). Open: frozen chocolate-coated fruit (D06.C02 or D08.C01?); the 265 D04.C05 pickles without storage evidence; whether a better AI pass is worth it (Sonnet lost the pilot). Service rows and nameless names are handled by the same build;
+  - **SU11A-52 catalog (rules v1.1 since SU11A-55): built, NOT applied.** Run `docs/catalog/su11a52_runbook.md` (migration, pull, one build, import dry run then apply), then `--manual docs/catalog/review_graded_v1.csv` (Dude's 150 graded rows) and `--manual docs/catalog/ai_audit_graded_v1.csv` (100, SU11A-57). Taxonomy is v1.2 (SU11A-56). Next to grade: `disagreements_v1.csv` (regenerated for v1.2). Open: frozen chocolate-coated fruit (D06.C02 or D08.C01?); the 265 D04.C05 pickles without storage evidence; whether a better AI pass is worth it (Sonnet lost the pilot). Service rows and nameless names are handled by the same build;
+  - **SU11A-57 categories tab + user suggestions:** built, not deployed. After su11a52 is applied: `docs/admin/su11a57_runbook.md` (migration, restart, web deploy, manual-row imports, checks). The app button ships in build 9;
   - category / attribute faceted filters;
   - a switch to hide tobacco and alcohol;
   - optionally, move the location prompt to a contextual moment.
@@ -2022,9 +2075,9 @@ The runbook (section 6) has the new expected counts.
 - **Play:**
   - **Production LIVE since 23 Oct 2026** (build 8, 1.2.1, Israel, "XXL Team", IARC / PEGI 3). The website badge and banner (SU11A-53) are built; Dude deploys the web.
   - plan Play Billing.
-  - Next build is versionCode 9 (carries the SU11A-46 terms bidi fix and the SU11A-47 search suggestions).
+  - Next build is versionCode 9 (carries the SU11A-46 terms bidi fix, the SU11A-47 search suggestions and the SU11A-57 category suggestion button).
 - **SEO:** built in SU11A-46. After the web deploy: submit the sitemaps in Search Console (see the SU11A-46 entry) and request indexing of the key pages. Optional nginx www -> apex redirect on 443.
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-57 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).
+Next free session ID: SU11A-58 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).

@@ -213,6 +213,23 @@ def get_current_user(
     return {"id": user_id, "email": email}
 
 
+def get_current_user_login_code(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    conn=Depends(get_db),
+) -> dict:
+    """get_current_user, but a missing or invalid token answers 401
+    {"code":"login_required"} (SU11A-57: the clients show "registered users
+    only" on that code). account_deleted and a JWKS outage (503) are unchanged."""
+    if not credentials:
+        raise ApiCodeError(401, "login_required")
+    try:
+        return get_current_user(credentials, conn)
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            raise ApiCodeError(401, "login_required") from None
+        raise
+
+
 def get_current_user_optional(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     conn=Depends(get_db),

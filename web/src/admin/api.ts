@@ -72,6 +72,7 @@ export interface Status {
   search_items: BuildStamp | null;
   search_item_prices: BuildStamp | null;
   moderation: { pending: number; hidden_7d: number; banned_users: number } | null;
+  category_suggestions?: { pending: number; pending_items: number } | null;
   db_size_bytes: number | null;
   disk: { path: string; total_bytes: number; free_bytes: number } | null;
   memory: { process_rss_bytes: number | null; system_total_bytes: number | null; system_available_bytes: number | null };
@@ -100,3 +101,61 @@ export const getHistory = (cursor?: Cursor | null) =>
 export const getAudit = (before?: number | null) =>
   http.get<{ items: AuditItem[]; next_before: number | null }>('/admin/audit',
     { params: { limit: 50, ...(before ? { before } : {}) } }).then(r => r.data);
+
+// --- Categories (SU11A-57) ---------------------------------------------------
+
+export interface CategoryNodeA { id: string; parent_id: string | null; level: number; name_he: string; name_en: string }
+
+export interface LabelBrief {
+  category_id: string; confidence: 'high' | 'medium' | 'low'; source: 'rule' | 'gs1' | 'ai' | 'manual';
+  reviewed: boolean; path_he: string; detail?: string | null;
+}
+
+export interface CatItemRow {
+  item_code: string; item_name: string | null; chains_live: number | null; label: LabelBrief | null;
+  other?: { source: string; category_id: string; path_he: string } | null;
+}
+
+export interface SuggestionGroup extends CatItemRow {
+  count: number; latest_at: string;
+  suggested: { category_id: string; n: number; path_he: string }[];
+  comments: { text: string; category_id: string; at: string }[];
+}
+
+export interface CatAuditEntry {
+  id: number; at: string; action: string;
+  old_category_id: string | null; new_category_id: string | null; revertible: boolean;
+}
+
+export interface CatItemDetail {
+  item_code: string; item_name: string | null; chains_live: number | null;
+  label: (LabelBrief & { model: string | null; taxonomy_version: string; decided_at: string | null }) | null;
+  open_suggestions: number; audit: CatAuditEntry[];
+}
+
+export type CatQueueKind = 'low' | 'disagreements' | 'unclassified' | 'suggestions';
+export interface CatQueuePage<T = CatItemRow> { kind: CatQueueKind; total: number; items: T[]; next_offset: number | null }
+
+export const getCategoryTreeA = () =>
+  http.get<{ version: string | null; nodes: CategoryNodeA[] }>('/categories/tree').then(r => r.data);
+export const searchCatItems = (q: string) =>
+  http.get<{ count: number; items: CatItemRow[] }>('/admin/categories/items', { params: { q } }).then(r => r.data);
+export const getCatItem = (code: string) =>
+  http.get<CatItemDetail>(`/admin/categories/items/${encodeURIComponent(code)}`).then(r => r.data);
+export const setCatItem = (code: string, category_id: string) =>
+  http.put(`/admin/categories/items/${encodeURIComponent(code)}`, { category_id }).then(r => r.data);
+export const confirmCatItem = (code: string) =>
+  http.post(`/admin/categories/items/${encodeURIComponent(code)}/confirm`).then(r => r.data);
+export const bulkCat = (item_codes: string[], category_id: string) =>
+  http.post<{ ok: boolean; updated: number; skipped: string[] }>('/admin/categories/bulk', { item_codes, category_id })
+    .then(r => r.data);
+export const revertCat = (auditId: number) =>
+  http.post(`/admin/categories/revert/${auditId}`).then(r => r.data);
+export const getCatQueue = <T = CatItemRow>(kind: CatQueueKind, offset = 0) =>
+  http.get<CatQueuePage<T>>(`/admin/categories/queue/${kind}`, { params: { limit: 50, offset } }).then(r => r.data);
+export const acceptSuggestions = (code: string, category_id: string) =>
+  http.post<{ ok: boolean; accepted: number }>(`/admin/category-suggestions/${encodeURIComponent(code)}/accept`,
+    { category_id }).then(r => r.data);
+export const rejectSuggestions = (code: string) =>
+  http.post<{ ok: boolean; rejected: number }>(`/admin/category-suggestions/${encodeURIComponent(code)}/reject`)
+    .then(r => r.data);

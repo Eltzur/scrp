@@ -693,3 +693,34 @@ Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; 
   - **RATINGS_REQUIRE_TERMS=on since 24 Oct 2026** (verified on the server). Build 7 (1.2.1 before consent) can no longer rate without accepting the terms.
   - **Website:** super.xxl.co.il and the portal now show the official Hebrew Google Play badge and the text label "בקרוב גם ל-iPhone". Android visitors get a dismissible banner linking to Play.
   - **iOS badge swap:** when the iOS app is live, set `IOS_APP_URL` in `web/src/config/apps.ts` and add Apple's official App Store badge at `/badges/app-store-he.svg`. The label then becomes the badge, and the iPhone banner becomes a store link. Until then, no Apple badge or logo anywhere.
+
+- **2026-10-25 (SU11A-57, ships in build 9):** "הצעת עדכון קטגוריה" on product-detail (`src/components/category-suggest.tsx`, wired in `src/app/product-detail.tsx`). Same texts and rules as the web (`he.category.*`).
+  - **Category line:** under the barcode, the item's path from `GET /items/{code}/category`.
+    - A low-confidence label shows the department only (the API cuts it).
+    - No label shows "המוצר עדיין לא סווג".
+  - **Signed in:** a page-sheet modal with:
+    - the current path;
+    - a searchable list of the taxonomy (`GET /categories/tree`), with the current category greyed out;
+    - an optional comment (200);
+    - submit (`POST /items/{code}/category-suggestions`). Success closes the modal and shows "תודה, ההצעה תיבדק".
+  - **Terms:** a user without consent to the current terms (the cached `ensureTerms`) ticks the consent box inside the modal, and the submit records it first.
+    - The terms and privacy links close the modal first.
+    - The modal stays mounted, so the typed text is kept.
+  - **Errors in the modal:** daily limit (20/day), already suggested, banned, same / invalid category, generic failure. A comment the server's blacklist withholds answers like any success.
+  - **Signed out:** no modal, a note "האפשרות זמינה למשתמשים רשומים בלבד" with sign-in / sign-up buttons.
+  - **A11y:**
+    - 48dp / 44pt targets;
+    - list rows are radios with selected / disabled state;
+    - the error is a live region.
+    - Dark mode comes from `useTheme` and `dark:` classes.
+  - **Checks:** JS only, no app.json / version change.
+    - **tsc:** no new errors; the same five pre-existing `src/tw` TS2589/TS2590.
+    - **eslint:** clean on the new and changed files. `product-detail.tsx` has the same 3 pre-existing set-state-in-effect errors as before.
+    - `expo lint` cannot run as checked in: there is no eslint config, and it tries to install one. The repo is unchanged.
+  - **NOT device-verified.** Device check for build 9:
+    - open a product signed out: the note and buttons;
+    - signed in: pick, comment, send, then send again and see "כבר שלחת…";
+    - an account without consent: the box, then send;
+    - RTL, light and dark;
+    - TalkBack / VoiceOver on the list.
+  - **Needs the SU11A-57 API deployed** (`docs/admin/su11a57_runbook.md`). Against the old API, the line says "not categorised" and a submit shows the generic failure.

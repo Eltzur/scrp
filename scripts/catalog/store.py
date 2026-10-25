@@ -1,8 +1,9 @@
 """Catalog category storage rules (SU11A-52): precedence and the SQL that enforces it.
 
 Tables: db/migrations/su11a52_catalog.sql (categories, item_categories,
-item_attributes). Writers: scripts/catalog/import_categories.py and the
-new-barcode hook in scripts/build_search_items.py.
+item_attributes). Writers: scripts/catalog/import_categories.py, the
+new-barcode hook in scripts/build_search_items.py and, since SU11A-57, the
+admin console (api/categories.py: manual rows, confirm, revert).
 
 PRECEDENCE (documented in CLAUDE.md and docs/catalog/su11a52_runbook.md):
 
@@ -79,6 +80,34 @@ ON CONFLICT (item_code) DO UPDATE SET
     reviewed = EXCLUDED.reviewed, decided_at = now()
 WHERE {guard}
 """
+
+
+def manual_row(item_code: str, category_id: str, taxonomy_version: str, detail: str) -> dict:
+    """One item_categories row from a human decision (import --manual, the admin
+    console, an accepted user suggestion): source manual, high, reviewed."""
+    return {"item_code": item_code, "category_id": category_id, "confidence": "high", "source": "manual",
+            "detail": detail[:300], "model": None, "taxonomy_version": taxonomy_version, "reviewed": True}
+
+
+# Admin console (SU11A-57). "נכון": the row stays as it is and is marked
+# reviewed, so no automated run touches it again.
+CONFIRM_ITEM_CATEGORY_SQL = """
+UPDATE item_categories SET reviewed = true, decided_at = now()
+WHERE item_code = :item_code AND NOT reviewed
+"""
+
+# Revert of an admin change: the audited old row is written back exactly as it
+# was (source, confidence, reviewed included), or the row is removed when there
+# was none. A human undo, so it is not bound by the automated guard.
+RESTORE_ITEM_CATEGORY_SQL = f"""
+INSERT INTO item_categories AS ic ({", ".join(ITEM_CATEGORY_COLS)}, decided_at)
+VALUES ({", ".join(f":{c}" for c in ITEM_CATEGORY_COLS)}, now())
+ON CONFLICT (item_code) DO UPDATE SET
+    category_id = EXCLUDED.category_id, confidence = EXCLUDED.confidence, source = EXCLUDED.source,
+    detail = EXCLUDED.detail, model = EXCLUDED.model, taxonomy_version = EXCLUDED.taxonomy_version,
+    reviewed = EXCLUDED.reviewed, decided_at = now()
+"""
+DELETE_ITEM_CATEGORY_SQL = "DELETE FROM item_categories WHERE item_code = :item_code"
 
 
 # New barcodes only (build hook): never touches an existing row.

@@ -84,6 +84,13 @@ A second dry run should report only `unchanged` (plus `protected` for anything y
 
 **Done for the first review (SU11A-55):** `docs/catalog/review_graded_v1.csv` holds Dude's 150 graded rows (130 confirmed, 20 corrected, every id valid). Load it with the two commands below, using that file name. The local dry run reported `manual_rows: 150`, `manual_bad_ids: []`.
 
+**Done for the AI audit (SU11A-57):** `docs/catalog/ai_audit_graded_v1.csv` holds Dude's 100 graded AI-only labels from `ai_audit_sample_v1_graded.xlsx`, with the four overrides (rows 46, 97 → D06.C04; 74 → D12.C12; 57 → D01.C01) and the free-text answers mapped to v1.2 ids as in `su11a56_v1_2_report.md` (rows 71 and 92 had no good node: nearest given, noted in `mapping_note`). item_code comes from `ai_audit_sample_v1.xlsx`. The local dry run reported `manual_rows: 100`, `manual_bad_ids: []`. Load it after `review_graded_v1.csv`:
+
+    venv/bin/python3 -m scripts.catalog.import_categories --manual docs/catalog/ai_audit_graded_v1.csv            # dry run
+    venv/bin/python3 -m scripts.catalog.import_categories --manual docs/catalog/ai_audit_graded_v1.csv --apply
+
+The two files share no barcode, so the order does not matter for the result.
+
 Fill `correct_category_id` (any id from `docs/catalog/taxonomy_v1_2.csv`) in any of:
 - `docs/catalog/ai_audit_sample_v1.xlsx` (100 AI-only labels; has a drop-down; save it as CSV for the import);
 - `docs/catalog/review_sample_v1.csv` (150 rows; already graded, see above);

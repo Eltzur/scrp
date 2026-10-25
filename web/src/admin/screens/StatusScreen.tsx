@@ -109,6 +109,14 @@ export default function StatusScreen() {
           </dl>
         </Card>
 
+        {/* SU11A-57: null until su11a57_category_suggestions.sql is applied. */}
+        <Card title={t('admin.status.categories')}>
+          <dl>
+            <Row label={t('admin.status.pending_suggestions')} value={s.category_suggestions?.pending} />
+            <Row label={t('admin.status.pending_items')} value={s.category_suggestions?.pending_items} />
+          </dl>
+        </Card>
+
         <Card title={t('admin.status.counters')}>
           <dl>
             <Row label={t('admin.status.requests')} value={s.counters.requests.toLocaleString('he-IL')} />

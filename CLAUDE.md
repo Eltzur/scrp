@@ -21,7 +21,7 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 15. **CC never deploys, never runs EAS builds, never calls `DELETE /account`, never modifies production data.** Dude runs `scripts\deploy_frontend.ps1` and EAS builds. Never delete the Supabase users x@xxl.co.il or gplay@xxl.co.il (the Play demo account); throwaway test users are created in Supabase → Authentication → Users → Add user (Auto Confirm).
 
 ## Status / next steps
-Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-57 (SU11A-37 reserved).
+Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-58 (SU11A-37 reserved).
 - Catalog categories: manual > ai > gs1 > rule; automated runs never overwrite manual/reviewed (enforced in `scripts/catalog/store.py`; tables in `db/migrations/su11a52_catalog.sql`).
 - RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (build 8 live on Play).
 - **Admin console: https://admin.xxl.co.il (SU11A-54).** 2FA (TOTP, aal2) is mandatory on every /admin/* endpoint, on top of ADMIN_USER_EMAILS. The console never edits secrets/.env, never runs shell commands or deploys, and never touches the DB from the browser: only authenticated API calls into the same functions as the scripts. It shows no user emails or ids, and every admin write goes to `admin_audit` (hashed actor).

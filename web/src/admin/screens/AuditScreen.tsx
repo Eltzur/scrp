@@ -6,6 +6,16 @@ import { actionLabel, fmtDate } from '../format';
 
 /** יומן פעולות (SU11A-54). The admin is shown as a short hash, never by name. */
 
+/** SU11A-57: category changes carry old / new label objects: show their id. */
+function detailValue(v: unknown): string {
+  if (v === null) return '—';
+  if (typeof v === 'object') {
+    const id = (v as { category_id?: unknown }).category_id;
+    return typeof id === 'string' ? id : JSON.stringify(v);
+  }
+  return String(v);
+}
+
 export default function AuditScreen() {
   const { t } = useTranslation();
   const q = useInfiniteQuery({
@@ -39,7 +49,7 @@ export default function AuditScreen() {
                 <>
                   <dt className="text-gray-500">{t('admin.audit.detail')}</dt>
                   <dd dir="ltr" className="text-right font-mono break-all">
-                    {Object.entries(i.detail).map(([k, v]) => `${k}=${String(v)}`).join('  ')}
+                    {Object.entries(i.detail).map(([k, v]) => `${k}=${detailValue(v)}`).join('  ')}
                   </dd>
                 </>
               )}

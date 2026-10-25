@@ -6,7 +6,7 @@ Order of operations:
   3. Refuse protected users (DELETE_PROTECTED_USER_IDS): 403 account_protected.
   4. One transaction: record the request in deleted_accounts, delete the user's
      flights rows (no FK to users), delete the users row. saved_baskets,
-     favorites and ratings follow by ON DELETE CASCADE, rating_reports via
+     favorites, ratings and category_suggestions (SU11A-57) follow by ON DELETE CASCADE, rating_reports via
      rating_id by CASCADE, and reports the user filed keep their row with
      reporter_user_id SET NULL (schema re-verified in SU11A-28).
   5. Delete the Supabase auth user. Success -> auth_deleted_at set, 204.

@@ -7,7 +7,7 @@ import { GateScreen, useAdminGate } from './AdminAuth';
 import { Loading } from './ui';
 
 /**
- * The admin console (SU11A-54), phase 1. App.tsx renders ONLY this on
+ * The admin console (SU11A-54), phase 1; SU11A-57 adds the קטגוריות tab. App.tsx renders ONLY this on
  * admin.xxl.co.il (or localhost?admin=1), loaded lazily: the shop's visitors
  * never download it. Hebrew RTL, mobile first.
  *
@@ -21,11 +21,13 @@ const StatusScreen = lazy(() => import('./screens/StatusScreen'));
 const QueueScreen = lazy(() => import('./screens/QueueScreen'));
 const HistoryScreen = lazy(() => import('./screens/HistoryScreen'));
 const AuditScreen = lazy(() => import('./screens/AuditScreen'));
+// SU11A-57: its own chunk too (picker, queues, the tab's strings).
+const CategoriesScreen = lazy(() => import('./screens/CategoriesScreen'));
 
-const TABS = ['status', 'queue', 'history', 'audit'] as const;
+const TABS = ['status', 'queue', 'categories', 'history', 'audit'] as const;
 type Tab = typeof TABS[number];
 const SCREENS: Record<Tab, LazyExoticComponent<ComponentType>> = {
-  status: StatusScreen, queue: QueueScreen, history: HistoryScreen, audit: AuditScreen,
+  status: StatusScreen, queue: QueueScreen, categories: CategoriesScreen, history: HistoryScreen, audit: AuditScreen,
 };
 
 function tabFromHash(): Tab {

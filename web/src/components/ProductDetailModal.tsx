@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import { getProductDetails, productImageUrl } from '../api/client';
 import ReviewsPanel from './ReviewsPanel';
+import CategoryLine from './CategoryLine';
 import type { ProductWithPrices, PriceQuote, ProductDetails } from '../api/client';
 
 interface Props {
@@ -209,6 +210,8 @@ export default function ProductDetailModal({ item, onClose, initialTab = 'prices
           <p className="text-[11px] text-gray-500 font-mono text-center pt-1" dir="ltr">
             {barcode}
           </p>
+          {/* SU11A-57: category path + "הצעת עדכון קטגוריה" (fixed height, lazy dialog). */}
+          <CategoryLine itemCode={barcode} />
         </div>
 
         {/* Tabs */}

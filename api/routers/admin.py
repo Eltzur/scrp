@@ -13,7 +13,7 @@ by identity; reports carry source, reason and date, never the reporter.
 GET /admin/me                       {is_admin, mfa} for the console
 GET /admin/ratings/history          recent moderator decisions
 GET /admin/ratings/{id}             one rating with all its reports
-GET /admin/status                   platform status (cached 30 s)
+GET /admin/status                   platform status (cached 30 s); SU11A-57: + open category suggestions
 GET /admin/audit                    the audit log
 
 The api-super host's nginx rate limit and X-Robots-Tag cover /admin/* like
@@ -183,6 +183,15 @@ def _moderation_counts(conn) -> dict:
     return {"pending": pending, "hidden_7d": int(hidden or 0), "banned_users": int(banned or 0)}
 
 
+def _suggestion_counts(conn) -> dict:
+    """SU11A-57: open user category suggestions (null until su11a57 is applied)."""
+    row = conn.execute(text("""
+        SELECT count(*) AS n, count(DISTINCT item_code) AS items
+        FROM category_suggestions WHERE status = 'open'
+    """)).mappings().one()
+    return {"pending": int(row["n"] or 0), "pending_items": int(row["items"] or 0)}
+
+
 def _proc_kb(path: str, keys: tuple[str, ...]) -> dict:
     out: dict = {}
     with open(path, encoding="ascii") as f:
@@ -221,6 +230,7 @@ def build_status(conn) -> dict:
         "search_items": _safe(conn, lambda: _table_build(conn, "search_items")),
         "search_item_prices": _safe(conn, lambda: _table_build(conn, "search_item_prices")),
         "moderation": _safe(conn, lambda: _moderation_counts(conn)),
+        "category_suggestions": _safe(conn, lambda: _suggestion_counts(conn)),
         "db_size_bytes": _safe(conn, lambda: conn.execute(
             text("SELECT pg_database_size(current_database())")).scalar()),
         "disk": _disk(),

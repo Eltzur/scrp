@@ -142,6 +142,15 @@
     "terms_failed": "Could not record your acceptance. Please try again.",
     "account_banned": "This account is restricted and cannot post reviews or reports. Details: info@xxl.co.il"
   },
+  "category": {
+    "label": "Category",
+    "loading": "Loading…",
+    "none": "Not categorised yet",
+    "suggest_button": "Suggest a category update",
+    "registered_only": "This option is available to registered users only",
+    "sign_in": "Sign in",
+    "sign_up": "Sign up"
+  },
   "apps": {
     "section_title": "SUPER XXL app",
     "section_sub": "Compare prices on your phone, with barcode scanning in the store",
@@ -201,7 +210,8 @@
       "queue": "Reviews to handle",
       "history": "History",
       "audit": "Audit log",
-      "soon": "Coming: categories, settings, stores"
+      "categories": "Categories",
+      "soon": "Coming soon: settings, branches"
     },
     "status": {
       "title": "Dashboard",
@@ -233,7 +243,10 @@
       "db_size": "Database size",
       "disk_free": "Free disk",
       "process_rss": "API process memory",
-      "system_memory": "Free server memory"
+      "system_memory": "Free server memory",
+      "categories": "Categories",
+      "pending_suggestions": "Pending category suggestions",
+      "pending_items": "Products with suggestions"
     },
     "rating": {
       "score": "Rated {{n}} of 3",
@@ -295,8 +308,18 @@
         "rating_keep": "Keep",
         "rating_restore": "Restore",
         "rating_ban_author": "Ban author",
-        "rating_unban_author": "Unban"
-      }
+        "rating_unban_author": "Unban",
+        "category_set": "Category change",
+        "category_confirm": "Category confirmed",
+        "category_bulk": "Bulk move",
+        "category_revert": "Category change undone",
+        "category_suggestion_accept": "Category suggestion accepted",
+        "category_suggestion_reject": "Category suggestion rejected"
+      },
+      "old_new": "{{old}} → {{new}}"
+    },
+    "categories": {
+      "title": "Categories"
     }
   }
 }
