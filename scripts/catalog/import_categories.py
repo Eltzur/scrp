@@ -1,15 +1,15 @@
-"""Load taxonomy v1 and the v1 labels into the su11a52 tables (SU11A-52). Runs on the server.
+"""Load the taxonomy (v1.1 since SU11A-55) and the labels into the su11a52 tables (SU11A-52). Runs on the server.
 
     venv/bin/python3 -m scripts.catalog.import_categories            # dry run (default)
     venv/bin/python3 -m scripts.catalog.import_categories --apply
     venv/bin/python3 -m scripts.catalog.import_categories --manual REVIEWED.csv [--apply]
 
 What it writes (with --apply, ONE transaction; nothing without it):
-  categories       every node of docs/catalog/taxonomy_v1.csv (insert or update);
+  categories       every node of docs/catalog/taxonomy_v1_1.csv (insert or update);
                    ids that are in the table but not in the CSV get active = false
                    (never deleted: ids are not reused)
   item_categories  one row per live, non-pseudo search_items barcode that has a
-                   label: the v1 rules + GS1 group map computed here from
+                   label: the v1.1 rules + GS1 group map computed here from
                    search_items.name_norm and gs1.products, combined with the AI
                    labels in docs/catalog/ai_labels_v1.csv by
                    scripts/catalog/combine.combine_label (the same rule as the
@@ -92,7 +92,7 @@ def plan_labels(items: list[dict], gs1: dict[str, tuple[str, str]], ai: dict[str
         res = C.classify_rules(tax, name, hints) if name else C.Result()
         res = C.combine_gs1(tax, res, gmap.get(group or ""))
         rule = {"category_id": res.category_id, "confidence": res.confidence, "reason": res.reason,
-                "keyword": res.keyword, "gs1_group": group}
+                "keyword": res.keyword, "gs1_group": group, "pinned": res.pinned}
         f = combine_label(rule, ai.get(code), valid)
         if not f:
             continue

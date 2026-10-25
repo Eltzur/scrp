@@ -4,7 +4,7 @@ Built 24 Oct 2026, **not applied and not deployed**. Nothing here changes the AP
 
 What is in the release:
 - `db/migrations/su11a52_catalog.sql`: three new tables, `categories`, `item_categories` and `item_attributes`. They are additive and idempotent, applied in one transaction, and owned by `scrp_app`.
-- `scripts/catalog/import_categories.py`: loads taxonomy v1 and the labels. Its default is a dry run; `--apply` writes everything in one transaction.
+- `scripts/catalog/import_categories.py`: loads the taxonomy and the labels (since SU11A-55: taxonomy **v1.1**, `docs/catalog/taxonomy_v1_1.csv` + `brand_category_hints_v1_1.csv`; same 201 ids as v1, rules fixed after Dude's review). Its default is a dry run; `--apply` writes everything in one transaction.
 - `scripts/build_search_items.py` (daily timer, 14:30) has three changes:
   - service rows (פיקדון / משלוח / fees) are now hidden like coupons;
   - nameless items fall back to a chain name, then the GS1 name;
@@ -82,40 +82,43 @@ A second dry run should report only `unchanged` (plus `protected` for anything y
 
 ## 5. Your reviews → manual rows
 
-Fill `correct_category_id` (any id from `docs/catalog/taxonomy_v1.csv`) in any of:
-- `docs/catalog/review_sample_v1.csv` (150 rows);
+**Done for the first review (SU11A-55):** `docs/catalog/review_graded_v1.csv` holds Dude's 150 graded rows (130 confirmed, 20 corrected, every id valid). Load it with the two commands below, using that file name. The local dry run reported `manual_rows: 150`, `manual_bad_ids: []`.
+
+Fill `correct_category_id` (any id from `docs/catalog/taxonomy_v1_1.csv`; the ids are the same as v1) in any of:
+- `docs/catalog/ai_audit_sample_v1.xlsx` (100 AI-only labels; has a drop-down; save it as CSV for the import);
+- `docs/catalog/review_sample_v1.csv` (150 rows; already graded, see above);
 - `docs/catalog/disagreements_v1.csv` (300 rows);
 - `review_sample_v0.csv`.
 
 Commit the file from Windows, pull on the server, then:
 
-    venv/bin/python3 -m scripts.catalog.import_categories --manual docs/catalog/review_sample_v1.csv            # dry run
-    venv/bin/python3 -m scripts.catalog.import_categories --manual docs/catalog/review_sample_v1.csv --apply
+    venv/bin/python3 -m scripts.catalog.import_categories --manual docs/catalog/review_graded_v1.csv            # dry run
+    venv/bin/python3 -m scripts.catalog.import_categories --manual docs/catalog/review_graded_v1.csv --apply
 
 Each filled row becomes `source = manual`, `reviewed = true`, and no automated run touches it again. An id that does not exist is listed under `manual_bad_ids` and skipped.
 
-## 6. Expected counts (local export, 24 Oct 2026)
+## 6. Expected counts (taxonomy v1.1, local export of 24 Oct 2026; updated SU11A-55)
 
 From the local export (131,324 live non-pseudo rows on 24 Oct; 99 of them become service pseudo rows, leaving 131,225). The server reads today's `search_items`, so expect the same shape with slightly different numbers.
 
-**`planned_by_source_confidence`, about 129,350 rows:**
+**`planned_by_source_confidence`, about 129,070 rows** (v1 in brackets):
 
 | Source | high | medium | low |
 |---|---:|---:|---:|
-| rule | 91,362 | 3,213 | 4,607 |
-| gs1 | 10,781 | 114 | 288 |
-| ai | 6,294 | 3,883 | 8,809 |
+| rule | 91,529 (91,362) | 3,067 (3,213) | 4,378 (4,607) |
+| gs1 | 10,801 (10,781) | 110 (114) | 279 (288) |
+| ai | 6,330 (6,294) | 3,949 (3,883) | 8,629 (8,809) |
 
 **Other expected values:**
 
 | Key | Expected |
 |---|---|
-| `unclassified_live_items` | about 1,900 (mostly the ~136 names that stay empty, bare codes and brands) |
+| `unclassified_live_items` | about 2,150 (v1: 1,874). About 290 items that v1 called fresh fruit only because a fruit word appeared in the name (Skittles, jams, flavours) are now unclassified on purpose |
 | `ai_labels_in_file` | 44,362 |
 | `ai_labels_for_live_items` | slightly fewer (barcodes that left the catalogue since the export) |
 | `item_attributes_planned` | several hundred thousand rows (brand, size, pack, weighted, kosher level, ...) |
 
-**Low-confidence rows (13,704):** about 11,100 are rule-vs-AI disagreements. The 300 most widely sold are in `disagreements_v1.csv`, ready for grading. A facet UI should show high and medium only.
+**Low-confidence rows (13,286; v1 13,704):** about 10,650 are rule-vs-AI disagreements (v1 11,100). The 300 most widely sold are in `disagreements_v1.csv`, ready for grading. A facet UI should show high and medium only.
 
 ## 7. Rollback
 

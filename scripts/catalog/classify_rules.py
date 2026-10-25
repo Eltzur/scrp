@@ -11,8 +11,9 @@ item_code, name, manufacturer, manufacturer_norm, chains_live, gs1_group, gs1_br
 gs1_kosher, gs1_diet, is_weighted, ...). Output in DIR: predictions.csv.gz (one row
 per item), report.json and report.txt (evaluation), unclassified_leading.tsv.
 
-Rules come from docs/catalog/taxonomy_v1.csv (keywords_he / negative_keywords_he),
-docs/catalog/gs1_group_map_v1.csv and docs/catalog/brand_category_hints_v1.csv.
+Rules come from docs/catalog/taxonomy_v1_1.csv (keywords_he / negative_keywords_he),
+docs/catalog/gs1_group_map_v1.csv and docs/catalog/brand_category_hints_v1_1.csv
+(v1.1, SU11A-55: same node ids as taxonomy_v1.csv, fixed keywords; v1 kept as the record).
 Names are normalised with db.search_norm.
 
 Keyword grammar (one keyword per '|' item, matched on whole tokens):
@@ -20,8 +21,15 @@ Keyword grammar (one keyword per '|' item, matched on whole tokens):
   - "a*"       token prefix: a token starting with a (מיובש* = מיובש, מיובשת, ...)
   - "x,y+z"    conjunction: one of the comma alternatives of every '+' part must
                occur somewhere in the name (צלחות,כוסות+חד פעמי*,פלסטיק)
+  - "^a"       head anchor (SU11A-55): the phrase counts only as the first content
+               word of the name ("^אפרסק" matches "אפרסק צהוב", not "פרוטאין אפרסק")
+  - "§pct"     feature token (SU11A-55): the name has a percentage (3%, 1.6 %);
+               used inside conjunctions ("פרוטאין+§pct")
 Negatives use the same grammar; a negative of a node (or of any ancestor) that
-occurs anywhere in the name vetoes that node.
+occurs anywhere in the name vetoes that node. A hard negative ("!רסק", SU11A-55)
+also refuses the node when the GS1 group map proposes it: "רסק תפוחים" in the
+GS1 group Apples is not fresh fruit. Plain negatives only stop keyword matches
+(they were written for that, and many GS1 rows are right where they would veto).
 
 Precedence: matches before a connector word (עם, בטעם, ללא ...) beat matches
 after it; then the earliest content position (pack words such as מארז / סט /
@@ -49,6 +57,10 @@ anywhere for position=any):
   - when neither matches and the hint has fallback=yes, the brand's category is
     used (reason "brand", at most medium);
   - a name that is only the brand word keeps the plain rule result.
+A hint with pin=yes (SU11A-55: טבעול is a frozen-food brand) pins the department:
+a rule result outside it is replaced by the best match among that department's
+nodes, else the hint's category; neither a GS1 group nor an AI label outside the
+department can override it (Result.pinned).
 """
 from __future__ import annotations
 
@@ -60,7 +72,7 @@ import json
 import re
 import sys
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -69,10 +81,11 @@ if str(ROOT) not in sys.path:
 
 from db.search_norm import normalize  # noqa: E402
 
-TAXONOMY_VERSION = "v1"
-TAXONOMY = ROOT / "docs" / "catalog" / "taxonomy_v1.csv"
+# v1.1 (SU11A-55): same 201 node ids as v1; keywords, negatives and brand hints changed.
+TAXONOMY_VERSION = "v1.1"
+TAXONOMY = ROOT / "docs" / "catalog" / "taxonomy_v1_1.csv"
 GS1_MAP = ROOT / "docs" / "catalog" / "gs1_group_map_v1.csv"
-BRAND_HINTS = ROOT / "docs" / "catalog" / "brand_category_hints_v1.csv"
+BRAND_HINTS = ROOT / "docs" / "catalog" / "brand_category_hints_v1_1.csv"
 
 _EDGE = "\"'.,;:!?()[]{}<>/\\|*+=#&@^~_%`"
 # Pack / marketing words: they do not count as a content position.
@@ -81,6 +94,7 @@ SKIP_WORDS = frozenset(normalize(w) for w in """
 חמישיית שישיית שישייה שישית מאגדת מגה מיני מבצע חדש חדשה ענק משפחתי פרימיום premium
 מבחר מגוון יח יח' יחידות יחידה אריזת אריזה חבילת חבילה ק"ג קג גרם גר גר' ג ג' מ"ל מל
 ליטר ל ל' ס"מ מ' x מבצע! חדש! במשקל
+חצי רבע סלסלת סלסלה ארגז
 """.split())
 # Words that end the "head" of a name: what follows describes, not names, the product.
 CONNECTORS = frozenset(normalize(w) for w in """
@@ -108,10 +122,25 @@ def tokens(name: str) -> list[str]:
     """
     out = []
     for raw in _GLUE.sub(" ", normalize(name)).split(" "):
-        t = raw.strip(_EDGE)
+        t = raw.strip(_EDGE).replace(FEATURE, "")
         if t:
             out.append(t)
     return out
+
+
+# Feature tokens (SU11A-55): facts about the whole name that the token grammar
+# cannot see, appended after the real tokens so they never move a position.
+FEATURE = "§"
+_PCT_FEATURE = re.compile(r"(?<![\d.,])\d{1,3}(?:[.,]\d+)?\s?%")
+
+
+def feature_tokens(name: str) -> list[str]:
+    return [FEATURE + "pct"] if _PCT_FEATURE.search(normalize(name)) else []
+
+
+def is_content(t: str) -> bool:
+    """A word that names something: not a pack word, a number or a feature token."""
+    return t not in SKIP_WORDS and not _NUM.match(t) and not t.startswith(FEATURE)
 
 
 def content_index(toks: list[str]) -> tuple[list[int], int]:
@@ -125,7 +154,7 @@ def content_index(toks: list[str]) -> tuple[list[int], int]:
         eff.append(n)
         if head_end == len(toks) and i > 0 and t in CONNECTORS:
             head_end = i
-        if t not in SKIP_WORDS and not _NUM.match(t):
+        if is_content(t):
             n += 1
     return eff, head_end
 
@@ -134,6 +163,7 @@ def content_index(toks: list[str]) -> tuple[list[int], int]:
 @dataclass(frozen=True)
 class Phrase:
     toks: tuple[tuple[str, bool], ...]  # (token, is_prefix)
+    head: bool = False                  # "^": only as the first content word
 
     def match_at(self, toks: list[str], i: int) -> bool:
         if i + len(self.toks) > len(toks):
@@ -151,6 +181,7 @@ class Rule:
     node: str
     parts: list[list[Phrase]]
     negative: bool = False
+    hard: bool = False               # "!": a negative that also refuses the GS1 id (SU11A-55)
 
     @property
     def size(self) -> int:
@@ -159,37 +190,45 @@ class Rule:
 
 def parse_phrase(s: str) -> Phrase | None:
     out = []
-    for t in normalize(s).split(" "):
+    s = s.strip()
+    head = s.startswith("^")
+    for t in normalize(s.lstrip("^")).split(" "):
         pre = t.endswith("*")
         t = t.rstrip("*").strip(_EDGE.replace("*", ""))
         if not t:
             continue
         pre = pre and len(t) >= 2
         out.append((unfinal(t) if pre else t, pre))
-    return Phrase(tuple(out)) if out else None
+    return Phrase(tuple(out), head) if out else None
 
 
 def parse_rule(text: str, node: str, negative: bool = False) -> Rule | None:
     parts = []
-    for part in text.split("+"):
+    hard = negative and text.startswith("!")
+    for part in text.lstrip("!").split("+"):
         alts = [p for p in (parse_phrase(a) for a in part.split(",")) if p]
         if not alts:
             return None
         parts.append(alts)
-    return Rule(text, node, parts, negative) if parts else None
+    return Rule(text, node, parts, negative, hard) if parts else None
 
 
-def match_rule(rule: Rule, toks: list[str]) -> tuple[int, int] | None:
+def match_rule(rule: Rule, toks: list[str], eff: list[int] | None = None) -> tuple[int, int] | None:
     """(start index, matched token count) of the rule in toks, or None.
 
     Single-part rule: the earliest occurrence (longest alternative there).
     Conjunction: every part must occur; start = earliest part occurrence.
+    eff: content_index(toks)[0], for head-anchored ("^") phrases.
     """
     starts, size = [], 0
     for part in rule.parts:
         best = None
         for ph in part:
+            if ph.head and eff is None:
+                eff = content_index(toks)[0]
             for i in range(len(toks)):
+                if ph.head and (eff[i] != 0 or not is_content(toks[i])):
+                    continue
                 if ph.match_at(toks, i):
                     cand = (i, -len(ph.toks))
                     if best is None or cand < best:
@@ -290,6 +329,7 @@ class BrandHint:
     confidence: str                  # high / medium / low; capped at medium when used
     first_only: bool
     fallback: bool = True            # use category_id when the rest of the name matches nothing
+    pin: bool = False                # the brand pins the department (SU11A-55)
 
 
 def load_brand_hints(path: Path | None = BRAND_HINTS) -> dict[str, list[BrandHint]]:
@@ -304,7 +344,8 @@ def load_brand_hints(path: Path | None = BRAND_HINTS) -> dict[str, list[BrandHin
                 out[toks[0]].append(BrandHint(row["brand"].strip(), toks, row["category_id"].strip(),
                                               (row.get("confidence") or "medium").strip(),
                                               (row.get("position") or "any").strip() == "first",
-                                              (row.get("fallback") or "yes").strip() != "no"))
+                                              (row.get("fallback") or "yes").strip() != "no",
+                                              (row.get("pin") or "").strip() == "yes"))
     for v in out.values():
         v.sort(key=lambda h: -len(h.toks))
     return dict(out)
@@ -314,7 +355,7 @@ def find_brand(hints: dict[str, list[BrandHint]], toks: list[str]) -> tuple[Bran
     """The first hinted brand in toks: (hint, start index)."""
     if not hints:
         return None
-    first_content = next((i for i, t in enumerate(toks) if t not in SKIP_WORDS and not _NUM.match(t)), None)
+    first_content = next((i for i, t in enumerate(toks) if is_content(t)), None)
     for i, t in enumerate(toks):
         for h in hints.get(t, ()):
             if tuple(toks[i:i + len(h.toks)]) == h.toks and (not h.first_only or i == first_content):
@@ -341,12 +382,15 @@ class Result:
     tied: tuple[str, ...] = ()       # categories tied with the winner (for priors)
     rule_id: str = ""                # what the rules alone said
     brand: str = ""                  # brand hint found in the name (SU11A-52)
+    vetoed: frozenset = frozenset()  # nodes vetoed by a hard negative ("!"): refused for GS1 too (SU11A-55)
+    pinned: str = ""                 # department pinned by a brand hint (SU11A-55)
 
 
 def classify_rules(tax: Taxonomy, name: str, hints: dict[str, list[BrandHint]] | None = None) -> Result:
     toks = tokens(name)
     if not toks:
         return Result()
+    toks += feature_tokens(name)
     hit = find_brand(hints, toks) if hints else None
     if not hit:
         return _classify_tokens(tax, toks)
@@ -354,34 +398,50 @@ def classify_rules(tax: Taxonomy, name: str, hints: dict[str, list[BrandHint]] |
     dept = h.category_id.split(".")[0]
     full = _classify_tokens(tax, toks)
     rest = toks[:i] + toks[i + len(h.toks):]
-    if full.category_id.split(".")[0] == dept or not any(t not in SKIP_WORDS and not _NUM.match(t) for t in rest):
+    if full.category_id.split(".")[0] == dept or not any(is_content(t) for t in rest):
         res = full                               # agrees with the brand, or the name is only the brand
+    elif h.pin:
+        # the department is certain: the best match among its own nodes, first without the
+        # brand's words (טבעול is itself a D06.C08 keyword), then with them
+        res = _classify_tokens(tax, rest, only=dept)
+        if not res.category_id:
+            res = _classify_tokens(tax, toks, only=dept)
+        if not res.category_id and h.category_id in tax.nodes:
+            res = replace(res, category_id=h.category_id, confidence="low" if h.confidence == "low" else "medium",
+                          reason="brand", keyword=h.brand, rule_id=h.category_id)
     else:
         res = _classify_tokens(tax, rest)
         if not res.category_id:
             # full matched (if at all) only through the brand's own words
             if h.fallback and h.category_id in tax.nodes:
                 conf = "low" if h.confidence == "low" else "medium"
-                res = Result(h.category_id, conf, "brand", h.brand, (), h.category_id)
+                res = Result(h.category_id, conf, "brand", h.brand, (), h.category_id, vetoed=res.vetoed)
             else:
                 res = full
     res.brand = h.brand
+    if h.pin and h.category_id in tax.nodes:
+        res.pinned = dept
     return res
 
 
-def _classify_tokens(tax: Taxonomy, toks: list[str]) -> Result:
+def _classify_tokens(tax: Taxonomy, toks: list[str], only: str = "") -> Result:
+    """only: restrict the candidates to one department (a pinned brand)."""
     eff, head_end = content_index(toks)
-    vetoed = set()
+    vetoed, hard = set(), set()
     for ri in tax.candidates(toks, negative=True):
         r = tax.negatives[ri]
-        if match_rule(r, toks):
+        if match_rule(r, toks, eff):
             vetoed.add(r.node)
+            if r.hard:
+                hard.add(r.node)
     best: dict[str, tuple] = {}   # node -> (key, keyword)
     for ri in tax.candidates(toks):
         r = tax.rules[ri]
+        if only and r.node.split(".")[0] != only:
+            continue
         if any(a in vetoed for a in tax.ancestors(r.node)):
             continue
-        m = match_rule(r, toks)
+        m = match_rule(r, toks, eff)
         if not m:
             continue
         start, size = m
@@ -389,7 +449,7 @@ def _classify_tokens(tax: Taxonomy, toks: list[str]) -> Result:
         if r.node not in best or key < best[r.node][0]:
             best[r.node] = (key, r.text)
     if not best:
-        return Result()
+        return Result(vetoed=frozenset(hard))
     by_cat: dict[str, tuple] = {}
     for nid, (key, kw) in best.items():
         c = tax.category_of(nid)
@@ -420,7 +480,7 @@ def _classify_tokens(tax: Taxonomy, toks: list[str]) -> Result:
         conf = "medium"
     if tax.nodes[nid].level == "department" and conf == "high":
         conf = "medium"   # a bare generic word (בשר, משקה) names the aisle, not the category
-    return Result(nid, conf, "rule", kw, tied, nid)
+    return Result(nid, conf, "rule", kw, tied, nid, vetoed=frozenset(hard))
 
 
 def related(a: str, b: str) -> bool:
@@ -431,14 +491,19 @@ def combine_gs1(tax: Taxonomy, res: Result, gs1: tuple[str, str] | None) -> Resu
     if not gs1:
         return res
     gid, gconf = gs1
+    if gid in tax.nodes and any(a in res.vetoed for a in tax.ancestors(gid)):
+        return res      # the name rules the GS1 id out (a hard negative of it matched)
+    if res.pinned and gid.split(".")[0] != res.pinned:
+        return res      # a pinned brand's department is not open to the GS1 group
     if not res.category_id:
-        return Result(gid, "high" if gconf == "high" else "medium", "gs1", "", (), "", res.brand)
+        return replace(res, category_id=gid, confidence="high" if gconf == "high" else "medium", reason="gs1",
+                       keyword="", tied=(), rule_id="")
     if related(res.category_id, gid):
         deeper = res.category_id if res.category_id.count(".") >= gid.count(".") else gid
-        return Result(deeper, "high", "rule+gs1", res.keyword, (), res.rule_id, res.brand)
+        return replace(res, category_id=deeper, confidence="high", reason="rule+gs1", tied=())
     if gconf == "high":
-        return Result(gid, "medium", "gs1", res.keyword, (), res.rule_id, res.brand)
-    return Result(res.category_id, "low", res.reason, res.keyword, res.tied, res.rule_id, res.brand)
+        return replace(res, category_id=gid, confidence="medium", reason="gs1", tied=())
+    return replace(res, confidence="low")
 
 
 def apply_prior(tax: Taxonomy, res: Result, prior: Counter | None) -> Result:
@@ -455,7 +520,7 @@ def apply_prior(tax: Taxonomy, res: Result, prior: Counter | None) -> Result:
         return res
     nid = res.category_id if tax.category_of(res.category_id) == cat else cat
     conf = "medium" if n / total >= 0.8 and total >= 10 else "low"
-    return Result(nid, conf, "prior", res.keyword, res.tied, res.rule_id, res.brand)
+    return replace(res, category_id=nid, confidence=conf, reason="prior")
 
 
 # --------------------------------------------------------------------------- attributes
@@ -610,7 +675,7 @@ def extract_attributes(tax: Taxonomy | None, node_id: str, name: str, row: dict 
 # --------------------------------------------------------------------------- run
 def leading_token(name: str) -> str:
     for t in tokens(name):
-        if t not in SKIP_WORDS and not _NUM.match(t):
+        if is_content(t):
             return t
     return ""
 
@@ -790,12 +855,12 @@ def main(argv: list[str] | None = None) -> int:
     with gzip.open(a.out_dir / "predictions.csv.gz", "wt", encoding="utf-8", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["item_code", "name", "category_id", "path_he", "confidence", "reason", "keyword",
-                    "rule_category_id", "chains_live", "gs1_group", "brand_hint", "attributes"])
+                    "rule_category_id", "chains_live", "gs1_group", "brand_hint", "attributes", "pinned"])
         for r, x in zip(rows, final):
             attrs = extract_attributes(tax, x.category_id, item_name(r), r, x.brand)
             w.writerow([r["item_code"], item_name(r), x.category_id, tax.path_he(x.category_id) if x.category_id else "",
                         x.confidence, x.reason, x.keyword, x.rule_id, r.get("chains_live", ""),
-                        r.get("gs1_group", ""), x.brand, json.dumps(attrs, ensure_ascii=False)])
+                        r.get("gs1_group", ""), x.brand, json.dumps(attrs, ensure_ascii=False), x.pinned])
     rep = evaluate(tax, rows, final, rule_only, gmap)
     (a.out_dir / "report.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
     with open(a.out_dir / "unclassified_leading.tsv", "w", encoding="utf-8") as fh:

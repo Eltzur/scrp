@@ -21,6 +21,7 @@ server, so the local report and the imported rows follow one rule:
                                                  disagreements_v1.csv
   low / medium           low                     rule / gs1 as is
   (any)                  none / "unknown"        rule / gs1 as is (unclassified stays so)
+  pinned brand dept      outside that department rule / gs1 as is (SU11A-55: טבעול is frozen)
 
 source: gs1 when the GS1 group decided or confirmed the rule result (reason gs1
 or rule+gs1), rule otherwise (rule / brand / prior), ai for AI ids.
@@ -62,7 +63,7 @@ def combine_label(rule: dict, ai: dict | None, valid_ids: set[str] | None = None
     """Final label for one item, or None when it stays unclassified.
 
     rule: category_id, confidence ('' = unclassified), reason, keyword (and
-    optionally gs1_group). ai: category_id, confidence, reason, model, or None.
+    optionally gs1_group, pinned). ai: category_id, confidence, reason, model, or None.
     """
     rid, rconf = rule.get("category_id") or "", rule.get("confidence") or ""
     src = rule_source(rule.get("reason") or "")
@@ -73,6 +74,8 @@ def combine_label(rule: dict, ai: dict | None, valid_ids: set[str] | None = None
              "disagreement": False, "ai_category_id": "", "rule_category_id": rid} if rid else None)
     aid = (ai or {}).get("category_id") or ""
     if not aid or aid == UNKNOWN or (valid_ids is not None and aid not in valid_ids) or rconf == "high":
+        return base
+    if rule.get("pinned") and aid.split(".")[0] != rule["pinned"]:
         return base
     aconf, model = ai.get("confidence") or "low", ai.get("model") or None
     adetail = f"ai: {ai.get('reason') or ''}".strip()

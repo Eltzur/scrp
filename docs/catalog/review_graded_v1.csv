@@ -1,0 +1,151 @@
+item_code,name,manufacturer,gs1_group,chains_live,stratum,predicted_category_id,predicted_path_he,source,confidence,detail,correct_category_id,graded_text,mapping_note,xlsx_row
+8850006955529,"פלמוליב ג'ל רחצה מסא'ג מינראלי 750 מ""ל",לא ידוע,Cleansing_Washing_Soap - Body,14,top_chains,D12.C04,"טיפוח, היגיינה ובריאות > סבון ורחצה",gs1,high,rule+gs1: ג'ל רחצה | gs1: Cleansing_Washing_Soap - Body,D12.C04,,,2
+7290000066332,אפרופו אסם 50 גרם,"אסם השקעות בע""מ",,14,top_chains,D08.C05.S02,חטיפים וממתקים > חטיפים מלוחים > במבה וחטיפי תירס ואורז,rule,high,rule: אפרופו,D08.C05.S02,,,3
+7290000063140,שקדי מרק רכיבים טבעי,"אסם השקעות בע""מ",,14,top_chains,D07.C16,מזווה ובישול > מרקים ואבקות מרק,rule,high,rule: שקדי מרק,D07.C16,,,4
+7290006664693,דנונה יוגורט עם אפרסק 3% 150 גרם,"שטראוס בריאות בע""מ",Yogurt_Yogurt Substitutes (Perishable),14,top_chains,D02.C03,"מוצרי חלב, ביצים ותחליפים > יוגורטים",gs1,high,rule+gs1: דנונה | gs1: Yogurt_Yogurt Substitutes (Perishable),D02.C03,,,5
+7290001136683,נקה 7 מרכך לשיער רגיל 750מל,טרופיקל דגיל תעשיות,Hair - Conditioner_Treatment,14,top_chains,D12.C01,"טיפוח, היגיינה ובריאות > שמפו ומרכך",gs1,high,rule+gs1: מרכך לשיער | gs1: Hair - Conditioner_Treatment,D12.C01,,,6
+7290119384068,פרה קראנצ' אגוזים 100 גרם,לא ידוע,Chocolate and Chocolate_Sugar Candy Combinations - Confectionery,14,top_chains,D08.C01.S02,חטיפים וממתקים > שוקולד > חטיפי שוקולד,ai,high,ai: chocolate peanut candy bar | agrees with gs1 D08.C01,D08.C01.S02,,,7
+7290112005656,ג'ל מסיר כתמים לכביסה לבנה 2.75 ל' וניש,רקיט בנקיזר בעמ,,14,top_chains,D11.C01.S03,"ניקיון, נייר וחד פעמי > כביסה > מסירי כתמים ותוספים",rule,high,rule: מסיר כתמים | ai agrees (D11.C01.S03),D11.C01.S03,,,8
+7290000072968,סיני מיניס 500 גרם,סי. פי.פולין,,14,top_chains,D08.C06,חטיפים וממתקים > עוגיות וביסקוויטים,ai,low,"ai: Mini biscuits, likely snack",D07.C22,דגני בוקר,"Cini Minis is Nestlé's breakfast cereal, not a biscuit",9
+7290112964472,"רוטב שום לסלט 290 מ""ל אסם",אסם,,14,top_chains,D07.C12,מזווה ובישול > חומץ ורטבים לסלט,ai,high,ai: Garlic salad dressing,D07.C12,,,10
+7290106577572,מטבוחה צבר 400 גר,לא ידוע,,14,top_chains,D04.C03,"מעדנייה, נקניקים וסלטים > סלטים ומטבלים",rule,high,rule: מטבוחה,D04.C03,,,11
+7290002824183,סקי גבינה לבנה 5% 500 גרם,לא ידוע,Cheese_Cheese Substitutes (Perishable),14,top_chains,D02.C02.S02,"מוצרי חלב, ביצים ותחליפים > גבינות > גבינות לבנות ורכות",gs1,high,rule+gs1: גבינה לבנה 5% | gs1: Cheese_Cheese Substitutes (Perishable),D02.C02.S02,,,12
+7290118427568,מנה חמה ווק נודלס ברוטב מוקפץ 70 גרם,לא ידוע,,14,top_chains,D07.C23,מזווה ובישול > אוכל אסייתי ובינלאומי,ai,low,ai: Wok noodles ready meal | DISAGREES with rule D07.C02,D07.C02,אטריות ונודלס,instant wok noodles; exact node,13
+8850006536346,"פלמוליב סבון גוף ארומה לימון 750 מ""ל",לא ידוע,Cleansing_Washing_Soap - Body,14,top_chains,D12.C04,"טיפוח, היגיינה ובריאות > סבון ורחצה",gs1,high,rule+gs1: סבון גוף | gs1: Cleansing_Washing_Soap - Body,D12.C04,,,14
+7290114314602,פרוטאין אפרסק 1.6% 200 ג,לא ידוע,,14,top_chains,D01.C04,פירות וירקות > פירות,rule,high,rule: אפרסק,D02.C03,יוגורט,Müller Protein peach 1.6% fat is a spoonable yogurt,15
+7290108355994,מקסימה מרכך כביסה בייבי שיבולת שועל 1 ליטר,"סנו מפעלי ברונוס בע""",Laundry Detergents,14,top_chains,D11.C01.S01,"ניקיון, נייר וחד פעמי > כביסה > אבקות ונוזלי כביסה",gs1,high,rule+gs1: מקסימה | gs1: Laundry Detergents,D11.C01.S01,,,16
+7290000493176,אבקת רוטב צלי לבשר אסם,"אסם השקעות בע""מ",,14,top_chains,D07.C10,מזווה ובישול > רטבים לבישול,rule,high,rule: רוטב צלי,D07.C10,,,17
+7290014940901,אנג'ל לחם פשוט מלא 750 גרם,מאפיית שלמה א. אנג'ל,Bread (Perishable),14,top_chains,D05.C01,לחם ומאפים > לחם,gs1,high,rule+gs1: לחם | gs1: Bread (Perishable),D05.C01,,,18
+7290112005083,"אבקה להסרת כתמים לכביסה צבעונית וניש קליה 1.5 ק""ג",לא ידוע,,14,top_chains,D11.C01.S03,"ניקיון, נייר וחד פעמי > כביסה > מסירי כתמים ותוספים",rule,high,rule: וניש | ai agrees (D11.C01.S03),D11.C01.S03,,,19
+7290000272726,חומץ טבעי 5% עסיס 1,בית-השיטה עסיס תעשיו,,14,top_chains,D07.C12,מזווה ובישול > חומץ ורטבים לסלט,rule,high,rule: חומץ,D07.C12,,,20
+7290110115272,ספרייט זירו 1.5 ליטר,לא ידוע,,14,top_chains,D09.C03.S02,משקאות > משקאות מוגזים > מוגזים בטעמים,rule,high,rule: ספרייט,D09.C03.S02,,,21
+7613036984478,קפסולות סטארבקס אספר,נסטלה נספרסו,,14,top_chains,D09.C08.S02,משקאות > קפה > קפסולות קפה,rule,high,rule: קפסולות,D09.C08.S02,,,22
+7290019205609,שניצל עוף טוב מיני דובונים 600 גרם,לא ידוע,Chicken - Prepared_Processed,14,top_chains,D06.C05,קפואים > שניצלים ונאגטס,rule,high,rule: שניצל | ai agrees (D06.C05),D06.C05,,,23
+4015400564454,אולוויז מגן תחתון עם ניחוח מגה פק לארג' 68 יח',פרוקטר אנד גמבל,Feminine Hygiene - Accessories,14,top_chains,D12.C11,"טיפוח, היגיינה ובריאות > היגיינה נשית",gs1,high,rule+gs1: אולוויז | gs1: Feminine Hygiene - Accessories,D12.C11,,,24
+7290119371846,'מעדן ביו סויה עם תות בתוספת חיידק פרובי,"שטראוס בריאות בע""מ",Yogurt_Yogurt Substitutes (Perishable),14,top_chains,D02.C03,"מוצרי חלב, ביצים ותחליפים > יוגורטים",gs1,high,"gs1: מעדן+אוכמניות,תות,משמש,דובדבן,פירות יער,אננס,תפוז,שזיף,ענבים | gs1: Yogurt_Yogurt Substitutes (Perishable) | ai agrees (D02.C03)",D02.C03,,,25
+7290117860946,"הוואי תחליב רחצה - יוגורט בניחוח קוקוס 650 מ""ל",לא ידוע,Hair - Shampoo,14,top_chains,D12.C01,"טיפוח, היגיינה ובריאות > שמפו ומרכך",gs1,high,gs1: תחליב רחצה | gs1: Hair - Shampoo | ai agrees (D12.C01),D12.C01,,,26
+7290107953559,מארז טורקי לדרך,שטראוס קפה בי.וי.,Coffee - Beans_Ground,14,top_chains,D09.C08,משקאות > קפה,gs1,high,gs1 | gs1: Coffee - Beans_Ground,D09.C08,,,27
+7290008757980,ספרינג רימונים 1 ל' קרטונית,"יפאורה תבורי בע""מ",Fruit Juice Drinks - Ready to Drink (Shelf Stable),14,top_chains,D09.C04,משקאות > מיצים ונקטרים,gs1,high,rule+gs1: ספרינג | gs1: Fruit Juice Drinks - Ready to Drink (Shelf Stable),D09.C04,,,28
+7290019056393,תפוזינה בטעם תות ובננה 1.5 ל',"יפאורה תבורי בע""מ",Fruit Juice - Ready to Drink (Shelf Stable),14,top_chains,D09.C04,משקאות > מיצים ונקטרים,gs1,high,rule+gs1: תפוזינה | gs1: Fruit Juice - Ready to Drink (Shelf Stable),D09.C04,,,29
+7290108358155,נוזל מרוכז לניקוי כללי שמן אורנים טבעי סנו,לא ידוע,,14,top_chains,D11.C03,"ניקיון, נייר וחד פעמי > חומרי ניקוי לבית",rule,high,rule: לניקוי | ai agrees (D11.C03),D11.C03,,,30
+7290000043814,"שמנת להקצפה 38% 250 מ""ל",תנובה,Cream_Cream Substitutes (Perishable),14,top_chains,D02.C06,"מוצרי חלב, ביצים ותחליפים > שמנת וקצפת",gs1,high,rule+gs1: שמנת להקצפה | gs1: Cream_Cream Substitutes (Perishable),D02.C06,,,31
+7290000041452,קוטג תנובה גביע 250 גר 9% בדצ,מחלבת אלון תבור,Cheese_Cheese Substitutes (Perishable),14,top_chains,D02.C02.S02,"מוצרי חלב, ביצים ותחליפים > גבינות > גבינות לבנות ורכות",gs1,high,rule+gs1: קוטג' | gs1: Cheese_Cheese Substitutes (Perishable),D02.C02.S02,,,32
+7290110115418,קוקה קולה זירו שישיי,לא ידוע,,14,top_chains,D09.C03.S01,משקאות > משקאות מוגזים > קולה,rule,high,rule: קוקה קולה זירו,D09.C03.S01,,,33
+7290019056553,מים מינרליים עין גדי 2 ל',עין גדי מים מינרליים,Packaged Water,14,top_chains,D09.C01,משקאות > מים,gs1,high,rule+gs1: מים מינרליים | gs1: Packaged Water,D09.C01,,,34
+7290006983770,עוגת הבית שיש אסם 400 גר,"אסם השקעות בע""מ",,14,top_chains,D05.C05,לחם ומאפים > עוגות,rule,high,rule: עוגת,D05.C05,,,35
+7290002253150,דורות בזיליקום קצוץ 32*70גרם,דורות,Vegetables - Prepared_Processed (Frozen),14,top_chains,D06.C01,קפואים > ירקות קפואים,gs1,high,rule+gs1: דורות | gs1: Vegetables - Prepared_Processed (Frozen),D06.C01,,,36
+7290000060965,אטריות רחבות אסם 400,"אסם השקעות בע""מ",,14,top_chains,D07.C02,מזווה ובישול > אטריות ונודלס,rule,high,rule: אטריות,D07.C02,,,37
+7290122782615,קרקר דק פיטנס כוסמין ודבש,יוקנעם,,14,top_chains,D08.C08,חטיפים וממתקים > קרקרים ופריכיות,rule,high,rule: קרקר,D08.C08,,,38
+7290019056249,שוופס מים בטעמים ענבים 1.5 ל',יפאורה תבורי בעמ,Drinks Flavoured - Ready to Drink,14,top_chains,D09.C03.S02,משקאות > משקאות מוגזים > מוגזים בטעמים,gs1,high,rule+gs1: שוופס | gs1: Drinks Flavoured - Ready to Drink,D09.C01,משקאות קלים (לא מוגז),no still-soft-drink node; v1 already files מים בטעמים under water (see proposal P1),39
+7290118423669,אפרופו טיובס טבעות בצל 50 גרם,"אסם השקעות בע""מ",,14,top_chains,D08.C05,חטיפים וממתקים > חטיפים מלוחים,rule,high,rule: אפרופו | ai agrees on the category (D08.C05.S01),D08.C05,,,40
+7290019232575,חליטה קרה בטעם אפרסק לואיזה,לא ידוע,Fruit Herbal Infusions - Bags_Loose,14,top_chains,D09.C09,משקאות > תה וחליטות,gs1,high,rule+gs1: חליטה | gs1: Fruit Herbal Infusions - Bags_Loose,D09.C09,,,41
+7290109354996,פתי בר ללא גלוטן שוקו 200 גרם אסם,"אסם השקעות בע""מ",,14,top_chains,D08.C06,חטיפים וממתקים > עוגיות וביסקוויטים,rule,high,rule: פתי בר,D08.C06,,,42
+7290013585394,קוקה קולה 1 ליטר,קוקה קולה,,14,top_chains,D09.C03.S01,משקאות > משקאות מוגזים > קולה,rule,high,rule: קוקה קולה,D09.C03.S01,,,43
+7290119383528,מעדן הגולן צמחי בטעם שוקולד,"שטראוס בריאות בע""מ",Dairy By-Products,14,top_chains,D02.C04,"מוצרי חלב, ביצים ותחליפים > מעדנים ופודינג",gs1,high,rule+gs1: מעדן | gs1: Dairy By-Products,D02.C04,,,44
+7290115208047,סירופ פטל ויטמינצ'יק 1 ליטר,"אסם השקעות בע""מ",,14,top_chains,D09.C05,משקאות > תרכיזים וסירופים,rule,high,rule: סירופ פטל,D09.C05,,,45
+7290000065335,מנה חמה פירה עם ירקות55ג,"אסם השקעות בע""מ",,14,top_chains,D07.C02,מזווה ובישול > אטריות ונודלס,rule,medium,rule: מנה חמה,D07.C02,,,46
+7290107937641,"מסטיק בזוקה קוביות, 58 גרם",לא ידוע,Chewing Gum,14,top_chains,D08.C03,חטיפים וממתקים > מסטיקים,gs1,high,rule+gs1: מסטיק | gs1: Chewing Gum,D08.C03,,,47
+7290000288024,סנו JAVEL אקונומיקה לניקוי יסודי בריח לימון 4 ליטר,"סנו מפעלי ברונוס בע""",Cleaning Accessories,14,top_chains,D11.C03,"ניקיון, נייר וחד פעמי > חומרי ניקוי לבית",gs1,high,rule+gs1: אקונומיקה | gs1: Cleaning Accessories,D11.C03,,,48
+4009300524588,פומפדור חליטת צמחים ופירות טעם פירות יער,טיקנה ג'י.אם.בי.אייג,Fruit Herbal Infusions - Bags_Loose,14,top_chains,D09.C09,משקאות > תה וחליטות,gs1,high,rule+gs1: חליטת צמחים | gs1: Fruit Herbal Infusions - Bags_Loose,D09.C09,,,49
+7290006712981,משחת שיניים ילדים באטמן לגילאי +6 להגנה מפני עששת ושיניים חזקות יותר,קולגייט פלמוליב,Denture_Orthodontic - Cleansing,14,top_chains,D12.C09,"טיפוח, היגיינה ובריאות > היגיינת הפה",gs1,high,rule+gs1: משחת שיניים | gs1: Denture_Orthodontic - Cleansing,D12.C09,,,50
+7290015858106,עללחם פסטו ביתי ממרח 180 גרם,"מדשא תעשיות מזון בע""",Sauces_Spreads_Dips_Condiments Variety Packs,14,top_chains,D07.C10,מזווה ובישול > רטבים לבישול,rule,low,rule: פסטו | DISAGREES with ai D07.C20,D07.C10,,,51
+7290110117832,מוגז בטעם  פירות יער למון  1 ל' נורדיק מיסט,לא ידוע,,14,top_chains,D09.C03,משקאות > משקאות מוגזים,rule,high,rule: מוגז,D09.C03,,,52
+7290002065616,לחם שיפון בתוספת גרעינים 750 גרם,אורנים,Bread (Perishable),14,top_chains,D05.C01,לחם ומאפים > לחם,gs1,high,rule+gs1: לחם שיפון | gs1: Bread (Perishable),D05.C01,,,53
+7290113192492,מלפפון בחומץ 13-17 ב,לא ידוע,,14,top_chains,D04.C05,"מעדנייה, נקניקים וסלטים > זיתים וחמוצים",rule,high,"rule: מלפפון,מלפפונים,מלפפוני+בחומץ,במלח,חמוצים,חמוץ,כבוש*",D07.C08,קופסאות שימורים,your call: jarred/canned pickles are canned goods (see proposal P3),54
+7290108352825,"סנו סושי - ספוג הפלא נירוסטה, 3 יחידות",לא ידוע,Cleaning Accessories,14,top_chains,D11.C07,"ניקיון, נייר וחד פעמי > אביזרי ניקיון",gs1,high,rule+gs1: ספוג | gs1: Cleaning Accessories,D11.C07,,,55
+7290113192362,טבעות זיתים ירוקים ב,בית-השיטה עסיס תעשיו,,14,top_chains,D04.C05,"מעדנייה, נקניקים וסלטים > זיתים וחמוצים",ai,low,ai: green olives | DISAGREES with rule D16.C03,D04.C05,,,56
+7290000178707,תפוצ'יפס בטעם טבעי 50 גרם,"שטראוס פריטו ליי בע""",Chips_Crisps_Snack Mixes - Natural_Extruded (Shelf Stable),14,top_chains,D08.C05.S01,חטיפים וממתקים > חטיפים מלוחים > תפוצ'יפס וצ'יפס,gs1,high,rule+gs1: תפוצ'יפס | gs1: Chips_Crisps_Snack Mixes - Natural_Extruded (Shelf Stable),D08.C05.S01,,,57
+8710908326691,דאב תחליב רחצה אדמונ,יוניליוור גרמניה GMB,,14,top_chains,D12.C04,"טיפוח, היגיינה ובריאות > סבון ורחצה",rule,high,rule: תחליב רחצה,D12.C04,,,58
+7290110329846,מעדן סויה ביו טבעי,"תנובה בע""מ",Dairy_Dairy Substitute Based Drinks - Ready to Drink (Perishable),14,top_chains,D02.C01.S03,"מוצרי חלב, ביצים ותחליפים > חלב ומשקאות חלב > משקאות צמחיים",ai,high,ai: soy plant-based drink | agrees with gs1 D02.C01,D02.C03,יוגורט,bio (cultured) soy dessert = soy yogurt alternative; GS1 drink group is wrong,59
+7290115207941,ויטמינצ'יק אננס 1 ליטר,"אסם השקעות בע""מ",,14,top_chains,D09.C04,משקאות > מיצים ונקטרים,ai,high,ai: pineapple vitamin juice drink,D09.C05,תרכיזים,Vitaminchik is a concentrate (תרכיז),60
+7290019056201,שוופס סודה פירות יער 1.5 ליטר,"יפאורה תבורי בע""מ",Beverages Variety Packs,14,top_chains,D09.C03.S02,משקאות > משקאות מוגזים > מוגזים בטעמים,gs1,high,rule+gs1: שוופס | gs1: Beverages Variety Packs,D09.C03.S02,,,61
+7290004130794,משקה סויה במתיקות מופחתת 1 ליטר אלטרנטיב,סוי מג'יק,Milk_Milk Substitutes (Perishable),14,top_chains,D02.C01.S03,"מוצרי חלב, ביצים ותחליפים > חלב ומשקאות חלב > משקאות צמחיים",gs1,high,rule+gs1: משקה סויה | gs1: Milk_Milk Substitutes (Perishable),D02.C01.S03,,,62
+7290110556884,צנצנת מסטיק מאסט בטעם מנטה מתוקה 66 גרם,לא ידוע,Chewing Gum,14,top_chains,D08.C03,חטיפים וממתקים > מסטיקים,gs1,high,rule+gs1: מסטיק | gs1: Chewing Gum,D08.C03,,,63
+7290018471913,שוופס מוגז פירות בטעם תפוחים 1.5 ליטר,"יפאורה תבורי בע""מ",Drinks Flavoured - Ready to Drink,14,top_chains,D09.C03.S02,משקאות > משקאות מוגזים > מוגזים בטעמים,gs1,high,rule+gs1: שוופס | gs1: Drinks Flavoured - Ready to Drink,D09.C03.S02,,,64
+7290102394845,גבינה צהובה דק דק 9% נעם 200 גרם,לא ידוע,,14,top_chains,D02.C02.S01,"מוצרי חלב, ביצים ותחליפים > גבינות > גבינות צהובות וקשות",rule,high,rule: גבינה צהובה,D02.C02.S01,,,65
+7290008747547,תפוצ'יפס קראנצ' בטעם טבעי 200 גרם,"שטראוס פריטו ליי בע""",Chips_Crisps_Snack Mixes - Natural_Extruded (Shelf Stable),14,top_chains,D08.C05.S01,חטיפים וממתקים > חטיפים מלוחים > תפוצ'יפס וצ'יפס,gs1,high,rule+gs1: תפוצ'יפס | gs1: Chips_Crisps_Snack Mixes - Natural_Extruded (Shelf Stable),D08.C05.S01,,,66
+7290019056072,שוופס מוגז עדין אננס 1.5 ל',יפאורה תבורי בעמ,Drinks Flavoured - Ready to Drink,14,top_chains,D09.C03.S02,משקאות > משקאות מוגזים > מוגזים בטעמים,gs1,high,rule+gs1: שוופס | gs1: Drinks Flavoured - Ready to Drink,D09.C03.S02,,,67
+7290000056951,שמנת לבישול 15% 500 מל,תנובה,Cream_Cream Substitutes (Shelf Stable),14,top_chains,D02.C06,"מוצרי חלב, ביצים ותחליפים > שמנת וקצפת",gs1,high,rule+gs1: שמנת לבישול | gs1: Cream_Cream Substitutes (Shelf Stable),D02.C06,,,68
+7290002253006,דורות שום צנצנת 2 12*200גרם,דורות,Vegetables - Prepared_Processed (Frozen),14,top_chains,D06.C01,קפואים > ירקות קפואים,gs1,high,rule+gs1: דורות | gs1: Vegetables - Prepared_Processed (Frozen),D06.C01,,,69
+7290019056546,שוופס פרוט ווטר אבטיח 1.5 ל',"יפאורה תבורי בע""מ",Drinks Flavoured - Ready to Drink,14,top_chains,D09.C03.S02,משקאות > משקאות מוגזים > מוגזים בטעמים,gs1,high,rule+gs1: שוופס | gs1: Drinks Flavoured - Ready to Drink,D09.C03.S02,,,70
+7290110558284,דנונה מולטי יוגורט עם מינרלים וויטמין D,"שטראוס בריאות בע""מ",Dairy By-Products,14,top_chains,D02.C03,"מוצרי חלב, ביצים ותחליפים > יוגורטים",gs1,high,rule+gs1: דנונה | gs1: Dairy By-Products,D02.C03,,,71
+7613287302151,קפסולות סטארבקס איטליאן סטייל רוסט,נסטלה נספרסו,,14,top_chains,D09.C08.S02,משקאות > קפה > קפסולות קפה,rule,high,rule: קפסולות,D09.C08.S02,,,72
+8445291451728,קפסולות סטארבקס ריסט,נסטלה נספרסו,,14,top_chains,D09.C08.S02,משקאות > קפה > קפסולות קפה,rule,high,rule: קפסולות,D09.C08.S02,,,73
+7290105360250,קפסולות מקיאטו למכונות אספרסו 10 יח',שטראוס קפה בי.וי.,Coffee - Beans_Ground,14,top_chains,D09.C08.S02,משקאות > קפה > קפסולות קפה,gs1,high,rule+gs1: קפסולות | gs1: Coffee - Beans_Ground,D09.C08.S02,,,74
+7290008693134,דניאלה מעדן גבינה מוקצפת בטעם תות 5%,"שטראוס בריאות בע""מ",Dairy By-Products,14,top_chains,D02.C04,"מוצרי חלב, ביצים ותחליפים > מעדנים ופודינג",gs1,high,rule+gs1: מעדן | gs1: Dairy By-Products,D02.C04,,,75
+7290006251275,תה ויסוצקי תה ירוק סיני קלאסי,ויסוצקי,Tea - Bags_Loose,14,top_chains,D09.C09,משקאות > תה וחליטות,gs1,high,rule+gs1: תה | gs1: Tea - Bags_Loose,D09.C09,,,76
+7290018755877,מאגדת מיני מגנום קלאסיק,"מיוצר ע""י גלידת שטרא",,14,top_chains,D06.C03,קפואים > גלידות וקרטיבים,rule,high,rule: מגנום,D06.C03,,,77
+7290001247099,ספרינג מנגו 1 ל' קרטונית,"יפאורה תבורי בע""מ",Fruit Juice Drinks - Ready to Drink (Shelf Stable),14,top_chains,D09.C04,משקאות > מיצים ונקטרים,gs1,high,rule+gs1: ספרינג | gs1: Fruit Juice Drinks - Ready to Drink (Shelf Stable),D09.C04,,,78
+7290000074375,קרקר זהב אסם 150 גרם,"אסם השקעות בע""מ",,14,top_chains,D08.C08,חטיפים וממתקים > קרקרים ופריכיות,rule,high,rule: קרקר,D08.C08,,,79
+7290114312813,אמנטל נעם פתיחה חוזרת 200 גרם,לא ידוע,,14,top_chains,D02.C02.S01,"מוצרי חלב, ביצים ותחליפים > גבינות > גבינות צהובות וקשות",rule,high,rule: אמנטל,D02.C02.S01,,,80
+7290112495433,דליפקאן 400 גר,יוניליור שפע ישראל ב,,14,top_chains,D12.C01,"טיפוח, היגיינה ובריאות > שמפו ומרכך",ai,high,ai: Dove shampoo/conditioner,D07.C22,דגני בוקר,Delipecan is a breakfast cereal; the AI read it as Dove,81
+7290106574953,בייגלה שטוחים שומשום,"אסם השקעות בע""מ",,14,top_chains,D08.C05.S03,חטיפים וממתקים > חטיפים מלוחים > בייגלה ופופקורן,rule,high,rule: בייגלה | ai agrees (D08.C05.S03),D08.C05.S03,,,82
+7290114311458,"חלב מועשר 3% וויטמין קרטון, 1 ל טרה",לא ידוע,,14,top_chains,D02.C01,"מוצרי חלב, ביצים ותחליפים > חלב ומשקאות חלב",rule,high,rule: חלב מועשר,D02.C01,,,83
+8700216350419,פמפרס בייבי דריי מידה 6 24 יחידות,לא ידוע,Baby Diapers (Disposable),14,top_chains,D13.C01,תינוקות > חיתולים,gs1,high,rule+gs1: פמפרס | gs1: Baby Diapers (Disposable),D13.C01,,,84
+7290102393060,מולר מיקס גלילות 170,לא ידוע,,14,top_chains,D02.C03,"מוצרי חלב, ביצים ותחליפים > יוגורטים",rule,high,rule: מולר,D02.C03,,,85
+7290111566271,חטיפי תירס טבעול 657 גר,טבעול תעשיות מזון בע,,14,top_chains,D08.C05.S02,חטיפים וממתקים > חטיפים מלוחים > במבה וחטיפי תירס ואורז,rule,high,rule: חטיפי תירס | ai agrees (D08.C05.S02),D06.C05,מזון קפוא,Tivall corn bites are breaded frozen nuggets; most specific frozen node,86
+7290106721920,מאסט גומי לעיסה ללא סוכר בטעם מנטה עדינה 66 גרם,אסקום קונפקשיין,Chewing Gum,14,top_chains,D08.C03,חטיפים וממתקים > מסטיקים,gs1,high,gs1: גומי | gs1: Chewing Gum | ai agrees (D08.C03),D08.C03,,,87
+7290017947891,"אנג'ל כוסמין וחיטה מלאה במרקם חלק, 750 גרם",לא ידוע,Bread (Perishable),14,top_chains,D05,לחם ומאפים,gs1,high,rule+gs1: אנג'ל | gs1: Bread (Perishable),D05,,,88
+8712561384841,דאב שמפו לטיפוח יום יומי 400 מל,"יוניליוור פולין, רחו",,14,top_chains,D12.C01,"טיפוח, היגיינה ובריאות > שמפו ומרכך",rule,high,rule: שמפו,D12.C01,,,89
+7290013585967,ספרייט זירו פחית 6*3,קוקה קולה,,14,top_chains,D09.C03.S02,משקאות > משקאות מוגזים > מוגזים בטעמים,rule,high,rule: ספרייט,D09.C03.S02,,,90
+72918388,חטיף שוקולד 28 ג' טוויסט,"שטראוס גרופ בע""מ",Chocolate and Chocolate_Sugar Candy Combinations - Confectionery,14,top_chains,D08.C01.S02,חטיפים וממתקים > שוקולד > חטיפי שוקולד,gs1,high,rule+gs1: חטיף שוקולד | gs1: Chocolate and Chocolate_Sugar Candy Combinations - Confectionery,D08.C01.S02,,,91
+7290102395231,מארז שמינייה מולר יוגורט ביו 2.8% שומן,לא ידוע,,14,top_chains,D02.C03,"מוצרי חלב, ביצים ותחליפים > יוגורטים",rule,high,rule: מולר,D02.C03,,,92
+7290100858592,קקאו עלית 150 גרם,שטראוס קפה בי.וי.,Chocolate_Cocoa_Malt - Not Ready to Drink,14,top_chains,D09.C10,משקאות > אבקות שוקו ומשקאות חמים,gs1,high,gs1: קקאו | gs1: Chocolate_Cocoa_Malt - Not Ready to Drink | ai agrees (D09.C10),D09.C10,,,93
+7290110117948,"נורדיק מיסט  מוגז זירו בטעם אפרסק מארז רביעיה* 250 מ""ל",לא ידוע,,14,top_chains,D09.C02,משקאות > סודה ומים מוגזים,ai,low,ai: Flavoured sparkling water | DISAGREES with rule D12.C14,D09.C02,,,94
+7290116537016,רביעיית שוקולד מריר פרווה ורד הגליל 100 גרם ליח',יוניליוור ישראל מזון,,14,top_chains,D08.C01.S01,חטיפים וממתקים > שוקולד > חפיסות וטבלאות,rule,high,rule: שוקולד מריר,D08.C01.S01,,,95
+7290000433110,"XL מנגו אננס פחית 250 מ""ל 24 יח",לא ידוע,Stimulants_Energy Drinks - Ready to Drink,14,top_chains,D09.C06,משקאות > משקאות אנרגיה וספורט,gs1,high,gs1 | gs1: Stimulants_Energy Drinks - Ready to Drink,D09.C06,,,96
+7290119381043,תפוצ'יפס פופס אפוי 50 גרם,לא ידוע,Chips_Crisps_Snack Mixes - Natural_Extruded (Shelf Stable),14,top_chains,D08.C05.S01,חטיפים וממתקים > חטיפים מלוחים > תפוצ'יפס וצ'יפס,gs1,high,rule+gs1: תפוצ'יפס | gs1: Chips_Crisps_Snack Mixes - Natural_Extruded (Shelf Stable),D08.C05.S01,,,97
+7290016509342,ברף מאת סוד - סבון אסלה כחול אקטיבי אקונומיקה - 3 יחידות,הנקל,Toilet Cleaning Products,14,top_chains,D11.C04,"ניקיון, נייר וחד פעמי > ניקוי אסלה ואמבטיה",gs1,high,rule+gs1: סבון אסלה | gs1: Toilet Cleaning Products,D11.C04,,,98
+7290107937627,צנצנת קוביות מנטה עדינה ללס 58 גר,לא ידוע,Chewing Gum,14,top_chains,D08.C03,חטיפים וממתקים > מסטיקים,gs1,high,gs1 | gs1: Chewing Gum,D08.C03,,,99
+7290001247105,ספרינג אפרסק 1 ל' קרטונית,"יפאורה תבורי בע""מ",Fruit Juice Drinks - Ready to Drink (Shelf Stable),14,top_chains,D09.C04,משקאות > מיצים ונקטרים,gs1,high,rule+gs1: ספרינג | gs1: Fruit Juice Drinks - Ready to Drink (Shelf Stable),D09.C04,,,100
+7290110558703,"מעדן חלב מועשר בחלבון לל""ס בטעם שוקולד","שטראוס בריאות בע""מ",Dairy By-Products,14,top_chains,D02.C04,"מוצרי חלב, ביצים ותחליפים > מעדנים ופודינג",gs1,high,rule+gs1: מעדן חלב | gs1: Dairy By-Products,D02.C04,,,101
+7290017058832,"תרסיס ע""""ב שמן חמניות 142גר'12X",",",Oils Edible - Vegetable or Plant (Shelf Stable),1,random,D07.C13,מזווה ובישול > שמנים,gs1,high,rule+gs1: שמן חמניות | gs1: Oils Edible - Vegetable or Plant (Shelf Stable),D07.C13,,,102
+9771565190000,אכו שבועון,",",,3,random,,,,unclassified,,D16.C07,עיתונים ומגזינים,weekly paper; newspapers already live in D16.C07 (see proposal P2),103
+782248293245,"סיר יציקת אלומניום - 28 ס""מ",לא ידוע,,1,random,D15.C01,בית ומטבח > סירים ומחבתות,rule,high,rule: סיר,D15.C01,,,104
+7290017637204,ג'ל אלכוהול 70% נובו,,,1,random,D12.C15,"טיפוח, היגיינה ובריאות > תרופות ועזרה ראשונה",ai,high,"ai: alcohol gel, first aid | agrees with rule D12",D12.C15,,,105
+6210289,שנק קינמון בונז`ור,,,2,random,D07.C14,מזווה ובישול > תבלינים,rule,high,rule: קינמון,D05.C06,מאפים,cinnamon schnecken is a sweet pastry,106
+3245372201045,יין פינו נואר אטמוספ,",",,1,random,D10.C01.S01,אלכוהול וטבק > יין > יין אדום,rule,high,rule: פינו נואר,D10.C01.S01,,,107
+7290000191652,"קלינקס טישו Daily Care, מגבוני אף דו שכבתיים רכים ואיכותיים (3*90 דפים)",קלינקס,Facial Tissue_Handkerchiefs (Disposable),12,random,D11.C09,"ניקיון, נייר וחד פעמי > טישו וממחטות",gs1,high,rule+gs1: קלינקס | gs1: Facial Tissue_Handkerchiefs (Disposable),D11.C09,,,108
+8190010296547,כרוב חמוציות 500 גר,לא ידוע,,1,random,D01.C01,פירות וירקות > ירקות,rule,high,rule: כרוב | ai agrees (D01.C01),D04.C03,סלטים מוכנים,cabbage with cranberries is a prepared salad,109
+7290017894669,פנקו ללא גלוטן דגש 3,לא ידוע,,4,random,D07.C17,מזווה ובישול > קמח ופירורים,rule,high,rule: פנקו,D07.C17,,,110
+7290002244059,טאפס פלפל אדום,לא ידוע,,1,random,D01.C01,פירות וירקות > ירקות,rule,high,rule: פלפל אדום,D02.C02,גבינות (פלפלים ממולאים בגבינה),"peppers stuffed with cheese, as you wrote; no cheese sub-type fits better",111
+7290013585233,ספרייט זירו פחית 330,לא ידוע,,13,random,D09.C03.S02,משקאות > משקאות מוגזים > מוגזים בטעמים,rule,high,rule: ספרייט,D09.C03.S02,,,112
+7290000051431,פירות אקזוטיים,",",,1,random,D01.C04,פירות וירקות > פירות,rule,high,rule: פירות,D09,משקאות קלים,"a drink, but your text does not say still or carbonated: department only (see P1)",113
+7290016299021,מרכך טיפולי  חומצה האילרונית וקרטין לשיער,לא ידוע,,9,random,D12.C01,"טיפוח, היגיינה ובריאות > שמפו ומרכך",rule,high,rule: מרכך,D12.C01,,,114
+7290017924816,קינואה לבנה מלאה אורגני 500 גרם,לא ידוע,,1,random,D07.C06,מזווה ובישול > דגנים,rule,high,rule: קינואה | ai agrees (D07.C06),D07.C06,,,115
+333177,מעורב מובחר טבעי שקיל,לא ידוע,,1,random,D03.C03,"בשר, עוף ודגים > בשר טחון וקבב",ai,high,"ai: mixed minced meat, raw | agrees with rule D03",D08.C09,פיצוחים,"weighed natural mix = nut mix, not meat",116
+710069082212,חרדל צהוב 255 גר',לא ידוע,,2,random,D07.C11,"מזווה ובישול > קטשופ, מיונז וחרדל",rule,high,rule: חרדל,D07.C11,,,117
+1168,נקניק סרוולט שלם,לא ידוע,,1,random,D04.C01.S03,"מעדנייה, נקניקים וסלטים > נקניקים ופסטרמה > נקניק וסלמי",rule,high,rule: נקניק,D04.C01.S03,,,118
+7290116071534,כבל 2M TYPE C NEW VI,לא ידוע,,1,random,D15.C08,בית ומטבח > מוצרי חשמל לבית ואלקטרוניקה,rule,high,rule: כבל,D15.C08,,,119
+8421405466,בובת TY עיניים גדולו,סודי,,2,random,D16.C04,"ביגוד, פנאי ומסיבות > צעצועים ומשחקים",rule,high,rule: בובת,D16.C04,,,120
+7290000194598,כבד עוף טרי ארוז מחפ,לא ידוע,,1,random,D03.C06,"בשר, עוף ודגים > עוף",rule,high,rule: כבד עוף,D03.C06,,,121
+370140,חזה הודו עם פלפל סניורה,לא ידוע,,1,random,D04.C01.S01,"מעדנייה, נקניקים וסלטים > נקניקים ופסטרמה > פסטרמה ופרוסות",ai,low,ai: Sliced turkey breast deli meat | DISAGREES with rule D03.C07,D04.C01.S01,,,122
+3574661428048,"גונסונס בייבי סבון ידיים 500 מ""ל",לא ידוע,,2,random,D13.C05,תינוקות > טיפוח תינוק,rule,high,"rule: שמפו,סבון,תחליב,קרם,משחה,משחת,שמן,אבקה,ג'ל רחצה,תחליב רחצה,מי רחצה,מגבת,מברשת,מסרק,מספריים,מדחום,ספוג+לתינוק,לתינוקות,תינוק,תינוקות,בייבי,baby,ג'ונסון,פעוטות,לפעוטות",D13.C05,,,123
+7290000976754,מאנצ'ס תפזורת,לא ידוע,,3,random,D08.C05.S02,חטיפים וממתקים > חטיפים מלוחים > במבה וחטיפי תירס ואורז,ai,low,"ai: Manchester snack, unclear",D08.C09,פיצוחים,Munchies loose mix = nuts,124
+7290014233560,"ויטמין C 500 מ""ג למציצה 60 טבליות",לא ידוע,,1,random,D12.C16,"טיפוח, היגיינה ובריאות > ויטמינים ותוספי תזונה",rule,high,rule: ויטמין c,D12.C16,,,125
+5061116737056,פילה נסיכת הנילוס קפוא 80% דג גודל 500,,,1,random,D03.C08,"בשר, עוף ודגים > דגים",rule,high,rule: פילה,D03.C08,,,126
+7290104504228,מארז דובונים 5*20 גר,"אסם השקעות בע""מ",,13,random,D08.C02,חטיפים וממתקים > סוכריות וממתקים,rule,high,rule: דובונים,D08.C05,חטיפים מלוחים,"Osem Dubonim are a salty snack; no sub-type fits (not puffs, not crisps)",127
+43427201438,רסק תפוחים בטעם תות,לא ידוע,,4,random,D07.C08,מזווה ובישול > שימורי ירקות וקטניות,rule,high,rule: רסק,D13.C04,מזון תינוקות,"apple sauce with strawberry = baby food, as you wrote",128
+329,שעועית,לא ידוע,,1,random,D07.C05,מזווה ובישול > קטניות יבשות,rule,high,rule: שעועית,D07.C05,,,129
+7290013187987,תיק רשת,לא ידוע,,1,random,D16.C03,"ביגוד, פנאי ומסיבות > תיקים ואקססוריז",rule,high,rule: תיק,D16.C03,,,130
+7290016898828,כפפות ניטריל כחולות L ר.,לא ידוע,,1,random,D11.C07,"ניקיון, נייר וחד פעמי > אביזרי ניקיון",rule,high,rule: כפפות ניטריל,D11.C07,,,131
+3561866422643,"דלי מלבני 36ס""מ",,,1,random,D11.C07,"ניקיון, נייר וחד פעמי > אביזרי ניקיון",rule,high,rule: דלי,D11.C07,,,132
+835811005261,תבנית אלומניום R29 קטנה 30 יח,"יבוא ושיווק: הנמל אריזות ושיווק בע""מ",Cookware (Disposable),1,random,D11.C10,"ניקיון, נייר וחד פעמי > כלים חד פעמיים",gs1,high,"rule+gs1: תבנית,תבניות,מגש,מגשים,מגשי+אלומניום | gs1: Cookware (Disposable)",D11.C10,,,133
+4652364,קשקבל ספרדי מעדנייה,,,1,random,D02.C02.S01,"מוצרי חלב, ביצים ותחליפים > גבינות > גבינות צהובות וקשות",rule,high,rule: קשקבל,D02.C02.S01,,,134
+7290019766421,מאגדת חטיף חלבון אול,,,1,random,D08.C10,חטיפים וממתקים > חטיפי דגנים ואנרגיה,rule,high,rule: חטיף חלבון | ai agrees (D08.C10),D08.C10,,,135
+8715700115832,"היינץ רוטב המבורגר אמריקאי 400 מ""ל",",",,3,random,D07.C11,"מזווה ובישול > קטשופ, מיונז וחרדל",rule,high,rule: היינץ | ai agrees (D07.C11),D07.C11,,,136
+7290020748348,קובה חמוסטה ארוז לנדא-בלינו,לא ידוע,,1,random,D04.C06,"מעדנייה, נקניקים וסלטים > מאכלים מוכנים מצוננים",rule,high,rule: קובה,D04.C06,,,137
+7297611925249,זוג תחתוני מקסי ללא תחרה,,,1,random,D16.C01,"ביגוד, פנאי ומסיבות > ביגוד",rule,high,rule: תחתוני,D16.C01,,,138
+7290000072623,קטשופ אסם 750 גרם,"אסם השקעות בע""מ",,14,random,D07.C11,"מזווה ובישול > קטשופ, מיונז וחרדל",rule,high,rule: קטשופ,D07.C11,,,139
+7290014397521,פרש הום מבשם לבית לבנדר פרובאנס 350 מל,סנו,Fresheners_Deodorisers Other,5,random,D11.C05,"ניקיון, נייר וחד פעמי > מטהרי אוויר",gs1,high,rule+gs1: מבשם | gs1: Fresheners_Deodorisers Other,D11.C05,,,140
+7290015161190,שמן קוקוס אורגני 1 ליטר,אן.אם.קיי אגרו אינדסטריז,,1,random,D07.C13,מזווה ובישול > שמנים,rule,high,rule: שמן קוקוס,D07.C13,,,141
+8022470213492,דרגיה דובדובן לבן 500 גר PRISCO MAX,ITALIANA CONFETTI-PR,,2,random,D06.C02,קפואים > פירות קפואים,ai,low,"ai: cherry name, likely candied fruit",D08.C01,שוקולד (דובדבן מצופה שוקולד),chocolate-coated cherry dragée; no dragée sub-type (see proposal P4),142
+7290118241157,רסק 22% רויאמיל 600 .,לא ידוע,,2,random,D07.C08,מזווה ובישול > שימורי ירקות וקטניות,rule,high,rule: רסק,D07.C08,רסק עגבניות,tomato paste already lives in D07.C08 (keyword רסק עגבניות): the prediction was right,143
+7290010322787,עלי תרד למהדרין עונו,,,1,random,D01.C01,פירות וירקות > ירקות,rule,high,rule: עלי,D01.C01,,,144
+8004350004536,ספגטי מרובע 500 גרם,לא ידוע,Pasta_Noodles - Not Ready to Eat (Perishable),1,random,D07.C01,מזווה ובישול > פסטה,ai,low,ai: spaghetti pasta | DISAGREES with gs1 D07.C03,D07.C01,,,145
+7290112347015,דנונה סקוויז 125 גרם,לא ידוע,,1,random,D02.C03,"מוצרי חלב, ביצים ותחליפים > יוגורטים",rule,high,rule: דנונה,D02.C03,,,146
+9780875830483,חוברת קן קו  1108 בו,לא ידוע,,1,random,D16.C07,"ביגוד, פנאי ומסיבות > ציוד משרדי, ספרים וחוברות",rule,high,rule: חוברת,D16.C07,,,147
+7290119049639,עוגיות סנדוויץ בטעם,לא ידוע,,2,random,D08.C06,חטיפים וממתקים > עוגיות וביסקוויטים,rule,high,rule: עוגיות סנדוויץ' | ai agrees (D08.C06),D08.C06,,,148
+7290001713815,מרכך כביסה מרוכז 1 ליטר בניחוח בית מלון מפנק,",",Fabric Softeners_Conditioners,4,random,D11.C01.S02,"ניקיון, נייר וחד פעמי > כביסה > מרככי כביסה",gs1,high,rule+gs1: מרכך כביסה מרוכז | gs1: Fabric Softeners_Conditioners,D11.C01.S02,,,149
+4860008660110,יין אדום חצי מתוק חנ,",",,1,random,D10.C01.S01,אלכוהול וטבק > יין > יין אדום,rule,high,rule: יין אדום,D10.C01.S01,,,150
+6219879,נקניק מורטדלה חדשה טעם של פעם,לא ידוע,,1,random,D04.C01.S03,"מעדנייה, נקניקים וסלטים > נקניקים ופסטרמה > נקניק וסלמי",rule,high,rule: נקניק,D04.C01.S03,,,151

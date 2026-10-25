@@ -411,7 +411,7 @@ def test_category_rows_for_new_barcodes(v1):
     assert set(out) == {"1", "5"}
     assert out["1"]["category_id"] == "D03.C06" and out["1"]["source"] == "rule"
     assert out["5"]["source"] == "gs1" and out["5"]["category_id"].startswith("D09.C08")
-    assert all(r["reviewed"] is False and r["taxonomy_version"] == "v1" for r in out.values())
+    assert all(r["reviewed"] is False and r["taxonomy_version"] == C.TAXONOMY_VERSION for r in out.values())
     # ids missing from the stored taxonomy are left out (FK safety)
     assert B.category_rows(rows, {}, {"D09"}) == []
 
@@ -441,6 +441,6 @@ def test_plan_labels_and_manual(v1, tmp_path):
     assert bad == ["3: D99"]
     existing = {"1": {"category_id": "D03.C06", "confidence": "high", "source": "manual", "reviewed": True},
                 "3": {"category_id": "D16.C04", "confidence": "medium", "source": "ai", "detail": "ai: r",
-                      "model": "claude-haiku-5-5", "taxonomy_version": "v1", "reviewed": False}}
+                      "model": "claude-haiku-5-5", "taxonomy_version": C.TAXONOMY_VERSION, "reviewed": False}}
     d = I.diff_counts(cats, existing, tuple(S.ITEM_CATEGORY_COLS[1:]))
     assert d == {"protected": 1, "unchanged": 1}
