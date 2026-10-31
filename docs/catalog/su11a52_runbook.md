@@ -125,11 +125,29 @@ The AI source is still `ai_labels_v1.csv` (Haiku): the SU11A-56 Sonnet pilot did
 | `unclassified_live_items` | about 2,150 (v1: 1,874; v1.1 and v1.2 the same). About 290 items that v1 called fresh fruit only because a fruit word appeared in the name (Skittles, jams, flavours) are now unclassified on purpose |
 | `ai_labels_in_file` | 44,362 |
 | `ai_labels_for_live_items` | slightly fewer (barcodes that left the catalogue since the export) |
-| `item_attributes_planned` | several hundred thousand rows (brand, size, pack, weighted, kosher level, ...) |
+| `item_attributes_planned` | about 90,000 rows: the server import of 25 Oct wrote **92,144** (corrected in SU11A-58; this line used to promise "several hundred thousand", an estimate that was never measured). See "Why item_attributes is about 0.7 rows per item" below |
 
 **Low-confidence rows (13,265; v1.1 13,286; v1 13,704):** about 10,640 are rule-vs-AI disagreements (v1 11,100). The 300 most widely sold are in `disagreements_v1.csv` (regenerated for v1.2 in SU11A-56; it had no grades), ready for grading.
 
 **New v1.2 nodes on the export:** D09.C11 still soft drinks about 270 items, D16.C08 newspapers about 55, D07.C08.S01 shelf-stable pickles and olives about 620 (D04.C05 keeps about 530). A facet UI should show high and medium only.
+
+### Why item_attributes is about 0.7 rows per item (SU11A-58)
+
+92,144 rows for about 129,000 labelled items. Nothing is wrong; the old estimate assumed two or three attributes per item. How the rows come about (`scripts/catalog/classify_rules.py` `extract_attributes`, called by `import_categories.py` `plan_labels`):
+
+- **One row per attribute actually found**, not one per item and key. A yes/no attribute (organic, gluten_free, vegan, sugar_free, reduced, lactose_free, kosher_passover, weighted) gets a row only when it is true.
+- **Only the keys the item's category offers** (taxonomy v1.2, inherited): brand, size_value, pack_count on all 204 nodes; kosher_level, kosher_type, kosher_passover, organic, gluten_free, vegan, sugar_free, reduced, flavour on the 131 food nodes; scent 18 nodes; weighted 16; fat_pct 14; lactose_free 14; alcohol_pct 14; state 10; cocoa_pct 4. Unclassified items get no attributes.
+- **Read from the name only, plus two GS1 fields.** The import passes the GS1 brand and `items.is_weighted` and nothing else. It does not pass the manufacturer, GS1 kosher or GS1 diet, so: `brand` fills only for items with a GS1 brand name or a name that hits the brand-hint list (85% of live items carry a placeholder manufacturer anyway); `kosher_type` (פרווה / חלבי / בשרי) comes only from GS1 kosher and is therefore never written; kosher_level and the diet flags come from the name only.
+- **size_value needs a number and a unit in the name** ("80 גרם", "1.5 ליטר"). Produce, weighed meat and fish, and names without a size get none.
+
+Typical yields: "במבה אסם 80 גרם" → size only (no brand: Osem is not in the hints); "קוקה קולה זירו 6*1.5 ליטר" → size, pack, sugar_free; "עגבניות שרי במשקל" → weighted; "תפוח עץ" → nothing.
+
+**Per-key coverage on the server** (read-only, seconds):
+
+    # [Server — bash]
+    sudo -u postgres psql xxl_super -c "SELECT attr_key, count(*) AS rows, round(100.0 * count(*) / (SELECT count(*) FROM item_categories), 1) AS pct_of_labelled FROM item_attributes GROUP BY 1 ORDER BY 2 DESC"
+
+Passing the manufacturer and the GS1 kosher / diet fields into the import would add rows; that is a behaviour change for a later catalog session, not part of SU11A-58.
 
 ## 7. Rollback
 

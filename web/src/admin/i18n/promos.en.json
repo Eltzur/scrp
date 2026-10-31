@@ -1,0 +1,91 @@
+{
+  "intro": "A pin shows a promotion first in every branch on the promo lists (the website's promos page). A hide takes it off those lists. Neither changes any price in search, compare or the basket.",
+  "tabs": {
+    "label": "Promo views",
+    "search": "Search",
+    "pins": "Pinned",
+    "hides": "Hidden",
+    "expired": "Expired"
+  },
+  "search_label": "Search promotions",
+  "search_placeholder": "Promo text, product name, barcode or promotion id",
+  "search_hint": "At least 2 characters, or a chain. Barcode: 7 digits or more.",
+  "chain_label": "Chain id (optional)",
+  "active_only": "Only promotions in force",
+  "no_results": "No promotions found",
+  "card": {
+    "stores": "{{n}} branches",
+    "items": "{{n}} products",
+    "until": "Until {{date}}",
+    "no_end": "No end date",
+    "ended": "Promotion ended",
+    "promo_id": "Promotion {{id}}",
+    "sample": "e.g. {{name}}",
+    "pinned_at": "Pinned, position {{rank}}",
+    "hidden": "Hidden",
+    "bundle": "{{qty}} for ₪{{price}}",
+    "price": "₪{{price}}",
+    "rate": "{{rate}}% off"
+  },
+  "pin": "Pin",
+  "hide": "Hide",
+  "close": "Close",
+  "pin_form": {
+    "title": "Pin promotion",
+    "rank": "Position (1 = first)",
+    "starts_at": "Starts (empty = now)",
+    "ends_at": "Ends (empty = until removed)",
+    "sponsored": "Paid placement (sponsored)",
+    "sponsored_warning": "Paid placement must be marked sponsored: the card then shows users the label \"ממומן\".",
+    "note": "Note (optional, up to 200 characters)",
+    "confirm": "Pin the promotion at position {{rank}}? Pins at that position and below move down one.",
+    "confirm_sponsored": "Pin the promotion at position {{rank}} as sponsored? Every user will see the label \"ממומן\"."
+  },
+  "hide_form": {
+    "title": "Hide promotion",
+    "reason": "Reason (required, up to 200 characters)",
+    "reason_placeholder": "e.g. bad data from the chain",
+    "ends_at": "Until (empty = until removed)",
+    "pricing_note": "A hide only takes the promotion off the promo lists. Its price in search, compare and the basket does not change.",
+    "confirm": "Hide the promotion from the promo lists?"
+  },
+  "list": {
+    "empty_pins": "No pinned promotions",
+    "empty_hides": "No hidden promotions",
+    "empty_expired": "Nothing expired",
+    "rank": "Position {{rank}}",
+    "up": "Move up: {{name}}",
+    "down": "Move down: {{name}}",
+    "remove": "Remove",
+    "remove_confirm": "Remove this entry? The removal is recorded in the audit log.",
+    "sponsored": "Sponsored",
+    "set_sponsored": "Mark sponsored",
+    "unset_sponsored": "Unmark sponsored",
+    "sponsored_confirm": "Mark as sponsored? Every user will see the label \"ממומן\".",
+    "scheduled": "Scheduled: starts {{date}}",
+    "until": "Until {{date}}",
+    "no_end": "Until removed",
+    "expired_date": "Expired: the end date has passed",
+    "expired_missing": "Expired: the promotion is no longer in the data",
+    "note": "Note: {{note}}",
+    "reason": "Reason: {{note}}"
+  },
+  "toast": {
+    "pinned": "Promotion pinned",
+    "hidden": "Promotion hidden",
+    "moved": "Order updated",
+    "removed": "Removed",
+    "saved": "Saved"
+  },
+  "errors": {
+    "promo_not_found": "The promotion is not in the current data",
+    "already_curated": "The promotion is already pinned or hidden",
+    "pinned": "The promotion is pinned: remove the pin before hiding it",
+    "hidden": "The promotion is hidden: remove the hide before pinning it",
+    "pins_full": "There are already 50 pinned promotions",
+    "invalid_dates": "The end must be in the future and after the start",
+    "curation_not_found": "The entry was already removed",
+    "reason_required": "A reason is required",
+    "query_required": "Type at least 2 characters or choose a chain"
+  }
+}

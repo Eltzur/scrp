@@ -560,26 +560,57 @@ def test_suggestion_queue_groups_without_identities(client, engine):
         assert secret not in r.text
 
 
-def test_accept_writes_manual_and_closes_all_open(client, engine):
+def test_accept_accepts_the_chosen_id_and_rejects_the_others(client, engine):
+    """SU11A-58: accepting with X accepts the open suggestions of X and rejects
+    the item's other open ones, in one transaction with the label and audit."""
     suggest(client, tok(client, USER), cid="D01.C02")
     suggest(client, tok(client, OTHER), cid="D07.C08")
+    suggest(client, tok(client, USER), code=ITEM2, cid="D01.C02")     # another item: untouched
     r = client.post(f"/admin/category-suggestions/{ITEM}/accept", json={"category_id": "D01.C02"},
                     headers=admin(client))
-    assert r.status_code == 200 and r.json()["accepted"] == 2
-    assert [x["status"] for x in rows(engine, "SELECT status FROM category_suggestions")] == ["accepted"] * 2
-    assert q(engine, "SELECT decided_at IS NOT NULL FROM category_suggestions LIMIT 1") == 1
+    assert r.status_code == 200 and (r.json()["accepted"], r.json()["rejected"]) == (1, 1)
+    got = {(x["item_code"], x["suggested_category_id"]): x["status"] for x in rows(
+        engine, "SELECT item_code, suggested_category_id, status FROM category_suggestions")}
+    assert got == {(ITEM, "D01.C02"): "accepted", (ITEM, "D07.C08"): "rejected", (ITEM2, "D01.C02"): "open"}
+    assert q(engine, "SELECT count(*) FROM category_suggestions WHERE item_code = :c AND decided_at IS NULL",
+             c=ITEM) == 0
     row = rows(engine, "SELECT * FROM item_categories WHERE item_code = :c", c=ITEM)[0]
     assert (row["category_id"], row["source"], row["reviewed"]) == ("D01.C02", "manual", 1)
     a = audit_rows(engine)[0]
     assert a["action"] == "category_suggestion.accept"
     assert a["detail"]["old"]["category_id"] == "D01.C01" and a["detail"]["new"]["category_id"] == "D01.C02"
     assert a["detail"]["suggested"] == {"D01.C02": 1, "D07.C08": 1} and a["detail"]["suggestions"] == 2
+    assert (a["detail"]["accepted"], a["detail"]["rejected"]) == (1, 1)
     assert_no_identities(engine)
+    with engine.begin() as c:
+        c.execute(text("DELETE FROM category_suggestions WHERE item_code = :c"), {"c": ITEM2})
     r = client.post(f"/admin/category-suggestions/{ITEM}/accept", json={"category_id": "D01.C02"},
                     headers=admin(client))
     assert (r.status_code, r.json()) == (404, {"code": "no_open_suggestions"})
     s = client.get("/admin/status", headers=admin(client)).json()
     assert s["category_suggestions"] == {"pending": 0, "pending_items": 0}
+
+
+def test_accept_with_an_unsuggested_id_rejects_all(client, engine):
+    suggest(client, tok(client, USER), cid="D01.C02")
+    suggest(client, tok(client, OTHER), cid="D07.C08")
+    r = client.post(f"/admin/category-suggestions/{ITEM}/accept", json={"category_id": "D07.C08.S01"},
+                    headers=admin(client))
+    assert (r.json()["accepted"], r.json()["rejected"]) == (0, 2)
+    assert {x["status"] for x in rows(engine, "SELECT status FROM category_suggestions")} == {"rejected"}
+    assert q(engine, "SELECT category_id FROM item_categories WHERE item_code = :c", c=ITEM) == "D07.C08.S01"
+
+
+def test_accept_rolls_back_when_the_audit_fails(client, engine):
+    suggest(client, tok(client, USER), cid="D01.C02")
+    suggest(client, tok(client, OTHER), cid="D07.C08")
+    with engine.begin() as c:
+        c.execute(text("DROP TABLE admin_audit"))
+    r = client.post(f"/admin/category-suggestions/{ITEM}/accept", json={"category_id": "D01.C02"},
+                    headers=admin(client))
+    assert (r.status_code, r.json()) == (500, {"code": "server_error"})
+    assert {x["status"] for x in rows(engine, "SELECT status FROM category_suggestions")} == {"open"}
+    assert q(engine, "SELECT category_id FROM item_categories WHERE item_code = :c", c=ITEM) == "D01.C01"
 
 
 def test_reject_closes_all_open_and_label_stays(client, engine):

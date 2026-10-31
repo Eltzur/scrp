@@ -96,6 +96,8 @@ curl -s -w ' %{http_code}\n' -H 'Authorization: Bearer garbage' http://127.0.0.1
 
 ## 4. Web deploy (PC)
 
+> **SU11A-58:** do not run this step on its own. The SU11A-57 and SU11A-58 web changes go out in ONE deploy: follow `docs/admin/su11a58_runbook.md` step 5 instead (its deploy script now refuses a build without the production hosts and checks MATCH by itself).
+
 ```
 # [PC — PowerShell]
 git pull
@@ -186,7 +188,7 @@ sudo -u postgres psql xxl_super -tAc "SELECT action, count(*) FROM admin_audit W
 
 - Nothing to schedule. The queues read live data.
 - A later import (`import_categories --apply`) skips every console and manual row; its dry run counts them as `protected`.
-- **Accepting suggestions** writes the category you choose and marks every open suggestion of that product accepted. Undo it from the product's history; the suggestions stay accepted.
+- **Accepting suggestions** writes the category you choose. Since SU11A-58 the open suggestions that proposed that category are marked accepted and the product's other open suggestions rejected, in the same transaction (the audit row records both counts). Choosing a category nobody suggested rejects them all. Undo the label from the product's history; the suggestions keep their status.
 
 ## 8. Rollback
 

@@ -16,7 +16,8 @@ POST /admin/categories/bulk                     {item_codes (<= 100), category_i
 POST /admin/categories/revert/{audit_id}        write the audited old label back
 GET  /admin/categories/queue/{kind}             low | disagreements | unclassified | suggestions,
                                                 paged (limit / offset), chains_live desc
-POST /admin/category-suggestions/{code}/accept  {category_id}: manual row, all open -> accepted
+POST /admin/category-suggestions/{code}/accept  {category_id}: manual row; open suggestions of that id
+                                                -> accepted, the item's other open ones -> rejected (SU11A-58)
 POST /admin/category-suggestions/{code}/reject  all open -> rejected
 """
 from __future__ import annotations
@@ -366,22 +367,41 @@ def _decide(conn, code: str, status: str) -> int:
     """), {"s": status, "c": code}).rowcount
 
 
+def _decide_accept(conn, code: str, category_id: str) -> tuple[int, int]:
+    """SU11A-58: open suggestions that proposed category_id -> accepted, the
+    item's other open ones -> rejected. One statement, so one decided_at.
+    Returns (accepted, rejected)."""
+    rows = conn.execute(text("""
+        UPDATE category_suggestions
+        SET status = CASE WHEN suggested_category_id = :cid THEN 'accepted' ELSE 'rejected' END,
+            decided_at = now()
+        WHERE item_code = :c AND status = 'open'
+        RETURNING status
+    """), {"c": code, "cid": category_id}).all()
+    accepted = sum(1 for r in rows if r[0] == "accepted")
+    return accepted, len(rows) - accepted
+
+
 @router.post("/admin/category-suggestions/{item_code}/accept",
              summary="Accept an item's open suggestions with a chosen category (admin + 2FA)")
 def accept_suggestions(item_code: str, body: SetIn, request: Request,
                        admin=Depends(require_admin_mfa), conn: Connection = Depends(get_db)):
     """Writes the chosen category as a manual row (it need not be one of the
-    suggested ids) and marks every open suggestion for the item accepted."""
+    suggested ids). SU11A-58: the open suggestions that proposed that id are
+    accepted and the item's other open suggestions rejected, in the same
+    transaction as the label and its audit row (which records both counts).
+    accepted can be 0 when the admin chose an id nobody suggested."""
     _require_category(conn, body.category_id)
     counts = _open_counts(conn, item_code)
     if not counts:
         conn.rollback()
         raise ApiCodeError(404, "no_open_suggestions")
-    n = _decide(conn, item_code, "accepted")
+    accepted, rejected = _decide_accept(conn, item_code, body.category_id)
     new = _set(conn, _recorder(conn, request, admin), item_code, body.category_id, "category_suggestion.accept",
-               f"manual: user suggestions ({n})", suggestions=n, suggested=dict(counts))
+               f"manual: user suggestions ({accepted} accepted, {rejected} rejected)",
+               suggestions=accepted + rejected, accepted=accepted, rejected=rejected, suggested=dict(counts))
     conn.commit()
-    return {"ok": True, "accepted": n, "label": _label_out(conn, new)}
+    return {"ok": True, "accepted": accepted, "rejected": rejected, "label": _label_out(conn, new)}
 
 
 @router.post("/admin/category-suggestions/{item_code}/reject",

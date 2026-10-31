@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "gen:types": "openapi-typescript http://localhost:8000/openapi.json -o src/types/api.ts",
     "test:i18n": "node scripts/check-i18n.js",
-    "check:admin-chunk": "node scripts/check-admin-chunk.js"
+    "check:admin-chunk": "node scripts/check-admin-chunk.js",
+    "test:unit": "node --test scripts/recent-search.test.mjs scripts/sponsored-label.test.mjs scripts/check-deploy.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.1",

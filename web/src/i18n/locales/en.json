@@ -211,6 +211,7 @@
       "history": "History",
       "audit": "Audit log",
       "categories": "Categories",
+      "promos": "Promos",
       "soon": "Coming soon: settings, branches"
     },
     "status": {
@@ -233,8 +234,8 @@
       "pending": "Waiting",
       "hidden_7d": "Hidden in 7 days",
       "banned_users": "Banned users",
-      "counters": "Requests in the last 24 hours",
-      "counters_note": "One API process (pid {{pid}}) since {{since}}. nginx rate-limit rejections are not counted here.",
+      "counters": "Requests since the last restart",
+      "counters_note": "Since {{since}}: the counters reset on every API restart and cover at most 24 hours. One API process (pid {{pid}}); nginx rate-limit rejections are not counted here.",
       "requests": "Requests",
       "http_5xx": "5xx errors",
       "query_timeout": "Database timeouts",
@@ -246,7 +247,11 @@
       "system_memory": "Free server memory",
       "categories": "Categories",
       "pending_suggestions": "Pending category suggestions",
-      "pending_items": "Products with suggestions"
+      "pending_items": "Products with suggestions",
+      "promos": "Promo pins and hides",
+      "active_pins": "Pinned promotions",
+      "active_hides": "Hidden promotions",
+      "curation_expired": "Expired"
     },
     "rating": {
       "score": "Rated {{n}} of 3",
@@ -320,6 +325,9 @@
     },
     "categories": {
       "title": "Categories"
+    },
+    "promos": {
+      "title": "Promos"
     }
   }
 }

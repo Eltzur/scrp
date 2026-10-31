@@ -117,6 +117,15 @@ export default function StatusScreen() {
           </dl>
         </Card>
 
+        {/* SU11A-58: null until su11a58_promo_curation.sql is applied. */}
+        <Card title={t('admin.status.promos')}>
+          <dl>
+            <Row label={t('admin.status.active_pins')} value={s.promo_curation?.active_pins} />
+            <Row label={t('admin.status.active_hides')} value={s.promo_curation?.active_hides} />
+            <Row label={t('admin.status.curation_expired')} value={s.promo_curation?.expired} />
+          </dl>
+        </Card>
+
         <Card title={t('admin.status.counters')}>
           <dl>
             <Row label={t('admin.status.requests')} value={s.counters.requests.toLocaleString('he-IL')} />

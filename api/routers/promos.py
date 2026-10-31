@@ -5,6 +5,7 @@ from sqlalchemy.engine import Connection
 
 from api.dependencies import get_db
 from api.models import GroupedPromoItem, HotPromoItem, PromoItem
+from db.promo_curation import get_curation
 from db.query import (
     fetch_grouped_promos, fetch_promo_chains, fetch_promo_cities,
     fetch_promos, fetch_promos_bulk, fetch_today_promos, lookup_store_fk,
@@ -45,7 +46,9 @@ def promos_today(
     chain_id: Optional[str] = Query(None, description="Filter by chain_id"),
     conn: Connection = Depends(get_db),
 ):
-    return fetch_today_promos(conn, city=city, chain_id=chain_id)
+    """SU11A-58: admin pins first, hidden promotions left out (db/promo_curation.py)."""
+    cur = get_curation(conn)
+    return fetch_today_promos(conn, city=city, chain_id=chain_id, curation=cur)
 
 
 @router.get(
@@ -83,9 +86,15 @@ def promos_grouped(
                    read promo_description and min_purchase_amount instead.
                    A `bands` filter excludes these by construction, since they
                    have no percentage to band.
+
+    SU11A-58: promotions an admin pinned lead each branch (pinned / sponsored
+    on the row; sponsored = the card shows "ממומן"), hidden ones are left out.
+    Display only: search, compare and basket prices never read the curation.
     """
+    cur = get_curation(conn)
     return fetch_grouped_promos(
         conn,
+        curation=cur,
         chain_id=chain,
         city=city,
         branch=branch,

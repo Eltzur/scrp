@@ -1,0 +1,6 @@
+{
+  "_comment": "SU11A-58: hosts a production build must contain (scripts/deploy_frontend.ps1 checks web/dist before uploading). Public values only - both are in every shipped bundle. Never put a key here.",
+  "api_host": "api-super.xxl.co.il",
+  "supabase_host": "dwohlwmiejgjlsbuegeu.supabase.co",
+  "live_url": "https://super.xxl.co.il/"
+}

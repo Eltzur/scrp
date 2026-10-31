@@ -802,6 +802,17 @@ export interface components {
             promo_start: string | null;
             /** Promo End */
             promo_end: string | null;
+            /**
+             * Pinned
+             * @default false
+             */
+            pinned?: boolean;
+            /**
+             * Sponsored
+             * @description Paid placement: the card must show the label ממומן
+             * @default false
+             */
+            sponsored?: boolean;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -835,6 +846,17 @@ export interface components {
             city: string | null;
             /** Promo End */
             promo_end: string | null;
+            /**
+             * Pinned
+             * @default false
+             */
+            pinned?: boolean;
+            /**
+             * Sponsored
+             * @description Paid placement: the card must show the label ממומן
+             * @default false
+             */
+            sponsored?: boolean;
         };
         /**
          * KashrutInfo

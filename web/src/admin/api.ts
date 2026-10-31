@@ -73,6 +73,7 @@ export interface Status {
   search_item_prices: BuildStamp | null;
   moderation: { pending: number; hidden_7d: number; banned_users: number } | null;
   category_suggestions?: { pending: number; pending_items: number } | null;
+  promo_curation?: { active_pins: number; active_hides: number; expired: number } | null;
   db_size_bytes: number | null;
   disk: { path: string; total_bytes: number; free_bytes: number } | null;
   memory: { process_rss_bytes: number | null; system_total_bytes: number | null; system_available_bytes: number | null };
@@ -159,3 +160,55 @@ export const acceptSuggestions = (code: string, category_id: string) =>
 export const rejectSuggestions = (code: string) =>
   http.post<{ ok: boolean; rejected: number }>(`/admin/category-suggestions/${encodeURIComponent(code)}/reject`)
     .then(r => r.data);
+
+// --- Promo pins and hides (SU11A-58) ----------------------------------------
+
+export interface PromoSample {
+  item_code: string; item_name: string | null;
+  min_qty: number | null; discount_price: number | null; discount_rate: number | null;
+}
+
+export interface PromoSummary {
+  chain_id: string; chain_name: string | null; promo_id: string; promo_description: string | null;
+  stores: number; items: number; promo_start: string | null; promo_end: string | null; live: boolean;
+  sample: PromoSample | null;
+}
+
+export interface PromoHit extends PromoSummary {
+  curation: { pin_id: number | null; pin_rank: number | null; hide_id: number | null };
+}
+
+export type CurationStatus = 'active' | 'scheduled' | 'expired_date' | 'expired_missing';
+
+export interface CurationRow {
+  id: number; kind: 'pin' | 'hide'; rank: number | null; sponsored: boolean; note: string | null;
+  starts_at: string; ends_at: string | null; created_at: string; status: CurationStatus; promo: PromoSummary;
+}
+
+export interface PinBody {
+  chain_id: string; promo_id: string; rank: number; sponsored: boolean;
+  starts_at?: string; ends_at?: string; note?: string;
+}
+export interface HideBody { chain_id: string; promo_id: string; reason: string; starts_at?: string; ends_at?: string }
+export interface CurationPatch {
+  rank?: number; sponsored?: boolean; note?: string; starts_at?: string; ends_at?: string; clear_ends_at?: boolean;
+}
+
+export const searchPromos = (p: { q?: string; chain?: string; active_only: boolean }) =>
+  http.get<{ count: number; items: PromoHit[] }>('/admin/promos/search', {
+    params: { ...(p.q ? { q: p.q } : {}), ...(p.chain ? { chain: p.chain } : {}), active_only: p.active_only },
+  }).then(r => r.data);
+export const getCuration = (state: 'active' | 'expired') =>
+  http.get<{ state: string; count: number; items: CurationRow[] }>('/admin/promos/curation', { params: { state } })
+    .then(r => r.data);
+export const createPin = (body: PinBody) =>
+  http.post<{ ok: boolean; id: number; rank: number }>('/admin/promos/pins', body).then(r => r.data);
+export const createHide = (body: HideBody) =>
+  http.post<{ ok: boolean; id: number }>('/admin/promos/hides', body).then(r => r.data);
+export const updateCuration = (id: number, body: CurationPatch) =>
+  http.patch<{ ok: boolean; rank: number | null }>(`/admin/promos/curation/${id}`, body).then(r => r.data);
+export const removeCuration = (id: number) =>
+  http.delete<{ ok: boolean }>(`/admin/promos/curation/${id}`).then(r => r.data);
+/** Public endpoint (chains with promos in force), for the chain picker. */
+export const getPromoChainsA = () =>
+  http.get<{ chain_id: string; name: string }[]>('/promos/chains').then(r => r.data);

@@ -724,3 +724,7 @@ Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; 
     - RTL, light and dark;
     - TalkBack / VoiceOver on the list.
   - **Needs the SU11A-57 API deployed** (`docs/admin/su11a57_runbook.md`). Against the old API, the line says "not categorised" and a submit shows the generic failure.
+- **2026-10-31 (SU11A-58, no mobile code change):** promo pins / hides in the admin console. The API's `/promos/grouped` and `/promos/today` rows gain `pinned` and `sponsored`; a sponsored promo card must show **ממומן**.
+  - **The app renders no promo lists** (no promos screen; promos appear only as the price on a search / product quote, which curation never changes). So there is no card to label and nothing changed in `xxl-super-mobile`. If a promos screen is added later, it must show ממומן on `sponsored: true` rows (the web's `SponsoredBadge` in `web/src/pages/PromosPage.tsx` is the reference).
+  - **Recent searches:** the app keeps none (only scan history), so the web's normalisation ("זירו 1.5" / "זירו1.5" / "1.5זירו" as one entry, `web/src/utils/recentSearch.ts`) has no app counterpart.
+  - Build 9 is unchanged by SU11A-58: it still carries the SU11A-46 terms bidi fix, the SU11A-47 suggestions and the SU11A-57 category suggestion button.

@@ -80,7 +80,7 @@
     "other": "Another category…",
     "accept": "Accept",
     "reject": "Reject",
-    "confirm_accept": "Accept \"{{path}}\"? All {{n}} open suggestions for the product are marked accepted.",
+    "confirm_accept": "Accept \"{{path}}\"? {{accepted}} suggestions for this category are marked accepted and the {{rejected}} other open suggestions for the product rejected.",
     "confirm_reject": "Reject all {{n}} open suggestions for the product? The category does not change.",
     "done_accept": "Suggestions accepted and category saved",
     "done_reject": "Suggestions rejected"

@@ -188,6 +188,9 @@ class HotPromoItem(BaseModel):
     store_name: str | None
     city: str | None
     promo_end: str | None
+    # SU11A-58 promo curation (admin pins). Display only: no price depends on it.
+    pinned: bool = False
+    sponsored: bool = Field(False, description="Paid placement: the card must show the label ממומן")
 
 
 class KashrutInfo(BaseModel):
@@ -303,3 +306,6 @@ class GroupedPromoItem(BaseModel):
     promo_description: str | None
     promo_start: str | None
     promo_end: str | None
+    # SU11A-58 promo curation (admin pins). Display only: no price depends on it.
+    pinned: bool = False
+    sponsored: bool = Field(False, description="Paid placement: the card must show the label ממומן")

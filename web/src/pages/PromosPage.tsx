@@ -118,6 +118,17 @@ function ConditionBadge({ amount }: { amount: number | null }) {
   );
 }
 
+/** SU11A-58: paid placement, chosen in the admin console. The label is
+ *  mandatory on a sponsored card, and is text (not colour alone). */
+function SponsoredBadge({ item }: { item: GroupedPromoItem }) {
+  if (!item.sponsored) return null;
+  return (
+    <span className="inline-block text-[11px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-300">
+      ממומן
+    </span>
+  );
+}
+
 /** Basket promos: conditional / spend-threshold deals with no per-unit price.
  *  Deliberately a different shape from a unit card — no struck-through shelf
  *  price, no unit price, no % badge, because none of those exist for these
@@ -140,6 +151,7 @@ function BasketCard({ item }: { item: GroupedPromoItem }) {
         )}
       </div>
       <div className="flex flex-col items-end gap-1 shrink-0">
+        <SponsoredBadge item={item} />
         {hasThreshold
           ? <ConditionBadge amount={item.min_purchase_amount} />
           : (
@@ -152,7 +164,8 @@ function BasketCard({ item }: { item: GroupedPromoItem }) {
   );
 }
 
-function PromoRow({ item }: { item: GroupedPromoItem }) {
+/** Exported for scripts/sponsored-label.test.mjs (SU11A-58). */
+export function PromoRow({ item }: { item: GroupedPromoItem }) {
   if (item.promo_kind === 'basket') return <BasketCard item={item} />;
 
   const isBundle = item.min_qty != null && item.min_qty > 1;
@@ -179,6 +192,7 @@ function PromoRow({ item }: { item: GroupedPromoItem }) {
             </span>
           )}
           <ConditionBadge amount={item.min_purchase_amount} />
+          <SponsoredBadge item={item} />
         </div>
         {isFreebie && item.promo_description && (
           <p className="text-[11px] text-gray-500 mt-1" dir="auto">{item.promo_description}</p>

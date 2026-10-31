@@ -17,6 +17,8 @@ from sqlalchemy import text, bindparam
 from sqlalchemy.engine import Connection
 
 from db.db import connect
+from db.promo_curation import EMPTY as EMPTY_CURATION, NO_PIN, Curation, hide_sql, pin_rank_sql
+from db.promo_curation import mark as mark_curation
 
 log = logging.getLogger(__name__)
 
@@ -1380,10 +1382,16 @@ def _fetch_today_promos_raw(
     limit: int = 200,
     city: str | None = None,
     chain_id: str | None = None,
+    curation: Curation = EMPTY_CURATION,
 ) -> list[dict]:
     """Return today's hot deals — deduplicated by (item_code, chain_id).
 
     Caps discount_pct at 99, excludes orphaned rows and online/virtual stores.
+
+    SU11A-58 curation (db/promo_curation.py; none = the SQL is unchanged):
+    hidden promotions are left out before the dedupe; a pinned promotion wins
+    its (item, chain) dedupe, passes the >=10% floor and comes first, in pin
+    order. Display only - no price here feeds anything else.
     """
     params: dict = {"limit": limit}
     city_clause = ""
@@ -1394,6 +1402,12 @@ def _fetch_today_promos_raw(
     if chain_id:
         chain_clause = "AND s.chain_id = :chain_id"
         params["chain_id"] = chain_id
+    hide_clause, hide_params = hide_sql(curation, "s.chain_id", "p.promo_id")
+    pin_expr, pin_params = pin_rank_sql(curation, "s.chain_id", "p.promo_id")
+    params.update(hide_params, **pin_params)
+    pin_col = f"{pin_expr} AS pin_rank," if pin_expr else ""
+    pin_pass = "OR pin_rank IS NOT NULL" if pin_expr else ""
+    pin_first = f"COALESCE(pin_rank, {NO_PIN})," if pin_expr else ""
 
     rows = conn.execute(text(f"""
         WITH promo_data AS (
@@ -1409,6 +1423,7 @@ def _fetch_today_promos_raw(
                 s.store_name,
                 s.city_canonical AS city,
                 pr.item_price,
+                {pin_col}
                 CASE
                     WHEN p.discount_price IS NOT NULL
                      AND COALESCE(p.min_qty, 1) <= 1
@@ -1433,17 +1448,19 @@ def _fetch_today_promos_raw(
               {_ONLINE_STORE_FILTER}
               {city_clause}
               {chain_clause}
+              {hide_clause}
         ),
         deduped AS (
             SELECT DISTINCT ON (item_code, chain_id) *
             FROM promo_data
             WHERE (discount_pct >= 10 AND discount_pct <= 99)
                OR (reward_type = 1 AND ROUND(COALESCE(min_qty, 0)::numeric) = 2)
-            ORDER BY item_code, chain_id, discount_pct DESC NULLS LAST
+               {pin_pass}
+            ORDER BY item_code, chain_id, {pin_first} discount_pct DESC NULLS LAST
         )
         SELECT *
         FROM deduped
-        ORDER BY discount_pct DESC NULLS LAST
+        ORDER BY {pin_first} discount_pct DESC NULLS LAST
         LIMIT :limit
     """), params).mappings().all()
     return [dict(r) for r in rows]
@@ -1611,6 +1628,7 @@ def _fetch_grouped_promos_raw(
     sort: str = "discount",
     limit: int = 500,
     offset: int = 0,
+    curation: Curation = EMPTY_CURATION,
 ) -> list[dict]:
     """Per-branch promo rows for the chain -> city -> branch display.
 
@@ -1634,6 +1652,11 @@ def _fetch_grouped_promos_raw(
 
     Sorting applies WITHIN each branch — the chain -> city -> branch grouping is
     always the outer ordering, or the client's grouped rendering would break.
+
+    SU11A-58 curation (db/promo_curation.py; none = the SQL is unchanged):
+    hidden promotions are left out in the base WHERE (so pages stay full), and
+    pinned ones lead WITHIN each branch, in pin order, ahead of `sort`. The
+    grouping stays the outer order. Rows then carry pin_rank (see mark()).
     """
     params: dict = {"limit": limit, "offset": offset}
     where = ""
@@ -1682,6 +1705,13 @@ def _fetch_grouped_promos_raw(
             params["promo_types"] = valid
 
     order_by = _PROMO_SORTS.get(sort, _PROMO_SORTS["discount"])
+    hide_clause, hide_params = hide_sql(curation, "s.chain_id", "p.promo_id")
+    pin_expr, pin_params = pin_rank_sql(curation, "s.chain_id", "p.promo_id")
+    where += hide_clause
+    params.update(hide_params, **pin_params)
+    pin_col = f"{pin_expr} AS pin_rank," if pin_expr else ""
+    pin_out = ", pin_rank" if pin_expr else ""
+    pin_first = f"COALESCE(pin_rank, {NO_PIN})," if pin_expr else ""
 
     rows = conn.execute(text(f"""
         WITH base AS (
@@ -1710,6 +1740,7 @@ def _fetch_grouped_promos_raw(
                 to_char(p.promo_start, 'YYYY-MM-DD"T"HH24:MI:SS') AS promo_start,
                 to_char(p.promo_end,   'YYYY-MM-DD"T"HH24:MI:SS') AS promo_end,
                 p.promo_end AS promo_end_ts,
+                {pin_col}
                 {_PROMO_TYPE_SQL} AS promo_type,
                 {_UNIT_PRICE_SQL} AS unit_price
             FROM promos p
@@ -1756,7 +1787,7 @@ def _fetch_grouped_promos_raw(
                CASE WHEN is_basket THEN NULL
                     ELSE round(unit_price::numeric, 2) END AS unit_price,
                discount_pct, savings,
-               promo_description, promo_start, promo_end
+               promo_description, promo_start, promo_end{pin_out}
         FROM calc
         -- Guard: a pct outside 0-100 means the source data is bad (promo dearer
         -- than shelf, or a negative shelf price). NULL is kept: that is either
@@ -1768,7 +1799,7 @@ def _fetch_grouped_promos_raw(
         -- in a different order on every query, so offset paging duplicated
         -- and skipped them: ~30% of King Store's rows at page size 300
         -- (SU10S-20). Every offset-paged promo read needs this.
-        ORDER BY chain_name, city NULLS LAST, branch, {order_by},
+        ORDER BY chain_name, city NULLS LAST, branch, {pin_first} {order_by},
                  store_fk, item_code, promo_id
         LIMIT :limit OFFSET :offset
     """), params).mappings().all()
@@ -1964,6 +1995,7 @@ def fetch_today_promos(
     limit: int = 200,
     city: str | None = None,
     chain_id: str | None = None,
+    curation: Curation = EMPTY_CURATION,
 ) -> list[dict]:
     """Hot deals from live stores, still exactly `limit` rows when available.
 
@@ -1976,10 +2008,10 @@ def fetch_today_promos(
     """
     lv = get_liveness()
     if lv is None:
-        rows = _fetch_today_promos_raw(conn, limit=limit, city=city, chain_id=chain_id)
+        rows = _fetch_today_promos_raw(conn, limit=limit, city=city, chain_id=chain_id, curation=curation)
     else:
         rows = _refill(
-            lambda n: _fetch_today_promos_raw(conn, limit=n, city=city, chain_id=chain_id),
+            lambda n: _fetch_today_promos_raw(conn, limit=n, city=city, chain_id=chain_id, curation=curation),
             limit,
             lambda r: (r["chain_id"], r["store_name"]) not in lv.dead_names,
             start=limit * 2,
@@ -1990,7 +2022,7 @@ def fetch_today_promos(
     for r in rows:
         if r["item_price"] is not None and r["item_price"] <= 0:
             r["item_price"] = None
-    return rows
+    return mark_curation(rows, curation)
 
 
 def fetch_promo_cities(conn: Connection) -> list[str]:
@@ -2023,6 +2055,7 @@ def fetch_grouped_promos(
     sort: str = "discount",
     limit: int = 500,
     offset: int = 0,
+    curation: Curation = EMPTY_CURATION,
 ) -> list[dict]:
     """Per-branch promos from live stores, paginated in the FILTERED sequence.
 
@@ -2034,11 +2067,11 @@ def fetch_grouped_promos(
     is materialised from row 0 up to offset + limit and sliced: exact pages,
     exact offsets. Cost: rows before `offset` are re-read on each page.
     """
-    args = dict(chain_id=chain_id, city=city, branch=branch, bands=bands,
-                promo_types=promo_types, q=q, ending_within_hours=ending_within_hours, sort=sort)
+    args = dict(chain_id=chain_id, city=city, branch=branch, bands=bands, promo_types=promo_types,
+                q=q, ending_within_hours=ending_within_hours, sort=sort, curation=curation)
     lv = get_liveness()
     if lv is None:
-        return _fetch_grouped_promos_raw(conn, limit=limit, offset=offset, **args)
+        return mark_curation(_fetch_grouped_promos_raw(conn, limit=limit, offset=offset, **args), curation)
     want = offset + limit
     rows = _refill(
         lambda n: _fetch_grouped_promos_raw(conn, limit=n, offset=0, **args),
@@ -2046,4 +2079,4 @@ def fetch_grouped_promos(
         lambda r: r["store_fk"] in lv.live_fks,
         start=want + limit,
     )
-    return rows[offset:want]
+    return mark_curation(rows[offset:want], curation)

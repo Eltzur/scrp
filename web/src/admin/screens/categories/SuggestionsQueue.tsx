@@ -15,11 +15,18 @@ import { K, useTree, writeError } from './shared';
  * הצעות קטגוריה (SU11A-57): open user suggestions grouped by item, busiest items
  * first (chains_live). Shows how many, which ids with counts, and the latest
  * comments (clamped). Accept with a choice (a suggested id or any other from the
- * picker) writes a manual row and closes every open suggestion of the item;
- * reject closes them without a change. Who suggested is never shown: the API
+ * picker) writes a manual row; the open suggestions of that id are accepted and
+ * the item's other open ones rejected (SU11A-58). Reject closes them all
+ * without a change. Who suggested is never shown: the API
  * does not send it.
  */
 const OTHER = '__other__';
+
+/** How an accept with `target` splits the item's open suggestions (SU11A-58). */
+function acceptSplit(g: SuggestionGroup, target: string | null) {
+  const accepted = g.suggested.find(s => s.category_id === target)?.n ?? 0;
+  return { accepted, rejected: g.count - accepted };
+}
 
 function Group({ g, onOpen }: { g: SuggestionGroup; onOpen: (code: string) => void }) {
   const { t, i18n } = useTranslation();
@@ -109,7 +116,7 @@ function Group({ g, onOpen }: { g: SuggestionGroup; onOpen: (code: string) => vo
       </Card>
       <ConfirmDialog
         open={asking !== null}
-        message={asking === 'accept' ? t(`${K}.sug.confirm_accept`, { path, n: g.count })
+        message={asking === 'accept' ? t(`${K}.sug.confirm_accept`, { path, ...acceptSplit(g, target) })
           : t(`${K}.sug.confirm_reject`, { n: g.count })}
         tone={asking === 'reject' ? 'danger' : 'primary'}
         busy={m.isPending}

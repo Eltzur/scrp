@@ -11,7 +11,7 @@ from sqlalchemy.exc import DBAPIError
 
 from api import metrics
 from api.auth import ApiCodeError
-from api.routers import account, admin, admin_categories, blocks, categories, health, catalog, search, product, basket, saved_baskets, favorites, freshness, coverage, promos, ratings, stores, terms
+from api.routers import account, admin, admin_categories, admin_promos, blocks, categories, health, catalog, search, product, basket, saved_baskets, favorites, freshness, coverage, promos, ratings, stores, terms
 from db import db as _db
 
 log = logging.getLogger(__name__)
@@ -128,6 +128,7 @@ app.include_router(terms.router)    # SU11A-44
 app.include_router(admin.router)    # SU11A-54 (after ratings: /admin/ratings/pending is there)
 app.include_router(categories.router)        # SU11A-57
 app.include_router(admin_categories.router)  # SU11A-57
+app.include_router(admin_promos.router)      # SU11A-58
 
 
 @app.exception_handler(ApiCodeError)

@@ -236,6 +236,9 @@ export interface HotPromoItem {
   store_name: string | null;
   city: string | null;
   promo_end: string | null;
+  /** SU11A-58: admin pin / paid placement (show ממומן). */
+  pinned?: boolean;
+  sponsored?: boolean;
 }
 
 export const getTodayPromos = (city?: string, chainId?: string): Promise<HotPromoItem[]> =>
@@ -358,6 +361,10 @@ export interface GroupedPromoItem {
   promo_description: string | null;
   promo_start: string | null;
   promo_end: string | null;
+  /** SU11A-58: an admin pinned this promotion (it leads its branch). */
+  pinned?: boolean;
+  /** SU11A-58: paid placement. The card MUST show the label ממומן. */
+  sponsored?: boolean;
 }
 
 export interface GroupedPromoOpts {

@@ -13,7 +13,8 @@ by identity; reports carry source, reason and date, never the reporter.
 GET /admin/me                       {is_admin, mfa} for the console
 GET /admin/ratings/history          recent moderator decisions
 GET /admin/ratings/{id}             one rating with all its reports
-GET /admin/status                   platform status (cached 30 s); SU11A-57: + open category suggestions
+GET /admin/status                   platform status (cached 30 s); SU11A-57: + open category suggestions;
+                                    SU11A-58: + promo pins / hides
 GET /admin/audit                    the audit log
 
 The api-super host's nginx rate limit and X-Robots-Tag cover /admin/* like
@@ -192,6 +193,22 @@ def _suggestion_counts(conn) -> dict:
     return {"pending": int(row["n"] or 0), "pending_items": int(row["items"] or 0)}
 
 
+def _curation_counts(conn) -> dict:
+    """SU11A-58: pins / hides in force now (null until su11a58 is applied).
+    "expired" counts only rows past ends_at; a pin whose promotion left the
+    data shows as expired in the admin list (GET /admin/promos/curation)."""
+    row = conn.execute(text("""
+        SELECT count(*) FILTER (WHERE kind = 'pin' AND starts_at <= now()
+                                  AND (ends_at IS NULL OR ends_at > now())) AS pins,
+               count(*) FILTER (WHERE kind = 'hide' AND starts_at <= now()
+                                  AND (ends_at IS NULL OR ends_at > now())) AS hides,
+               count(*) FILTER (WHERE ends_at IS NOT NULL AND ends_at <= now()) AS expired
+        FROM promo_curation WHERE active
+    """)).mappings().one()
+    return {"active_pins": int(row["pins"] or 0), "active_hides": int(row["hides"] or 0),
+            "expired": int(row["expired"] or 0)}
+
+
 def _proc_kb(path: str, keys: tuple[str, ...]) -> dict:
     out: dict = {}
     with open(path, encoding="ascii") as f:
@@ -231,6 +248,7 @@ def build_status(conn) -> dict:
         "search_item_prices": _safe(conn, lambda: _table_build(conn, "search_item_prices")),
         "moderation": _safe(conn, lambda: _moderation_counts(conn)),
         "category_suggestions": _safe(conn, lambda: _suggestion_counts(conn)),
+        "promo_curation": _safe(conn, lambda: _curation_counts(conn)),
         "db_size_bytes": _safe(conn, lambda: conn.execute(
             text("SELECT pg_database_size(current_database())")).scalar()),
         "disk": _disk(),

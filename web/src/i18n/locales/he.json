@@ -211,6 +211,7 @@
       "history": "היסטוריה",
       "audit": "יומן פעולות",
       "categories": "קטגוריות",
+      "promos": "מבצעים",
       "soon": "בקרוב: הגדרות, סניפים"
     },
     "status": {
@@ -233,8 +234,8 @@
       "pending": "ממתינות לטיפול",
       "hidden_7d": "הוסתרו ב־7 ימים",
       "banned_users": "משתמשים חסומים",
-      "counters": "בקשות ב־24 השעות האחרונות",
-      "counters_note": "של תהליך API אחד (pid {{pid}}) מאז {{since}}. חסימות קצב של nginx לא נספרות כאן.",
+      "counters": "בקשות מאז ההפעלה האחרונה",
+      "counters_note": "מאז {{since}}: המונים מתאפסים בכל הפעלה מחדש של ה־API ומכסים לכל היותר 24 שעות. תהליך API אחד (pid {{pid}}); חסימות קצב של nginx לא נספרות כאן.",
       "requests": "בקשות",
       "http_5xx": "שגיאות 5xx",
       "query_timeout": "חריגות זמן במסד הנתונים",
@@ -246,7 +247,11 @@
       "system_memory": "זיכרון פנוי בשרת",
       "categories": "קטגוריות",
       "pending_suggestions": "הצעות קטגוריה ממתינות",
-      "pending_items": "מוצרים עם הצעות"
+      "pending_items": "מוצרים עם הצעות",
+      "promos": "קידום והסתרת מבצעים",
+      "active_pins": "מבצעים מקודמים",
+      "active_hides": "מבצעים מוסתרים",
+      "curation_expired": "פג תוקף"
     },
     "rating": {
       "score": "דירוג {{n}} מתוך 3",
@@ -320,6 +325,9 @@
     },
     "categories": {
       "title": "קטגוריות"
+    },
+    "promos": {
+      "title": "מבצעים"
     }
   }
 }
