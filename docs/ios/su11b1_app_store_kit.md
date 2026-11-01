@@ -10,7 +10,7 @@ Prepared 1 Nov 2026. Source facts: `docs/store_privacy_inventory.md` (SU11A-38),
 | Bundle ID | `il.co.xxl.supermarket` |
 | SKU | `superxxl-ios-001` |
 | Team | Individual, Team ID **V46QVK4YSA**; seller shown on the store: **Elad Tzur** (must read so before Submit for Review; it currently reads "Lead Tour") |
-| Version | 1.2.1 (same as Android build 9); build number from EAS (remote, auto-increment; the first iOS build will be 1) |
+| Version | **1.2.2** (SU11B-2; same as Android build 9); build number from EAS (remote, auto-increment; the first iOS build will be 1) |
 | Devices | iPhone only (`supportsTablet: false`) |
 | Primary language | Hebrew |
 | Categories | Primary: Shopping; secondary: Food & Drink |
@@ -81,7 +81,7 @@ Notes: "14 רשתות" matches `scraper/registry.py` today; change the number in
 ```
 (App Store Connect adds the © itself.)
 
-**What's New** (first version: not shown; keep for 1.2.2+).
+**What's New** (first version: not shown; keep for 1.2.3+).
 
 ---
 
@@ -132,11 +132,13 @@ App Store Connect → App Information → Age Rating → Edit. Answers:
 | Weapons | None | |
 | Made for Kids | No | |
 
-**Expected rating: 13+** with the alcohol/tobacco answer above (would be 4+ if that answer were "None"). Google Play rated the same app PEGI 3 / Everyone; the difference is Apple's alcohol/tobacco question. **Open decision for Dude:** accept 13+, or answer "None" and accept the rejection risk. App Store Connect computes the final rating from the answers — confirm the shown result before saving.
+**Decision (Dude, SU11B-2): alcohol/tobacco "Infrequent" → 13+.** Google Play rated the same app PEGI 3 / Everyone; the difference is Apple's alcohol/tobacco question. App Store Connect computes the final rating from the answers — confirm it shows 13+ before saving.
 
 ---
 
 ## 4. Content Rights
+
+**Status: PENDING GS1 confirmation (Dude).** Leave Content Rights unanswered until Dude confirms GS1 public-display rights; this is hard stop G2 in the runbook.
 
 App Store Connect → App Information → Content Rights: **"Does your app contain, show, or access third-party content?" → Yes.** Then: "Do you have all necessary rights to that third-party content…?"
 
