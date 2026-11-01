@@ -21,7 +21,7 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 15. **CC never deploys, never runs EAS builds, never calls `DELETE /account`, never modifies production data.** Dude runs `scripts\deploy_frontend.ps1` and EAS builds. Never delete the Supabase users x@xxl.co.il or gplay@xxl.co.il (the Play demo account); throwaway test users are created in Supabase → Authentication → Users → Add user (Auto Confirm).
 
 ## Status / next steps
-Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-59 (SU11A-37 reserved).
+Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-60 (SU11A-37 reserved).
 - **Promo curation (SU11A-58):** admin pins / hides key on (chain_id, promo_id), apply only to `/promos/grouped` and `/promos/today` (`db/promo_curation.py`), and NEVER to search, compare, basket, `/product`, `/promos/bulk` or the search build; a sponsored pin must show ממומן. Runbook `docs/admin/su11a58_runbook.md`.
 - Catalog categories: manual > ai > gs1 > rule; automated runs never overwrite manual/reviewed (enforced in `scripts/catalog/store.py`; tables in `db/migrations/su11a52_catalog.sql`).
 - RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (build 8 live on Play).
@@ -186,6 +186,7 @@ For all other commands, select "Yes" (one-time approval) unless the command look
 - **Supabase: from 30 Oct 2026 any NEW table in the `public` schema needs explicit GRANTs in its migration** (`anon` / `authenticated` / `service_role`, only what the table needs, plus RLS). Existing tables are unaffected.
 - nginx rate limits, security headers and CSP Report-Only live in `deploy/nginx/` (installed by hand, `docs/security/su11a49_runbook.md`). A live nginx change is copied back there.
 - The API alone sets a 15 s DB `statement_timeout` (`api/main.py`, env `api_statement_timeout_ms`); never set it on the `scrp_app` role (the loader and build need long statements).
+- **A public endpoint must not scan `prices` / `promos` per request** (SU11A-59: `/chains` did and 503'd on every call from 22 Oct): read small tables or the search build, and cache by the build stamp. CORS `PATCH` is allowed for `https://admin.xxl.co.il` only (`AdminAwareCORSMiddleware`).
 - Review and open findings: `docs/security/su11a48_security_review.md`. Compliance drafts (Hebrew): `docs/compliance/`.
 
 ## Deploy frontend

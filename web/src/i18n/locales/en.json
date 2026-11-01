@@ -251,7 +251,8 @@
       "promos": "Promo pins and hides",
       "active_pins": "Pinned promotions",
       "active_hides": "Hidden promotions",
-      "curation_expired": "Expired"
+      "curation_expired": "Expired",
+      "open_tab": "Open the {{tab}} tab"
     },
     "rating": {
       "score": "Rated {{n}} of 3",

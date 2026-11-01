@@ -251,7 +251,8 @@
       "promos": "קידום והסתרת מבצעים",
       "active_pins": "מבצעים מקודמים",
       "active_hides": "מבצעים מוסתרים",
-      "curation_expired": "פג תוקף"
+      "curation_expired": "פג תוקף",
+      "open_tab": "מעבר ללשונית {{tab}}"
     },
     "rating": {
       "score": "דירוג {{n}} מתוך 3",

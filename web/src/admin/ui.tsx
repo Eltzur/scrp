@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Loader2 } from 'lucide-react';
+import { ChevronLeft, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { errorCode } from './api';
 
@@ -45,11 +45,28 @@ export function ErrorBox({ error, onRetry }: { error: unknown; onRetry?: () => v
   );
 }
 
-export function Card({ title, children, aside }: { title: string; children: ReactNode; aside?: ReactNode }) {
+/** `href` (SU11A-59) makes the title a link, e.g. a dashboard card to its tab;
+ * `linkLabel` is added for screen readers after the visible title ("open tab X"). */
+export function Card({ title, children, aside, href, linkLabel }: {
+  title: string; children: ReactNode; aside?: ReactNode; href?: string; linkLabel?: string;
+}) {
   return (
     <section className="bg-white rounded-2xl border border-gray-200 p-4 sm:p-5" aria-label={title}>
       <div className="flex items-center justify-between gap-2 mb-3">
-        <h2 className="text-base font-bold text-gray-900">{title}</h2>
+        <h2 className="text-base font-bold text-gray-900">
+          {href ? (
+            <a
+              href={href}
+              className="inline-flex items-center gap-1 min-h-[44px] -my-2 rounded text-emerald-800 underline underline-offset-4
+                decoration-emerald-300 hover:decoration-emerald-700
+                focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
+            >
+              {title}
+              {linkLabel && <span className="sr-only"> ({linkLabel})</span>}
+              <ChevronLeft size={18} aria-hidden="true" />
+            </a>
+          ) : title}
+        </h2>
         {aside}
       </div>
       {children}

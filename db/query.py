@@ -788,19 +788,89 @@ def group_by_store(rows: list[dict]) -> list[dict]:
 # Catalog queries
 # ---------------------------------------------------------------------------
 
+# SU11A-59: /chains used to join every row of prices (7.9M) and COUNT(DISTINCT)
+# them, >15 s on production, so the API statement_timeout (SU11A-49) turned
+# every call into a 503 from 22 Oct. Now only small tables: the chain list and
+# store counts are the same as before (every chain, all its stores);
+# total_barcodes is the items with a live quote in the chain from the search
+# build (search_item_prices, one row per item and live chain), 0 without it.
+_CHAINS_SQL = """
+    SELECT c.chain_id, c.name,
+           COALESCE(b.n, 0) AS total_barcodes,
+           COALESCE(s.n, 0) AS total_stores_loaded
+    FROM chains c
+    LEFT JOIN (SELECT chain_id, COUNT(*) AS n FROM stores GROUP BY chain_id) s ON s.chain_id = c.chain_id
+    LEFT JOIN (SELECT chain_id, COUNT(*) AS n FROM search_item_prices GROUP BY chain_id) b ON b.chain_id = c.chain_id
+    ORDER BY c.name
+"""
+_CHAINS_SQL_NO_BUILD = """
+    SELECT c.chain_id, c.name,
+           0                AS total_barcodes,
+           COALESCE(s.n, 0) AS total_stores_loaded
+    FROM chains c
+    LEFT JOIN (SELECT chain_id, COUNT(*) AS n FROM stores GROUP BY chain_id) s ON s.chain_id = c.chain_id
+    ORDER BY c.name
+"""
+
+CHAINS_STAMP_TTL_S = 60.0       # how often the build stamp is re-read
+CHAINS_MAX_AGE_S = 6 * 3600.0   # refresh even when the stamp never moves (no build tables)
+
+
+@dataclass
+class _ChainsCache:
+    stamp: object = None
+    stamp_at: float = float("-inf")
+    rows: list[dict] | None = None
+    rows_at: float = float("-inf")
+
+
+_chains_cache = _ChainsCache()
+
+
+def _chains_stamp(conn: Connection) -> object:
+    """The search build stamp (search_items / search_item_prices built_at), None without them."""
+    has = conn.execute(text(
+        "SELECT to_regclass('public.search_items') IS NOT NULL, to_regclass('public.search_item_prices') IS NOT NULL")).one()
+    items = conn.execute(text("SELECT built_at FROM search_items LIMIT 1")).scalar() if has[0] else None
+    prices = conn.execute(text("SELECT built_at FROM search_item_prices LIMIT 1")).scalar() if has[1] else None
+    return (items, prices, has[1])
+
+
+def _fetch_chains_raw(conn: Connection, with_build: bool) -> list[dict]:
+    return [dict(r) for r in conn.execute(text(_CHAINS_SQL if with_build else _CHAINS_SQL_NO_BUILD)).mappings().all()]
+
+
 def fetch_chains(conn: Connection) -> list[dict]:
-    return [dict(r) for r in conn.execute(text("""
-        SELECT
-            c.chain_id,
-            c.name,
-            COUNT(DISTINCT p.item_code) AS total_barcodes,
-            COUNT(DISTINCT s.id)        AS total_stores_loaded
-        FROM chains c
-        LEFT JOIN stores s ON s.chain_id = c.chain_id
-        LEFT JOIN prices p ON p.store_fk = s.id
-        GROUP BY c.chain_id, c.name
-        ORDER BY c.name
-    """)).mappings().all()]
+    """/chains, cached per worker until the search build stamp changes (re-read
+    at most every CHAINS_STAMP_TTL_S) or CHAINS_MAX_AGE_S passes. If the
+    database fails, the last value is served; only a cold worker with no value
+    raises."""
+    c, now = _chains_cache, time.monotonic()
+    try:
+        if c.rows is not None and now - c.stamp_at < CHAINS_STAMP_TTL_S and now - c.rows_at < CHAINS_MAX_AGE_S:
+            return c.rows
+        stamp = _chains_stamp(conn)
+        c.stamp_at = now
+        if c.rows is not None and stamp == c.stamp and now - c.rows_at < CHAINS_MAX_AGE_S:
+            return c.rows
+        rows = _fetch_chains_raw(conn, with_build=bool(stamp[2]))
+        c.stamp, c.rows, c.rows_at = stamp, rows, now
+        return rows
+    except Exception as exc:
+        if c.rows is None:
+            raise
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        c.stamp_at = now   # do not retry the database on every request while it fails
+        log.warning("/chains: serving the cached list (%s)", type(exc).__name__)
+        return c.rows
+
+
+def invalidate_chains() -> None:
+    global _chains_cache
+    _chains_cache = _ChainsCache()
 
 
 def fetch_stores(

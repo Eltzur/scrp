@@ -6,7 +6,7 @@ import time
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.exc import DBAPIError
 
 from api import metrics
@@ -102,11 +102,32 @@ class RequestMetricsMiddleware:
             await send({"type": "http.response.body", "body": body})
 
 
+PUBLIC_METHODS = ["GET", "POST", "PUT", "DELETE"]
+ADMIN_METHODS = PUBLIC_METHODS + ["PATCH"]
+
+
+class AdminAwareCORSMiddleware(CORSMiddleware):
+    """SU11A-59: PATCH (the console's /admin/promos/curation/{id} edit, e.g.
+    ביטול ממומן) is allowed in a preflight only from ADMIN_ORIGIN; the other
+    origins keep GET / POST / PUT / DELETE. Before this, every PATCH preflight
+    got 400 and the browser showed "no connection"."""
+
+    def preflight_response(self, request_headers):
+        resp = super().preflight_response(request_headers)
+        if request_headers.get("origin") == ADMIN_ORIGIN:
+            return resp
+        resp.headers["Access-Control-Allow-Methods"] = ", ".join(PUBLIC_METHODS)
+        if request_headers.get("access-control-request-method") not in PUBLIC_METHODS and resp.status_code == 200:
+            headers = {k: v for k, v in resp.headers.items() if k not in ("content-length", "content-type")}
+            return PlainTextResponse("Disallowed CORS method", status_code=400, headers=headers)
+        return resp
+
+
 app.add_middleware(RequestMetricsMiddleware)
 app.add_middleware(
-    CORSMiddleware,
+    AdminAwareCORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_methods=ADMIN_METHODS,
     allow_headers=["*"],
 )
 

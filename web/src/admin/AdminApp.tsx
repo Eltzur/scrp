@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Toaster } from 'sonner';
 import { useAuth } from '../components/AuthContext';
 import { GateScreen, useAdminGate } from './AdminAuth';
+import { hashParts } from './nav';
 import { Loading } from './ui';
 
 /**
@@ -14,8 +15,9 @@ import { Loading } from './ui';
  * Nothing here edits secrets, runs commands or reaches the database: every
  * action is an API call that the server checks for admin + 2FA.
  *
- * The screen is kept in the URL hash (#queue …), not in the path, so the dev
- * flag ?admin=1 survives navigation and reloads.
+ * The screen is kept in the URL hash (#queue, #categories/suggestions …; see
+ * nav.ts), not in the path, so the dev flag ?admin=1 survives navigation and
+ * reloads.
  */
 const StatusScreen = lazy(() => import('./screens/StatusScreen'));
 const QueueScreen = lazy(() => import('./screens/QueueScreen'));
@@ -34,7 +36,7 @@ const SCREENS: Record<Tab, LazyExoticComponent<ComponentType>> = {
 };
 
 function tabFromHash(): Tab {
-  const h = window.location.hash.replace('#', '');
+  const h = hashParts()[0];
   return (TABS as readonly string[]).includes(h) ? (h as Tab) : 'status';
 }
 

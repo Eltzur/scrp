@@ -4,8 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { getStatus, type BuildStamp } from '../api';
 import { Button, Card, ErrorBox, Loading } from '../ui';
 import { fmtBytes, fmtDate, freshness } from '../format';
+import { tabHref } from '../nav';
 
-/** לוח בקרה: chain freshness, search build stamps, counters, server (SU11A-54). */
+/** לוח בקרה: chain freshness, search build stamps, counters, server (SU11A-54).
+ * SU11A-59: the reviews, categories and promos card titles link to their tabs. */
 const DOT = {
   today: 'bg-emerald-600',
   yesterday: 'bg-amber-500',
@@ -46,6 +48,7 @@ export default function StatusScreen() {
   if (q.isError) return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
   const s = q.data;
   const now = new Date();
+  const open = (tab: string) => t('admin.status.open_tab', { tab: t(`admin.nav.${tab}`) });
 
   return (
     <div className="space-y-4">
@@ -101,7 +104,7 @@ export default function StatusScreen() {
           <Build label={t('admin.status.search_prices')} b={s.search_item_prices} />
         </Card>
 
-        <Card title={t('admin.status.moderation')}>
+        <Card title={t('admin.status.moderation')} href={tabHref('queue')} linkLabel={open('queue')}>
           <dl>
             <Row label={t('admin.status.pending')} value={s.moderation?.pending} />
             <Row label={t('admin.status.hidden_7d')} value={s.moderation?.hidden_7d} />
@@ -110,7 +113,8 @@ export default function StatusScreen() {
         </Card>
 
         {/* SU11A-57: null until su11a57_category_suggestions.sql is applied. */}
-        <Card title={t('admin.status.categories')}>
+        <Card title={t('admin.status.categories')} linkLabel={open('categories')}
+          href={tabHref('categories', (s.category_suggestions?.pending ?? 0) > 0 ? 'suggestions' : undefined)}>
           <dl>
             <Row label={t('admin.status.pending_suggestions')} value={s.category_suggestions?.pending} />
             <Row label={t('admin.status.pending_items')} value={s.category_suggestions?.pending_items} />
@@ -118,7 +122,7 @@ export default function StatusScreen() {
         </Card>
 
         {/* SU11A-58: null until su11a58_promo_curation.sql is applied. */}
-        <Card title={t('admin.status.promos')}>
+        <Card title={t('admin.status.promos')} href={tabHref('promos', 'pins')} linkLabel={open('promos')}>
           <dl>
             <Row label={t('admin.status.active_pins')} value={s.promo_curation?.active_pins} />
             <Row label={t('admin.status.active_hides')} value={s.promo_curation?.active_hides} />

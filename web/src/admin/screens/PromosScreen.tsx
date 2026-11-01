@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getPromoChainsA, searchPromos, type PromoHit } from '../api';
+import { viewFromHash } from '../nav';
 import { Button, ErrorBox, Loading } from '../ui';
 import CurationList from './promos/CurationList';
 import { HideForm, PinForm } from './promos/CurateForms';
@@ -103,7 +104,7 @@ function SearchView() {
 
 export default function PromosScreen() {
   const { t } = useTranslation();
-  const [view, setView] = useState<View>('search');
+  const [view, setView] = useState<View>(() => viewFromHash(VIEWS, 'search'));
   return (
     <div>
       <p className="text-sm text-gray-700 mb-4">{t(`${K}.intro`)}</p>

@@ -3,6 +3,7 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getCatQueue, searchCatItems, type CatQueueKind } from '../api';
+import { viewFromHash } from '../nav';
 import { Button, ErrorBox, Loading } from '../ui';
 import ItemList from './categories/ItemList';
 import ItemPanel from './categories/ItemPanel';
@@ -91,7 +92,7 @@ function QueueView({ kind, onOpen }: { kind: Exclude<CatQueueKind, 'suggestions'
 
 export default function CategoriesScreen() {
   const { t } = useTranslation();
-  const [view, setView] = useState<View>('search');
+  const [view, setView] = useState<View>(() => viewFromHash(VIEWS, 'search'));
   const [open, setOpen] = useState<string | null>(null);
 
   if (open) return <ItemPanel code={open} onBack={() => setOpen(null)} />;
