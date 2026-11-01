@@ -2124,7 +2124,19 @@ Runbook: `docs/admin/su11a60_runbook.md`. No migration. Goal: no chain gets free
 
 **Local timings** (14 chains, 936 stores, 7.9M prices, 842k promos): list Tel Aviv + department 0.24 s (page 5: 0.22 s), all cities + department 1.1 s, Tel Aviv + q 0.35 s; grouped chain + Tel Aviv 0.45 s, Tel Aviv + department 0.25 s; promoted 0.05-0.1 s.
 
-**Tests:** `tests/test_promos_page_su11a60_pg.py` (19), the SU11A-58 byte-identical pricing tests unchanged and green, `web/scripts/promos-page.test.mjs` (7, server-rendered real page). Web: build, eslint, tsc, i18n parity (281 + 172 lazy), check:admin-chunk, deploy guard, `npm run test:unit` (21). Full Python suite with the throwaway Postgres: 848 passed + the 14 known `api/tests/test_smoke.py` failures, 0 skipped.
+**Tests:** `tests/test_promos_page_su11a60_pg.py` (19), the SU11A-58 byte-identical pricing tests unchanged and green, `web/scripts/promos-page.test.mjs` (9, server-rendered real page).
+
+**Follow-up fix (1 Nov, web only; `docs/admin/su11a60_runbook.md` step 8).** Production evidence: spinner forever after the header "מבצעים" link, and 10-15 s on refresh.
+- Playwright on production found:
+  - The page resolved the city once per mount (`resolved` ref); the header link drops `?city` while the page stays mounted, so the city stayed null: spinner and disabled select forever.
+  - The content waited for city + promoted.
+  - The "detection" was `fetch('http://ip-api.com')` with no timeout (blocked as mixed content, SU11A-48 F-12; it hangs where a browser holds it). No page uses `navigator.geolocation`.
+  - On a slow phone profile, 6.8 s of a 10-11 s direct load is the site's ~280 kB JS download.
+- Fix:
+  - City = URL -> remembered (`rememberedCity()`) -> '' synchronously, written back with replace; the select is never disabled.
+  - IP lookup removed from `utils/city.ts`, PromosPage and HomePage (search: stored city else the default, at once).
+  - Promoted and list are separate react-query queries (`useQuery` / `useInfiniteQuery`) with abort signals passed to axios; each renders and fails on its own (retry button).
+- Playwright on a local build with a mocked API: content 0.06-0.46 s on every path, including a 3 s promoted response and a 500; superseded requests aborted. Web: build, eslint, tsc, i18n parity (281 + 172 lazy), check:admin-chunk, deploy guard, `npm run test:unit` (21). Full Python suite with the throwaway Postgres: 848 passed + the 14 known `api/tests/test_smoke.py` failures, 0 skipped.
 
 ## 📋 Open items / next steps (as of 1 Nov 2026)
 

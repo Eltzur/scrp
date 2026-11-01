@@ -176,7 +176,10 @@
     "all_categories": "כל הקטגוריות",
     "one_more_branch": "ועוד סניף אחד",
     "more_branches": "ועוד {{count}} סניפים",
-    "loading": "טוען מבצעים"
+    "loading": "טוען מבצעים",
+    "promoted_loading": "טוען מבצעים מקודמים…",
+    "promoted_error": "לא הצלחנו לטעון את המבצעים המקודמים",
+    "retry": "נסו שוב"
   },
   "admin": {
     "title": "XXL Admin",

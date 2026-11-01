@@ -176,7 +176,10 @@
     "all_categories": "All categories",
     "one_more_branch": "and one more branch",
     "more_branches": "and {{count}} more branches",
-    "loading": "Loading deals"
+    "loading": "Loading deals",
+    "promoted_loading": "Loading promoted deals…",
+    "promoted_error": "Could not load the promoted deals",
+    "retry": "Try again"
   },
   "admin": {
     "title": "XXL Admin",

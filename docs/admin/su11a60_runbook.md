@@ -219,6 +219,55 @@ git checkout HEAD~1 -- web/; .\scripts\deploy_frontend.ps1; git checkout HEAD --
 
 **Expect:** `MATCH`, then `Done!`.
 
+## 8. Follow-up (1 Nov 2026): the page never waits on the city
+
+This is a web-only fix to the SU11A-60 page; the API is unchanged. If SU11A-60 is already deployed, do 8a and 8b only; otherwise step 5 above already ships it.
+
+**What was wrong** (reproduced with Playwright on production, read-only loads):
+- **The spinner that never ended.** The page resolved the city once per mount (a `resolved` ref). The header "מבצעים" link drops `?city` while the page stays mounted, so the city stayed unresolved. That left a spinner forever, the city select disabled on "כל הערים", and no new requests.
+- **The city "detection" was not GPS.** No page uses `navigator.geolocation`. It was `fetch('http://ip-api.com/…')` with no timeout, which browsers block as mixed content on https (SU11A-48 F-12). Where the browser held it instead of failing it, the page waited on it.
+- **The whole content area waited** for the city and the promoted section before showing anything.
+- **Slow networks:** on a slow phone profile (3G, 6× CPU) a direct load took 10.7–11.6 s to show content. Most of that (6.8 s) is downloading the site's ~280 kB of JS, before any page code runs; the gating added the rest.
+
+**What changed:**
+- **City:** URL `city`, else the remembered city, else כל הערים, decided synchronously. It is written to the URL with replace, and the same happens on an in-app link. The select is never disabled.
+- **IP lookup removed** from the promos page and the search page (`web/src/utils/city.ts`).
+- **מבצעים מקודמים and the list are separate queries.** Each renders when its own data arrives, with its own loading line / spinner and its own נסו שוב on failure. A newer filter choice aborts the superseded requests.
+
+**Playwright, local production build with the API mocked:**
+
+| Scenario | Content (filters, start text, chips) | Other |
+|---|---|---|
+| Direct `/promos`, promoted request held for 3 s | 0.42 s | promoted section at 3.5 s |
+| Home → header link | 0.18 s | |
+| On `/promos?city=…&cat=…` → header link | 0.06 s | |
+| Promoted returns 500 | 0.46 s | its own retry at 1.6 s (after one retry) |
+| A category with promoted held for 3 s | list at 0.59 s | |
+| Two quick filter changes | | the superseded `/promos/list` and `/promos/promoted` requests aborted |
+
+**8a. Web deploy.** Run on a PC with `web/.env.production`:
+
+**[PC — PowerShell]**
+
+```
+git pull origin main; .\scripts\deploy_frontend.ps1
+```
+
+**Expect:** `build OK`, `MATCH`, `Done!`.
+**STOP on** a red line.
+
+**8b. Checks**
+
+**[Browser]**
+1. On super.xxl.co.il/promos?city=… pick a category.
+2. Click the header "מבצעים" icon.
+   - **Expect:** at once, the filters, the start text and the chips; the city select is enabled; the address bar shows `?city=…`.
+3. Refresh the page (Ctrl+F5).
+   - **Expect:** the filters and chips within about a second. מבצעים מקודמים may show "טוען מבצעים מקודמים…" briefly.
+4. In DevTools → Console, check there is **no** "Mixed Content … ip-api.com" error any more, on the promos page or on the search page.
+
+**Rollback:** step 7b, using the commit before this fix (`git checkout HEAD~1 -- web/`).
+
 ---
 
 ## Reference

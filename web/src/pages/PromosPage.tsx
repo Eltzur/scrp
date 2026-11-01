@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, Loader2, AlertCircle, Search, SlidersHorizontal, X } from 'lucide-react';
 import clsx from 'clsx';
 import type {
-  CategoryNode, FlatPromoItem, GroupedPromoItem, PromoChain, CityInfo, PromoShape, PromoSort,
+  CategoryNode, FlatPromoItem, GroupedPromoItem, PromoChain, PromoShape, PromoSort,
 } from '../api/client';
 import { getCategoryTree, getFlatPromos, getGroupedPromos, getPromoChains, getPromotedPromos } from '../api/client';
 import { useCities } from '../api/hooks';
-import { detectCity, rememberCity } from '../utils/city';
+import { rememberCity, rememberedCity } from '../utils/city';
 import { promosMode, readView, withChanges } from '../utils/promosView';
 
 const PAGE_SIZE = 300;      // grouped (one chain)
@@ -321,12 +321,18 @@ export default function PromosPage() {
   const { data: cityInfos = [] } = useCities();
   const tree = useQuery({ queryKey: ['category-tree'], queryFn: getCategoryTree, staleTime: 60 * 60 * 1000, retry: 1 });
 
-  // SU11A-60: the view lives in the URL (shareable, Back works). A missing
-  // city is resolved once (remembered / detected) and written back; city=''
-  // is "all cities".
+  // SU11A-60: the view lives in the URL (shareable, Back works); city=''
+  // is "all cities". The city never waits on anything: URL -> remembered ->
+  // all cities, synchronously, on a direct load and on an in-app link alike
+  // (the header link drops ?city while this page stays mounted).
   const [params, setParams] = useSearchParams();
   const view = useMemo(() => readView(params, VIEW_ALLOWED), [params]);
-  const { city, branch, q, ending: endingSoon } = view;   // city null = not resolved yet
+  const remembered = useMemo(() => {
+    const c = rememberedCity();
+    return c && (cityInfos.length === 0 || cityInfos.some(x => x.city === c)) ? c : '';
+  }, [cityInfos]);
+  const city = view.city ?? remembered;
+  const { branch, q, ending: endingSoon } = view;
   const chainId = view.chain;
   const category = view.cat;
   const sort = view.sort as PromoSort;
@@ -337,13 +343,7 @@ export default function PromosPage() {
     setParams(prev => withChanges(prev, changes), { replace });
 
   const [chains,  setChains]  = useState<PromoChain[]>([]);
-  const [rows,    setRows]    = useState<GroupedPromoItem[]>([]);
   const [qInput,  setQInput]  = useState(q);
-  const [loading, setLoading] = useState(false);
-  const [rowsKey, setRowsKey] = useState('');  // the request the rows (or error) belong to
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error,   setError]   = useState(false);
-  const [hasMore, setHasMore] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false); // mobile panel
 
   // Branch options are captured from an UNFILTERED-by-branch result and kept in
@@ -353,15 +353,12 @@ export default function PromosPage() {
 
   useEffect(() => { getPromoChains().then(setChains).catch(() => setChains([])); }, []);
 
-  // Resolve the active city ONCE, from the same source the search page uses, so
-  // the two pages never disagree about "your city". '' means "all cities".
-  const resolved = useRef(false);
+  // Write the city into the URL when it has none (shareable view); replace,
+  // so Back does not stop on the city-less entry.
   useEffect(() => {
-    if (resolved.current || city !== null || cityInfos.length === 0) return;
-    resolved.current = true;
-    detectCity(cityInfos as CityInfo[]).then(c => update({ city: c }, true));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the city list arrives
-  }, [cityInfos, city]);
+    if (view.city === null) update({ city: remembered }, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- update is stable in effect
+  }, [view.city, remembered]);
 
   // Debounce the search box; typing replaces the history entry instead of adding one per pause.
   useEffect(() => {
@@ -391,56 +388,41 @@ export default function PromosPage() {
     endingWithinHours: endingSoon ? ENDING_SOON_HOURS : undefined,
     sort,
   }), [city, chainId, branch, category, bands, types, q, endingSoon, sort]);
-  const argsKey = `${mode}|${JSON.stringify(filterArgs)}`;
 
+  // Two independent queries; each section renders when its own data arrives.
+  // A new key leaves the old request unused, and react-query aborts it
+  // (the signal goes to axios).
   // מבצעים מקודמים: every state, the same filters minus branch and sort.
   const promotedArgs = useMemo(() => ({ ...filterArgs, branch: undefined, sort: undefined }), [filterArgs]);
   const promoted = useQuery({
     queryKey: ['promos-promoted', promotedArgs],
-    queryFn: () => getPromotedPromos(promotedArgs),
-    enabled: city !== null,
+    queryFn: ({ signal }) => getPromotedPromos(promotedArgs, signal),
     staleTime: 30_000,
     placeholderData: keepPreviousData,
   });
 
-  useEffect(() => {
-    if (city === null || !active) return;
-    let stale = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag for the fetch this effect starts
-    setLoading(true);
-    setError(false);
-    (flat ? getFlatPromos : getGroupedPromos)({ ...filterArgs, limit: pageSize, offset: 0 })
-      .then(data => {
-        if (stale) return;
-        setRows(data);
-        setRowsKey(argsKey);
-        setHasMore(data.length === pageSize);
-        // Only refresh the branch list when not already narrowed to one branch.
-        if (!flat && filterArgs.branch == null) {
-          const seen = new Map<number, string>();
-          for (const r of data) {
-            if (r.store_fk != null && !seen.has(r.store_fk)) {
-              seen.set(r.store_fk, r.branch ?? String(r.store_fk));
-            }
-          }
-          setBranchOpts(Array.from(seen, ([fk, name]) => ({ fk, name })));
-        }
-      })
-      .catch(() => { if (!stale) { setError(true); setRowsKey(argsKey); } })
-      .finally(() => { if (!stale) setLoading(false); });
-    return () => { stale = true; };
-  }, [filterArgs, city, active, flat, pageSize, argsKey]);
+  const list = useInfiniteQuery({
+    queryKey: ['promos-list', mode, filterArgs],
+    queryFn: ({ pageParam, signal }) =>
+      (flat ? getFlatPromos : getGroupedPromos)({ ...filterArgs, limit: pageSize, offset: pageParam }, signal),
+    initialPageParam: 0,
+    getNextPageParam: (last: GroupedPromoItem[], all: GroupedPromoItem[][]) =>
+      last.length === pageSize ? all.reduce((n, pg) => n + pg.length, 0) : undefined,
+    enabled: active,
+    staleTime: 60_000,
+  });
+  const rows = useMemo(() => list.data?.pages.flat() ?? [], [list.data]);
 
-  const loadMore = () => {
-    setLoadingMore(true);
-    (flat ? getFlatPromos : getGroupedPromos)({ ...filterArgs, limit: pageSize, offset: rows.length })
-      .then(data => {
-        setRows(prev => [...prev, ...data]);
-        setHasMore(data.length === pageSize);
-      })
-      .catch(() => setError(true))
-      .finally(() => setLoadingMore(false));
-  };
+  // Only refresh the branch list when not already narrowed to one branch.
+  useEffect(() => {
+    if (mode !== 'grouped' || filterArgs.branch != null) return;
+    const seen = new Map<number, string>();
+    for (const r of list.data?.pages[0] ?? []) {
+      if (r.store_fk != null && !seen.has(r.store_fk)) seen.set(r.store_fk, r.branch ?? String(r.store_fk));
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- options from the unfiltered-by-branch page
+    setBranchOpts(Array.from(seen, ([fk, name]) => ({ fk, name })));
+  }, [list.data, mode, filterArgs.branch, chainId]);
 
   const grouped = useMemo(() => (flat ? [] : groupRows(rows)), [rows, flat]);
   const showCityHeaders = !city;
@@ -470,14 +452,14 @@ export default function PromosPage() {
       {/* Row 1 — dropdowns */}
       <div className="flex flex-wrap gap-2">
         <select
-          value={city ?? ''}
+          value={city}
           onChange={e => handleCityChange(e.target.value)}
           className={SELECT_CLS}
           dir="rtl"
-          disabled={city === null}
           aria-label="עיר"
         >
           <option value="">כל הערים</option>
+          {city && !cityInfos.some(c => c.city === city) && <option value={city}>{city}</option>}
           {cityInfos.map(c => <option key={c.city} value={c.city}>{c.city}</option>)}
         </select>
 
@@ -583,9 +565,17 @@ export default function PromosPage() {
     </div>
   );
 
-  // One placeholder until the city and the promoted section are known, so
-  // neither pushes the other down when it arrives.
-  const ready = city !== null && !promoted.isPending;
+  const retryBox = (onRetry: () => void, small = false) => (
+    <div role="alert" className={clsx('flex flex-col items-center gap-2 text-gray-600', small ? 'py-3' : 'py-24')}>
+      <span className="flex items-center gap-2 text-sm"><AlertCircle size={small ? 16 : 28} className="text-rose-400" aria-hidden="true" />
+        {small ? t('promos.promoted_error') : 'שגיאה בטעינת המבצעים'}</span>
+      <button type="button" onClick={onRetry}
+        className="min-h-[44px] px-4 rounded-lg border border-gray-300 bg-white text-sm text-gray-800 hover:border-emerald-400
+                   focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700">
+        {t('promos.retry')}
+      </button>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -630,9 +620,15 @@ export default function PromosPage() {
         </button>
         <div className={clsx('mb-6', filtersOpen ? 'block' : 'hidden sm:block')}>{filterBar}</div>
 
-        {!ready ? spinner : (
-          <>
-            {promotedRows.length > 0 && (
+        {/* Each section renders when its own data arrives. The promoted one
+            shows a one-line placeholder while it loads (no jump when the
+            usual empty answer comes back) and its own retry on failure. */}
+        <>
+            {promoted.isPending ? (
+              <p className="mb-6 h-6 text-xs text-gray-500" aria-live="polite">{t('promos.promoted_loading')}</p>
+            ) : promoted.isError && !promoted.data ? (
+              <div className="mb-6">{retryBox(() => void promoted.refetch(), true)}</div>
+            ) : promotedRows.length > 0 && (
               <section aria-labelledby="promoted-title" className="mb-6">
                 <h2 id="promoted-title" className="text-base font-bold text-gray-900 mb-2">{t('promos.promoted_title')}</h2>
                 <ul className="grid gap-2 sm:grid-cols-2">
@@ -662,12 +658,7 @@ export default function PromosPage() {
                   </div>
                 )}
               </section>
-            ) : loading || rowsKey !== argsKey ? spinner : error ? (
-              <div className="flex flex-col items-center gap-2 py-24 text-gray-500">
-                <AlertCircle size={28} className="text-rose-400" />
-                <p className="text-sm">שגיאה בטעינת המבצעים</p>
-              </div>
-            ) : rows.length === 0 ? (
+            ) : list.isPending ? spinner : list.isError && rows.length === 0 ? retryBox(() => void list.refetch()) : rows.length === 0 ? (
               <p className="text-center text-gray-500 py-24" dir="auto">אין מבצעים תואמים</p>
             ) : (
               <>
@@ -710,23 +701,22 @@ export default function PromosPage() {
                   </div>
                 )}
 
-                {hasMore && (
+                {list.hasNextPage && (
                   <div className="flex justify-center mt-6">
                     <button
-                      onClick={loadMore}
-                      disabled={loadingMore}
+                      onClick={() => void list.fetchNextPage()}
+                      disabled={list.isFetchingNextPage}
                       className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white
                                  text-sm text-gray-700 hover:border-emerald-400 disabled:opacity-50 transition-colors"
                     >
-                      {loadingMore && <Loader2 size={14} className="animate-spin" />}
+                      {list.isFetchingNextPage && <Loader2 size={14} className="animate-spin" />}
                       טען עוד
                     </button>
                   </div>
                 )}
               </>
             )}
-          </>
-        )}
+        </>
       </main>
     </div>
   );

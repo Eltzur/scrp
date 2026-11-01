@@ -3,7 +3,8 @@
 // the view round-trips through the URL. Bundles the real page and
 // src/utils/promosView.ts with esbuild and renders with react-dom/server inside
 // a MemoryRouter and a pre-filled QueryClient (no network: effects do not run
-// on the server, so "asks for results" shows as the results spinner).
+// on the server, so "asks for results" shows as the results spinner). The
+// 2026-11 follow-up: nothing waits on the city or on the promoted section.
 // Run: npm run test:unit
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -111,6 +112,21 @@ test('the URL restores the filters', () => {
   assert.match(html, /<option value="savings" selected="">/);
   assert.match(html, /aria-pressed="true"[^>]*>26–50%/);
   assert.match(html, /aria-pressed="true"[^>]*>1\+1 \/ מתנה/);
+});
+
+test('no city in the URL: renders at once, nothing gates on the city', () => {
+  // A remembered city / "all cities" is used synchronously; the select is never disabled.
+  const html = m.page('/promos', [[['cities'], []], [['category-tree'], TREE], [['promos-promoted', {}], []]]);
+  assert.ok(html.includes(START) && html.includes('>מוצרי חלב</button>'));
+  assert.match(html, /<select[^>]*aria-label="עיר"[^>]*>/);
+  assert.doesNotMatch(html.match(/<select[^>]*aria-label="עיר"[^>]*>/)[0], /\sdisabled(=|\s|>)/);
+});
+
+test('promoted still loading: filters and chips are already there', () => {
+  const html = m.page(`/promos?city=${encodeURIComponent(CITY)}`, seed().slice(0, 2));   // no promoted data
+  assert.ok(html.includes(START) && html.includes('>מוצרי חלב</button>'));
+  assert.ok(html.includes('טוען מבצעים מקודמים'));
+  assert.ok(!html.includes(SPINNER), 'no page-wide spinner');
 });
 
 test('view: mode, read and write round-trip', () => {

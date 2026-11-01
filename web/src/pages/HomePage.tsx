@@ -12,7 +12,7 @@ import AppBadges from '../components/AppBadges';
 import { useSearch, useCompare } from '../api/hooks';
 import { searchProducts, compareProducts, getProduct, isBusyError } from '../api/client';
 import type { ProductWithPrices, CityInfo } from '../api/client';
-import { defaultCity, matchIpCity, rememberCity, storedCity } from '../utils/city';
+import { defaultCity, rememberCity, storedCity } from '../utils/city';
 
 const DEFAULT_FILTERS: FilterState = {
   city:        null,
@@ -77,24 +77,9 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
     if (cityDetected.current || cities.length === 0) return;
     cityDetected.current = true;
 
-    // 1. Prefer the city the user last used.
-    const saved = storedCity(cities);
-    if (saved) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- applies the saved city once the city list arrives
-      setFilters(f => ({ ...f, city: [saved] }));
-      return;
-    }
-
-    // 2. Try IP geolocation (free, no key, Hebrew city names).
-    fetch('http://ip-api.com/json/?fields=city&lang=he')
-      .then(r => r.json())
-      .then((json: { city?: string }) => {
-        const matched = matchIpCity(json.city ?? '', cities);
-        setFilters(f => ({ ...f, city: [matched ?? defaultCity(cities)] }));
-      })
-      .catch(() => {
-        setFilters(f => ({ ...f, city: [defaultCity(cities)] }));
-      });
+    // The city the user last used, else the default. Synchronous: the old IP
+    // lookup was blocked as mixed content (and could hang), SU11A-60 follow-up.
+    setFilters(f => ({ ...f, city: [storedCity(cities) ?? defaultCity(cities)] }));
   }, [cities]);
 
   // Persist single-city selections to localStorage so next visit skips geolocation.

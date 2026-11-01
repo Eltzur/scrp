@@ -403,9 +403,11 @@ const promoParams = (opts: GroupedPromoOpts) => ({
   ...(opts.endingWithinHours ? { ending_within_hours: opts.endingWithinHours } : {}),
 });
 
-/** Cross-chain list, sorted by the server; page with offset = rows shown. */
-export const getFlatPromos = (opts: GroupedPromoOpts = {}): Promise<FlatPromoItem[]> =>
+/** Cross-chain list, sorted by the server; page with offset = rows shown.
+ *  `signal` cancels a superseded request (react-query passes one). */
+export const getFlatPromos = (opts: GroupedPromoOpts = {}, signal?: AbortSignal): Promise<FlatPromoItem[]> =>
   http.get<FlatPromoItem[]>('/promos/list', {
+    signal,
     params: {
       ...promoParams(opts),
       ...(opts.sort && opts.sort !== 'discount' ? { sort: opts.sort } : {}),
@@ -413,15 +415,15 @@ export const getFlatPromos = (opts: GroupedPromoOpts = {}): Promise<FlatPromoIte
     },
   }).then(r => r.data);
 
-/** מבצעים מקודמים: at most 10 active pins, in rank order. [] on any error. */
-export const getPromotedPromos = (opts: GroupedPromoOpts = {}): Promise<FlatPromoItem[]> =>
-  http.get<FlatPromoItem[]>('/promos/promoted', { params: promoParams(opts) })
-    .then(r => r.data).catch(() => []);
+/** מבצעים מקודמים: at most 10 active pins, in rank order. */
+export const getPromotedPromos = (opts: GroupedPromoOpts = {}, signal?: AbortSignal): Promise<FlatPromoItem[]> =>
+  http.get<FlatPromoItem[]>('/promos/promoted', { signal, params: promoParams(opts) }).then(r => r.data);
 
 /** Rows arrive pre-sorted chain → city → branch → discount desc. Preserve that
  *  order; re-sorting client-side would break the grouped rendering. */
-export const getGroupedPromos = (opts: GroupedPromoOpts = {}): Promise<GroupedPromoItem[]> =>
+export const getGroupedPromos = (opts: GroupedPromoOpts = {}, signal?: AbortSignal): Promise<GroupedPromoItem[]> =>
   http.get<GroupedPromoItem[]>('/promos/grouped', {
+    signal,
     // axios encodes params via the shared paramsSerializer (URLSearchParams),
     // which percent-encodes Hebrew correctly — do NOT hand-build this query.
     params: {
