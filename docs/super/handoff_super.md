@@ -2146,8 +2146,8 @@ Runbook: `docs/admin/su11a60_runbook.md`. No migration. Goal: no chain gets free
 - **SU11A-49 security fixes:** built, not deployed. Run `docs/security/su11a49_runbook.md` (after or together with the SU11A-47 runbook; both restart scrp-api), then the web deploy. Then: review the compliance drafts in `docs/compliance/` (with an advisor for the לאימות items), the sudo checks in the SU11A-48 review, CSP enforcement after a clean week, and the open findings F-06 to F-23.
 - **SU11A-47 search speed:** built, not deployed. Run `docs/super/su11a47_search_speed_runbook.md` (migration, build, check-precomputed, restart, curl), then the web deploy. Mobile suggestions ship in build 9.
 - **SU11A-54 admin console:** built, not deployed. Run `docs/admin/su11a54_runbook.md` (DNS, Supabase TOTP, allowlist, migration, restart, certificate + site, web deploy, first TOTP enrolment). From then on every /admin call needs 2FA. Next phases: settings, stores (categories: SU11A-57).
-- **SU11A-60 promos page:** built, not deployed. `docs/admin/su11a60_runbook.md` (restart, timings, web deploy, browser checks incl. two pins). Follow-up (not started): precompute `/promos/today` in the 14:30 build (cold call still ~11 s; cached after).
-- **SU11A-59 /chains + admin CORS + dashboard links:** built, not deployed. `docs/admin/su11a59_runbook.md` (API pull + restart fixes `/chains` and ביטול ממומן; web deploy for the card links). Follow-up candidate (not started): `/stats` (scans all prices).
+- **SU11A-60 promos page:** deployed 1 Nov 2026 (API restarted on 5a1c2fb, web da83ca4, guard MATCH). `docs/admin/su11a60_runbook.md`. Follow-up (not started): precompute `/promos/today` in the 14:30 build (cold call still ~11 s; cached after).
+- **SU11A-59 /chains + admin CORS + dashboard links:** deployed 1 Nov 2026. `docs/admin/su11a59_runbook.md`. Follow-up candidate (not started): `/stats` (scans all prices).
 - **SU11A-58 promo pins / hides:** in use on production by 1 Nov. `docs/admin/su11a58_runbook.md` (migration, restart, ONE web deploy for SU11A-57 + SU11A-58 from a PC with `web/.env.production`, checks). Open decision: whether a hide should also exclude a promotion from prices (options A / B / C in the SU11A-58 entry).
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
 - **Catalog:**
@@ -2156,13 +2156,12 @@ Runbook: `docs/admin/su11a60_runbook.md`. No migration. Goal: no chain gets free
   - category / attribute faceted filters;
   - a switch to hide tobacco and alcohol;
   - optionally, move the location prompt to a contextual moment.
-- **Apple:**
-  - App Store Connect record;
-  - EAS iOS build without the local-network string;
-  - TestFlight;
-  - App Privacy answers.
-  - Sign in with Apple is not required for email/password only.
-  - Guideline 1.2 needs terms, report, block and contact info: all built (SU11A-44), not yet deployed.
+- **Apple (SU11B series, `docs/handoff_mobile.md` SU11B-1):**
+  - Individual account (Team V46QVK4YSA), App Store Connect app SUPER XXL (ascAppId 6829450422), bundle `il.co.xxl.supermarket`, Israel only. iOS config, privacy manifest and submit profile done in SU11B-1.
+  - Next: first EAS iOS build, TestFlight on the iPhone 12, listing, screenshots: `docs/ios/su11b1_runbook.md` with the copy and answers in `docs/ios/su11b1_app_store_kit.md`.
+  - **HARD STOP:** no Submit for Review until the Apple team/legal name reads "Elad Tzur" (it shows "Lead Tour").
+  - Open: GS1 licence for public display (kit §4); age rating 13+ vs 4+ (kit §3); review account appreview@xxl.co.il (Supabase Add user, not in DELETE_PROTECTED_USER_IDS).
+  - Sign in with Apple is not required (email/password only). Guideline 1.2 items (terms, report, block, blocked list, contact) are live.
 - **Play:**
   - **Production LIVE since 23 Oct 2026** (build 8, 1.2.1, Israel, "XXL Team", IARC / PEGI 3). The website badge and banner (SU11A-53) are built; Dude deploys the web.
   - plan Play Billing.
