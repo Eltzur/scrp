@@ -2,7 +2,8 @@
 db/migrations/su11a58_promo_curation.sql).
 
 Admins pin a promotion (shown first, in rank order) or hide it (left out) on the
-promo LISTS only: /promos/grouped (web PromosPage) and /promos/today. A
+promo LISTS only: /promos/grouped, /promos/list and /promos/promoted (web
+PromosPage; the pins are the מבצעים מקודמים section, SU11A-60) and /promos/today. A
 promotion is (chain_id, promo_id), the chain's PromotionId, which survives the
 daily reload; promos.id does not.
 

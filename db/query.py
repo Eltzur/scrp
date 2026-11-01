@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 import time
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -1686,6 +1687,58 @@ _PROMO_SORTS = {
 }
 
 
+@dataclass(frozen=True)
+class CategoryFilter:
+    """SU11A-60: promos of items labelled under a category node. ids = the node
+    and its descendants; department = the node is a department (level 1), the
+    only level where a LOW-confidence label counts (the SU11A-57 display rule:
+    a low label shows the department only)."""
+    ids: tuple[str, ...]
+    department: bool
+
+
+def _layout_tail(layout: str, order_by: str, pin_first: str) -> str:
+    """The ORDER BY / LIMIT closing _fetch_grouped_promos_raw. flat / promoted
+    close the "grouped" CTE the select was opened in and keep one row per
+    group; their orders end in a unique key too (total order for paging)."""
+    if layout == "flat":
+        # promo_end_ts stays inside calc; the ISO text promo_end sorts the same.
+        order_by = order_by.replace("promo_end_ts", "promo_end")
+        return f"""
+        ), flat AS (
+            SELECT g.*,
+                   COUNT(*) OVER (PARTITION BY chain_id, item_code, promo_id) AS branch_count,
+                   ROW_NUMBER() OVER (PARTITION BY chain_id, item_code, promo_id
+                                      ORDER BY {order_by}, store_fk) AS rn
+            FROM grouped g
+        )
+        SELECT * FROM flat WHERE rn = 1
+        ORDER BY {order_by}, chain_name, chain_id, item_code, promo_id
+        LIMIT :limit OFFSET :offset"""
+    if layout == "promoted":
+        return """
+        ), firsts AS (
+            SELECT g.*,
+                   ROW_NUMBER() OVER (PARTITION BY chain_id, promo_id, store_fk ORDER BY item_code) AS store_rn,
+                   ROW_NUMBER() OVER (PARTITION BY chain_id, promo_id, item_code ORDER BY store_fk) AS item_rn
+            FROM grouped g
+        ), promoted AS (
+            SELECT f.*,
+                   SUM(CASE WHEN store_rn = 1 THEN 1 ELSE 0 END) OVER w AS branch_count,
+                   SUM(CASE WHEN item_rn = 1 THEN 1 ELSE 0 END) OVER w AS item_count,
+                   ROW_NUMBER() OVER (PARTITION BY chain_id, promo_id
+                                      ORDER BY discount_pct DESC NULLS LAST, store_fk, item_code) AS rn
+            FROM firsts f
+            WINDOW w AS (PARTITION BY chain_id, promo_id)
+        )
+        SELECT * FROM promoted WHERE rn = 1
+        ORDER BY pin_rank, chain_id, promo_id
+        LIMIT :limit OFFSET :offset"""
+    return f"""ORDER BY chain_name, city NULLS LAST, branch, {pin_first} {order_by},
+                 store_fk, item_code, promo_id
+        LIMIT :limit OFFSET :offset"""
+
+
 def _fetch_grouped_promos_raw(
     conn: Connection,
     chain_id: str | None = None,
@@ -1699,6 +1752,9 @@ def _fetch_grouped_promos_raw(
     limit: int = 500,
     offset: int = 0,
     curation: Curation = EMPTY_CURATION,
+    category: CategoryFilter | None = None,
+    layout: str = "grouped",
+    live_fks: frozenset | None = None,
 ) -> list[dict]:
     """Per-branch promo rows for the chain -> city -> branch display.
 
@@ -1727,9 +1783,29 @@ def _fetch_grouped_promos_raw(
     hidden promotions are left out in the base WHERE (so pages stay full), and
     pinned ones lead WITHIN each branch, in pin order, ahead of `sort`. The
     grouping stays the outer order. Rows then carry pin_rank (see mark()).
+
+    SU11A-60:
+      * category: only items labelled under the node (CategoryFilter; a
+        low-confidence label counts at department level only). Unlabelled
+        items never match a category.
+      * layout "flat": one row per (chain, item, promotion) across branches,
+        the best branch by `sort` as its representative, branch_count = the
+        matching branches; ordered by `sort` across chains. "promoted": only
+        pinned promotions, one row per (chain, promotion) in pin order, the
+        best row by discount as its representative, branch_count / item_count
+        = distinct matching branches / items.
+        Both dedupe in SQL, so live_fks (Liveness.live_fks) is applied in SQL.
     """
     params: dict = {"limit": limit, "offset": offset}
     where = ""
+    if live_fks is not None:
+        where += " AND p.store_fk = ANY(:live_fks)"
+        params["live_fks"] = sorted(live_fks)
+    if category is not None:
+        low = "" if category.department else " AND ic.confidence <> 'low'"
+        where += (" AND EXISTS (SELECT 1 FROM item_categories ic WHERE ic.item_code = p.item_code"
+                  f" AND ic.category_id = ANY(:cat_ids){low})")
+        params["cat_ids"] = list(category.ids)
     if chain_id:
         where += " AND s.chain_id = :chain_id"
         params["chain_id"] = chain_id
@@ -1782,6 +1858,14 @@ def _fetch_grouped_promos_raw(
     pin_col = f"{pin_expr} AS pin_rank," if pin_expr else ""
     pin_out = ", pin_rank" if pin_expr else ""
     pin_first = f"COALESCE(pin_rank, {NO_PIN})," if pin_expr else ""
+    if layout == "promoted":
+        if not pin_expr:
+            return []
+        # promo_id = ANY first: idx_promos_promo_id (SU11A-58) finds the pinned
+        # rows; the CASE alone made this scan every promo (8.9 s for all cities).
+        where += f" AND p.promo_id = ANY(:pin_ids) AND ({pin_expr}) IS NOT NULL"
+        params["pin_ids"] = sorted({pn.promo_id for pn in curation.pins})
+    open_grouped = ", grouped AS (" if layout in ("flat", "promoted") else ""
 
     rows = conn.execute(text(f"""
         WITH base AS (
@@ -1847,7 +1931,7 @@ def _fetch_grouped_promos_raw(
                         THEN round((b.shelf_price - b.unit_price)::numeric, 2)
                    END AS savings
             FROM base b
-        )
+        ){open_grouped}
         SELECT chain_id, chain_name, city, branch, store_fk, item_code, product_name,
                shelf_price, min_qty, discount_price, reward_type,
                min_purchase_amount, promo_type,
@@ -1857,7 +1941,7 @@ def _fetch_grouped_promos_raw(
                CASE WHEN is_basket THEN NULL
                     ELSE round(unit_price::numeric, 2) END AS unit_price,
                discount_pct, savings,
-               promo_description, promo_start, promo_end{pin_out}
+               promo_description, promo_start, promo_end{pin_out}{", promo_id" if open_grouped else ""}
         FROM calc
         -- Guard: a pct outside 0-100 means the source data is bad (promo dearer
         -- than shelf, or a negative shelf price). NULL is kept: that is either
@@ -1869,9 +1953,7 @@ def _fetch_grouped_promos_raw(
         -- in a different order on every query, so offset paging duplicated
         -- and skipped them: ~30% of King Store's rows at page size 300
         -- (SU10S-20). Every offset-paged promo read needs this.
-        ORDER BY chain_name, city NULLS LAST, branch, {pin_first} {order_by},
-                 store_fk, item_code, promo_id
-        LIMIT :limit OFFSET :offset
+        {_layout_tail(layout, order_by, pin_first)}
     """), params).mappings().all()
     return [dict(r) for r in rows]
 
@@ -2060,7 +2142,64 @@ def _refill(fetch, want: int, keep, start: int) -> list[dict]:
         n *= 2
 
 
+# SU11A-60: /promos/today joins every active promo row (~0.5-1M) to its shelf
+# price and dedupes them: ~11 s on production, close to the API's 15 s
+# statement_timeout. The answer only changes with a load (stores.last_loaded_at),
+# the curation, or a promo passing its end, so it is cached per worker and key:
+# rebuilt when the load stamp or the curation changes, or after TODAY_TTL_S (a
+# promo ending inside that window can show up to TODAY_TTL_S late). If the
+# database fails, the last answer for the key is served.
+TODAY_TTL_S = 300.0
+TODAY_MAX_KEYS = 256
+_today_lock = threading.Lock()
+_today_cache: OrderedDict[tuple, tuple[object, float, list[dict]]] = OrderedDict()
+
+
+def reset_today_cache() -> None:
+    with _today_lock:
+        _today_cache.clear()
+
+
+def _load_stamp(conn: Connection) -> object:
+    return conn.execute(text("SELECT max(last_loaded_at) FROM stores")).scalar()
+
+
 def fetch_today_promos(
+    conn: Connection,
+    limit: int = 200,
+    city: str | None = None,
+    chain_id: str | None = None,
+    curation: Curation = EMPTY_CURATION,
+) -> list[dict]:
+    """fetch_today_promos_live, cached (see TODAY_TTL_S). Returns copies."""
+    key = (limit, city, chain_id, curation)
+    now = time.monotonic()
+    with _today_lock:
+        hit = _today_cache.get(key)
+    try:
+        stamp = _load_stamp(conn)
+        if hit is not None and hit[0] == stamp and now - hit[1] < TODAY_TTL_S:
+            rows = hit[2]
+        else:
+            rows = fetch_today_promos_live(conn, limit=limit, city=city, chain_id=chain_id, curation=curation)
+            with _today_lock:
+                _today_cache[key] = (stamp, now, rows)
+                _today_cache.move_to_end(key)
+                while len(_today_cache) > TODAY_MAX_KEYS:
+                    _today_cache.popitem(last=False)
+    except Exception as exc:
+        if hit is None:
+            raise
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        log.warning("/promos/today: serving the cached answer (%s)", type(exc).__name__)
+        rows = hit[2]
+    return [dict(r) for r in rows]
+
+
+def fetch_today_promos_live(
     conn: Connection,
     limit: int = 200,
     city: str | None = None,
@@ -2126,6 +2265,7 @@ def fetch_grouped_promos(
     limit: int = 500,
     offset: int = 0,
     curation: Curation = EMPTY_CURATION,
+    category: CategoryFilter | None = None,
 ) -> list[dict]:
     """Per-branch promos from live stores, paginated in the FILTERED sequence.
 
@@ -2138,7 +2278,8 @@ def fetch_grouped_promos(
     exact offsets. Cost: rows before `offset` are re-read on each page.
     """
     args = dict(chain_id=chain_id, city=city, branch=branch, bands=bands, promo_types=promo_types,
-                q=q, ending_within_hours=ending_within_hours, sort=sort, curation=curation)
+                q=q, ending_within_hours=ending_within_hours, sort=sort, curation=curation,
+                category=category)
     lv = get_liveness()
     if lv is None:
         return mark_curation(_fetch_grouped_promos_raw(conn, limit=limit, offset=offset, **args), curation)
@@ -2150,3 +2291,36 @@ def fetch_grouped_promos(
         start=want + limit,
     )
     return mark_curation(rows[offset:want], curation)
+
+
+_WINDOW_COLS = ("rn", "store_rn", "item_rn")
+
+
+def _fetch_layout(conn: Connection, layout: str, curation: Curation, **args) -> list[dict]:
+    lv = get_liveness()
+    rows = _fetch_grouped_promos_raw(conn, layout=layout, curation=curation,
+                                     live_fks=None if lv is None else lv.live_fks, **args)
+    for r in rows:
+        for k in _WINDOW_COLS:
+            r.pop(k, None)
+    return mark_curation(rows, curation)
+
+
+def fetch_flat_promos(conn: Connection, curation: Curation = EMPTY_CURATION, **args) -> list[dict]:
+    """SU11A-60 /promos/list: one row per (chain, item, promotion) across
+    branches, sorted by `sort` across chains, exact offset paging (live stores
+    are filtered in SQL, before the dedupe). Same filters as
+    fetch_grouped_promos; pins are not lifted here (they have /promos/promoted)."""
+    return _fetch_layout(conn, "flat", curation, **args)
+
+
+PROMOTED_MAX = 10
+
+
+def fetch_promoted_promos(conn: Connection, curation: Curation = EMPTY_CURATION, **args) -> list[dict]:
+    """SU11A-60 /promos/promoted: the active pins matching the filters, one row
+    per pinned promotion, in pin rank order, at most PROMOTED_MAX. No pins: no
+    query at all. A hidden promotion is never pinned (db/promo_curation.py)."""
+    if not curation.pins:
+        return []
+    return _fetch_layout(conn, "promoted", curation, limit=PROMOTED_MAX, offset=0, **args)

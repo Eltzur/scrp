@@ -309,3 +309,11 @@ class GroupedPromoItem(BaseModel):
     # SU11A-58 promo curation (admin pins). Display only: no price depends on it.
     pinned: bool = False
     sponsored: bool = Field(False, description="Paid placement: the card must show the label ממומן")
+
+
+class FlatPromoItem(GroupedPromoItem):
+    """SU11A-60 /promos/list and /promos/promoted: one card for many branches.
+    branch / store_fk / prices are the representative branch's (the best one by
+    the chosen sort; /promos/promoted: by discount)."""
+    branch_count: int = Field(description="Matching branches (in the city filter, if any)")
+    item_count: int | None = Field(None, description="/promos/promoted: matching items of the promotion")

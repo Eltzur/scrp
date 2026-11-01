@@ -167,6 +167,17 @@
     "banner_ios_link": "הורידו מ-App Store",
     "banner_close": "סגירה"
   },
+  "promos": {
+    "promoted_title": "מבצעים מקודמים",
+    "start_title": "איזה מבצעים מעניינים אתכם?",
+    "start_text": "בחרו רשת, קטגוריה או חפשו מוצר, ונציג את המבצעים בעיר שבחרתם.",
+    "departments": "מחלקות",
+    "category_label": "קטגוריה",
+    "all_categories": "כל הקטגוריות",
+    "one_more_branch": "ועוד סניף אחד",
+    "more_branches": "ועוד {{count}} סניפים",
+    "loading": "טוען מבצעים"
+  },
   "admin": {
     "title": "XXL Admin",
     "common": {

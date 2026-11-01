@@ -381,7 +381,42 @@ export interface GroupedPromoOpts {
   sort?: PromoSort;
   limit?: number;
   offset?: number;
+  /** SU11A-60: category node id from /categories/tree. */
+  category?: string;
 }
+
+/** SU11A-60 /promos/list and /promos/promoted: one card for many branches. */
+export interface FlatPromoItem extends GroupedPromoItem {
+  branch_count: number;
+  item_count?: number | null;
+}
+
+const promoParams = (opts: GroupedPromoOpts) => ({
+  // axios encodes params via the shared paramsSerializer (URLSearchParams),
+  // which percent-encodes Hebrew correctly — do NOT hand-build this query.
+  ...(opts.city    ? { city:  opts.city    } : {}),
+  ...(opts.chainId ? { chain: opts.chainId } : {}),
+  ...(opts.category ? { category: opts.category } : {}),
+  ...(opts.bands?.length      ? { bands: opts.bands.join(',') } : {}),
+  ...(opts.promoTypes?.length ? { promo_type: opts.promoTypes.join(',') } : {}),
+  ...(opts.q ? { q: opts.q } : {}),
+  ...(opts.endingWithinHours ? { ending_within_hours: opts.endingWithinHours } : {}),
+});
+
+/** Cross-chain list, sorted by the server; page with offset = rows shown. */
+export const getFlatPromos = (opts: GroupedPromoOpts = {}): Promise<FlatPromoItem[]> =>
+  http.get<FlatPromoItem[]>('/promos/list', {
+    params: {
+      ...promoParams(opts),
+      ...(opts.sort && opts.sort !== 'discount' ? { sort: opts.sort } : {}),
+      limit: opts.limit ?? 30, offset: opts.offset ?? 0,
+    },
+  }).then(r => r.data);
+
+/** מבצעים מקודמים: at most 10 active pins, in rank order. [] on any error. */
+export const getPromotedPromos = (opts: GroupedPromoOpts = {}): Promise<FlatPromoItem[]> =>
+  http.get<FlatPromoItem[]>('/promos/promoted', { params: promoParams(opts) })
+    .then(r => r.data).catch(() => []);
 
 /** Rows arrive pre-sorted chain → city → branch → discount desc. Preserve that
  *  order; re-sorting client-side would break the grouped rendering. */
@@ -390,6 +425,7 @@ export const getGroupedPromos = (opts: GroupedPromoOpts = {}): Promise<GroupedPr
     // axios encodes params via the shared paramsSerializer (URLSearchParams),
     // which percent-encodes Hebrew correctly — do NOT hand-build this query.
     params: {
+      ...(opts.category ? { category: opts.category } : {}),
       ...(opts.city    ? { city:  opts.city    } : {}),
       ...(opts.chainId ? { chain: opts.chainId } : {}),
       ...(opts.branch != null ? { branch: opts.branch } : {}),

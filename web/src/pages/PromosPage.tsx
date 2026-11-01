@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { ChevronDown, Loader2, AlertCircle, Search, SlidersHorizontal, X } from 'lucide-react';
 import clsx from 'clsx';
 import type {
-  GroupedPromoItem, PromoChain, CityInfo, PromoShape, PromoSort,
+  CategoryNode, FlatPromoItem, GroupedPromoItem, PromoChain, CityInfo, PromoShape, PromoSort,
 } from '../api/client';
-import { getGroupedPromos, getPromoChains } from '../api/client';
+import { getCategoryTree, getFlatPromos, getGroupedPromos, getPromoChains, getPromotedPromos } from '../api/client';
 import { useCities } from '../api/hooks';
 import { detectCity, rememberCity } from '../utils/city';
+import { promosMode, readView, withChanges } from '../utils/promosView';
 
-const PAGE_SIZE = 300;
+const PAGE_SIZE = 300;      // grouped (one chain)
+const FLAT_PAGE_SIZE = 30;  // SU11A-60: the cross-chain list
 const SEARCH_DEBOUNCE_MS = 300;
 const ENDING_SOON_HOURS = 48;
 
@@ -268,21 +273,74 @@ function Collapsible({
   );
 }
 
+/** SU11A-60: a cross-chain card (flat list, מבצעים מקודמים): the chain and the
+ *  representative branch on top, then the usual promo row. */
+export function FlatCard({ item }: { item: FlatPromoItem }) {
+  const { t } = useTranslation();
+  const more = item.branch_count - 1;
+  return (
+    <li className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <p className="px-3 pt-2 text-xs text-gray-600" dir="auto">
+        <span className="font-semibold text-gray-900">{item.chain_name ?? item.chain_id}</span>
+        {' · '}{item.branch ?? '—'}
+        {more > 0 && <> {more === 1 ? t('promos.one_more_branch') : t('promos.more_branches', { count: more })}</>}
+      </p>
+      <PromoRow item={item} />
+    </li>
+  );
+}
+
+/** Departments, categories and sub-categories in tree order, for the select. */
+function categoryOptions(nodes: CategoryNode[], en: boolean) {
+  const kids = new Map<string | null, CategoryNode[]>();
+  for (const n of nodes) {
+    const k = kids.get(n.parent_id) ?? [];
+    k.push(n);
+    kids.set(n.parent_id, k);
+  }
+  const out: { id: string; label: string; level: number }[] = [];
+  const walk = (parent: string | null) => {
+    for (const n of kids.get(parent) ?? []) {
+      out.push({ id: n.id, label: '  '.repeat(n.level - 1) + ((en && n.name_en) || n.name_he), level: n.level });
+      walk(n.id);
+    }
+  };
+  walk(null);
+  return out;
+}
+
+const VIEW_ALLOWED = {
+  sorts: SORTS.map(x => x.value as string),
+  bands: BANDS.map(x => x.value),
+  types: PROMO_TYPES.map(x => x.value as string),
+};
+
 export default function PromosPage() {
+  const { t, i18n } = useTranslation();
+  const en = i18n.language.startsWith('en');
   const { data: cityInfos = [] } = useCities();
+  const tree = useQuery({ queryKey: ['category-tree'], queryFn: getCategoryTree, staleTime: 60 * 60 * 1000, retry: 1 });
+
+  // SU11A-60: the view lives in the URL (shareable, Back works). A missing
+  // city is resolved once (remembered / detected) and written back; city=''
+  // is "all cities".
+  const [params, setParams] = useSearchParams();
+  const view = useMemo(() => readView(params, VIEW_ALLOWED), [params]);
+  const { city, branch, q, ending: endingSoon } = view;   // city null = not resolved yet
+  const chainId = view.chain;
+  const category = view.cat;
+  const sort = view.sort as PromoSort;
+  const bands = view.bands;
+  const types = view.types as PromoShape[];
+
+  const update = (changes: Record<string, string | null>, replace = false) =>
+    setParams(prev => withChanges(prev, changes), { replace });
 
   const [chains,  setChains]  = useState<PromoChain[]>([]);
   const [rows,    setRows]    = useState<GroupedPromoItem[]>([]);
-  const [city,    setCity]    = useState<string | null>(null); // null = not resolved yet
-  const [chainId, setChainId] = useState('');
-  const [branch,  setBranch]  = useState<number | null>(null);
-  const [bands,   setBands]   = useState<string[]>([]);
-  const [types,   setTypes]   = useState<PromoShape[]>([]);
-  const [sort,    setSort]    = useState<PromoSort>('discount');
-  const [endingSoon, setEndingSoon] = useState(false);
-  const [qInput,  setQInput]  = useState('');
-  const [q,       setQ]       = useState('');
-  const [loading, setLoading] = useState(true);
+  const [qInput,  setQInput]  = useState(q);
+  const [loading, setLoading] = useState(false);
+  const [rowsKey, setRowsKey] = useState('');  // the request the rows (or error) belong to
   const [loadingMore, setLoadingMore] = useState(false);
   const [error,   setError]   = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -299,43 +357,66 @@ export default function PromosPage() {
   // the two pages never disagree about "your city". '' means "all cities".
   const resolved = useRef(false);
   useEffect(() => {
-    if (resolved.current || cityInfos.length === 0) return;
+    if (resolved.current || city !== null || cityInfos.length === 0) return;
     resolved.current = true;
-    detectCity(cityInfos as CityInfo[]).then(setCity);
-  }, [cityInfos]);
+    detectCity(cityInfos as CityInfo[]).then(c => update({ city: c }, true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the city list arrives
+  }, [cityInfos, city]);
 
-  // Debounce the search box so typing does not fire a request per keystroke.
+  // Debounce the search box; typing replaces the history entry instead of adding one per pause.
   useEffect(() => {
-    const t = setTimeout(() => setQ(qInput.trim()), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(t);
+    const v = qInput.trim();
+    if (v === q) return;
+    const h = setTimeout(() => update({ q: v }, true), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- update is stable in effect
   }, [qInput]);
+  // Back / a shared link changes q under the box: follow it.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- mirror the URL into the input
+  useEffect(() => { setQInput(cur => (cur.trim() === q ? cur : q)); }, [q]);
 
-  // A branch belongs to exactly one chain, so any chain change invalidates it.
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- a chain change invalidates the selected branch
-  useEffect(() => { setBranch(null); }, [chainId]);
+  const mode = promosMode(view);
+  const active = mode !== 'start';
+  const flat = mode === 'flat';
+  const pageSize = flat ? FLAT_PAGE_SIZE : PAGE_SIZE;
 
   const filterArgs = useMemo(() => ({
     city: city || undefined,
     chainId: chainId || undefined,
-    branch: branch ?? undefined,
+    branch: chainId ? branch ?? undefined : undefined,
+    category: category || undefined,
     bands: bands.length ? bands : undefined,
     promoTypes: types.length ? types : undefined,
     q: q || undefined,
     endingWithinHours: endingSoon ? ENDING_SOON_HOURS : undefined,
     sort,
-  }), [city, chainId, branch, bands, types, q, endingSoon, sort]);
+  }), [city, chainId, branch, category, bands, types, q, endingSoon, sort]);
+  const argsKey = `${mode}|${JSON.stringify(filterArgs)}`;
+
+  // מבצעים מקודמים: every state, the same filters minus branch and sort.
+  const promotedArgs = useMemo(() => ({ ...filterArgs, branch: undefined, sort: undefined }), [filterArgs]);
+  const promoted = useQuery({
+    queryKey: ['promos-promoted', promotedArgs],
+    queryFn: () => getPromotedPromos(promotedArgs),
+    enabled: city !== null,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
 
   useEffect(() => {
-    if (city === null) return; // wait for city resolution
+    if (city === null || !active) return;
+    let stale = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag for the fetch this effect starts
     setLoading(true);
     setError(false);
-    getGroupedPromos({ ...filterArgs, limit: PAGE_SIZE, offset: 0 })
+    (flat ? getFlatPromos : getGroupedPromos)({ ...filterArgs, limit: pageSize, offset: 0 })
       .then(data => {
+        if (stale) return;
         setRows(data);
-        setHasMore(data.length === PAGE_SIZE);
+        setRowsKey(argsKey);
+        setHasMore(data.length === pageSize);
         // Only refresh the branch list when not already narrowed to one branch.
-        if (branch == null) {
+        if (!flat && filterArgs.branch == null) {
           const seen = new Map<number, string>();
           for (const r of data) {
             if (r.store_fk != null && !seen.has(r.store_fk)) {
@@ -345,39 +426,43 @@ export default function PromosPage() {
           setBranchOpts(Array.from(seen, ([fk, name]) => ({ fk, name })));
         }
       })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
-  }, [filterArgs, city, branch]);
+      .catch(() => { if (!stale) { setError(true); setRowsKey(argsKey); } })
+      .finally(() => { if (!stale) setLoading(false); });
+    return () => { stale = true; };
+  }, [filterArgs, city, active, flat, pageSize, argsKey]);
 
   const loadMore = () => {
     setLoadingMore(true);
-    getGroupedPromos({ ...filterArgs, limit: PAGE_SIZE, offset: rows.length })
+    (flat ? getFlatPromos : getGroupedPromos)({ ...filterArgs, limit: pageSize, offset: rows.length })
       .then(data => {
         setRows(prev => [...prev, ...data]);
-        setHasMore(data.length === PAGE_SIZE);
+        setHasMore(data.length === pageSize);
       })
       .catch(() => setError(true))
       .finally(() => setLoadingMore(false));
   };
 
-  const grouped = useMemo(() => groupRows(rows), [rows]);
+  const grouped = useMemo(() => (flat ? [] : groupRows(rows)), [rows, flat]);
   const showCityHeaders = !city;
+  const catOpts = useMemo(() => categoryOptions(tree.data?.nodes ?? [], en), [tree.data, en]);
+  const departments = catOpts.filter(c => c.level === 1);
+  const promotedRows = promoted.data ?? [];
 
   const handleCityChange = (next: string) => {
-    setCity(next);
+    update({ city: next });
     if (next) rememberCity(next); // keep search + promos in sync
   };
 
-  const toggle = <T extends string>(list: T[], v: T, set: (x: T[]) => void) =>
-    set(list.includes(v) ? list.filter(x => x !== v) : [...list, v]);
+  const toggle = (key: 'bands' | 'types', list: string[], v: string) =>
+    update({ [key]: (list.includes(v) ? list.filter(x => x !== v) : [...list, v]).join(',') });
 
   const activeCount =
-    bands.length + types.length + (endingSoon ? 1 : 0) +
+    bands.length + types.length + (endingSoon ? 1 : 0) + (category ? 1 : 0) +
     (branch != null ? 1 : 0) + (chainId ? 1 : 0) + (q ? 1 : 0);
 
   const clearAll = () => {
-    setChainId(''); setBranch(null); setBands([]); setTypes([]);
-    setEndingSoon(false); setQInput(''); setQ(''); setSort('discount');
+    setQInput('');
+    update({ chain: null, branch: null, cat: null, bands: null, types: null, ending: null, q: null, sort: null });
   };
 
   const filterBar = (
@@ -398,7 +483,7 @@ export default function PromosPage() {
 
         <select
           value={chainId}
-          onChange={e => setChainId(e.target.value)}
+          onChange={e => update({ chain: e.target.value, branch: null })}
           className={SELECT_CLS}
           dir="rtl"
           aria-label="רשת"
@@ -407,13 +492,26 @@ export default function PromosPage() {
           {chains.map(c => <option key={c.chain_id} value={c.chain_id}>{c.name}</option>)}
         </select>
 
+        {/* SU11A-60: department / category / sub-category, indented. */}
+        <select
+          value={category}
+          onChange={e => update({ cat: e.target.value })}
+          className={clsx(SELECT_CLS, 'max-w-full')}
+          dir="rtl"
+          aria-label={t('promos.category_label')}
+          disabled={catOpts.length === 0}
+        >
+          <option value="">{t('promos.all_categories')}</option>
+          {catOpts.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </select>
+
         {/* Branch is only meaningful within one chain: branch names are not
             unique across chains, so offering it under "all chains" would be
             ambiguous. Disabled rather than hidden, so the control is
             discoverable and its precondition is visible. */}
         <select
           value={branch ?? ''}
-          onChange={e => setBranch(e.target.value ? Number(e.target.value) : null)}
+          onChange={e => update({ branch: e.target.value || null })}
           className={SELECT_CLS}
           dir="rtl"
           disabled={!chainId}
@@ -428,7 +526,7 @@ export default function PromosPage() {
 
         <select
           value={sort}
-          onChange={e => setSort(e.target.value as PromoSort)}
+          onChange={e => update({ sort: e.target.value === 'discount' ? null : e.target.value })}
           className={SELECT_CLS}
           dir="rtl"
           aria-label="מיון"
@@ -445,7 +543,7 @@ export default function PromosPage() {
             key={b.value}
             label={b.label}
             active={bands.includes(b.value)}
-            onClick={() => toggle(bands, b.value, setBands)}
+            onClick={() => toggle('bands', bands, b.value)}
           />
         ))}
       </div>
@@ -453,19 +551,19 @@ export default function PromosPage() {
       {/* Row 3 — promo shape + ending soon */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-xs text-gray-500 ms-1">סוג:</span>
-        {PROMO_TYPES.map(t => (
+        {PROMO_TYPES.map(pt => (
           <Chip
-            key={t.value}
-            label={t.label}
-            active={types.includes(t.value)}
-            onClick={() => toggle(types, t.value, setTypes)}
+            key={pt.value}
+            label={pt.label}
+            active={types.includes(pt.value)}
+            onClick={() => toggle('types', types, pt.value)}
           />
         ))}
         <span className="w-px h-4 bg-gray-200 mx-1" />
         <Chip
           label={`מסתיים ב-${ENDING_SOON_HOURS} שעות`}
           active={endingSoon}
-          onClick={() => setEndingSoon(v => !v)}
+          onClick={() => update({ ending: endingSoon ? null : '1' })}
         />
         {activeCount > 0 && (
           <button
@@ -479,6 +577,16 @@ export default function PromosPage() {
     </div>
   );
 
+  const spinner = (
+    <div className="flex justify-center items-center py-24">
+      <Loader2 size={32} className="animate-spin text-emerald-500" aria-label={t('promos.loading')} />
+    </div>
+  );
+
+  // One placeholder until the city and the promoted section are known, so
+  // neither pushes the other down when it arrives.
+  const ready = city !== null && !promoted.isPending;
+
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="max-w-4xl mx-auto px-4 pt-8 pb-24" dir="rtl">
@@ -491,7 +599,7 @@ export default function PromosPage() {
         <div className="relative mb-3">
           <Search size={15} className="absolute top-1/2 -translate-y-1/2 end-3 text-gray-500 pointer-events-none" />
           <input
-            type="text"
+            type="search"
             value={qInput}
             onChange={e => setQInput(e.target.value)}
             placeholder="חיפוש מוצר במבצעים"
@@ -505,6 +613,7 @@ export default function PromosPage() {
         {/* Mobile: collapsible panel so the list stays visible. Desktop: always open. */}
         <button
           onClick={() => setFiltersOpen(o => !o)}
+          aria-expanded={filtersOpen}
           className="sm:hidden w-full flex items-center justify-between gap-2 px-3 py-2 mb-3
                      border border-gray-300 rounded-lg bg-white text-sm text-gray-700"
         >
@@ -521,66 +630,100 @@ export default function PromosPage() {
         </button>
         <div className={clsx('mb-6', filtersOpen ? 'block' : 'hidden sm:block')}>{filterBar}</div>
 
-        {loading || city === null ? (
-          <div className="flex justify-center items-center py-24">
-            <Loader2 size={32} className="animate-spin text-emerald-500" />
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center gap-2 py-24 text-gray-500">
-            <AlertCircle size={28} className="text-rose-400" />
-            <p className="text-sm">שגיאה בטעינת המבצעים</p>
-          </div>
-        ) : rows.length === 0 ? (
-          <p className="text-center text-gray-500 py-24" dir="auto">
-            {activeCount > 0
-              ? 'אין מבצעים תואמים'
-              : city ? `אין מבצעים ב${city} כרגע` : 'אין מבצעים זמינים כרגע'}
-          </p>
-        ) : (
+        {!ready ? spinner : (
           <>
-            <p className="text-xs text-gray-500 mb-3">{rows.length} מבצעים</p>
-            <div className="flex flex-col gap-4">
-              {grouped.map(cg => (
-                <Collapsible key={cg.chain} title={cg.chain} count={cg.count} level="chain">
-                  {cg.cities.map(cityGrp => {
-                    const branches = cityGrp.branches.map(b => (
-                      <Collapsible
-                        key={`${cityGrp.city}-${b.branch}`}
-                        title={b.branch}
-                        count={b.rows.length}
-                        level="branch"
-                      >
-                        <div className="px-1 pb-1">
-                          {b.rows.map((r, i) => (
-                            <PromoRow key={`${r.item_code}-${r.store_fk}-${i}`} item={r} />
-                          ))}
-                        </div>
-                      </Collapsible>
-                    ));
-                    return showCityHeaders ? (
-                      <Collapsible key={cityGrp.city} title={cityGrp.city} level="city">
-                        <div className="ps-2">{branches}</div>
-                      </Collapsible>
-                    ) : (
-                      <div key={cityGrp.city}>{branches}</div>
-                    );
-                  })}
-                </Collapsible>
-              ))}
-            </div>
+            {promotedRows.length > 0 && (
+              <section aria-labelledby="promoted-title" className="mb-6">
+                <h2 id="promoted-title" className="text-base font-bold text-gray-900 mb-2">{t('promos.promoted_title')}</h2>
+                <ul className="grid gap-2 sm:grid-cols-2">
+                  {promotedRows.map(r => <FlatCard key={`${r.chain_id}-${r.store_fk}-${r.item_code}`} item={r} />)}
+                </ul>
+              </section>
+            )}
 
-            {hasMore && (
-              <div className="flex justify-center mt-6">
-                <button
-                  onClick={loadMore}
-                  disabled={loadingMore}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white
-                             text-sm text-gray-700 hover:border-emerald-400 disabled:opacity-50 transition-colors"
-                >
-                  {loadingMore && <Loader2 size={14} className="animate-spin" />}
-                  טען עוד
-                </button>
+            {!active ? (
+              <section aria-labelledby="promos-start" className="bg-white rounded-xl border border-gray-200 p-5 text-center">
+                <h2 id="promos-start" className="text-base font-bold text-gray-900">{t('promos.start_title')}</h2>
+                <p className="text-sm text-gray-600 mt-1">{t('promos.start_text')}</p>
+                {departments.length > 0 && (
+                  <div className="flex flex-wrap justify-center gap-2 mt-4" role="group" aria-label={t('promos.departments')}>
+                    {departments.map(d => (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => update({ cat: d.id })}
+                        className="min-h-[44px] px-3 rounded-full border border-gray-300 bg-white text-sm text-gray-800
+                                   hover:border-emerald-500 focus-visible:outline focus-visible:outline-2
+                                   focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
+                      >
+                        {d.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+            ) : loading || rowsKey !== argsKey ? spinner : error ? (
+              <div className="flex flex-col items-center gap-2 py-24 text-gray-500">
+                <AlertCircle size={28} className="text-rose-400" />
+                <p className="text-sm">שגיאה בטעינת המבצעים</p>
               </div>
+            ) : rows.length === 0 ? (
+              <p className="text-center text-gray-500 py-24" dir="auto">אין מבצעים תואמים</p>
+            ) : (
+              <>
+                <p className="text-xs text-gray-500 mb-3">{rows.length} מבצעים</p>
+                {flat ? (
+                  <ul className="flex flex-col gap-2">
+                    {(rows as FlatPromoItem[]).map(r => (
+                      <FlatCard key={`${r.chain_id}-${r.item_code}-${r.store_fk}-${r.promo_description}`} item={r} />
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    {grouped.map(cg => (
+                      <Collapsible key={cg.chain} title={cg.chain} count={cg.count} level="chain">
+                        {cg.cities.map(cityGrp => {
+                          const branches = cityGrp.branches.map(b => (
+                            <Collapsible
+                              key={`${cityGrp.city}-${b.branch}`}
+                              title={b.branch}
+                              count={b.rows.length}
+                              level="branch"
+                            >
+                              <div className="px-1 pb-1">
+                                {b.rows.map((r, i) => (
+                                  <PromoRow key={`${r.item_code}-${r.store_fk}-${i}`} item={r} />
+                                ))}
+                              </div>
+                            </Collapsible>
+                          ));
+                          return showCityHeaders ? (
+                            <Collapsible key={cityGrp.city} title={cityGrp.city} level="city">
+                              <div className="ps-2">{branches}</div>
+                            </Collapsible>
+                          ) : (
+                            <div key={cityGrp.city}>{branches}</div>
+                          );
+                        })}
+                      </Collapsible>
+                    ))}
+                  </div>
+                )}
+
+                {hasMore && (
+                  <div className="flex justify-center mt-6">
+                    <button
+                      onClick={loadMore}
+                      disabled={loadingMore}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white
+                                 text-sm text-gray-700 hover:border-emerald-400 disabled:opacity-50 transition-colors"
+                    >
+                      {loadingMore && <Loader2 size={14} className="animate-spin" />}
+                      טען עוד
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}

@@ -167,6 +167,17 @@
     "banner_ios_link": "download on the App Store",
     "banner_close": "Close"
   },
+  "promos": {
+    "promoted_title": "Promoted deals",
+    "start_title": "Which deals are you looking for?",
+    "start_text": "Pick a chain or a category, or search for a product, to see the deals in your city.",
+    "departments": "Departments",
+    "category_label": "Category",
+    "all_categories": "All categories",
+    "one_more_branch": "and one more branch",
+    "more_branches": "and {{count}} more branches",
+    "loading": "Loading deals"
+  },
   "admin": {
     "title": "XXL Admin",
     "common": {

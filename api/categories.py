@@ -23,6 +23,7 @@ from typing import Callable
 
 from sqlalchemy import text
 
+from db.query import CategoryFilter
 from scripts.catalog import store
 
 TREE_TTL_S = 600.0
@@ -79,6 +80,33 @@ def public_tree(conn) -> dict:
 def active_node(conn, category_id: str | None) -> dict | None:
     n = tree(conn)["nodes"].get(category_id or "")
     return n if n and n["active"] else None
+
+
+def promo_filter(conn, category_id: str):
+    """SU11A-60: the promos-page category filter for an ACTIVE node (None for an
+    unknown or inactive id, or when the category tables are missing): the node
+    and every descendant (inactive ones too, so an older label below it still
+    counts), and whether it is a department."""
+    try:
+        nodes = tree(conn)["nodes"]
+    except Exception:  # noqa: BLE001 - su11a52 not applied: no category matches
+        conn.rollback()
+        return None
+    root = nodes.get(category_id)
+    if not root or not root["active"]:
+        return None
+    children: dict[str, list[str]] = {}
+    for n in nodes.values():
+        if n["parent_id"]:
+            children.setdefault(n["parent_id"], []).append(n["id"])
+    ids, todo = [], [category_id]
+    while todo:
+        cur = todo.pop()
+        if cur in ids:
+            continue
+        ids.append(cur)
+        todo.extend(children.get(cur, []))
+    return CategoryFilter(tuple(sorted(ids)), root["level"] == 1)
 
 
 def path(conn, category_id: str | None) -> list[dict]:
