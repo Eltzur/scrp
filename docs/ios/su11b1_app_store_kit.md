@@ -10,7 +10,7 @@ Prepared 1 Nov 2026. Source facts: `docs/store_privacy_inventory.md` (SU11A-38),
 | Bundle ID | `il.co.xxl.supermarket` |
 | SKU | `superxxl-ios-001` |
 | Team | Individual, Team ID **V46QVK4YSA**; seller shown on the store: **Elad Tzur** (must read so before Submit for Review; it currently reads "Lead Tour") |
-| Version | **1.2.2** (SU11B-2; same as Android build 9); build number from EAS (remote, auto-increment; the first iOS build will be 1) |
+| Version | **1.2.2** (SU11B-2; same as Android build 9); build number from EAS (remote, auto-increment). **Submit build 1.2.2 (2)** (SU11B-3 commit); build 1.2.2 (1) was rejected in processing (ITMS-90683, missing NSMotionUsageDescription) |
 | Devices | iPhone only (`supportsTablet: false`) |
 | Primary language | Hebrew |
 | Categories | Primary: Shopping; secondary: Food & Drink |
@@ -138,7 +138,7 @@ App Store Connect → App Information → Age Rating → Edit. Answers:
 
 ## 4. Content Rights
 
-**Status: PENDING GS1 confirmation (Dude).** Leave Content Rights unanswered until Dude confirms GS1 public-display rights; this is hard stop G2 in the runbook.
+**Status: CLOSED (SU11B-3).** Dude confirmed on 2 Nov 2026 that the GS1 service terms cover public price comparison (display of GS1 product data and images in the website and apps). **Answers: third-party content → Yes; necessary rights → Yes.**
 
 App Store Connect → App Information → Content Rights: **"Does your app contain, show, or access third-party content?" → Yes.** Then: "Do you have all necessary rights to that third-party content…?"
 
@@ -146,10 +146,10 @@ App Store Connect → App Information → Content Rights: **"Does your app conta
 |---|---|---|
 | Chain prices, promotions, store lists | Published by the chains as public files under the Promotion of Competition in the Food Sector Law (חוק קידום התחרות בענף המזון, 2014), whose purpose is public price comparison. | OK. |
 | Store coordinates | Google (stored under Dude's decision of 2026-10-08, licensing his) + legacy OpenStreetMap rows (ODbL, credited on the Help screen). | Dude's call (CLAUDE.md "Google data"). |
-| GS1 Israel product data (names, brand, ingredients, nutrition, allergens, labels) and **product images** | Fetched with our GS1 Israel API account (`docs/gs1_integration.md`). | **UNCLEAR.** `docs/gs1_integration.md` documents the endpoint, auth and storage but **no licence terms**: nothing says the subscription permits public display of GS1 data and images in a consumer app. |
+| GS1 Israel product data (names, brand, ingredients, nutrition, allergens, labels) and **product images** | Fetched with our GS1 Israel API account (`docs/gs1_integration.md`). | OK — Dude confirmed 2 Nov 2026 that the GS1 service terms cover public price comparison. |
 | Product names / reviews by users | Our users, under the terms they accept. | OK. |
 
-**Plainly: we do not have a written basis in the repo for showing GS1 images and data publicly.** Before answering "Yes, I have the rights", Dude should confirm with GS1 Israel (the account contract or a short email) that public display in the website and apps is allowed. If it is not, the fallback is to hide GS1 images/data in the app (a code change, not done here). The same question already applies to the live web and Android app.
+(Before SU11B-3 this row was UNCLEAR: the repo held no GS1 licence terms. Dude's confirmation of 2 Nov 2026 closes it; the basis is the GS1 service terms, kept outside the repo.)
 
 ---
 

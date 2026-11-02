@@ -1,13 +1,15 @@
 # SU11B-1 runbook — first iOS build, TestFlight, App Store listing, submission; Android build 9
 
-Dude runs every step. CC prepared the config (mobile repo: SU11B-1 `85eb6a6`, SU11B-2 `c56e27f`) and the kit `docs/ios/su11b1_app_store_kit.md`. **Version 1.2.2** (SU11B-2); iOS build number 1, Android versionCode 9.
+Dude runs every step. CC prepared the config (mobile repo: SU11B-1 `85eb6a6`, SU11B-2 `c56e27f`, **SU11B-3 `65882ea`**) and the kit `docs/ios/su11b1_app_store_kit.md`. **Version 1.2.2** (SU11B-2); **iOS build 1.2.2 (2)**, Android versionCode 9 — both from the SU11B-3 commit `65882ea`.
 
-**Decisions recorded (Dude, SU11B-2):** placeholder drawer rows hidden on all platforms; version 1.2.2; age rating: alcohol/tobacco "Infrequent" → **13+**; GS1 public-display rights pending Dude's confirmation (second hard stop in G); review account created at step D.
+**Build 1.2.2 (1) rejected (SU11B-3 record):** EAS build `80074645` (commit `c56e27f`) was uploaded and Apple rejected it in processing with **ITMS-90683** "Missing purpose string in Info.plist — NSMotionUsageDescription" (expo-location references `CMMotionActivityManager`; SU11B-1 had set `motionUsagePermission` false). SU11B-3 adds NSMotionUsageDescription plus NSMicrophoneUsageDescription, NSFaceIDUsageDescription and NSPhotoLibraryUsageDescription (each an honest Hebrew "the app never uses / never requests it" text). Build 1 stays in App Store Connect as invalid and is never used; B runs again and produces build 2.
+
+**Decisions recorded (Dude, SU11B-2):** placeholder drawer rows hidden on all platforms; version 1.2.2; age rating: alcohol/tobacco "Infrequent" → **13+**; review account created at step D. **GS1 (SU11B-3): CLOSED** — Dude confirmed on 2 Nov 2026 that the GS1 service terms cover public price comparison; Content Rights: third-party content Yes, necessary rights Yes.
 Rules: passwords and 2FA codes are typed only into the EAS prompt or the Apple / Google page, never into chat or files. Throwaway users only for deletion tests; never delete `x@xxl.co.il` or `gplay@xxl.co.il`. Each `eas build` run burns a build number / versionCode: run each build once.
 
-Order: A (checks) → B (iOS build) → **J step 1 (Android build, right after B, same commit)** → C (submit to App Store Connect) → D (TestFlight test) → E (listing) → F (screenshots) → **G (two HARD STOPs: name + GS1 rights)** → H (submit for review) → I (release + website). The Android upload to Play (J step 2 on) can follow D's checks.
+Order: A (checks) → B (iOS build) → **J step 1 (Android build, right after B, same commit)** → C (submit to App Store Connect) → D (TestFlight test) → E (listing) → F (screenshots) → **G (HARD STOP: name "Elad Tzur")** → H (submit for review) → I (release + website). The Android upload to Play (J step 2 on) can follow D's checks.
 
-**B and J must be built from the same commit (the SU11B-2 commit `c56e27f` or a later docs-only state of `main`): iOS first, Android right after. Do not pull or change anything between the two builds.**
+**B and J must be built from the same commit (the SU11B-3 commit `65882ea` or a later docs-only state of `main`): iOS build 2 first, Android build 9 right after. Do not pull or change anything between the two builds.**
 
 ---
 
@@ -22,7 +24,7 @@ git status --short
 npx eas-cli@latest --version
 npx eas-cli@latest whoami
 ```
-Expected: the top commit is the SU11B-2 commit `c56e27f` (fix(drawer): SU11B-2 …); `git status` shows only Dude's untracked drafts (`assets/images/icon.jpg`, `splash-icon gplay.png`, `splash-icon2.png`, `crpxxl-super-mobile`); eas-cli ≥ 21.7.1; `whoami` prints the Expo account that owns `xxlcoils-team`.
+Expected: the top commit is the SU11B-3 commit `65882ea` (fix(ios): SU11B-3 …); `git status` shows only Dude's untracked drafts (`assets/images/icon.jpg`, `splash-icon gplay.png`, `splash-icon2.png`, `crpxxl-super-mobile`); eas-cli ≥ 21.7.1; `whoami` prints the Expo account that owns `xxlcoils-team`.
 STOP if `whoami` says "Not logged in": run `npx eas-cli@latest login` (Expo account, not Apple) and repeat. STOP if there are modified tracked files.
 
 Typecheck (Dude's standard bar, 6–8 minutes):
@@ -39,9 +41,9 @@ Config check (the production Info.plist values):
 [PC — PowerShell]
 ```powershell
 cd C:\scrp\xxl-super-mobile
-npx expo config --type introspect --json | Select-String -Pattern 'ITSAppUsesNonExemptEncryption|NSAllowsArbitraryLoads|NSFaceIDUsageDescription|NSPrivacyTracking"'
+npx expo config --type introspect --json | Select-String -Pattern 'ITSAppUsesNonExemptEncryption|NSAllowsArbitraryLoads|NSPrivacyTracking"|NSMotionUsageDescription|NSMicrophoneUsageDescription|NSFaceIDUsageDescription|NSPhotoLibraryUsageDescription'
 ```
-Expected: `ITSAppUsesNonExemptEncryption":false`, `NSAllowsArbitraryLoads":false`, `NSPrivacyTracking":false`, and **no** `NSFaceIDUsageDescription`. (The introspect output still lists `NSLocalNetworkUsageDescription` / `_expo._tcp`; expo-dev-launcher's build phase deletes them from Release builds — checked in D.)
+Expected: `ITSAppUsesNonExemptEncryption":false`, `NSAllowsArbitraryLoads":false`, `NSPrivacyTracking":false`, and **all four** purpose strings present, each a Hebrew text starting "SUPER XXL אינה משתמשת ב…": `NSMotionUsageDescription`, `NSMicrophoneUsageDescription`, `NSFaceIDUsageDescription`, `NSPhotoLibraryUsageDescription` (SU11B-3; required because autolinked native code references these APIs — ITMS-90683 rejected build 1 without the motion key). STOP if any of the four is missing. (The introspect output still lists `NSLocalNetworkUsageDescription` / `_expo._tcp`; expo-dev-launcher's build phase deletes them from Release builds — checked in D.)
 
 ---
 
@@ -70,8 +72,8 @@ What EAS asks and what to answer:
 | "Generate a new Apple Provisioning Profile?" | **Yes** |
 | "Would you like to set up Push Notifications?" (if asked) | **No** — the app has no push |
 
-Expected: upload of the project, then a build URL; the build runs 15–30 min and ends with **Build finished** and an `.ipa` link. The build log shows `Version 1.2.2`, `Build number 1`.
-STOP if: the build fails (send the build page's error section to the chat); the version is not 1.2.2; EAS asks for a password anywhere other than its own prompt.
+Expected: upload of the project, then a build URL; the build runs 15–30 min and ends with **Build finished** and an `.ipa` link. The build log shows `Version 1.2.2`, **`Build number 2`** (build 1 was the rejected SU11B-2 upload).
+STOP if: the build fails (send the build page's error section to the chat); the version is not 1.2.2 or the build number is not 2; EAS asks for a password anywhere other than its own prompt.
 
 ---
 
@@ -103,14 +105,14 @@ $env:EXPO_APPLE_APP_SPECIFIC_PASSWORD = Read-Host "App-specific password"
 npx eas-cli@latest submit -p ios --profile production --latest
 Remove-Item Env:EXPO_APPLE_APP_SPECIFIC_PASSWORD
 ```
-Expected: as above. STOP on "Missing compliance" or "Invalid binary" mails from Apple: forward the text (no secrets) to the chat.
+Expected: as above. STOP on "Missing compliance", "Invalid binary" or any ITMS-9xxxx mail from Apple (build 1 got ITMS-90683): forward the text (no secrets) to the chat.
 
 ---
 
 ## D. TestFlight internal test on the iPhone 12
 
 [Browser]
-App Store Connect → Apps → SUPER XXL → TestFlight → the build 1.2.2 (1) shows "Ready to Submit"/"Testing" (no "Missing Compliance", because `usesNonExemptEncryption` is false). Internal Testing → "+" group `XXL` → add yourself → the build.
+App Store Connect → Apps → SUPER XXL → TestFlight → the build 1.2.2 (2) shows "Ready to Submit"/"Testing" (no "Missing Compliance", because `usesNonExemptEncryption` is false). Internal Testing → "+" group `XXL` → add yourself → the build.
 
 [iPhone]
 Install **TestFlight** from the App Store → open the invitation mail → Install SUPER XXL. Then work through this checklist (tick in the chat when done):
@@ -127,7 +129,7 @@ Install **TestFlight** from the App Store → open the invitation mail → Insta
 10. **Back navigation:** on every pushed screen (product, compare, terms, privacy, help, sign-in/up, forgot password, delete account, blocked users, scan history, my ratings) both the header back button and the **edge swipe** go back (in RTL the swipe starts at the right edge). Modals: city picker (סגירה), manual barcode (ביטול), category sheet (✕ or swipe down), consent (ביטול), permission primer (לא עכשיו).
 11. **Dark mode** (iOS Control Center) on scan, search, product, terms; **VoiceOver** spot check: tab bar, the ⋯ button reads "פעולות על הביקורת", the consent checkbox reads as a checkbox.
 12. **Terms screen:** lines starting with Latin ("XXL…", "SerpApi…") stay right-aligned (SU11A-46).
-13. Settings shows version 1.2.2 (build 1).
+13. Settings shows version 1.2.2 (build 2). No microphone, Face ID, photo-library or motion ("Motion & Fitness") dialog appears at any point in the checklist — the strings exist only because of built-in components.
 14. **Local-network check:** the app must never ask "find devices on your local network". Also, if App Store Connect offers an Info.plist view for the build (TestFlight → build → Build Metadata), it has no `NSLocalNetworkUsageDescription` / `NSBonjourServices`. If there is no such view, the on-device check (no "local network" dialog during the whole checklist) is sufficient.
 15. **Images (ATS: `NSAllowsArbitraryLoads` is false):** product images load on the product page (milk `7290004131074`, cottage `7290011194246`) and in the search results list. **Any blank image where the Android app shows one → STOP** and report the product barcode.
 
@@ -141,10 +143,10 @@ STOP on any crash, a missing Hebrew permission text, a screen without a way back
 
 [Browser]
 App Store Connect → SUPER XXL:
-1. **App Information:** name, subtitle, categories Shopping / Food & Drink, Content Rights (kit §4 — **pending GS1 confirmation (Dude)**; leave it unanswered until then), Age Rating (kit §3: alcohol/tobacco "Infrequent" → expect **13+**, Dude's decision).
+1. **App Information:** name, subtitle, categories Shopping / Food & Drink, Content Rights (kit §4: third-party content **Yes**, necessary rights **Yes** — GS1 confirmed by Dude 2 Nov 2026), Age Rating (kit §3: alcohol/tobacco "Infrequent" → expect **13+**, Dude's decision).
 2. **App Privacy:** kit §2; privacy policy URL.
 3. **Pricing and Availability:** Free; Israel only (kit §8).
-4. **Version page:** it must read **1.2.2** — if App Store Connect created it as 1.0, edit the version number to 1.2.2 **before** selecting the build (a build only attaches to a version with the same number). Then: promotional text, description, keywords, support / marketing URLs, copyright (kit §1); **App Review Information:** contact first name, last name, email (info@xxl.co.il) **and a phone number with country code (+972 …)**, sign-in required = Yes with `appreview@xxl.co.il` and its password (typed only here), notes (kit §6); build → select 1.2.2 (1). Release: "Manually release this version".
+4. **Version page:** it must read **1.2.2** — if App Store Connect created it as 1.0, edit the version number to 1.2.2 **before** selecting the build (a build only attaches to a version with the same number). Then: promotional text, description, keywords, support / marketing URLs, copyright (kit §1); **App Review Information:** contact first name, last name, email (info@xxl.co.il) **and a phone number with country code (+972 …)**, sign-in required = Yes with `appreview@xxl.co.il` and its password (typed only here), notes (kit §6); build → select **1.2.2 (2)** (never the rejected build 1). Release: "Manually release this version".
 Expected: every section saved without red marks except screenshots (next step).
 
 ---
@@ -165,9 +167,9 @@ Version page → Previews and Screenshots → iPhone → **6.5" Display** → dr
 
 ---
 
-## G. TWO HARD STOPS before any submission
+## G. HARD STOP before any submission
 
-**Do not press "Add for Review" / "Submit for Review" until BOTH G1 and G2 pass.**
+**Do not press "Add for Review" / "Submit for Review" until G1 passes.** G1 is the only remaining hard stop (G2 closed in SU11B-3).
 
 ### G1 — the seller / team name reads "Elad Tzur" (not "Lead Tour")
 
@@ -179,13 +181,13 @@ Check both:
 
 If either still says "Lead Tour": stop here; building, TestFlight and the listing stay ready. Follow up with Apple Developer Support on the open case.
 
-### G2 — GS1 public-display rights confirmed by Dude
+### G2 — GS1 public-display rights: CLOSED (2 Nov 2026)
 
-Dude confirms (GS1 Israel contract or a written answer from GS1 Israel) that GS1 product data and images may be shown publicly in the website and apps. Only then answer Content Rights (kit §4) "Yes, I have the necessary rights". If GS1 says no or does not answer: stop here and bring it to the chat (the fallback is hiding GS1 images/data, a code change).
+Dude confirmed on 2 Nov 2026 that the GS1 service terms cover public price comparison. Content Rights (kit §4): third-party content **Yes**, necessary rights **Yes**. No action left here.
 
 ---
 
-## H. Submit for review (only after G1 AND G2 pass)
+## H. Submit for review (only after G1 passes)
 
 [Browser]
 Version page → **Add for Review** → **Submit to App Review**. Expected: status "Waiting for Review", then "In Review" (typically 24–48 h). If rejected: copy the Resolution Center text (no credentials) to the chat; do not reply to Apple before the chat has reviewed it.
@@ -219,7 +221,7 @@ cd C:\scrp\xxl-super-mobile
 git log --oneline -1
 npx eas-cli@latest build -p android --profile production
 ```
-Expected: `git log` shows the same commit as the iOS build in B; the build log shows `versionName 1.2.2`, **`versionCode 9`**; the result is an `.aab` (app-bundle). STOP if the versionCode is not 9 (tell the chat before uploading).
+Expected: `git log` shows the same commit as the iOS build 2 in B (SU11B-3 `65882ea` or a later docs-only state); the build log shows `versionName 1.2.2`, **`versionCode 9`**; the result is an `.aab` (app-bundle). STOP if the versionCode is not 9 (tell the chat before uploading).
 
 [Browser]
 1. Download the `.aab` from the EAS build page.

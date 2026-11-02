@@ -2160,7 +2160,7 @@ Runbook: `docs/admin/su11a60_runbook.md`. No migration. Goal: no chain gets free
   - Individual account (Team V46QVK4YSA), App Store Connect app SUPER XXL (ascAppId 6829450422), bundle `il.co.xxl.supermarket`, Israel only. iOS config, privacy manifest and submit profile done in SU11B-1.
   - Next: first EAS iOS build, TestFlight on the iPhone 12, listing, screenshots: `docs/ios/su11b1_runbook.md` with the copy and answers in `docs/ios/su11b1_app_store_kit.md`.
   - **HARD STOP:** no Submit for Review until the Apple team/legal name reads "Elad Tzur" (it shows "Lead Tour").
-  - Open: GS1 licence for public display (kit §4); age rating 13+ vs 4+ (kit §3); review account appreview@xxl.co.il (Supabase Add user, not in DELETE_PROTECTED_USER_IDS).
+  - GS1 public display: CLOSED 2 Nov 2026 (Dude: the GS1 service terms cover public price comparison; Content Rights Yes / Yes, SU11B-3). Age rating 13+ (Dude, SU11B-2). iOS build 1.2.2 (1) was rejected (ITMS-90683; fix SU11B-3 `65882ea`); next: build 1.2.2 (2) + Android 9 from that commit. Open: review account appreview@xxl.co.il (Supabase Add user, not in DELETE_PROTECTED_USER_IDS).
   - Sign in with Apple is not required (email/password only). Guideline 1.2 items (terms, report, block, blocked list, contact) are live.
 - **Play:**
   - **Production LIVE since 23 Oct 2026** (build 8, 1.2.1, Israel, "XXL Team", IARC / PEGI 3). The website badge and banner (SU11A-53) are built; Dude deploys the web.
