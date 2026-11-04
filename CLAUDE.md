@@ -21,7 +21,7 @@ Israeli supermarket price comparison app. Backend: FastAPI + SQLAlchemy + Postgr
 15. **CC never deploys, never runs EAS builds, never calls `DELETE /account`, never modifies production data.** Dude runs `scripts\deploy_frontend.ps1` and EAS builds. Never delete the Supabase users x@xxl.co.il or gplay@xxl.co.il (the Play demo account); throwaway test users are created in Supabase → Authentication → Users → Add user (Auto Confirm).
 
 ## Status / next steps
-Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-61 (SU11A-37 reserved).
+Current status and the open-items list live at the end of `docs/super/handoff_super.md` ("Open items / next steps"). Next free session ID: SU11A-64 (SU11A-37 reserved; SU11A-61 = chat plan, SU11A-62 = promo task in docs/SU11A-62_handover.md, SU11A-63 = static audit).
 - **Promo curation (SU11A-58):** admin pins / hides key on (chain_id, promo_id), apply only to `/promos/grouped`, `/promos/list`, `/promos/promoted` (the מבצעים מקודמים section, SU11A-60) and `/promos/today` (`db/promo_curation.py`), and NEVER to search, compare, basket, `/product`, `/promos/bulk` or the search build; a sponsored pin must show ממומן. Runbook `docs/admin/su11a58_runbook.md`.
 - Catalog categories: manual > ai > gs1 > rule; automated runs never overwrite manual/reviewed (enforced in `scripts/catalog/store.py`; tables in `db/migrations/su11a52_catalog.sql`).
 - RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (build 8 live on Play).
