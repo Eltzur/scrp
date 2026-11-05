@@ -39,7 +39,7 @@ if (missingInEn.length) {
 // SU11A-57: lazy string bundles (<dir>/<name>.he.json / <name>.en.json) ship
 // with their own chunk; they must have the same keys too.
 let lazyKeys = 0;
-for (const dir of ['src/admin/i18n', 'src/components/category']) {
+for (const dir of ['src/admin/i18n', 'src/components/category', 'src/pages/categories']) {
 const lazyDir = join(__dirname, '..', dir);
 for (const f of readdirSync(lazyDir).filter(f => f.endsWith('.he.json'))) {
   const base = `${dir}/${f.slice(0, -'.he.json'.length)}`;

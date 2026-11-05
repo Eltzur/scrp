@@ -24,6 +24,8 @@ const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
 const DisclaimerPage    = lazy(() => import('./pages/DisclaimerPage'));
 const AccessibilityPage = lazy(() => import('./pages/AccessibilityPage'));
 const PartnershipsPage  = lazy(() => import('./pages/PartnershipsPage'));
+// SU11A-67: category browse pages, their own chunk (with their strings).
+const CategoriesPage    = lazy(() => import('./pages/categories/CategoriesPage'));
 // SU11A-54: the admin console, its own chunk; only admin.xxl.co.il loads it.
 const AdminApp          = lazy(() => import('./admin/AdminApp'));
 // Utilities
@@ -63,6 +65,8 @@ function AppShell() {
           <Route path="/favorites" element={<FavoritesPage />} />
           <Route path="/my-ratings" element={<MyRatingsPage />} />
           <Route path="/promos"    element={<PromosPage />} />
+          <Route path="/categories"     element={<CategoriesPage />} />
+          <Route path="/categories/:id" element={<CategoriesPage />} />
           {/* SU11A-31: public deletion URL (Google Play); the form needs sign-in. */}
           <Route path="/account/delete" element={<DeleteAccountPage />} />
         </Routes>

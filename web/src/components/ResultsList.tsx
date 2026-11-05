@@ -19,6 +19,8 @@ interface Props {
   onRetry: () => void;
   onLoadMore?: () => void;
   isLoadingMore?: boolean;
+  /** SU11A-67: replaces the "N results" line (category pages: an estimate when not exact). */
+  countText?: string;
 }
 
 export type PromoMap = Record<string, PromoItem[]>;
@@ -26,7 +28,7 @@ export type PromoMap = Record<string, PromoItem[]>;
 const SKELETON_COUNT = 6;
 
 export default function ResultsList({
-  result, isLoading, isFetching, isError, isBusy, query, onRetry, onLoadMore, isLoadingMore,
+  result, isLoading, isFetching, isError, isBusy, query, onRetry, onLoadMore, isLoadingMore, countText,
 }: Props) {
   const { t } = useTranslation();
 
@@ -105,8 +107,8 @@ export default function ResultsList({
     <div className={isFetching && !isLoadingMore ? 'opacity-70 transition-opacity' : ''}>
       <div className="flex items-center gap-2 mb-3">
         <p className="text-xs text-gray-500">
-          {t('search.results_count', { count: result.total_matches })}
-          {result.comparable_count > 0 && ` · ${t('search.comparable_count', { count: result.comparable_count })}`}
+          {countText ?? t('search.results_count', { count: result.total_matches })}
+          {!countText && result.comparable_count > 0 && ` · ${t('search.comparable_count', { count: result.comparable_count })}`}
         </p>
         {/* SU11A-47: the previous results stay up (dimmed) while the next query loads. */}
         {isFetching && !isLoadingMore && (

@@ -13,7 +13,7 @@ export type CityInfo        = components['schemas']['CityInfo'];
 import { supabase } from '../lib/supabase';
 import { mergePromoMaps, planPromosBulk } from '../utils/promoBulk';
 
-const http = axios.create({
+export const http = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
   paramsSerializer: (params) => {
     const sp = new URLSearchParams();

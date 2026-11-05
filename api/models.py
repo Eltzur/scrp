@@ -72,6 +72,35 @@ class ProductWithPrices(BaseModel):
     chains_count: int         = Field(description="Number of distinct chains carrying this barcode")
 
 
+class CategoryItem(ProductWithPrices):
+    """SU11A-67: a product on a category browse page: the search card plus its label's node."""
+    category_id: str | None = Field(None, description="The item's category node (visible label, db/category_browse.py)")
+
+
+class CategoryRef(BaseModel):
+    id: str
+    level: int
+    name_he: str
+    name_en: str = ""
+
+
+class CategoryChild(CategoryRef):
+    count: int = Field(description="Visible live items under it (this build)")
+
+
+class CategoryItemsResult(BaseModel):
+    """GET /categories/{id}/items (SU11A-67)."""
+    category: CategoryRef
+    path: list[CategoryRef] = Field(description="Department first, ending with the category itself")
+    children: list[CategoryChild] = Field(default_factory=list, description="Linked sub-nodes (>= 5 visible items)")
+    count: int = Field(description="Visible live items in the category nationwide (this build), no filters")
+    total: int = Field(description="Items matching the filters; exact when total_exact")
+    total_exact: bool = True
+    has_more: bool = False
+    sort: str
+    items: list[CategoryItem]
+
+
 class CityInfo(BaseModel):
     """A city with price coverage statistics."""
     city: str

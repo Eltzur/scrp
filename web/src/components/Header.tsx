@@ -60,6 +60,14 @@ export default function Header() {
           >
             🔥 מבצעים
           </Link>
+          {/* SU11A-67: category browse pages. Shown at phone widths too (the row
+              wraps): the only way into the browse pages until the home page links them. */}
+          <Link
+            to="/categories"
+            className="text-sm font-medium text-gray-600 hover:text-emerald-700 transition-colors px-1 py-1"
+          >
+            קטגוריות
+          </Link>
 
           {/* Basket icon with badge */}
           <button

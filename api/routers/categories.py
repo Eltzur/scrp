@@ -1,6 +1,9 @@
 """Item categories for users, and user category suggestions (SU11A-57).
 
 GET  /categories/tree                     public, cached: the active taxonomy for the picker
+GET  /categories/browse-tree              SU11A-67: departments -> categories -> sub-categories with
+                                          visible live item counts (db/category_browse.py), cached per build
+GET  /categories/{id}/items               SU11A-67: a browse page (city / chain / sort / on_promo, paged)
 GET  /items/{code}/category               the item's category path (department › category ›
                                           sub-category); a LOW-confidence label shows the
                                           department only (api/categories.public_path)
@@ -32,7 +35,18 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
+import re
+import time
+from typing import Literal
+
+from fastapi import Query
+
 from api import categories as cats
+from api.models import CategoryItem, CategoryItemsResult
+from api.routers.search import _to_model
+from db import category_browse as B
+from db.query import today_key_values
+from db.search_v2 import V2Unavailable
 from api.auth import ApiCodeError, get_current_user_login_code
 from api.dependencies import get_db
 from api.routers.ratings import _blacklist_hit, _posting_state
@@ -52,6 +66,77 @@ def categories_tree(response: Response, conn: Connection = Depends(get_db)):
     name_he, name_en}]}. The same for everyone: a shared cache may keep it."""
     response.headers["Cache-Control"] = "public, max-age=3600"
     return cats.public_tree(conn)
+
+
+@router.get("/categories/browse-tree", summary="The browse tree with visible item counts (public, cached per build)")
+def categories_browse_tree(response: Response, conn: Connection = Depends(get_db)):
+    """{min_linked, total, built_at, departments: [{id, level, name_he, name_en, count,
+    children: [... linked categories (count >= min_linked), each with its linked
+    sub-categories]}]}. Visibility: db/category_browse.py VISIBLE_SQL. Tobacco is
+    never listed."""
+    tree = B.browse_tree(conn)
+    conn.rollback()
+    response.headers["Cache-Control"] = "public, max-age=600"
+    return {k: v for k, v in tree.items() if not k.startswith("_")}
+
+
+_NODE_ID = re.compile(r"^D\d{2}(\.C\d{2}(\.S\d{2})?)?$")
+
+
+@router.get("/categories/{category_id}/items", response_model=CategoryItemsResult,
+            summary="A category browse page (SU11A-67)")
+def category_items(
+    category_id: str,
+    response: Response,
+    city: str | None = Query(None, max_length=64, description="A city_canonical value (422 unknown_city)"),
+    chain: str | None = Query(None, max_length=32, description="A chain_id (422 unknown_chain)"),
+    sort: Literal["popular", "cheapest", "name"] = Query("popular"),
+    on_promo: bool = Query(False, description="Only items with a promo in force (see db/category_browse.py)"),
+    limit: int = Query(30, ge=1, le=B.LIMIT_MAX),
+    offset: int = Query(0, ge=0, le=B.OFFSET_MAX),
+    conn: Connection = Depends(get_db),
+):
+    """The category's visible live items with the search card's prices.
+    404 category_not_found for an unknown, inactive or tobacco id. Without a
+    city the page comes from the search build; with one, from the city's live
+    stores (the filtered-search walk)."""
+    t0 = time.perf_counter()
+    if not _NODE_ID.match(category_id):
+        raise ApiCodeError(404, "category_not_found")
+    known = today_key_values(conn)
+    if known is not None:
+        if city is not None and city not in known[0]:
+            raise ApiCodeError(422, "unknown_city")
+        if chain is not None and chain not in known[1]:
+            raise ApiCodeError(422, "unknown_chain")
+    try:
+        page = B.items_page(conn, category_id, city=city or None, chain=chain or None, sort=sort,
+                            on_promo=on_promo, limit=limit, offset=offset)
+    except B.NotFound:
+        conn.rollback()
+        raise ApiCodeError(404, "category_not_found") from None
+    except V2Unavailable:
+        conn.rollback()
+        raise ApiCodeError(503, "build_unavailable") from None
+    info = B.tree_node(conn, category_id) or {"count": 0, "children": []}
+    conn.rollback()
+    n = page.node
+    path = [{"id": p["id"], "level": p["level"], "name_he": p["name_he"], "name_en": p["name_en"]}
+            for p in cats.path(conn, category_id)]
+    tm = page.timings_ms
+    response.headers["Server-Timing"] = (f"candidates;dur={tm.get('candidates', 0)}, filter;dur={tm.get('filter', 0)}, "
+                                         f"total;dur={round((time.perf_counter() - t0) * 1000, 1)};desc={page.mode}")
+    if not city:
+        response.headers["Cache-Control"] = "public, max-age=300"
+    return CategoryItemsResult(
+        category={"id": n["id"], "level": n["level"], "name_he": n["name_he"], "name_en": n["name_en"]},
+        path=path,
+        children=[{"id": c["id"], "level": c["level"], "name_he": c["name_he"], "name_en": c["name_en"],
+                   "count": c["count"]} for c in info["children"]],
+        count=info["count"], total=page.total, total_exact=page.total_exact, has_more=page.has_more,
+        sort=sort,
+        items=[CategoryItem(**_to_model(p).model_dump(), category_id=p.get("category_id")) for p in page.products],
+    )
 
 
 @router.get("/items/{item_code}/category", summary="An item's category path (low confidence: department only)")
