@@ -46,9 +46,17 @@ export function withChanges(prev: URLSearchParams, changes: Record<string, strin
   return next;
 }
 
+/** SU11A-62: the search text as the server reads it (db/query.py
+ *  clean_promo_q): whitespace collapsed; '' when under 2 characters besides
+ *  %, _, \ and spaces, which is no search (SU11A-63 H2). */
+export function promoSearchText(q: string): string {
+  const t = q.split(/\s+/).filter(Boolean).join(' ');
+  return t.replace(/[%_\\\s]/g, '').length >= 2 ? t : '';
+}
+
 /** No list until a chain, a category or search text is chosen; a city alone
  *  is only a scope. No chain: one cross-chain list; a chain: its branches. */
 export function promosMode(v: Pick<PromosView, 'chain' | 'cat' | 'q'>): PromosMode {
   if (v.chain) return 'grouped';
-  return v.cat || v.q ? 'flat' : 'start';
+  return v.cat || promoSearchText(v.q) ? 'flat' : 'start';
 }

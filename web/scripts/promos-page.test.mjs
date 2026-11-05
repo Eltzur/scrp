@@ -145,3 +145,30 @@ test('view: mode, read and write round-trip', () => {
   assert.equal(p.get('cat'), null);
   assert.deepEqual([p.get('q'), p.get('ending'), p.get('city')], ['זירו', '1', '']);
 });
+
+// SU11A-62 (SU11A-63 H2): text under 2 real characters is no search, as on the server.
+test('wildcard or one-letter search text is no search: start page and a hint', () => {
+  for (const q of ['%', '_', 'a', ' % ']) {
+    const html = m.page(`/promos?city=${encodeURIComponent(CITY)}&q=${encodeURIComponent(q)}`, seed());
+    assert.ok(html.includes(START), q);
+    assert.ok(!html.includes(SPINNER), `${q}: no results requested`);
+    assert.ok(html.includes('הקלידו לפחות 2 אותיות כדי לחפש'), q);
+  }
+  assert.equal(m.promoSearchText('  חלב   3% '), 'חלב 3%');
+  assert.equal(m.promoSearchText('%%'), '');
+  assert.equal(m.promoSearchText('a_'), '');
+  assert.equal(m.promoSearchText('ab%'), 'ab%');
+  assert.equal(m.promosMode({ chain: '', cat: '', q: '%' }), 'start');
+});
+
+test('search text: the matching product is marked, other matches counted', () => {
+  const html = m.page(`/promos?city=${encodeURIComponent(CITY)}&q=${encodeURIComponent('חלב')}`,
+    seed([{ ...PIN, item_count: 3 }], { q: 'חלב' }));
+  assert.ok(html.includes('<mark class="bg-amber-100 text-gray-900 rounded-sm">חלב</mark> 3%'));
+  assert.ok(html.includes('ועוד 2 מוצרים תואמים'));
+  const one = m.page(`/promos?city=${encodeURIComponent(CITY)}&q=${encodeURIComponent('חלב')}`,
+    seed([{ ...PIN, item_count: 2 }], { q: 'חלב' }));
+  assert.ok(one.includes('ועוד מוצר תואם אחד'));
+  const noText = m.page(`/promos?city=${encodeURIComponent(CITY)}`, seed([{ ...PIN, item_count: 3 }]));
+  assert.ok(!noText.includes('<mark') && !noText.includes('מוצרים תואמים'), 'no text: no marks, no match count');
+});

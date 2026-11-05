@@ -200,6 +200,13 @@ PASS = static evidence supports it; GAP = see §5; N/A = not applicable; UNKNOWN
   - Web unit test: the request body never exceeds N.
 
 ### GAP-H2 — High: promo search text with `%` / `_` / spaces lifts the SU11A-60 unfiltered cap
+- **Status: fixed in SU11A-62, not deployed** (`docs/admin/su11a62_runbook.md`).
+  - `db/query.py clean_promo_q`: whitespace collapsed; under 2 characters besides `%` / `_` / `\` / spaces is no search.
+  - Every promo LIKE, public and admin, is `_like_escape` + `ESCAPE '\'` (`promo_match_sql`).
+  - `q` is `max_length=100` on the public endpoints.
+  - An unfiltered `/promos/list` / `/promos/grouped` (including `q=%`) returns `[]` with no DB query (`api/routers/promos._unfiltered`).
+  - Tests: `tests/test_promo_search_su11a62_pg.py`.
+  - Still open, in SU11A-64: `/promos/list` and `/promos/promoted` in the nginx heavy zone.
 - **Flows:** g.
 - **Evidence:**
   - `api/routers/promos.py:129-132`: `_capped` returns the full limit whenever `args["q"]` is truthy.

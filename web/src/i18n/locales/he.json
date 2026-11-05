@@ -179,6 +179,9 @@
     "loading": "טוען מבצעים",
     "promoted_loading": "טוען מבצעים מקודמים…",
     "promoted_error": "לא הצלחנו לטעון את המבצעים המקודמים",
+    "one_more_match": "ועוד מוצר תואם אחד",
+    "more_matches": "ועוד {{count}} מוצרים תואמים",
+    "search_too_short": "הקלידו לפחות 2 אותיות כדי לחפש",
     "retry": "נסו שוב"
   },
   "admin": {

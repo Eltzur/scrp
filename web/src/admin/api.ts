@@ -172,10 +172,14 @@ export interface PromoSummary {
   chain_id: string; chain_name: string | null; promo_id: string; promo_description: string | null;
   stores: number; items: number; promo_start: string | null; promo_end: string | null; live: boolean;
   sample: PromoSample | null;
+  /** SU11A-62: cities where it shows on the public promo lists (search hits, pins). */
+  cities?: string[];
 }
 
 export interface PromoHit extends PromoSummary {
   curation: { pin_id: number | null; pin_rank: number | null; hide_id: number | null };
+  /** SU11A-62: products matching the search text (null without text); sample is the best match. */
+  matches: number | null;
 }
 
 export type CurationStatus = 'active' | 'scheduled' | 'expired_date' | 'expired_missing';
@@ -209,6 +213,9 @@ export const updateCuration = (id: number, body: CurationPatch) =>
   http.patch<{ ok: boolean; rank: number | null }>(`/admin/promos/curation/${id}`, body).then(r => r.data);
 export const removeCuration = (id: number) =>
   http.delete<{ ok: boolean }>(`/admin/promos/curation/${id}`).then(r => r.data);
+/** Public endpoint (cities with live stores), for the pin coverage check (SU11A-62). */
+export const getCitiesA = () =>
+  http.get<{ city: string }[]>('/cities').then(r => r.data.map(c => c.city));
 /** Public endpoint (chains with promos in force), for the chain picker. */
 export const getPromoChainsA = () =>
   http.get<{ chain_id: string; name: string }[]>('/promos/chains').then(r => r.data);

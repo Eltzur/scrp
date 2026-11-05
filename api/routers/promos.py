@@ -8,14 +8,15 @@ from api.dependencies import get_db
 from api.models import FlatPromoItem, GroupedPromoItem, HotPromoItem, PromoItem
 from db.promo_curation import get_curation
 from db.query import (
-    fetch_flat_promos, fetch_grouped_promos, fetch_promo_chains, fetch_promo_cities,
+    PROMO_Q_MAX, clean_promo_q, fetch_flat_promos, fetch_grouped_promos, fetch_promo_chains, fetch_promo_cities,
     fetch_promoted_promos, fetch_promos, fetch_promos_bulk, fetch_today_promos, lookup_store_fk,
 )
 
-# SU11A-60: a list read with no chain, category, search text or branch scans
-# every active promo; the web no longer asks for it, so such a call gets at most
-# UNFILTERED_CAP rows in all (offset + limit).
-UNFILTERED_CAP = 100
+# SU11A-62: a list read with no chain, category, search text or branch scanned
+# every active promo (15 s, 503 on production; SU11A-60 only capped the rows it
+# returned). Such a call now returns [] at once, without a DB query. Search text
+# that is no search (db.query.clean_promo_q: under 2 characters besides
+# wildcards and spaces, SU11A-63 H2) does not count as a filter.
 
 router = APIRouter(tags=["Promos"])
 
@@ -68,7 +69,7 @@ def promos_grouped(
     branch: Optional[int] = Query(None, description="Filter to one branch by stores.id (store_fk)"),
     bands:  Optional[str] = Query(None, description="CSV of discount bands: 0-10,11-25,26-50,51-75,76-99. Lower bound exclusive, upper inclusive — so 0% and 100% match no band"),
     promo_type: Optional[str] = Query(None, description="CSV of shape classes: gift,bundle,fixed,discount,basket"),
-    q:      Optional[str] = Query(None, description="Search product name (substring) or exact item_code"),
+    q:      Optional[str] = Query(None, max_length=PROMO_Q_MAX, description="Search product name / promotion description (substring) or exact item_code; best matches first"),
     ending_within_hours: Optional[int] = Query(None, ge=1, description="Only promos ending within N hours"),
     sort:   str           = Query("discount", pattern="^(discount|savings|ending)$", description="Row order WITHIN each branch"),
     limit:  int           = Query(500, ge=1, le=5000, description="Max rows returned"),
@@ -98,15 +99,13 @@ def promos_grouped(
     on the row; sponsored = the card shows "ממומן"), hidden ones are left out.
     Display only: search, compare and basket prices never read the curation.
 
-    SU11A-60: `category`; without chain, category, q and branch at most
-    UNFILTERED_CAP rows in all.
+    SU11A-60: `category`. SU11A-62: without chain, category, q or branch: [].
     """
+    if _unfiltered(chain, category, q, branch):
+        return []
     cur = get_curation(conn)
     args = _filters(conn, chain, city, branch, bands, promo_type, q, ending_within_hours, sort, category)
     if args is None:
-        return []
-    limit = _capped(args, limit, offset)
-    if limit == 0:
         return []
     return fetch_grouped_promos(conn, curation=cur, limit=limit, offset=offset, **args)
 
@@ -123,13 +122,13 @@ def _filters(conn, chain, city, branch, bands, promo_type, q, ending_within_hour
         if cat is None:
             return None
     return dict(chain_id=chain, city=city, branch=branch, bands=_csv(bands), promo_types=_csv(promo_type),
-                q=q, ending_within_hours=ending_within_hours, sort=sort, category=cat)
+                q=cats.promo_search(conn, q), ending_within_hours=ending_within_hours, sort=sort, category=cat)
 
 
-def _capped(args: dict, limit: int, offset: int) -> int:
-    if args["chain_id"] or args["category"] or args["q"] or args["branch"] is not None:
-        return limit
-    return max(0, min(limit, UNFILTERED_CAP - offset))
+def _unfiltered(chain, category, q, branch) -> bool:
+    """No chain, category, real search text or branch: the read would scan
+    every active promo. Decided before any DB access."""
+    return not (chain or category or clean_promo_q(q) or branch is not None)
 
 
 _FILTER_DOC = dict(
@@ -137,7 +136,7 @@ _FILTER_DOC = dict(
     city=Query(None, description="Filter by city_canonical"),
     bands=Query(None, description="CSV of discount bands, as /promos/grouped"),
     promo_type=Query(None, description="CSV of shape classes, as /promos/grouped"),
-    q=Query(None, description="Product name (substring) or exact item_code"),
+    q=Query(None, max_length=PROMO_Q_MAX, description="Product name / promotion description (substring) or exact item_code"),
     category=Query(None, max_length=32, description="Category node id, as /promos/grouped"),
 )
 
@@ -163,13 +162,12 @@ def promos_list(
     """The promos page's flat list (no chain chosen): each row is the best
     branch of a (chain, product, promotion) by `sort`, with branch_count.
     Hidden promotions are left out; pins are not lifted (see /promos/promoted)
-    but carry pinned / sponsored. Same cap as /promos/grouped when unfiltered."""
+    but carry pinned / sponsored. Unfiltered: [] at once, as /promos/grouped."""
+    if _unfiltered(chain, category, q, None):
+        return []
     cur = get_curation(conn)
     args = _filters(conn, chain, city, None, bands, promo_type, q, ending_within_hours, sort, category)
     if args is None:
-        return []
-    limit = _capped(args, limit, offset)
-    if limit == 0:
         return []
     args.pop("branch")
     return fetch_flat_promos(conn, curation=cur, limit=limit, offset=offset, **args)

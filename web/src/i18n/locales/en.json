@@ -179,6 +179,9 @@
     "loading": "Loading deals",
     "promoted_loading": "Loading promoted deals…",
     "promoted_error": "Could not load the promoted deals",
+    "one_more_match": "and one more matching product",
+    "more_matches": "and {{count}} more matching products",
+    "search_too_short": "Type at least 2 letters to search",
     "retry": "Try again"
   },
   "admin": {

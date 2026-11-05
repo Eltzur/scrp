@@ -304,8 +304,10 @@ def test_pricing_is_byte_identical_with_and_without_curation(client, engine):
             c.execute(text("INSERT INTO promo_curation (kind, chain_id, promo_id, rank, sponsored, actor_hash) "
                            "VALUES ('pin', :c, :p, :r, :s, 'h')"), {"c": ch, "p": pid, "r": k, "s": k % 2 == 0})
     promo_curation.invalidate()
-    # The curation IS in effect on the promo lists ...
-    g = grouped(client)
+    # The curation IS in effect on the promo lists ... (SU11A-62: an
+    # unfiltered list is empty, so read it chain by chain)
+    import tests.test_search_filtered_pg as F0
+    g = [r for ch in F0.CHAINS for r in grouped(client, chain=ch)]
     assert not any(r["item_code"] in (T1, T3) for r in g)
     assert any(r["pinned"] for r in g)
     # ... and changes nothing that prices.

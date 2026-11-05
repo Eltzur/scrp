@@ -15,7 +15,9 @@ pseudonym as admin_audit's). Active pins are kept numbered 1..n: inserting at
 rank N shifts the rest down, in the same transaction, under a row lock.
 
 GET    /admin/promos/search?q=&chain=&active_only=     promotions by text, barcode or PromotionId
+                                                       (+ the cities where each shows, SU11A-62)
 GET    /admin/promos/curation?state=active|expired     pins and hides with their promotion
+                                                       (pins: + cities, SU11A-62)
 POST   /admin/promos/pins                              {chain_id, promo_id, rank, starts_at, ends_at, sponsored, note}
 POST   /admin/promos/hides                             {chain_id, promo_id, reason, starts_at, ends_at}
 PATCH  /admin/promos/curation/{id}                     {rank, starts_at, ends_at, sponsored, note}
@@ -31,9 +33,11 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from api import admin_audit
+from api import categories as cats
 from api.auth import ApiCodeError, require_admin_mfa
 from api.dependencies import get_db
 from db import promo_curation
+from db.query import clean_promo_q, fetch_promo_coverage, promo_match_sql
 
 router = APIRouter(tags=["Admin"], dependencies=[Depends(require_admin_mfa)])
 
@@ -142,7 +146,7 @@ _SUMMARY = f"""
         FROM promos p JOIN stores s ON s.id = p.store_fk
         LEFT JOIN items i ON i.item_code = p.item_code
         WHERE s.chain_id = m.chain_id AND p.promo_id = m.promo_id {{live}}
-        ORDER BY i.item_name IS NULL, p.item_code
+        ORDER BY {{best}}i.item_name IS NULL, p.item_code
         LIMIT 1
     ) x ON TRUE
     LEFT JOIN chains c ON c.chain_id = m.chain_id
@@ -170,48 +174,67 @@ def search_promos(q: str | None = Query(None, max_length=80), chain: str | None 
                   conn: Connection = Depends(get_db)):
     """By barcode (7+ digits: exact item_code), PromotionId (exact) or text
     (promo description or product name, substring). q or chain is required.
-    One row per promotion, the widest (most stores) first, with its curation."""
-    q = (q or "").strip()
-    if len(q) < 2 and not chain:
+    One row per promotion with its curation.
+
+    SU11A-62: text results rank as the public promos search (db.query.
+    promo_match_sql: description > name starts with the text > name contains
+    it > only in a flavour phrase, an item in a category the text names
+    first); the widest (most stores) next. `sample` is the best-matching
+    product, `matches` the matching products (null without text). The text is
+    escaped, and under 2 characters besides wildcards and spaces is no text
+    (SU11A-63 H2). `cities`: where the promotion shows on the public lists."""
+    text_q = clean_promo_q(q)
+    if text_q is None and not chain:
         raise ApiCodeError(422, "query_required")
     where, params = "", {"limit": limit}
+    rel, matches, best = "0", "NULL::bigint", ""
     if chain:
         where += " AND s.chain_id = :chain"
         params["chain"] = chain
     if active_only:
         where += f" AND {_LIVE}"
-    if q.isdigit() and len(q) >= 7:
+    if text_q and text_q.isdigit() and len(text_q) >= 7:
         where += " AND (p.item_code = :q OR p.promo_id = :q)"
-        params["q"] = q
-    elif q:
-        where += " AND (p.promo_description ILIKE :like OR i.item_name ILIKE :like OR p.promo_id = :q)"
-        params.update(q=q, like=f"%{q.replace('%', '').replace('_', '')}%")
+        params["q"] = text_q
+    elif text_q:
+        match, rank, name_tier, mp = promo_match_sql(cats.promo_search(conn, text_q), "i.item_name",
+                                                    "p.promo_description", "p.item_code")
+        where += f" AND ({match} OR p.promo_id = :q)"
+        params.update(mp, q=text_q)
+        rel = f"min(CASE WHEN p.promo_id = :q THEN -1 ELSE {rank} END)"
+        matches = "count(DISTINCT p.item_code)"
+        best = f"{rank}, {name_tier}, "
     live = f"AND {_LIVE}" if active_only else ""
     rows = conn.execute(text(f"""
         WITH m AS (
-            SELECT s.chain_id, p.promo_id, count(DISTINCT p.store_fk) AS n
+            SELECT s.chain_id, p.promo_id, count(DISTINCT p.store_fk) AS n,
+                   {rel} AS rel, {matches} AS matches
             FROM promos p
             JOIN stores s ON s.id = p.store_fk
             LEFT JOIN items i ON i.item_code = p.item_code
             WHERE p.promo_id IS NOT NULL {where}
             GROUP BY s.chain_id, p.promo_id
-            ORDER BY n DESC, s.chain_id, p.promo_id
+            ORDER BY rel, n DESC, s.chain_id, p.promo_id
             LIMIT :limit
         )
-        SELECT m.chain_id, m.promo_id, m.n, c.name AS chain_name, g.*, x.*,
+        SELECT m.chain_id, m.promo_id, m.n, m.rel, m.matches, c.name AS chain_name, g.*, x.*,
                (SELECT pc.id FROM promo_curation pc WHERE pc.active AND pc.kind = 'pin'
                   AND pc.chain_id = m.chain_id AND pc.promo_id = m.promo_id) AS pin_id,
                (SELECT pc.rank FROM promo_curation pc WHERE pc.active AND pc.kind = 'pin'
                   AND pc.chain_id = m.chain_id AND pc.promo_id = m.promo_id) AS pin_rank,
                (SELECT pc.id FROM promo_curation pc WHERE pc.active AND pc.kind = 'hide'
                   AND pc.chain_id = m.chain_id AND pc.promo_id = m.promo_id) AS hide_id
-        FROM m {_SUMMARY.format(live=live)}
-        ORDER BY m.n DESC, m.chain_id, m.promo_id
+        FROM m {_SUMMARY.format(live=live, best=best)}
+        ORDER BY m.rel, m.n DESC, m.chain_id, m.promo_id
     """), params).mappings().all()
+    conn.rollback()
+    cover = fetch_promo_coverage(conn, [(r["chain_id"], r["promo_id"]) for r in rows])
     conn.rollback()
     items = []
     for r in rows:
         out = _promo_out(r)
+        out["matches"] = None if r["matches"] is None else int(r["matches"])
+        out["cities"] = cover.get((r["chain_id"], r["promo_id"]), [])
         out["curation"] = {"pin_id": r["pin_id"], "pin_rank": r["pin_rank"], "hide_id": r["hide_id"]}
         items.append(out)
     return {"count": len(items), "items": items}
@@ -232,10 +255,12 @@ def list_curation(state: str = Query("active", pattern="^(active|expired)$"), co
                m.chain_id, m.promo_id, c.name AS chain_name, g.*, x.*
         FROM promo_curation pc
         CROSS JOIN LATERAL (SELECT pc.chain_id, pc.promo_id) m
-        {_SUMMARY.format(live='AND ' + _LIVE)}
+        {_SUMMARY.format(live='AND ' + _LIVE, best='')}
         WHERE pc.active
         ORDER BY pc.kind DESC, pc.rank NULLS LAST, pc.created_at DESC, pc.id
     """)).mappings().all()
+    conn.rollback()
+    cover = fetch_promo_coverage(conn, [(r["chain_id"], r["promo_id"]) for r in rows if r["kind"] == "pin"])
     conn.rollback()
     items = []
     for r in rows:
@@ -243,12 +268,15 @@ def list_curation(state: str = Query("active", pattern="^(active|expired)$"), co
         expired = bool(r["past_end"]) or missing
         if expired != (state == "expired"):
             continue
+        promo = _promo_out(r)
+        if r["kind"] == "pin":
+            promo["cities"] = cover.get((r["chain_id"], r["promo_id"]), [])
         items.append({
             "id": r["id"], "kind": r["kind"], "rank": r["rank"], "sponsored": bool(r["sponsored"]),
             "note": r["note"], "starts_at": r["starts_at"], "ends_at": r["ends_at"], "created_at": r["created_at"],
             "status": ("expired_missing" if missing else "expired_date") if expired
             else ("scheduled" if r["scheduled"] else "active"),
-            "promo": _promo_out(r),
+            "promo": promo,
         })
     return {"state": state, "count": len(items), "items": items}
 

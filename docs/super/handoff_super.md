@@ -952,6 +952,9 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-58 (Oct 31) — promo pins / hides in the admin console (`promo_curation`, `docs/admin/su11a58_runbook.md`, one web deploy with SU11A-57), accept fix, deploy guard, recent searches, npm audit fix. In use on production by 1 Nov.
 - SU11A-59 (Nov 1) — `/chains` 503 fix, admin CORS PATCH, dashboard card links (`docs/admin/su11a59_runbook.md`). Not deployed.
 - SU11A-60 (Nov 1) — promos page: no default list, מבצעים מקודמים, category filter, flat list; `/promos/today` cache (`docs/admin/su11a60_runbook.md`). Not deployed.
+- SU11A-61 (Nov 1) — chat plan only (the promo follow-ups that became SU11A-62).
+- SU11A-62 (Nov 5) — promo search relevance (description > name start > contains > flavour; category boost; best-matching example), list cleanup ("-0%", coupon / threshold), admin pin coverage (cities + check-city warning), unfiltered lists empty without a query, SU11A-63 H2 (escaped, min 2 characters). Runbook `docs/admin/su11a62_runbook.md`. Not deployed.
+- SU11A-63 (Nov 4) — static security / reliability audit (read-only): `docs/security/su11a63_static_audit.md`.
 - SU11A-56 (Oct 25) — catalog taxonomy v1.2 (`taxonomy_v1_2.csv`, `gs1_group_map_v1_2.csv`: D09.C11, D16.C08, D07.C08.S01 storage split), Sonnet 5.5 pilot on the graded AI audit (53% vs Haiku 64%: gate failed, no full re-check). Not applied.
 - SU11A-55 (Oct 25) — catalog: Dude's review as `docs/catalog/review_graded_v1.csv` (150 manual rows), taxonomy/rules v1.1 (`taxonomy_v1_1.csv`, `brand_category_hints_v1_1.csv`; head anchor, %, hard negatives, brand pin), AI audit sample `ai_audit_sample_v1.xlsx`. Not applied.
 - SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
@@ -2138,7 +2141,91 @@ Runbook: `docs/admin/su11a60_runbook.md`. No migration. Goal: no chain gets free
   - Promoted and list are separate react-query queries (`useQuery` / `useInfiniteQuery`) with abort signals passed to axios; each renders and fails on its own (retry button).
 - Playwright on a local build with a mocked API: content 0.06-0.46 s on every path, including a 3 s promoted response and a 500; superseded requests aborted. Web: build, eslint, tsc, i18n parity (281 + 172 lazy), check:admin-chunk, deploy guard, `npm run test:unit` (21). Full Python suite with the throwaway Postgres: 848 passed + the 14 known `api/tests/test_smoke.py` failures, 0 skipped.
 
-## 📋 Open items / next steps (as of 1 Nov 2026)
+### SU11A-62 (5 Nov 2026) - promo search relevance, promo list cleanup, admin pin coverage, SU11A-63 H2; built, not deployed
+
+Runbook: `docs/admin/su11a62_runbook.md` (quiet-time check, pull, restart + health, timings, read-only before/after report, web deploy, browser checks, rollback by a revert commit). No migration, no nginx change.
+
+**Production finding it fixes:** the admin search "שמנת" at Osher Ad returned three promotions whose matching products were cream-flavoured snacks ("בייגלה שטוחים טעם שמנת בצל אסם 270 גרם", "תן צאפ טבעות בטעם שמנת בצל 50 גרם", "ג'לילנד גלידה בטעמי שמנת ותות"). Their cards showed another product of the promotion as the example. The public search sorted only by discount, so flavour snacks with big discounts led there too.
+
+**Search (`db/query.py`):**
+- `clean_promo_q` collapses whitespace. Text under 2 characters besides `%`, `_`, `\` and spaces is no search (SU11A-63 H2).
+- `PromoSearch` carries the text plus the category boost.
+- `promo_match_sql` builds the where / rank / name-tier expressions. Every LIKE uses `_like_escape` + `ESCAPE '\'`.
+- The match covers the product name, the promotion description or the exact barcode. The public search matched the name only before.
+- Rank, lower first:
+  - 0: description or barcode;
+  - 2: the name starts with the text;
+  - 4: the name contains it outside a flavour phrase;
+  - 6: the text appears only in a flavour phrase (`_FLAVOUR_RE`: from טעם / בטעם / טעמי / בטעמי / בטעמים to the end of the name).
+  - Minus 1 for an item labelled under a category the text names.
+- The boost (`api/categories.promo_search`): active nodes whose name equals the text or has it as a word (a leading ו also counts), with their subtrees.
+  - Only the most specific match counts: "חלב" boosts "חלב ומשקאות חלב", not the whole department "מוצרי חלב, ביצים ותחליפים".
+  - A low-confidence label counts only under a matched department (the SU11A-57 rule).
+- Ordering (`_layout_tail rel_first`):
+  - flat list: relevance, then `sort`;
+  - grouped: pins, then relevance, then `sort`, within each branch;
+  - promoted: the promotion's example is its best match (`item_count` = matching items).
+- `/admin/promos/search`:
+  - promotions ordered by min(rank) (an exact PromotionId first), then by stores;
+  - `sample` = the best-matching item (rank, then name tier);
+  - new `matches` (matching items, null without text) and `cities`.
+- Max length: `q` max 100 on the public endpoints (422 above); 80 on the admin endpoint, as before.
+
+**Unfiltered:** `/promos/list` and `/promos/grouped` without chain, category, clean search text or branch return [] before any DB access (`api/routers/promos._unfiltered`).
+- This replaces the SU11A-60 `UNFILTERED_CAP`, which still scanned: about 15.2 s and 503, 3 out of 3 on production.
+- A city alone, `q=%` and `q= ` count as unfiltered.
+
+**List cleanup (list, grouped, promoted; never pricing, badges or /promos/today):**
+- `_NO_DISCOUNT_SQL`: the rounded discount is 0%. These are the "-0%" cards; a promo dearer than shelf was already dropped by the 0-100 guard.
+- `_COUPON_SQL`: a basket row (no per-item price) whose description matches `קופון|מעל\s*₪?\s*[0-9]`.
+- `count_promo_list_cleanup` and the `cleanup_count` / `cleanup_examples:<rule>` layouts give the diagnostic.
+
+**Production numbers: not measured in this session** (no server access). The report is runbook step 5 (`scripts/su11a62_promo_report.py`): the before / after top 10 for שמנת, חלב, במבה, קפה and חומוס in Tel Aviv and in all cities, and the rows each rule removes with 10 examples each. Record them here after the run.
+
+**Admin coverage:** `fetch_promo_coverage` runs the same SQL as the lists (layout `coverage`: live physical branches, in force, after the cleanup). It gives the distinct cities per (chain_id, promo_id).
+- Returned on `/admin/promos/search` hits and on `/admin/promos/curation` pins.
+- Web:
+  - "מוצג ב-N ערים" with the list in `<details>`;
+  - a red warning for none, an amber "לא מוצג ב<city>" against the check city.
+- The check city ("עיר לבדיקת הקידום") is the admin's own choice in localStorage `xxl_admin_check_city`, else the shop's remembered city, else תל אביב-יפו. The console is a separate origin, so the shop's city is normally not readable there.
+- Hidden hits show no coverage.
+
+**Web:**
+- `web/src/components/Highlight.tsx` marks the text.
+- `promoSearchText` (`web/src/utils/promosView.ts`) mirrors `clean_promo_q`. The page sends only clean text, and shorter text shows "הקלידו לפחות 2 אותיות כדי לחפש" on the start screen.
+- Promo cards:
+  - `PromoRow` / `FlatCard` take `term`;
+  - with text, a promoted card shows "ועוד N מוצרים תואמים".
+- Admin `PromoCard`: "מוצר תואם:" with the term marked, plus "ועוד N מוצרים תואמים".
+- New strings:
+  - `promos.one_more_match`, `promos.more_matches`, `promos.search_too_short`;
+  - admin `card.match`, `card.more_matches`, `coverage.*`, `check_city*`;
+  - admin `card.sample` is now "לדוגמה:" with the name outside the string.
+- Main chunk 170.37 kB (gzip 47.38) in the local manifest build.
+
+**Fixture example (synthetic data, `tests/test_promo_search_su11a62_pg.py`), /promos/list?q=שמנת:**
+- **before:** sorted by discount: the 80% "תן צאפ … בטעם שמנת בצל" first; the promotion described "מבצע שמנת וחמאה" not found.
+- **after:**
+  1. חמאה 82% (description);
+  2. שמנת חמוצה 15%;
+  3. שמנת מתוקה 38%;
+  4. גבינת שמנת 30% (category);
+  5. רוטב פטריות שמנת;
+  6. תן צאפ … בטעם שמנת בצל;
+  7. בייגלה … טעם שמנת בצל;
+  8. ג'לילנד … בטעמי שמנת ותות.
+
+**Tests:**
+- `tests/test_promo_search_su11a62_pg.py` (28): relevance, the example and matches (public promoted and admin), the boost and the low-label rule; H2 for `%`, `%25` / literal `%25`, space, `_`, `ab%`, `x_y`, over-long text, admin wildcards, and no DB access when unfiltered; the cleanup on list / grouped / promoted and its counts; the report script; coverage vs what `/promos/promoted` shows per city.
+- Updated: `tests/test_promos_page_su11a60_pg.py` (sort within a relevance tier; unfiltered = []) and `tests/test_promo_curation_su11a58_pg.py` (curation read per chain). The SU11A-58 byte-identical pricing test is unchanged and green.
+- Full Python suite with the throwaway Postgres: 878 passed + the 14 known `api/tests/test_smoke.py` failures.
+- Web: `tsc -b`, eslint 0, i18n parity (287 + 180 lazy), `vite build --manifest` + check:admin-chunk OK, `npm run test:unit` 25 (deploy guard included).
+
+**Left for later:**
+- SU11A-64 (reserved): SU11A-63 H1 (`/promos/bulk` cap + heavy zone), M1 (`/promos/today` key + single-flight), M2, L2 backend, and the nginx strict group for `/promos/list`, `/promos/grouped` (already), `/promos/promoted` and `/admin/promos/search`.
+- Possibly: a trigram index if the description match makes all-cities search slow on production (runbook step 4 STOPs above 5 s).
+
+## 📋 Open items / next steps (as of 5 Nov 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (verified, SU11A-53). Lawyer review of the terms is Dude's call.
 - **SU11A-36 Search v2:** SEARCH_V2=on since 21 Oct 2026; timer daily 14:30.
@@ -2146,6 +2233,8 @@ Runbook: `docs/admin/su11a60_runbook.md`. No migration. Goal: no chain gets free
 - **SU11A-49 security fixes:** built, not deployed. Run `docs/security/su11a49_runbook.md` (after or together with the SU11A-47 runbook; both restart scrp-api), then the web deploy. Then: review the compliance drafts in `docs/compliance/` (with an advisor for the לאימות items), the sudo checks in the SU11A-48 review, CSP enforcement after a clean week, and the open findings F-06 to F-23.
 - **SU11A-47 search speed:** built, not deployed. Run `docs/super/su11a47_search_speed_runbook.md` (migration, build, check-precomputed, restart, curl), then the web deploy. Mobile suggestions ship in build 9.
 - **SU11A-54 admin console:** built, not deployed. Run `docs/admin/su11a54_runbook.md` (DNS, Supabase TOTP, allowlist, migration, restart, certificate + site, web deploy, first TOTP enrolment). From then on every /admin call needs 2FA. Next phases: settings, stores (categories: SU11A-57).
+- **SU11A-62 promo search + cleanup + pin coverage (+ SU11A-63 H2):** built, not deployed. Run `docs/admin/su11a62_runbook.md` (API restart and web deploy close together), then paste the step-5 report so the before / after top 10 and the cleanup counts are recorded in the SU11A-62 entry.
+- **SU11A-63 audit (`docs/security/su11a63_static_audit.md`):** H2 fixed in SU11A-62 (not deployed). SU11A-64 is reserved for H1, M1, M2, the backend half of L2 and the nginx strict group for the promo endpoints. L1 and the mobile half of L2 belong to SU11B-5.
 - **SU11A-60 promos page:** deployed 1 Nov 2026 (API restarted on 5a1c2fb, web da83ca4, guard MATCH). `docs/admin/su11a60_runbook.md`. Follow-up (not started): precompute `/promos/today` in the 14:30 build (cold call still ~11 s; cached after).
 - **SU11A-59 /chains + admin CORS + dashboard links:** deployed 1 Nov 2026. `docs/admin/su11a59_runbook.md`. Follow-up candidate (not started): `/stats` (scans all prices).
 - **SU11A-58 promo pins / hides:** in use on production by 1 Nov. `docs/admin/su11a58_runbook.md` (migration, restart, ONE web deploy for SU11A-57 + SU11A-58 from a PC with `web/.env.production`, checks). Open decision: whether a hide should also exclude a promotion from prices (options A / B / C in the SU11A-58 entry).
@@ -2173,4 +2262,4 @@ Runbook: `docs/admin/su11a60_runbook.md`. No migration. Goal: no chain gets free
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-61 (SU11A-37 reserved: popularity counters). Apple sessions use SU11B (first: SU11B-1).
+Next free session ID: SU11A-64, reserved for the SU11A-63 audit fixes (H1 / M1 / M2 / L2 backend + nginx strict group for the promo endpoints); then SU11A-65. SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).

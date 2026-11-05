@@ -2,7 +2,8 @@ import { useEffect, useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { getPromoChainsA, searchPromos, type PromoHit } from '../api';
+import { FALLBACK_CITY, rememberedCity } from '../../utils/city';
+import { getCitiesA, getPromoChainsA, searchPromos, type PromoHit } from '../api';
 import { viewFromHash } from '../nav';
 import { Button, ErrorBox, Loading } from '../ui';
 import CurationList from './promos/CurationList';
@@ -16,7 +17,22 @@ import { INPUT, K } from './promos/shared';
  * lists of active pins (reorder with up / down), active hides and expired rows.
  * Pins and hides change the promo lists only, never a price. Every write is
  * confirmed first and recorded in the audit log.
+ *
+ * SU11A-62: search results rank by relevance with the best-matching product as
+ * the example; search hits and pins show where they are visible ("מוצג ב-N
+ * ערים") and warn against the check city. The console runs on its own origin,
+ * so the shop's remembered city is rarely available here: the check city is
+ * the admin's own choice (kept in this browser), else the shop's, else Tel Aviv.
  */
+const CHECK_CITY_KEY = 'xxl_admin_check_city';
+
+function initialCheckCity(): string {
+  try {
+    return localStorage.getItem(CHECK_CITY_KEY) || rememberedCity() || FALLBACK_CITY;
+  } catch {
+    return FALLBACK_CITY;
+  }
+}
 const VIEWS = ['search', 'pins', 'hides', 'expired'] as const;
 type View = typeof VIEWS[number];
 
@@ -29,13 +45,15 @@ function useDebounced(v: string, ms = 350) {
   return d;
 }
 
-function Hit({ h }: { h: PromoHit }) {
+function Hit({ h, term, checkCity }: { h: PromoHit; term: string; checkCity: string }) {
   const { t } = useTranslation();
   const [form, setForm] = useState<'pin' | 'hide' | null>(null);
   const c = h.curation;
+  // A hidden promotion shows nowhere, whatever its rows: no coverage line.
+  const p = c.hide_id != null ? { ...h, cities: undefined } : h;
   return (
     <li>
-      <PromoCard p={h}>
+      <PromoCard p={p} term={term} matches={h.matches} checkCity={checkCity}>
         {(c.pin_rank != null || c.hide_id != null) && (
           <p className="mt-2 text-xs font-semibold text-emerald-900">
             {c.pin_rank != null ? t(`${K}.card.pinned_at`, { rank: c.pin_rank }) : t(`${K}.card.hidden`)}
@@ -57,7 +75,7 @@ function Hit({ h }: { h: PromoHit }) {
   );
 }
 
-function SearchView() {
+function SearchView({ checkCity }: { checkCity: string }) {
   const { t } = useTranslation();
   const id = useId();
   const [text, setText] = useState('');
@@ -96,7 +114,8 @@ function SearchView() {
       <div className="mt-4">
         {!enabled ? null : r.isPending ? <Loading /> : r.isError ? <ErrorBox error={r.error} onRetry={() => void r.refetch()} />
           : r.data.items.length === 0 ? <p className="text-sm text-gray-700 py-4">{t(`${K}.no_results`)}</p>
-            : <ul className="space-y-3">{r.data.items.map(h => <Hit key={`${h.chain_id}:${h.promo_id}`} h={h} />)}</ul>}
+            : <ul className="space-y-3">{r.data.items.map(h => (
+              <Hit key={`${h.chain_id}:${h.promo_id}`} h={h} term={q} checkCity={checkCity} />))}</ul>}
       </div>
     </div>
   );
@@ -105,9 +124,26 @@ function SearchView() {
 export default function PromosScreen() {
   const { t } = useTranslation();
   const [view, setView] = useState<View>(() => viewFromHash(VIEWS, 'search'));
+  const id = useId();
+  const [checkCity, setCheckCity] = useState(initialCheckCity);
+  const cities = useQuery({ queryKey: ['admin', 'cities'], queryFn: getCitiesA, staleTime: 3600_000, retry: 0 });
+  const pickCity = (c: string) => {
+    setCheckCity(c);
+    try { localStorage.setItem(CHECK_CITY_KEY, c); } catch { /* private mode: this session only */ }
+  };
+  const cityOpts = cities.data ?? [];
   return (
     <div>
       <p className="text-sm text-gray-700 mb-4">{t(`${K}.intro`)}</p>
+      <div className="mb-4 max-w-sm">
+        <label htmlFor={`${id}-city`} className="block text-sm font-semibold text-gray-800 mb-1">{t(`${K}.check_city`)}</label>
+        <select id={`${id}-city`} value={checkCity} onChange={e => pickCity(e.target.value)} className={INPUT}
+          aria-describedby={`${id}-city-hint`} dir="rtl">
+          {!cityOpts.includes(checkCity) && <option value={checkCity}>{checkCity}</option>}
+          {cityOpts.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <p id={`${id}-city-hint`} className="text-xs text-gray-600 mt-1">{t(`${K}.check_city_hint`)}</p>
+      </div>
       <div role="tablist" aria-label={t(`${K}.tabs.label`)} className="flex gap-1 overflow-x-auto mb-4 -mx-1 px-1">
         {VIEWS.map(v => (
           <button
@@ -125,7 +161,7 @@ export default function PromosScreen() {
         ))}
       </div>
       <div role="tabpanel">
-        {view === 'search' ? <SearchView /> : <CurationList key={view} view={view} />}
+        {view === 'search' ? <SearchView checkCity={checkCity} /> : <CurationList key={view} view={view} checkCity={checkCity} />}
       </div>
     </div>
   );

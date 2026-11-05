@@ -17,13 +17,14 @@ can write the old row back exactly.
 """
 from __future__ import annotations
 
+import re
 import threading
 import time
 from typing import Callable
 
 from sqlalchemy import text
 
-from db.query import CategoryFilter
+from db.query import CategoryFilter, PromoSearch, clean_promo_q
 from scripts.catalog import store
 
 TREE_TTL_S = 600.0
@@ -95,18 +96,65 @@ def promo_filter(conn, category_id: str):
     root = nodes.get(category_id)
     if not root or not root["active"]:
         return None
+    return CategoryFilter(tuple(sorted(_subtree(nodes, category_id))), root["level"] == 1)
+
+
+def _subtree(nodes: dict, root_id: str) -> set[str]:
+    """root_id and every descendant (inactive ones too)."""
     children: dict[str, list[str]] = {}
     for n in nodes.values():
         if n["parent_id"]:
             children.setdefault(n["parent_id"], []).append(n["id"])
-    ids, todo = [], [category_id]
+    ids, todo = set(), [root_id]
     while todo:
         cur = todo.pop()
         if cur in ids:
             continue
-        ids.append(cur)
+        ids.add(cur)
         todo.extend(children.get(cur, []))
-    return CategoryFilter(tuple(sorted(ids)), root["level"] == 1)
+    return ids
+
+
+_NAME_WORDS = re.compile(r"[\s,/&()\-–›]+")
+
+
+def promo_search(conn, q: str | None) -> PromoSearch | None:
+    """SU11A-62: the promos search text (db.query.clean_promo_q; None = no
+    search) with its category boost: the ACTIVE nodes whose Hebrew name is the
+    text or has it as a word (a leading ו counts, "חלב" in "חלב ומשקאות
+    חלב"), with their subtrees; a match whose subtree holds another match
+    gives way to it. A low-confidence label counts only under a
+    matched department (the SU11A-57 display rule). No boost for a barcode,
+    or when the category tables are missing."""
+    text_q = clean_promo_q(q)
+    if text_q is None:
+        return None
+    if text_q.isdigit():
+        return PromoSearch(text_q)
+    try:
+        nodes = tree(conn)["nodes"]
+    except Exception:  # noqa: BLE001 - su11a52 not applied: no boost
+        conn.rollback()
+        return PromoSearch(text_q)
+    want = text_q.casefold()
+    matched = {}
+    for n in nodes.values():
+        name = (n["name_he"] or "").casefold()
+        words = {w for w in _NAME_WORDS.split(name) if w}
+        if n["active"] and (name == want or want in words or "ו" + want in words):
+            matched[n["id"]] = _subtree(nodes, n["id"])
+    ids: set[str] = set()
+    low: set[str] = set()
+    for nid, sub in matched.items():
+        # The most specific match only: "חלב" names the milk category and, as
+        # a word, the dairy department ("מוצרי חלב, ביצים ותחליפים"); boosting
+        # every cheese and yogurt is not what was asked.
+        if any(other != nid and other in sub for other in matched):
+            continue
+        ids |= sub
+        if nodes[nid]["level"] == 1:
+            low |= sub
+    return PromoSearch(text_q, tuple(sorted(ids)), tuple(sorted(low)))
 
 
 def path(conn, category_id: str | None) -> list[dict]:

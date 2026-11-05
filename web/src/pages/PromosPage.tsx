@@ -10,7 +10,8 @@ import type {
 import { getCategoryTree, getFlatPromos, getGroupedPromos, getPromoChains, getPromotedPromos } from '../api/client';
 import { useCities } from '../api/hooks';
 import { rememberCity, rememberedCity } from '../utils/city';
-import { promosMode, readView, withChanges } from '../utils/promosView';
+import { promoSearchText, promosMode, readView, withChanges } from '../utils/promosView';
+import Highlight from '../components/Highlight';
 
 const PAGE_SIZE = 300;      // grouped (one chain)
 const FLAT_PAGE_SIZE = 30;  // SU11A-60: the cross-chain list
@@ -138,7 +139,7 @@ function SponsoredBadge({ item }: { item: GroupedPromoItem }) {
  *  Deliberately a different shape from a unit card — no struck-through shelf
  *  price, no unit price, no % badge, because none of those exist for these
  *  rows and inventing them is exactly the bug this whole workstream fixed. */
-function BasketCard({ item }: { item: GroupedPromoItem }) {
+function BasketCard({ item, term }: { item: GroupedPromoItem; term?: string }) {
   const hasThreshold = item.min_purchase_amount != null && item.min_purchase_amount > 0;
   return (
     <div className="flex items-start justify-between gap-3 px-3 py-2.5 border-t border-gray-100 first:border-t-0 bg-sky-50/30">
@@ -146,10 +147,10 @@ function BasketCard({ item }: { item: GroupedPromoItem }) {
         {/* Description leads here: for these rows it carries the actual terms
             (common for weighted goods — fish, meat, produce). */}
         <p className="text-sm text-gray-900 leading-snug font-medium" dir="auto">
-          {item.promo_description ?? item.product_name ?? item.item_code}
+          <Highlight text={item.promo_description ?? item.product_name ?? item.item_code} term={term} />
         </p>
         {item.product_name && item.promo_description && (
-          <p className="text-[11px] text-gray-500 mt-0.5" dir="auto">{item.product_name}</p>
+          <p className="text-[11px] text-gray-500 mt-0.5" dir="auto"><Highlight text={item.product_name} term={term} /></p>
         )}
         {item.promo_end && (
           <p className="text-[11px] text-gray-500 mt-1">{fmtDate(item.promo_end)}</p>
@@ -169,9 +170,10 @@ function BasketCard({ item }: { item: GroupedPromoItem }) {
   );
 }
 
-/** Exported for scripts/sponsored-label.test.mjs (SU11A-58). */
-export function PromoRow({ item }: { item: GroupedPromoItem }) {
-  if (item.promo_kind === 'basket') return <BasketCard item={item} />;
+/** Exported for scripts/sponsored-label.test.mjs (SU11A-58). SU11A-62: term =
+ *  the search text, marked in the product name. */
+export function PromoRow({ item, term }: { item: GroupedPromoItem; term?: string }) {
+  if (item.promo_kind === 'basket') return <BasketCard item={item} term={term} />;
 
   const isBundle = item.min_qty != null && item.min_qty > 1;
   // A zero unit price is never a real price — nothing is bought for ₪0.00. It
@@ -186,7 +188,7 @@ export function PromoRow({ item }: { item: GroupedPromoItem }) {
     <div className="flex items-start justify-between gap-3 px-3 py-2.5 border-t border-gray-100 first:border-t-0">
       <div className="min-w-0 flex-1">
         <p className="text-sm text-gray-900 leading-snug" dir="auto">
-          {item.product_name ?? item.promo_description ?? item.item_code}
+          <Highlight text={item.product_name ?? item.promo_description ?? item.item_code} term={term} />
         </p>
         <div className="flex flex-wrap items-center gap-1 mt-1">
           {/* Suppressed for freebies: a gift promo has discount_price 0, so this
@@ -274,10 +276,13 @@ function Collapsible({
 }
 
 /** SU11A-60: a cross-chain card (flat list, מבצעים מקודמים): the chain and the
- *  representative branch on top, then the usual promo row. */
-export function FlatCard({ item }: { item: FlatPromoItem }) {
+ *  representative branch on top, then the usual promo row. SU11A-62: with
+ *  search text, a promoted card shows its best-matching product and how many
+ *  more of the promotion's products match. */
+export function FlatCard({ item, term }: { item: FlatPromoItem; term?: string }) {
   const { t } = useTranslation();
   const more = item.branch_count - 1;
+  const moreMatches = term && item.item_count != null ? item.item_count - 1 : 0;
   return (
     <li className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       <p className="px-3 pt-2 text-xs text-gray-600" dir="auto">
@@ -285,7 +290,12 @@ export function FlatCard({ item }: { item: FlatPromoItem }) {
         {' · '}{item.branch ?? '—'}
         {more > 0 && <> {more === 1 ? t('promos.one_more_branch') : t('promos.more_branches', { count: more })}</>}
       </p>
-      <PromoRow item={item} />
+      <PromoRow item={item} term={term} />
+      {moreMatches > 0 && (
+        <p className="px-3 pb-2 -mt-1 text-[11px] text-gray-600" dir="auto">
+          {moreMatches === 1 ? t('promos.one_more_match') : t('promos.more_matches', { count: moreMatches })}
+        </p>
+      )}
     </li>
   );
 }
@@ -373,6 +383,7 @@ export default function PromosPage() {
   useEffect(() => { setQInput(cur => (cur.trim() === q ? cur : q)); }, [q]);
 
   const mode = promosMode(view);
+  const searchText = promoSearchText(q);
   const active = mode !== 'start';
   const flat = mode === 'flat';
   const pageSize = flat ? FLAT_PAGE_SIZE : PAGE_SIZE;
@@ -384,10 +395,10 @@ export default function PromosPage() {
     category: category || undefined,
     bands: bands.length ? bands : undefined,
     promoTypes: types.length ? types : undefined,
-    q: q || undefined,
+    q: searchText || undefined,
     endingWithinHours: endingSoon ? ENDING_SOON_HOURS : undefined,
     sort,
-  }), [city, chainId, branch, category, bands, types, q, endingSoon, sort]);
+  }), [city, chainId, branch, category, bands, types, searchText, endingSoon, sort]);
 
   // Two independent queries; each section renders when its own data arrives.
   // A new key leaves the old request unused, and react-query aborts it
@@ -597,8 +608,12 @@ export default function PromosPage() {
                        placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             dir="rtl"
             aria-label="חיפוש מוצר במבצעים"
+            aria-describedby={q && !searchText ? 'promos-q-short' : undefined}
           />
         </div>
+        {q && !searchText && (
+          <p id="promos-q-short" className="-mt-2 mb-3 text-xs text-gray-600" aria-live="polite">{t('promos.search_too_short')}</p>
+        )}
 
         {/* Mobile: collapsible panel so the list stays visible. Desktop: always open. */}
         <button
@@ -632,7 +647,7 @@ export default function PromosPage() {
               <section aria-labelledby="promoted-title" className="mb-6">
                 <h2 id="promoted-title" className="text-base font-bold text-gray-900 mb-2">{t('promos.promoted_title')}</h2>
                 <ul className="grid gap-2 sm:grid-cols-2">
-                  {promotedRows.map(r => <FlatCard key={`${r.chain_id}-${r.store_fk}-${r.item_code}`} item={r} />)}
+                  {promotedRows.map(r => <FlatCard key={`${r.chain_id}-${r.store_fk}-${r.item_code}`} item={r} term={searchText} />)}
                 </ul>
               </section>
             )}
@@ -666,7 +681,7 @@ export default function PromosPage() {
                 {flat ? (
                   <ul className="flex flex-col gap-2">
                     {(rows as FlatPromoItem[]).map(r => (
-                      <FlatCard key={`${r.chain_id}-${r.item_code}-${r.store_fk}-${r.promo_description}`} item={r} />
+                      <FlatCard key={`${r.chain_id}-${r.item_code}-${r.store_fk}-${r.promo_description}`} item={r} term={searchText} />
                     ))}
                   </ul>
                 ) : (
@@ -683,7 +698,7 @@ export default function PromosPage() {
                             >
                               <div className="px-1 pb-1">
                                 {b.rows.map((r, i) => (
-                                  <PromoRow key={`${r.item_code}-${r.store_fk}-${i}`} item={r} />
+                                  <PromoRow key={`${r.item_code}-${r.store_fk}-${i}`} item={r} term={searchText} />
                                 ))}
                               </div>
                             </Collapsible>

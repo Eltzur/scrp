@@ -13,6 +13,8 @@ import { K, writeError } from './shared';
  * The active pins (rank order, moved with up / down), the active hides, and
  * the expired rows (past their end date, or the promotion left the data) of
  * the מבצעים tab (SU11A-58). Removing keeps the row for the record (audited).
+ * SU11A-62: each pin shows the cities where it is visible, with a warning when
+ * there are none or checkCity is not one of them.
  */
 type View = 'pins' | 'hides' | 'expired';
 type Ask = { row: CurationRow; what: 'remove' | 'sponsor' } | null;
@@ -43,7 +45,7 @@ function Meta({ r }: { r: CurationRow }) {
   return <p className="mt-2 text-xs text-gray-700" dir="auto">{bits.join(' · ')}</p>;
 }
 
-export default function CurationList({ view }: { view: View }) {
+export default function CurationList({ view, checkCity }: { view: View; checkCity?: string }) {
   const { t } = useTranslation();
   const state = view === 'expired' ? 'expired' : 'active';
   const q = useQuery({ queryKey: ['admin', 'promo-curation', state], queryFn: () => getCuration(state), retry: 0 });
@@ -63,7 +65,7 @@ export default function CurationList({ view }: { view: View }) {
           const name = r.promo.promo_description || r.promo.promo_id;
           return (
             <li key={r.id}>
-              <PromoCard p={r.promo}>
+              <PromoCard p={r.promo} checkCity={checkCity}>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   {r.kind === 'pin' && (
                     <span className="text-xs font-semibold rounded-full border border-emerald-300 bg-emerald-50 text-emerald-900 px-2 py-0.5">

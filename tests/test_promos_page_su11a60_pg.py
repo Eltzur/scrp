@@ -98,14 +98,21 @@ def test_flat_matches_grouped_rows(api):
 @pytest.mark.parametrize("sort,key,desc", [("discount", "discount_pct", True), ("savings", "savings", True),
                                            ("ending", "promo_end", False)])
 def test_flat_sort_and_exact_paging(api, sort, key, desc):
+    """SU11A-62: with search text the most relevant rows lead; `sort` orders
+    the rows WITHIN each relevance tier (tests/test_promo_search_su11a62_pg.py)."""
+    from tests.test_promo_search_su11a62_pg import tier
     params = {"q": "חלב", "sort": sort}
     whole = api.get("/promos/list", params={**params, "limit": 100}).json()
     assert len(whole) > 6
-    vals = [r[key] for r in whole if r[key] is not None]
-    assert vals == sorted(vals, reverse=desc)
-    if any(r[key] is None for r in whole):              # NULLS LAST
-        first_null = next(i for i, r in enumerate(whole) if r[key] is None)
-        assert all(r[key] is None for r in whole[first_null:])
+    tiers = [tier(r, "חלב") for r in whole]
+    assert tiers == sorted(tiers)
+    for t in set(tiers):
+        group = [r for r, k in zip(whole, tiers) if k == t]
+        vals = [r[key] for r in group if r[key] is not None]
+        assert vals == sorted(vals, reverse=desc)
+        if any(r[key] is None for r in group):          # NULLS LAST
+            first_null = next(i for i, r in enumerate(group) if r[key] is None)
+            assert all(r[key] is None for r in group[first_null:])
     pages = []
     for off in range(0, len(whole), 4):
         pages += api.get("/promos/list", params={**params, "limit": 4, "offset": off}).json()
@@ -120,15 +127,13 @@ def test_flat_list_only_live_stores(api, eng):
 
 
 @pytest.mark.parametrize("path", ["/promos/list", "/promos/grouped"])
-def test_unfiltered_read_is_capped(api, monkeypatch, path):
-    import api.routers.promos as R
-    monkeypatch.setattr(R, "UNFILTERED_CAP", 5)
-    rows = api.get(path, params={"limit": 50}).json()
-    assert len(rows) == 5
-    assert api.get(path, params={"limit": 50, "offset": 5}).json() == []
-    assert len(api.get(path, params={"limit": 50, "offset": 3}).json()) == 2
-    assert len(api.get(path, params={"limit": 50, "city": rows[0]["city"]}).json()) <= 5   # a city alone stays capped
-    assert len(api.get(path, params={"limit": 50, "chain": "A"}).json()) > 5               # a chain lifts the cap
+def test_unfiltered_read_is_empty(api, path):
+    """SU11A-62 (was the SU11A-60 cap): unfiltered = [] at once; the DB side is
+    tested in tests/test_promo_search_su11a62_pg.py (no query at all)."""
+    import tests.test_search_filtered_pg as F0
+    assert api.get(path, params={"limit": 50}).json() == []
+    assert api.get(path, params={"limit": 50, "city": F0.CITIES[0]}).json() == []   # a city alone is a scope
+    assert len(api.get(path, params={"limit": 50, "chain": "A"}).json()) > 5        # a chain is a filter
 
 
 # ------------------------------------------------------------------ promoted

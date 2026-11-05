@@ -1697,10 +1697,116 @@ class CategoryFilter:
     department: bool
 
 
-def _layout_tail(layout: str, order_by: str, pin_first: str) -> str:
+# ---------------------------------------------------------------------------
+# Promo search text and relevance (SU11A-62; SU11A-63 H2)
+# ---------------------------------------------------------------------------
+# The text reaches LIKE only escaped (_like_escape + ESCAPE '\'), and text with
+# fewer than 2 characters besides wildcards and spaces is NO search: before
+# H2, q='%' or q=' ' counted as a filter, lifted the unfiltered cap and
+# scanned every promo (15 s, 503).
+PROMO_Q_MAX = 100
+_NOT_A_CHAR = re.compile(r"[%_\\\s]")
+
+
+def clean_promo_q(q: str | None) -> str | None:
+    """The promo search text with whitespace collapsed, or None when it is no
+    search at all (fewer than 2 characters once %, _, \\ and spaces are left out)."""
+    if q is None:
+        return None
+    q = " ".join(q.split())
+    return q if len(_NOT_A_CHAR.sub("", q)) >= 2 else None
+
+
+@dataclass(frozen=True)
+class PromoSearch:
+    """Clean search text (clean_promo_q) plus the category boost: items labelled
+    under boost_ids rank higher; a LOW-confidence label counts only under
+    boost_low_ids, the subtrees of matched departments (the SU11A-57 rule)."""
+    q: str
+    boost_ids: tuple[str, ...] = ()
+    boost_low_ids: tuple[str, ...] = ()
+
+
+# A flavour phrase runs from "טעם" / "בטעם" / "טעמי" / "בטעמי" / "בטעמים" to
+# the end of the name: "בייגלה שטוחים טעם שמנת בצל" is not cream.
+_FLAVOUR_RE = r"(^|\s)ו?ב?(טעם|טעמי|טעמים)(\s.*)?$"
+
+
+def promo_match_sql(s: PromoSearch, name: str, desc: str, code: str) -> tuple[str, str, str, dict]:
+    """(where, rank, name_tier, params) for promo search text over the given
+    columns. Lower rank = more relevant:
+        0  the promotion's description matches, or the exact barcode
+        1  the product name starts with the text
+        2  the name contains it outside a flavour phrase
+        3  the name contains it only inside a flavour phrase
+    rank = tier * 2, minus 1 for an item labelled in a category the text names.
+    name_tier is the tier from the name alone (picks a promotion's example)."""
+    esc = _like_escape(s.q)
+    params = {"pq_like": f"%{esc}%", "pq_start": f"{esc}%", "pq_exact": s.q, "pq_flavour": _FLAVOUR_RE}
+    like = f"ILIKE :pq_like ESCAPE '\\'"
+    name_tier = (f"CASE WHEN {name} ILIKE :pq_start ESCAPE '\\' THEN 1"
+                 f" WHEN regexp_replace({name}, :pq_flavour, '') {like} THEN 2"
+                 f" WHEN {name} {like} THEN 3 ELSE 4 END")
+    boost = "0"
+    if s.boost_ids:
+        boost = ("CASE WHEN EXISTS (SELECT 1 FROM item_categories ic_b WHERE ic_b.item_code = "
+                 f"{code} AND ic_b.category_id = ANY(:pq_cat) AND (ic_b.confidence <> 'low'"
+                 " OR ic_b.category_id = ANY(:pq_cat_low))) THEN 1 ELSE 0 END")
+        params.update(pq_cat=list(s.boost_ids), pq_cat_low=list(s.boost_low_ids))
+    where = f"({desc} {like} OR {name} {like} OR {code} = :pq_exact)"
+    rank = (f"((CASE WHEN {code} = :pq_exact OR {desc} {like} THEN 0 ELSE {name_tier} END) * 2"
+            f" - {boost})")
+    return where, rank, name_tier, params
+
+
+def as_promo_search(q) -> PromoSearch | None:
+    """q as str (cleaned, no boost) or PromoSearch; None = no search."""
+    if q is None or isinstance(q, PromoSearch):
+        return q
+    c = clean_promo_q(q)
+    return PromoSearch(c) if c else None
+
+
+# SU11A-62 list cleanup (list, grouped, promoted; never a price, a badge or
+# /promos/today). Both read calc columns:
+#   no discount  the rounded discount is 0%: the promo unit price is the shelf
+#                price, or under half a percent below it (cards read "-0%";
+#                dearer than shelf was already dropped by the 0-100 guard);
+#   coupon       a basket row (no per-item price) whose description is a coupon
+#                or a spend threshold ("קופון איש 50 מעל 249", "מעל ₪100").
+#                A row with a real per-item discount is a unit row and stays.
+_NO_DISCOUNT_SQL = "discount_pct = 0"
+_COUPON_SQL = "(promo_type = 'basket' AND COALESCE(promo_description, '') ~ :coupon_re)"
+CLEANUP_RULES = {"no_discount": _NO_DISCOUNT_SQL, "coupon": _COUPON_SQL}
+_COUPON_RE = r"קופון|מעל\s*₪?\s*[0-9]"
+
+
+def _layout_tail(layout: str, order_by: str, pin_first: str, rel_first: str = "") -> str:
     """The ORDER BY / LIMIT closing _fetch_grouped_promos_raw. flat / promoted
     close the "grouped" CTE the select was opened in and keep one row per
-    group; their orders end in a unique key too (total order for paging)."""
+    group; their orders end in a unique key too (total order for paging).
+    rel_first ("match_rank, " with search text, SU11A-62) puts the most
+    relevant rows first: across the flat list, within each branch, and as a
+    promoted promotion's example. "coverage": the distinct cities per pinned
+    promotion (admin, SU11A-62)."""
+    if layout == "coverage":
+        return """
+        )
+        SELECT DISTINCT chain_id, promo_id, city FROM grouped WHERE city IS NOT NULL
+        ORDER BY chain_id, promo_id, city"""
+    if layout == "cleanup_count":
+        counts = ", ".join(f"count(*) FILTER (WHERE COALESCE({sql}, false)) AS {name}"
+                           for name, sql in CLEANUP_RULES.items())
+        return f"""
+        )
+        SELECT count(*) AS rows_before_cleanup, {counts} FROM grouped"""
+    if layout.startswith("cleanup_examples:"):
+        rule = CLEANUP_RULES[layout.split(":", 1)[1]]
+        return f"""
+        )
+        SELECT * FROM grouped WHERE COALESCE({rule}, false)
+        ORDER BY chain_id, item_code, store_fk, promo_id
+        LIMIT :limit"""
     if layout == "flat":
         # promo_end_ts stays inside calc; the ISO text promo_end sorts the same.
         order_by = order_by.replace("promo_end_ts", "promo_end")
@@ -1713,10 +1819,10 @@ def _layout_tail(layout: str, order_by: str, pin_first: str) -> str:
             FROM grouped g
         )
         SELECT * FROM flat WHERE rn = 1
-        ORDER BY {order_by}, chain_name, chain_id, item_code, promo_id
+        ORDER BY {rel_first}{order_by}, chain_name, chain_id, item_code, promo_id
         LIMIT :limit OFFSET :offset"""
     if layout == "promoted":
-        return """
+        return f"""
         ), firsts AS (
             SELECT g.*,
                    ROW_NUMBER() OVER (PARTITION BY chain_id, promo_id, store_fk ORDER BY item_code) AS store_rn,
@@ -1727,14 +1833,14 @@ def _layout_tail(layout: str, order_by: str, pin_first: str) -> str:
                    SUM(CASE WHEN store_rn = 1 THEN 1 ELSE 0 END) OVER w AS branch_count,
                    SUM(CASE WHEN item_rn = 1 THEN 1 ELSE 0 END) OVER w AS item_count,
                    ROW_NUMBER() OVER (PARTITION BY chain_id, promo_id
-                                      ORDER BY discount_pct DESC NULLS LAST, store_fk, item_code) AS rn
+                                      ORDER BY {rel_first}discount_pct DESC NULLS LAST, store_fk, item_code) AS rn
             FROM firsts f
             WINDOW w AS (PARTITION BY chain_id, promo_id)
         )
         SELECT * FROM promoted WHERE rn = 1
         ORDER BY pin_rank, chain_id, promo_id
         LIMIT :limit OFFSET :offset"""
-    return f"""ORDER BY chain_name, city NULLS LAST, branch, {pin_first} {order_by},
+    return f"""ORDER BY chain_name, city NULLS LAST, branch, {pin_first} {rel_first}{order_by},
                  store_fk, item_code, promo_id
         LIMIT :limit OFFSET :offset"""
 
@@ -1746,7 +1852,7 @@ def _fetch_grouped_promos_raw(
     branch: int | None = None,
     bands: list[str] | None = None,
     promo_types: list[str] | None = None,
-    q: str | None = None,
+    q: str | PromoSearch | None = None,
     ending_within_hours: int | None = None,
     sort: str = "discount",
     limit: int = 500,
@@ -1755,6 +1861,8 @@ def _fetch_grouped_promos_raw(
     category: CategoryFilter | None = None,
     layout: str = "grouped",
     live_fks: frozenset | None = None,
+    promo_keys: list[tuple[str, str]] | None = None,
+    legacy: bool = False,
 ) -> list[dict]:
     """Per-branch promo rows for the chain -> city -> branch display.
 
@@ -1795,9 +1903,31 @@ def _fetch_grouped_promos_raw(
         best row by discount as its representative, branch_count / item_count
         = distinct matching branches / items.
         Both dedupe in SQL, so live_fks (Liveness.live_fks) is applied in SQL.
+
+    SU11A-62:
+      * q: escaped, matches the product name, the promotion's description or
+        the exact barcode (promo_match_sql); text that is no search
+        (clean_promo_q) filters nothing. The best matches lead (see
+        _layout_tail).
+      * the list cleanup rules (_NO_DISCOUNT_SQL, _COUPON_SQL) on every layout.
+      * legacy=True: the pre-SU11A-62 list (name / barcode match, no
+        relevance, no cleanup), for the before/after report only
+        (scripts/su11a62_promo_report.py).
+      * layout "coverage" + promo_keys: the cities where those promotions show.
     """
-    params: dict = {"limit": limit, "offset": offset}
+    params: dict = {"limit": limit, "offset": offset, "coupon_re": _COUPON_RE}
     where = ""
+    search = as_promo_search(q)
+    rank_col = ""
+    if promo_keys is not None:
+        if not promo_keys:
+            return []
+        keys = []
+        for k, (ch, pid) in enumerate(sorted(set(promo_keys))):
+            keys.append(f"(:pk_c{k}, :pk_p{k})")
+            params[f"pk_c{k}"], params[f"pk_p{k}"] = ch, pid
+        where += f" AND p.promo_id = ANY(:pk_ids) AND (s.chain_id, p.promo_id) IN ({', '.join(keys)})"
+        params["pk_ids"] = sorted({pid for _, pid in promo_keys})
     if live_fks is not None:
         where += " AND p.store_fk = ANY(:live_fks)"
         params["live_fks"] = sorted(live_fks)
@@ -1821,13 +1951,17 @@ def _fetch_grouped_promos_raw(
         where += (" AND p.promo_end IS NOT NULL"
                   " AND p.promo_end <= NOW() + make_interval(hours => :ending_hours)")
         params["ending_hours"] = ending_within_hours
-    if q:
-        # Name match OR an exact barcode. Exact rather than LIKE on item_code:
-        # a partial barcode match is never what the user meant, and would drag
-        # in unrelated products that merely share a digit run.
-        where += " AND (i.item_name ILIKE :q_like OR p.item_code = :q_exact)"
-        params["q_like"] = f"%{q}%"
-        params["q_exact"] = q
+    if search:
+        # Name or description match OR an exact barcode. Exact rather than LIKE
+        # on item_code: a partial barcode match is never what the user meant,
+        # and would drag in unrelated products that merely share a digit run.
+        match, rank, _, match_params = promo_match_sql(search, "i.item_name", "p.promo_description", "p.item_code")
+        if not legacy:
+            rank_col = f"{rank} AS match_rank,"
+        else:   # the pre-SU11A-62 match: product name or barcode only
+            match = "(i.item_name ILIKE :pq_like ESCAPE '\\' OR p.item_code = :pq_exact)"
+        where += f" AND {match}"
+        params.update(match_params)
 
     # Post-computation filters — these reference derived columns, so they belong
     # after the calc CTE rather than in the base WHERE.
@@ -1865,7 +1999,11 @@ def _fetch_grouped_promos_raw(
         # rows; the CASE alone made this scan every promo (8.9 s for all cities).
         where += f" AND p.promo_id = ANY(:pin_ids) AND ({pin_expr}) IS NOT NULL"
         params["pin_ids"] = sorted({pn.promo_id for pn in curation.pins})
-    open_grouped = ", grouped AS (" if layout in ("flat", "promoted") else ""
+    report = layout.startswith("cleanup")   # the cleanup report reads the rows the rules remove
+    open_grouped = ", grouped AS (" if layout in ("flat", "promoted", "coverage") or report else ""
+    cleanup = "" if report or legacy else f"AND NOT COALESCE({_NO_DISCOUNT_SQL}, false) AND NOT {_COUPON_SQL}"
+    rel_out = ", match_rank" if rank_col else ""
+    rel_first = "match_rank, " if rank_col else ""
 
     rows = conn.execute(text(f"""
         WITH base AS (
@@ -1895,6 +2033,7 @@ def _fetch_grouped_promos_raw(
                 to_char(p.promo_end,   'YYYY-MM-DD"T"HH24:MI:SS') AS promo_end,
                 p.promo_end AS promo_end_ts,
                 {pin_col}
+                {rank_col}
                 {_PROMO_TYPE_SQL} AS promo_type,
                 {_UNIT_PRICE_SQL} AS unit_price
             FROM promos p
@@ -1941,21 +2080,26 @@ def _fetch_grouped_promos_raw(
                CASE WHEN is_basket THEN NULL
                     ELSE round(unit_price::numeric, 2) END AS unit_price,
                discount_pct, savings,
-               promo_description, promo_start, promo_end{pin_out}{", promo_id" if open_grouped else ""}
+               promo_description, promo_start, promo_end{pin_out}{rel_out}{", promo_id" if open_grouped else ""}
         FROM calc
         -- Guard: a pct outside 0-100 means the source data is bad (promo dearer
         -- than shelf, or a negative shelf price). NULL is kept: that is either
         -- "no shelf price to compare" or a basket row, neither a data error.
         WHERE (discount_pct IS NULL OR discount_pct BETWEEN 0 AND 100)
+          -- SU11A-62 list cleanup: no "-0%" cards, no coupon / threshold cards.
+          {cleanup}
           {having}
         -- The trailing (store_fk, item_code, promo_id) is UNIQUE, which makes
         -- this a TOTAL order. Without it, rows tied on the sort key came back
         -- in a different order on every query, so offset paging duplicated
         -- and skipped them: ~30% of King Store's rows at page size 300
         -- (SU10S-20). Every offset-paged promo read needs this.
-        {_layout_tail(layout, order_by, pin_first)}
+        {_layout_tail(layout, order_by, pin_first, rel_first)}
     """), params).mappings().all()
-    return [dict(r) for r in rows]
+    out = [dict(r) for r in rows]
+    for r in out:
+        r.pop("match_rank", None)
+    return out
 
 
 def count_grouped_promos_dropped(conn: Connection) -> dict:
@@ -2324,3 +2468,33 @@ def fetch_promoted_promos(conn: Connection, curation: Curation = EMPTY_CURATION,
     if not curation.pins:
         return []
     return _fetch_layout(conn, "promoted", curation, limit=PROMOTED_MAX, offset=0, **args)
+
+
+def fetch_promo_coverage(conn: Connection, keys: list[tuple[str, str]]) -> dict[tuple[str, str], list[str]]:
+    """SU11A-62 admin: per (chain_id, promo_id), the cities where the promotion
+    has a row on the public promo lists (live physical branches, in force, after
+    the list cleanup), sorted. A promotion with none maps to []. Same SQL as
+    the lists (layout "coverage"), so it cannot drift from what users see."""
+    out: dict[tuple[str, str], list[str]] = {k: [] for k in keys}
+    if not keys:
+        return out
+    lv = get_liveness()
+    for r in _fetch_grouped_promos_raw(conn, layout="coverage", promo_keys=list(keys),
+                                       live_fks=None if lv is None else lv.live_fks):
+        out.setdefault((r["chain_id"], r["promo_id"]), []).append(r["city"])
+    return out
+
+
+def count_promo_list_cleanup(conn: Connection, examples: int = 10, **args) -> dict:
+    """SU11A-62 diagnostic, read-only: rows of the promo lists before the
+    cleanup and how many each rule removes (a row can match both), plus up to
+    `examples` rows per rule. Same filters as fetch_grouped_promos; live stores
+    only. Unfiltered it reads every active promo: run it at a quiet time."""
+    lv = get_liveness()
+    live = None if lv is None else lv.live_fks
+    counts = _fetch_grouped_promos_raw(conn, layout="cleanup_count", live_fks=live, **args)[0]
+    out = {"counts": {k: int(v or 0) for k, v in counts.items()}, "examples": {}}
+    for name in CLEANUP_RULES:
+        out["examples"][name] = _fetch_grouped_promos_raw(
+            conn, layout=f"cleanup_examples:{name}", live_fks=live, limit=examples, **args)
+    return out
