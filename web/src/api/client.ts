@@ -339,6 +339,8 @@ export const productImageUrl = (itemCode: string): string =>
 
 export type PromoKind = 'unit' | 'basket';
 export type PromoShape = 'gift' | 'bundle' | 'fixed' | 'discount' | 'basket';
+/** SU11A-65: the type chips; 'gift_coupon' selects only gift coupons (the other chips exclude them). */
+export type PromoTypeFilter = PromoShape | 'gift_coupon';
 export type PromoSort = 'discount' | 'savings' | 'ending';
 
 export interface GroupedPromoItem {
@@ -371,6 +373,8 @@ export interface GroupedPromoItem {
   pinned?: boolean;
   /** SU11A-58: paid placement. The card MUST show the label ממומן. */
   sponsored?: boolean;
+  /** SU11A-65: a free unit with a coupon: "מתנה בקופון", never "100%" or a struck price. */
+  gift_coupon?: boolean;
 }
 
 export interface GroupedPromoOpts {
@@ -380,7 +384,7 @@ export interface GroupedPromoOpts {
   branch?: number;
   /** Discount bands, e.g. ['26-50','51-75']. Excludes basket rows (no pct). */
   bands?: string[];
-  promoTypes?: PromoShape[];
+  promoTypes?: PromoTypeFilter[];
   /** Product name substring, or an exact barcode. */
   q?: string;
   endingWithinHours?: number;

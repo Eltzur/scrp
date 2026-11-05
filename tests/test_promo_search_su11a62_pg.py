@@ -68,6 +68,11 @@ ROWS = [
 
 @pytest.fixture(scope="module")
 def eng(engine):  # noqa: F811
+    return load_rows(engine)
+
+
+def load_rows(engine):  # noqa: F811
+    """The rows above in chain A's live branches (also used by SU11A-65)."""
     from tests.test_promos_page_su11a60_pg import CATALOG
     from tests.test_promo_curation_su11a58_pg import _run_sql
     _run_sql(engine, CATALOG)

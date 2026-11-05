@@ -1703,8 +1703,46 @@ _PROMO_TYPE_SQL = f"""
     END
 """
 
+# SU11A-65 gift coupons ("קופון שמנת חמוצה … 1 יח' מתנה"): a unit row whose
+# item is FREE (no price, or price 0, and an effective rate of 100%: the
+# _UNIT_PRICE_SQL unit price is 0) and whose promotion description names a
+# coupon. They read "100%" by the numbers, but the value is conditional (a
+# coupon, often a spend or a quantity), so the lists show them as "מתנה
+# בקופון" (gift_coupon on the row), rank them after every real per-item
+# discount in the "discount" sort, and give them their own type chip
+# (promo_types 'gift_coupon', which excludes them from the other chips).
+# Lists only (list, grouped, promoted): pricing never reads this.
+# A coupon row with NO shelf price is a basket row and the SU11A-62 coupon
+# cleanup already leaves it out; a free unit without "קופון" (1+1 halves,
+# gift-with-purchase) is unchanged.
+_GIFT_COUPON_RE = r"קופון"
+_GIFT_COUPON_SQL = f"""
+    (b.promo_type <> 'basket'
+     AND (b.discount_price IS NULL OR b.discount_price = 0)
+     AND COALESCE(b.min_qty, 1) <= 24
+     AND (CASE WHEN b.discount_rate > 100 THEN b.discount_rate / 100.0 ELSE b.discount_rate END) >= 100
+     AND COALESCE(b.promo_description, '') ~ :gift_coupon_re)
+"""
+PROMO_TYPE_FILTERS = ("gift", "bundle", "fixed", "discount", "basket", "gift_coupon")
+
+
+def is_gift_coupon(description: str | None, min_qty, discount_price, discount_rate) -> bool:
+    """The _GIFT_COUPON_SQL rule in Python (the admin promotion sample)."""
+    rate = None if discount_rate is None else float(discount_rate)
+    if rate is not None and rate > 100:
+        rate /= 100.0
+    return ((discount_price is None or float(discount_price) == 0)
+            and (min_qty is None or float(min_qty) <= 24)
+            and rate is not None and rate >= 100
+            and re.search(_GIFT_COUPON_RE, description or "") is not None)
+
+
+# "discount": real per-item discounts first (by %), then gift coupons, then
+# rows without a % (basket / no shelf price). For every row that is not a gift
+# coupon this is the pre-SU11A-65 order (discount_pct DESC NULLS LAST).
 _PROMO_SORTS = {
-    "discount": "discount_pct DESC NULLS LAST",
+    "discount": ("(CASE WHEN gift_coupon THEN 1 WHEN discount_pct IS NULL THEN 2 ELSE 0 END),"
+                 " discount_pct DESC NULLS LAST"),
     "savings":  "savings DESC NULLS LAST",
     "ending":   "promo_end_ts ASC NULLS LAST",
 }
@@ -1754,6 +1792,9 @@ class PromoSearch:
 # the end of the name: "בייגלה שטוחים טעם שמנת בצל" is not cream.
 _FLAVOUR_RE = r"(^|\s)ו?ב?(טעם|טעמי|טעמים)(\s.*)?$"
 
+# SU11A-65: False = the pre-SU11A-65 WHERE (tests only).
+PROMO_MATCH_INDEXED = True
+
 
 def promo_match_sql(s: PromoSearch, name: str, desc: str, code: str) -> tuple[str, str, str, dict]:
     """(where, rank, name_tier, params) for promo search text over the given
@@ -1763,7 +1804,9 @@ def promo_match_sql(s: PromoSearch, name: str, desc: str, code: str) -> tuple[st
         2  the name contains it outside a flavour phrase
         3  the name contains it only inside a flavour phrase
     rank = tier * 2, minus 1 for an item labelled in a category the text names.
-    name_tier is the tier from the name alone (picks a promotion's example)."""
+    name_tier is the tier from the name alone (picks a promotion's example).
+    The category boost only lowers the rank of rows the WHERE already admits:
+    it is never part of the WHERE (SU11A-65 test)."""
     esc = _like_escape(s.q)
     params = {"pq_like": f"%{esc}%", "pq_start": f"{esc}%", "pq_exact": s.q, "pq_flavour": _FLAVOUR_RE}
     like = f"ILIKE :pq_like ESCAPE '\\'"
@@ -1776,7 +1819,17 @@ def promo_match_sql(s: PromoSearch, name: str, desc: str, code: str) -> tuple[st
                  f"{code} AND ic_b.category_id = ANY(:pq_cat) AND (ic_b.confidence <> 'low'"
                  " OR ic_b.category_id = ANY(:pq_cat_low))) THEN 1 ELSE 0 END")
         params.update(pq_cat=list(s.boost_ids), pq_cat_low=list(s.boost_low_ids))
-    where = f"({desc} {like} OR {name} {like} OR {code} = :pq_exact)"
+    if PROMO_MATCH_INDEXED:
+        # SU11A-65: the same match, in a form the planner can index: the name
+        # test becomes "the barcode is one of the items whose name matches"
+        # (items.item_code is the primary key and {name} is that item's name,
+        # so the rows are identical), which lets a BitmapOr combine
+        # idx_promos_description_trgm with idx_promos_item_code instead of
+        # running ILIKE over every promo row (su11a65_promo_search.sql).
+        names = "ARRAY(SELECT it.item_code FROM items it WHERE it.item_name ILIKE :pq_like ESCAPE '\\')"
+        where = f"({desc} {like} OR {code} = ANY({names}) OR {code} = :pq_exact)"
+    else:   # the pre-SU11A-65 form (the old-vs-new test compares the two)
+        where = f"({desc} {like} OR {name} {like} OR {code} = :pq_exact)"
     rank = (f"((CASE WHEN {code} = :pq_exact OR {desc} {like} THEN 0 ELSE {name_tier} END) * 2"
             f" - {boost})")
     return where, rank, name_tier, params
@@ -1823,6 +1876,27 @@ def _layout_tail(layout: str, order_by: str, pin_first: str, rel_first: str = ""
         return f"""
         )
         SELECT count(*) AS rows_before_cleanup, {counts} FROM grouped"""
+    if layout == "gift_count":
+        return """
+        )
+        SELECT count(*) FILTER (WHERE gift_coupon) AS gift_coupon_rows,
+               count(DISTINCT (chain_id, promo_id)) FILTER (WHERE gift_coupon) AS gift_coupon_promotions,
+               count(DISTINCT (chain_id, item_code, promo_id)) FILTER (WHERE gift_coupon) AS gift_coupon_cards,
+               count(*) FILTER (WHERE NOT gift_coupon AND promo_type <> 'basket' AND unit_price = 0)
+                   AS free_unit_without_coupon_rows,
+               count(*) AS list_rows
+        FROM grouped"""
+    if layout == "gift_by_chain":
+        return """
+        )
+        SELECT chain_id, chain_name, count(*) AS rows, count(DISTINCT promo_id) AS promotions
+        FROM grouped WHERE gift_coupon GROUP BY chain_id, chain_name ORDER BY rows DESC, chain_id"""
+    if layout == "gift_examples":
+        return """
+        )
+        SELECT * FROM grouped WHERE gift_coupon
+        ORDER BY chain_id, promo_id, item_code, store_fk
+        LIMIT :limit"""
     if layout.startswith("cleanup_examples:"):
         rule = CLEANUP_RULES[layout.split(":", 1)[1]]
         return f"""
@@ -1856,7 +1930,7 @@ def _layout_tail(layout: str, order_by: str, pin_first: str, rel_first: str = ""
                    SUM(CASE WHEN store_rn = 1 THEN 1 ELSE 0 END) OVER w AS branch_count,
                    SUM(CASE WHEN item_rn = 1 THEN 1 ELSE 0 END) OVER w AS item_count,
                    ROW_NUMBER() OVER (PARTITION BY chain_id, promo_id
-                                      ORDER BY {rel_first}discount_pct DESC NULLS LAST, store_fk, item_code) AS rn
+                                      ORDER BY {rel_first}{_PROMO_SORTS["discount"]}, store_fk, item_code) AS rn
             FROM firsts f
             WINDOW w AS (PARTITION BY chain_id, promo_id)
         )
@@ -1937,8 +2011,15 @@ def _fetch_grouped_promos_raw(
         relevance, no cleanup), for the before/after report only
         (scripts/su11a62_promo_report.py).
       * layout "coverage" + promo_keys: the cities where those promotions show.
+
+    SU11A-65:
+      * gift_coupon on every row (_GIFT_COUPON_SQL); the "discount" sort puts
+        gift coupons after every real per-item discount; promo_types
+        'gift_coupon' selects only them and the other types exclude them.
+      * layouts "gift_count", "gift_by_chain", "gift_examples": the
+        count_gift_coupons diagnostic.
     """
-    params: dict = {"limit": limit, "offset": offset, "coupon_re": _COUPON_RE}
+    params: dict = {"limit": limit, "offset": offset, "coupon_re": _COUPON_RE, "gift_coupon_re": _GIFT_COUPON_RE}
     where = ""
     search = as_promo_search(q)
     rank_col = ""
@@ -2001,10 +2082,10 @@ def _fetch_grouped_promos_raw(
         if clauses:
             having += f" AND ({' OR '.join(clauses)})"
     if promo_types:
-        valid = [t for t in promo_types if t in
-                 ("gift", "bundle", "fixed", "discount", "basket")]
+        valid = [t for t in promo_types if t in PROMO_TYPE_FILTERS]
         if valid:
-            having += " AND promo_type = ANY(:promo_types)"
+            # SU11A-65: a gift coupon matches only the gift_coupon chip.
+            having += " AND (CASE WHEN gift_coupon THEN 'gift_coupon' ELSE promo_type END) = ANY(:promo_types)"
             params["promo_types"] = valid
 
     order_by = _PROMO_SORTS.get(sort, _PROMO_SORTS["discount"])
@@ -2023,7 +2104,8 @@ def _fetch_grouped_promos_raw(
         where += f" AND p.promo_id = ANY(:pin_ids) AND ({pin_expr}) IS NOT NULL"
         params["pin_ids"] = sorted({pn.promo_id for pn in curation.pins})
     report = layout.startswith("cleanup")   # the cleanup report reads the rows the rules remove
-    open_grouped = ", grouped AS (" if layout in ("flat", "promoted", "coverage") or report else ""
+    open_grouped = (", grouped AS (" if layout in ("flat", "promoted", "coverage") or report
+                    or layout.startswith("gift_") else "")
     cleanup = "" if report or legacy else f"AND NOT COALESCE({_NO_DISCOUNT_SQL}, false) AND NOT {_COUPON_SQL}"
     rel_out = ", match_rank" if rank_col else ""
     rel_first = "match_rank, " if rank_col else ""
@@ -2046,6 +2128,7 @@ def _fetch_grouped_promos_raw(
                 pr.item_price     AS shelf_price,
                 p.min_qty,
                 p.discount_price,
+                p.discount_rate,
                 -- Needed to tell a genuine 100%-off from a 1+1: the source
                 -- encodes the free half of a buy-one-get-one as
                 -- discount_price=0, which would otherwise render as "₪0.00".
@@ -2091,7 +2174,8 @@ def _fetch_grouped_promos_raw(
                    END AS discount_pct,
                    CASE WHEN b.promo_type <> 'basket' AND b.shelf_price IS NOT NULL
                         THEN round((b.shelf_price - b.unit_price)::numeric, 2)
-                   END AS savings
+                   END AS savings,
+                   COALESCE({_GIFT_COUPON_SQL}, false) AS gift_coupon
             FROM base b
         ){open_grouped}
         SELECT chain_id, chain_name, city, branch, store_fk, item_code, product_name,
@@ -2102,7 +2186,7 @@ def _fetch_grouped_promos_raw(
                -- would invite the client to render a price that does not exist.
                CASE WHEN is_basket THEN NULL
                     ELSE round(unit_price::numeric, 2) END AS unit_price,
-               discount_pct, savings,
+               discount_pct, savings, gift_coupon,
                promo_description, promo_start, promo_end{pin_out}{rel_out}{", promo_id" if open_grouped else ""}
         FROM calc
         -- Guard: a pct outside 0-100 means the source data is bad (promo dearer
@@ -2586,3 +2670,19 @@ def count_promo_list_cleanup(conn: Connection, examples: int = 10, **args) -> di
         out["examples"][name] = _fetch_grouped_promos_raw(
             conn, layout=f"cleanup_examples:{name}", live_fks=live, limit=examples, **args)
     return out
+
+
+def count_gift_coupons(conn: Connection, examples: int = 10, **args) -> dict:
+    """SU11A-65 diagnostic, read-only: gift-coupon rows on the promo lists
+    (after the cleanup, live stores), the distinct promotions / cards, free
+    units WITHOUT a coupon (unchanged, for context), per chain, and up to
+    `examples` rows. Same filters as fetch_grouped_promos. Unfiltered it reads
+    every active promo: run it at a quiet time."""
+    lv = get_liveness()
+    live = None if lv is None else lv.live_fks
+    counts = _fetch_grouped_promos_raw(conn, layout="gift_count", live_fks=live, **args)[0]
+    return {
+        "counts": {k: int(v or 0) for k, v in counts.items()},
+        "by_chain": _fetch_grouped_promos_raw(conn, layout="gift_by_chain", live_fks=live, **args),
+        "examples": _fetch_grouped_promos_raw(conn, layout="gift_examples", live_fks=live, limit=examples, **args),
+    }

@@ -274,7 +274,7 @@ PASS = static evidence supports it; GAP = see §5; N/A = not applicable; UNKNOWN
   - Expect 200 and one `users` row (B, e) with the first fix, or 409 `email_conflict` with the second. Never a 500.
 
 ### GAP-L1 — Low: a client timeout after a successful server delete shows an error and leaves the user stuck
-- **Status:** mobile, SU11B-5 (`docs/handoff_mobile.md`). The web account-deletion page has the same pattern; not changed.
+- **Status:** mobile, SU11B-5 (`docs/handoff_mobile.md`). Web: fixed in SU11A-65, not deployed (`web/src/utils/deleteAccountFlow.ts`, runbook `docs/admin/su11a65_runbook.md`).
 - **Flows:** b.
 - **Evidence:**
   - Both clients abort `DELETE /account` at 15 s: mobile `src/api/client.ts:29,699-718`, web `client.ts:597-617`.

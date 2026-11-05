@@ -27,7 +27,9 @@
     "hidden": "Hidden",
     "bundle": "{{qty}} for ₪{{price}}",
     "price": "₪{{price}}",
-    "rate": "{{rate}}% off"
+    "rate": "{{rate}}% off",
+    "gift_coupon": "Gift with a coupon",
+    "gift_qty": "{{n}} free"
   },
   "coverage": {
     "none": "Shown in no city: the promotion has no rows in force at live branches on the promo lists",

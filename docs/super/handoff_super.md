@@ -956,6 +956,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-62 (Nov 5) — promo search relevance (description > name start > contains > flavour; category boost; best-matching example), list cleanup ("-0%", coupon / threshold), admin pin coverage (cities + check-city warning), unfiltered lists empty without a query, SU11A-63 H2 (escaped, min 2 characters). Runbook `docs/admin/su11a62_runbook.md`. Not deployed.
 - SU11A-63 (Nov 4) — static security / reliability audit (read-only): `docs/security/su11a63_static_audit.md`.
 - SU11A-64 (Nov 5) — audit fixes: `/promos/bulk` caps + `item_codes` + row limit (H1), `/promos/today` key check + single-flight (M1), users email tombstone (M2), app basket hidden on the web / 409 on delete-rename (L2), nginx heavy group for `/promos/bulk|list|promoted|today` and `/admin/promos/search`. Runbook `docs/security/su11a64_runbook.md`. Not deployed.
+- SU11A-65 (Nov 5) — gift coupons on the promo lists ("מתנה בקופון", sorted after real discounts, own chip), promo search trigram indexes (migration su11a65; identical results), category-boost guard tests (the boost never adds rows; the חומוס lentils come from the description match), SU11A-63 L1 web deletion timeout. Runbook `docs/admin/su11a65_runbook.md`. Not deployed.
 - SU11A-56 (Oct 25) — catalog taxonomy v1.2 (`taxonomy_v1_2.csv`, `gs1_group_map_v1_2.csv`: D09.C11, D16.C08, D07.C08.S01 storage split), Sonnet 5.5 pilot on the graded AI audit (53% vs Haiku 64%: gate failed, no full re-check). Not applied.
 - SU11A-55 (Oct 25) — catalog: Dude's review as `docs/catalog/review_graded_v1.csv` (150 manual rows), taxonomy/rules v1.1 (`taxonomy_v1_1.csv`, `brand_category_hints_v1_1.csv`; head anchor, %, hard negatives, brand pin), AI audit sample `ai_audit_sample_v1.xlsx`. Not applied.
 - SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
@@ -2281,6 +2282,131 @@ Runbook: `docs/security/su11a64_runbook.md`. The web deploy comes before the API
 - **L3, L4:** deferred (low).
 - **Real bulk sizes:** the web's store counts on production searches were not measured; the reasoning is in the H1 bullet. Check in DevTools during runbook 7b.
 
+### SU11A-65 (5 Nov 2026) - gift coupons on the promo lists, promo search index, category-boost guard, SU11A-63 L1 (web); built, not deployed
+
+Runbook: `docs/admin/su11a65_runbook.md`.
+- **Order:** SU11A-64 deployed (step 0) → quiet time → timings before → pull → disk check → migration as postgres → index check → restart → timings after → report → web deploy → browser checks.
+- **Migration:** `db/migrations/su11a65_promo_search.sql` (rollback `su11a65_promo_search_rollback.sql`).
+- **Pricing:** unchanged.
+
+**1. Gift coupons (decision B):**
+- **Rule** (`db/query.py _GIFT_COUPON_SQL`, the same rule in Python as `is_gift_coupon`), all of these:
+  - a unit row (not basket);
+  - no price or price 0;
+  - min_qty ≤ 24;
+  - an effective rate ≥ 100% (basis points / 100, as `_EFFECTIVE_RATE_SQL`), so the computed unit price is 0;
+  - the promotion description contains "קופון".
+- **Not covered:**
+  - A coupon row without a shelf price is a basket row, which the SU11A-62 coupon cleanup already removes.
+  - Free units without "קופון" (1+1 halves, gift with purchase) are unchanged. The report counts them as `free_unit_without_coupon_rows`.
+- **Lists only** (list, grouped, promoted):
+  - `gift_coupon` on every row (`api/models.py GroupedPromoItem`);
+  - the "discount" sort is `(gift coupon → 1, no % → 2, else 0), discount_pct DESC NULLS LAST`. For every other row this is the old order;
+  - `promo_type=gift_coupon` selects only them, and every other type value excludes them (exclusive chips).
+- **Not changed:**
+  - the savings and ending sorts. In savings a gift coupon's savings is the whole shelf price, as before;
+  - `/promos/today`, `/promos/bulk` and pricing.
+- **Admin:** `sample.gift_coupon` on `/admin/promos/search` and the curation list (`_promo_out`).
+- **Web** (`web/src/utils/giftCoupon.ts`):
+  - The free quantity is "N יח' מתנה" in the description; else 1 for a single-unit row; else nothing (never invented).
+  - The condition is `min_purchase_amount`, else "מעל N" in the description, plus "בקניית N יח' לפחות" for min_qty 2–24.
+  - Promos page (`GiftCouponCard`): the badge "מתנה בקופון", the quantity, the condition, "מחיר מדף ₪X" not struck, the description. No %.
+  - The chip "מתנה בקופון" is next to the other type chips.
+  - Admin `PromoCard`: "מתנה בקופון · 1 יח' מתנה · condition", never "100% הנחה". The condition text is Hebrew in both admin locales.
+- **Counts:**
+  - **Test data** (`tests/test_promo_su11a65_pg.py`, 2 live branches):
+    - `gift_coupon_rows` 4, `gift_coupon_promotions` 2, `gift_coupon_cards` 2;
+    - `free_unit_without_coupon_rows` 4, `list_rows` 97;
+    - examples: "קופון שמנת חמוצה 15% טרה 1 יח' מתנה" (rate 100, no price) and "קופון קוטג' מעל 100 ש"ח 1 יח' מתנה" (10000 bp, price 0). Not gift coupons: "1+1 חטיף אגוזים" (no coupon) and "קופון 50% הנחה מרכך" (a real 50%).
+  - **Production counts: not measured** (no server access). Runbook step 8 (`scripts/su11a65_promo_report.py`) prints the rows, promotions, cards, per chain and 10 examples. Record them here.
+
+**2. Promo search speed:**
+- **Bench:** a throwaway PostgreSQL 18.4 (EDB binaries, Hebrew ctype so pg_trgm splits Hebrew, as on production where search v2 uses it). Production-sized synthetic data:
+  - 14 chains, 936 stores, 7.9M prices, 842,136 promos (172 MB), 75,000 items;
+  - Hebrew product names from a vocabulary of about 60 nouns plus brands and sizes;
+  - one description per promotion naming its first item's noun ("2ב15 עדשים סוגת"), so the description match pulls in the promotion's other items, as on production;
+  - all stores live.
+  - **Synthetic:** the descriptions are shorter (15 characters on average) and more repetitive than production's.
+- **Where the time went** (EXPLAIN (ANALYZE, BUFFERS), q=חומוס, Tel Aviv):
+  - 2,186 ms in all;
+  - about 1.9 s of that is the Hash Left Join filter `promo_description ILIKE OR item_name ILIKE OR item_code =`, over a parallel seq scan of all 814k in-force promo rows. It runs BEFORE the city join, and drops 790k rows;
+  - the prices lookups (2,007 index scans) and the windows are under 50 ms.
+- **(a) pg_trgm GIN** on `promos.promo_description` and `items.item_name`:
+  - The name test is written as `p.item_code = ANY(ARRAY(SELECT item_code FROM items WHERE item_name ILIKE …))`. items.item_code is the key, so the rows are the same. The planner then runs a BitmapOr of `idx_promos_description_trgm` + `idx_promos_item_code` (x2, for the names and the exact barcode).
+  - **Speed:**
+
+    | | before | after |
+    |---|---|---|
+    | list-city-q | 1.6–2.5 s | 0.17–0.30 s |
+    | list-all-q | 2.3–4.3 s | 0.76–1.08 s |
+    | EXPLAIN, Tel Aviv | 2,186 ms | 180 ms |
+    | EXPLAIN, all cities | 2,747 ms | 813 ms |
+
+    The rest of the all-cities time is the windows and rank over the about 24,000 matching rows.
+  - **Build:** 6.7 s + 1.6 s (the migration file 8.1 s).
+  - **Size:** 20 MB + 3.7 MB, against a 104 MB heap.
+  - **Load cost** (90,000-row batches):
+    - UPDATE with an unchanged description 3.6 → 5.6 s;
+    - UPDATE with a changed description 4.3 → 4.7 s;
+    - INSERT 2.8 → 4.0 s;
+    - in all, on the order of +10–20 s for a whole day's 840k-row load.
+  - **Disk:** the index size.
+- **(b) a precomputed search table** in the 14:30 build:
+  - It is distinct (chain, promotion, item) plus the texts: 12,596 rows (2 MB) on the bench. ILIKE over it takes 47–51 ms, but the per-store rows still have to be joined back.
+  - It is stale between the 10:00 load and 14:30, so the results would NOT equal the live query (new and ended promotions).
+  - It needs a table, build code and a swap.
+- **Chosen: (a).**
+  - **Identical results:**
+    - test `test_indexed_where_is_identical_to_the_old_one`: list (three sorts) / grouped / promoted (pins) / admin for 10 terms, with `PROMO_MATCH_INDEXED` on and off, byte-equal JSON;
+    - also with the migration applied;
+    - on the bench, list (3 pages, Tel Aviv and all cities) + grouped for 7 terms, equal hashes.
+  - **Plan:** the bench plan reads both indexes; the test checks the match uses them.
+  - **Escaping:** the SU11A-63 H2 escaping is unchanged (`_like_escape` + `ESCAPE '\'` in both LIKEs).
+  - **Production timings: not measured.** Production ran about 1.3x slower than the bench before, so the estimate is about 0.3 s (city) and about 1.0–1.4 s (all cities). Runbook step 7 is the check (STOP if slower than before).
+
+**3. Category boost, q=חומוס (lentils / peas at positions 9–10):**
+- **The boost cannot add rows.** `promo_match_sql` puts the boost only in the rank. The WHERE is the text / description / barcode match. Tests:
+  - `test_boost_only_reranks_text_matches`: a legume-category member whose name and description lack חומוס never appears;
+  - `test_boost_never_changes_the_row_set`: the same rows with and without the boost for 3 terms.
+- **The likely cause is the description match** (SU11A-62 rank 0). The production descriptions were shown cut off ("2ב15 עדשים 500 גר' סוגת…", "2ב15.90 שדה בשקית…"). A multi-product promotion's description that also names חומוס ("… סוגת / חומוס …") matches every item of that promotion at rank 0. With the legume boost, such an item ranks even higher.
+  - The fixture reproduces it: "אפונה וגזר לנדא 800 גרם" with the description "2ב15.90 שדה בשקית חומוס / אפונה" ranks first.
+  - **Not verified on production:** the full descriptions were not available here. Runbook step 8 prints why each top-15 row matched, with the full description.
+- **Open decision (not changed here):** whether a description-only match should rank after the name matches. That changes the SU11A-62 order: the fixture's "חמאה 82%" from "מבצע שמנת וחמאה" would no longer lead.
+
+**4. SU11A-63 L1, web** (`web/src/utils/deleteAccountFlow.ts`, used by `DeleteAccountPage.tsx`):
+- **Lost answer:** after a timeout or network failure on a SENT `DELETE /account`, the page retries once with the same fresh token. A finished deletion answers 401 `account_deleted`, which counts as deleted.
+- **Memory:** the attempt (user id + token) is kept in module memory only, never stored or logged.
+- **Later attempt:** a sign-in that fails with invalid credentials asks the server with that token:
+  - deleted or pending (202) → deleted, with the note "המחיקה הושלמה כבר בניסיון הקודם";
+  - offline or timeout → the offline message;
+  - 5xx → "try again" (the record is kept);
+  - reauth_required or protected (the account exists) → "wrong password", and the record is cleared.
+- **Unchanged:** a sign-in network failure or another user's record never reaches the check.
+- **Difference from the app** (SU11B-5, `xxl-super-mobile src/app/delete-account.tsx:120-124`, not touched here): the app treats every check answer other than reauth or protected, including offline and 5xx, as deleted. Worth aligning in the next app version.
+
+**5.** `deploy/nginx/xxl-ratelimit-http.conf`: the header comment lists the eight heavy endpoints (comment only). The installed copy keeps the old comment, and nothing needs installing.
+
+**Tests:**
+- `tests/test_promo_su11a65_pg.py` (11; the migration test needs pg_trgm and skips on the pgserver Postgres 16):
+  - gift-coupon rule, SQL = Python;
+  - sort, within each branch too;
+  - grouped / promoted flag;
+  - chip exclusivity;
+  - admin sample;
+  - counts + report;
+  - boost guard ×2;
+  - old = new;
+  - migration twice + valid + plan + rollback.
+- `tests/test_promo_search_su11a62_pg.py`: the fixture body is now `load_rows()`.
+- `web/scripts/gift-coupon.test.mjs` (4: text, promos-page card, admin card, chip) and `web/scripts/delete-account.test.mjs` (11: every timeout path).
+- **Full Python suite on the throwaway Postgres 18:** 900 passed, plus the 14 known `api/tests/test_smoke.py` failures, plus 1 flaky test (below).
+- **Web:** `tsc -b` and eslint clean; `npm run test:unit` 44; i18n parity (287 + 182 lazy); `vite build --manifest` + check:admin-chunk OK. Main chunk 173.17 kB (gzip 48.13); it was 170.96.
+
+**Found, pre-existing, not fixed:**
+- `test_pricing_is_byte_identical_with_and_without_curation` (SU11A-58) is flaky on the base commit 34b4916 as well: 2 of 6 runs on Postgres 16 and 1 of 2 on Postgres 18.
+- **Cause:** `/search?engine=v1&group_by=store` returns tied items in a different order on two identical calls with no curation at all (a missing tie-break in the v1 store grouping, a pricing path).
+- **Proof that SU11A-65 changes no price:** the full pricing snapshot (111 keys: search v1/v2, compare, city, store v2, product, basket, `/promos/bulk`, `/promos/{fk}`, the build hash; only the flaky `store … v1` keys left out) is identical between base and SU11A-65.
+
 ## 📋 Open items / next steps (as of 5 Nov 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (verified, SU11A-53). Lawyer review of the terms is Dude's call.
@@ -2291,12 +2417,11 @@ Runbook: `docs/security/su11a64_runbook.md`. The web deploy comes before the API
 - **SU11A-54 admin console:** built, not deployed. Run `docs/admin/su11a54_runbook.md` (DNS, Supabase TOTP, allowlist, migration, restart, certificate + site, web deploy, first TOTP enrolment). From then on every /admin call needs 2FA. Next phases: settings, stores (categories: SU11A-57).
 - **SU11A-62 promo search + cleanup + pin coverage (+ SU11A-63 H2):** deployed 5 Nov 2026 (API 14:03, web MATCH). Still to do: run step 5 of `docs/admin/su11a62_runbook.md` and paste the report, so the before / after top 10 and the cleanup counts are recorded in the SU11A-62 entry.
 - **SU11A-64 audit fixes (H1, M1, M2, L2 web / API, nginx heavy group):** built, not deployed. Run `docs/security/su11a64_runbook.md` (web deploy first, then pull / restart, curl checks, nginx install with a backup outside `snippets/`, burst test, browser checks).
-- **SU11A-63 audit (`docs/security/su11a63_static_audit.md`):** H2 fixed in SU11A-62; H1, M1, M2 and L2 (web / API) in SU11A-64. L1 and the mobile half of L2 are in SU11B-5. L3 and L4 are deferred (low).
-- **SU11A-65 (queued, reserved): how promo-list gift coupons ("קופון … 1 יח' מתנה") are shown.**
-  - On the promos page they show a "מבצע" badge with the shelf price and no discount figure.
-  - In admin they read "100% הנחה".
-  - They float to the top of the "הנחה גדולה" sort.
-  - Decide the display (and whether they belong in the list) before changing code.
+- **SU11A-63 audit (`docs/security/su11a63_static_audit.md`):** H2 fixed in SU11A-62; H1, M1, M2 and L2 (web / API) in SU11A-64. L1 and the mobile half of L2 are in SU11B-5; L1 web in SU11A-65 (not deployed). L3 and L4 are deferred (low).
+- **SU11A-65 gift coupons + promo search index + L1 web:** built, not deployed. After SU11A-64: run `docs/admin/su11a65_runbook.md` (migration as postgres with CONCURRENTLY, restart, timings, report, web deploy, browser checks). Then record the step 8 report (gift-coupon counts, the חומוס "why" lines, production timings) in the SU11A-65 entry.
+  - **Decision for Dude:** should a promotion-description-only match (the חומוס lentils / peas case) rank after the name matches? Today it ranks first (SU11A-62 design).
+  - **Pre-existing flake:** `/search?engine=v1&group_by=store` orders tied items differently on identical calls, so the SU11A-58 byte-identical test fails about 1 run in 3. It needs a tie-break in the v1 store grouping (a pricing path: its own session).
+  - **App (next version):** align the deletion check with the web. Treat as deleted only on deleted / pending from the server, not on offline / 5xx.
 - **SU11A-60 promos page:** deployed 1 Nov 2026 (API restarted on 5a1c2fb, web da83ca4, guard MATCH). `docs/admin/su11a60_runbook.md`. Follow-up (not started): precompute `/promos/today` in the 14:30 build (cold call still ~11 s; cached after).
 - **SU11A-59 /chains + admin CORS + dashboard links:** deployed 1 Nov 2026. `docs/admin/su11a59_runbook.md`. Follow-up candidate (not started): `/stats` (scans all prices).
 - **SU11A-58 promo pins / hides:** in use on production by 1 Nov. `docs/admin/su11a58_runbook.md` (migration, restart, ONE web deploy for SU11A-57 + SU11A-58 from a PC with `web/.env.production`, checks). Open decision: whether a hide should also exclude a promotion from prices (options A / B / C in the SU11A-58 entry).
@@ -2324,4 +2449,4 @@ Runbook: `docs/security/su11a64_runbook.md`. The web deploy comes before the API
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-65, reserved for the gift-coupon display decision (see Open items); then SU11A-66. SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
+Next free session ID: SU11A-66 (planned: categories coverage / design); then SU11A-67. SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).

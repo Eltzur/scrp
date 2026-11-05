@@ -5,13 +5,14 @@ import { useTranslation } from 'react-i18next';
 import { ChevronDown, Loader2, AlertCircle, Search, SlidersHorizontal, X } from 'lucide-react';
 import clsx from 'clsx';
 import type {
-  CategoryNode, FlatPromoItem, GroupedPromoItem, PromoChain, PromoShape, PromoSort,
+  CategoryNode, FlatPromoItem, GroupedPromoItem, PromoChain, PromoSort, PromoTypeFilter,
 } from '../api/client';
 import { getCategoryTree, getFlatPromos, getGroupedPromos, getPromoChains, getPromotedPromos } from '../api/client';
 import { useCities } from '../api/hooks';
 import { rememberCity, rememberedCity } from '../utils/city';
 import { promoSearchText, promosMode, readView, withChanges } from '../utils/promosView';
 import Highlight from '../components/Highlight';
+import { GIFT_COUPON_LABEL, giftCouponView, giftQtyText } from '../utils/giftCoupon';
 
 const PAGE_SIZE = 300;      // grouped (one chain)
 const FLAT_PAGE_SIZE = 30;  // SU11A-60: the cross-chain list
@@ -35,12 +36,14 @@ const BANDS: { value: string; label: string }[] = [
 
 // Gift deals sit at exactly 100% off, which falls in NO band (bands are
 // upper-inclusive and stop at 99), so this chip is the only way to reach them.
-const PROMO_TYPES: { value: PromoShape; label: string }[] = [
+// SU11A-65: gift coupons have their own chip; the other chips exclude them.
+const PROMO_TYPES: { value: PromoTypeFilter; label: string }[] = [
   { value: 'gift',     label: '1+1 / מתנה'    },
   { value: 'bundle',   label: "כמה יח' ב-₪"   },
   { value: 'fixed',    label: 'מחיר מבצע'     },
   { value: 'discount', label: '% הנחה'        },
   { value: 'basket',   label: 'בתנאי / מעל סכום' },
+  { value: 'gift_coupon', label: GIFT_COUPON_LABEL },
 ];
 
 const SORTS: { value: PromoSort; label: string }[] = [
@@ -170,10 +173,55 @@ function BasketCard({ item, term }: { item: GroupedPromoItem; term?: string }) {
   );
 }
 
+/** SU11A-65: a free unit with a coupon. Its value is conditional, so it shows
+ *  "מתנה בקופון", the free quantity and the condition, and the shelf price as
+ *  plain text: never a %, never a struck-through price. */
+function GiftCouponCard({ item, term }: { item: GroupedPromoItem; term?: string }) {
+  const g = giftCouponView(item);
+  const qty = giftQtyText(g.qty);
+  return (
+    <div className="flex items-start justify-between gap-3 px-3 py-2.5 border-t border-gray-100 first:border-t-0">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-gray-900 leading-snug" dir="auto">
+          <Highlight text={item.product_name ?? item.promo_description ?? item.item_code} term={term} />
+        </p>
+        <div className="flex flex-wrap items-center gap-1 mt-1">
+          {qty && (
+            <span className="inline-block text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+              {qty}
+            </span>
+          )}
+          {g.condition && (
+            <span className="inline-block text-[11px] font-medium px-1.5 py-0.5 rounded bg-sky-50 text-sky-800 border border-sky-200">
+              {g.condition}
+            </span>
+          )}
+          <SponsoredBadge item={item} />
+        </div>
+        {item.promo_description && (
+          <p className="text-[11px] text-gray-500 mt-1" dir="auto"><Highlight text={item.promo_description} term={term} /></p>
+        )}
+        {item.promo_end && (
+          <p className="text-[11px] text-gray-500 mt-1">{fmtDate(item.promo_end)}</p>
+        )}
+      </div>
+      <div className="flex flex-col items-end gap-1 shrink-0">
+        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 whitespace-nowrap">
+          {GIFT_COUPON_LABEL}
+        </span>
+        {item.shelf_price != null && (
+          <span className="text-[11px] text-gray-600 whitespace-nowrap">מחיר מדף {fmtPrice(item.shelf_price)}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Exported for scripts/sponsored-label.test.mjs (SU11A-58). SU11A-62: term =
  *  the search text, marked in the product name. */
 export function PromoRow({ item, term }: { item: GroupedPromoItem; term?: string }) {
   if (item.promo_kind === 'basket') return <BasketCard item={item} term={term} />;
+  if (item.gift_coupon) return <GiftCouponCard item={item} term={term} />;
 
   const isBundle = item.min_qty != null && item.min_qty > 1;
   // A zero unit price is never a real price — nothing is bought for ₪0.00. It
@@ -347,7 +395,7 @@ export default function PromosPage() {
   const category = view.cat;
   const sort = view.sort as PromoSort;
   const bands = view.bands;
-  const types = view.types as PromoShape[];
+  const types = view.types as PromoTypeFilter[];
 
   const update = (changes: Record<string, string | null>, replace = false) =>
     setParams(prev => withChanges(prev, changes), { replace });

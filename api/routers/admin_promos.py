@@ -37,7 +37,7 @@ from api import categories as cats
 from api.auth import ApiCodeError, require_admin_mfa
 from api.dependencies import get_db
 from db import promo_curation
-from db.query import clean_promo_q, fetch_promo_coverage, promo_match_sql
+from db.query import clean_promo_q, fetch_promo_coverage, is_gift_coupon, promo_match_sql
 
 router = APIRouter(tags=["Admin"], dependencies=[Depends(require_admin_mfa)])
 
@@ -164,6 +164,9 @@ def _promo_out(r) -> dict:
             "min_qty": None if r["min_qty"] is None else float(r["min_qty"]),
             "discount_price": None if r["discount_price"] is None else float(r["discount_price"]),
             "discount_rate": None if r["discount_rate"] is None else float(r["discount_rate"]),
+            # SU11A-65: a free unit with a coupon reads "מתנה בקופון", never "100% הנחה".
+            "gift_coupon": is_gift_coupon(r["promo_description"], r["min_qty"], r["discount_price"],
+                                          r["discount_rate"]),
         },
     }
 

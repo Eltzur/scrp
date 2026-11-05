@@ -11,6 +11,9 @@
  * than 5 minutes) -> DELETE /account with that token. On "reauth" the sign-in is
  * repeated once and the call retried once. Deleted (204, or 401 account_deleted)
  * or pending (202): local sign-out, cached data cleared, confirmation shown.
+ * SU11A-65: a timeout / lost answer after sending is retried with the same
+ * token, and a later "wrong password" after such an attempt is checked with the
+ * server first (utils/deleteAccountFlow.ts).
  * The local basket (device-only) is left alone.
  */
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
@@ -19,7 +22,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Trash2 } from 'lucide-react';
 import { useAuth } from '../components/AuthContext';
 import { LEGAL_ENTITY_NAME } from '../legal/terms';
-import { deleteAccount, type DeleteAccountResult } from '../api/client';
+import { deleteAccount } from '../api/client';
+import { runAccountDeletion } from '../utils/deleteAccountFlow';
 
 const MSG = {
   passwordRequired: 'יש להזין סיסמה.',
@@ -30,6 +34,7 @@ const MSG = {
   failed: 'לא הצלחנו למחוק כרגע, נסו שוב. החשבון נשאר כפי שהיה או שהמחיקה בתהליך.',
   generic: 'משהו השתבש. נסו שוב.',
   confirm: 'למחוק את החשבון לצמיתות?\nלא ניתן לבטל פעולה זו.',
+  afterLostAnswer: 'המחיקה הושלמה כבר בניסיון הקודם; התשובה מהשרת לא הגיעה אז.',
 };
 
 type Outcome = 'deleted' | 'pending' | null;
@@ -50,6 +55,7 @@ export default function DeleteAccountPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<Outcome>(null);
+  const [afterLostAnswer, setAfterLostAnswer] = useState(false);
   // A ref, not state: two submits inside one render would both see busy=false.
   const inFlight = useRef(false);
   const errorRef = useRef<HTMLDivElement>(null);
@@ -63,34 +69,20 @@ export default function DeleteAccountPage() {
   }, [outcome]);
 
   const run = async () => {
-    let result: DeleteAccountResult = { kind: 'reauth' };
-    // At most two rounds: the first, and one retry if the server still finds
-    // the fresh token too old (clock skew, a very slow network).
-    for (let round = 0; round < 2 && result.kind === 'reauth'; round++) {
-      const auth = await reauthenticate(password);
-      if ('reason' in auth) {
-        setError(
-          auth.reason === 'invalid_credentials'
-            ? MSG.wrongPassword
-            : auth.reason === 'network'
-              ? MSG.offline
-              : MSG.generic,
-        );
-        return;
-      }
-      result = await deleteAccount(auth.accessToken);
-    }
-
-    if (result.kind === 'deleted' || result.kind === 'pending') {
-      await finishAccountDeletion();
-      queryClient.clear();
-      setPassword('');
-      setOutcome(result.kind);
+    // SU11A-65 (SU11A-63 L1): the steps, including the timeout paths, live in
+    // utils/deleteAccountFlow.ts.
+    const out = await runAccountDeletion({
+      userId: user?.id ?? '', password, reauthenticate, deleteAccount,
+    });
+    if (out.kind === 'error') {
+      setError(MSG[out.message]);
       return;
     }
-    if (result.kind === 'protected') setError(MSG.protectedAccount);
-    else if (result.kind === 'error' && result.reason !== 'http') setError(MSG.offline);
-    else setError(MSG.failed);
+    await finishAccountDeletion();
+    queryClient.clear();
+    setPassword('');
+    setAfterLostAnswer(out.kind === 'deleted' && out.afterLostAnswer);
+    setOutcome(out.kind);
   };
 
   const onSubmit = async (e: FormEvent) => {
@@ -156,6 +148,7 @@ export default function DeleteAccountPage() {
                     ? 'המידע שלכם נמחק. מחיקת פרטי ההתחברות תושלם תוך 24 שעות.'
                     : 'החשבון והמידע המשויך אליו נמחקו, וההתחברות בדפדפן זה הסתיימה.'}
                 </p>
+                {afterLostAnswer && <p className="mt-1 text-sm text-emerald-900">{MSG.afterLostAnswer}</p>}
                 <Link to="/" className="mt-3 inline-block text-sm text-emerald-700 hover:underline">
                   חזרה לדף הבית
                 </Link>

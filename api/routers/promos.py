@@ -103,7 +103,7 @@ def promos_grouped(
     city:   Optional[str] = Query(None, description="Filter by city_canonical"),
     branch: Optional[int] = Query(None, description="Filter to one branch by stores.id (store_fk)"),
     bands:  Optional[str] = Query(None, description="CSV of discount bands: 0-10,11-25,26-50,51-75,76-99. Lower bound exclusive, upper inclusive — so 0% and 100% match no band"),
-    promo_type: Optional[str] = Query(None, description="CSV of shape classes: gift,bundle,fixed,discount,basket"),
+    promo_type: Optional[str] = Query(None, description="CSV of shape classes: gift,bundle,fixed,discount,basket; SU11A-65 gift_coupon = only gift coupons (the other classes exclude them)"),
     q:      Optional[str] = Query(None, max_length=PROMO_Q_MAX, description="Search product name / promotion description (substring) or exact item_code; best matches first"),
     ending_within_hours: Optional[int] = Query(None, ge=1, description="Only promos ending within N hours"),
     sort:   str           = Query("discount", pattern="^(discount|savings|ending)$", description="Row order WITHIN each branch"),

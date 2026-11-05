@@ -5,6 +5,7 @@ import Highlight from '../../../components/Highlight';
 import type { PromoSummary } from '../../api';
 import { fmtDate } from '../../format';
 import { K } from './shared';
+import { giftCouponView } from '../../../utils/giftCoupon';
 
 function money(n: number) {
   return n.toFixed(2).replace(/\.00$/, '');
@@ -48,7 +49,12 @@ export default function PromoCard({ p, children, term, matches, checkCity }: {
 }) {
   const { t } = useTranslation();
   const s = p.sample;
+  // SU11A-65: a gift coupon is "מתנה בקופון", the free quantity and the
+  // condition; never "100% הנחה".
+  const gift = s?.gift_coupon ? giftCouponView({ promo_description: p.promo_description, min_qty: s.min_qty }) : null;
   const terms = !s ? null
+    : gift ? [t(`${K}.card.gift_coupon`), gift.qty != null ? t(`${K}.card.gift_qty`, { n: gift.qty }) : null, gift.condition]
+      .filter(Boolean).join(' · ')
     : s.discount_price != null && s.min_qty != null && s.min_qty > 1 && s.min_qty <= 24
       ? t(`${K}.card.bundle`, { qty: Math.round(s.min_qty), price: money(s.discount_price) })
       : s.discount_price != null && s.discount_price > 0 ? t(`${K}.card.price`, { price: money(s.discount_price) })

@@ -166,6 +166,8 @@ export const rejectSuggestions = (code: string) =>
 export interface PromoSample {
   item_code: string; item_name: string | null;
   min_qty: number | null; discount_price: number | null; discount_rate: number | null;
+  /** SU11A-65: a free unit with a coupon: show "מתנה בקופון", never "100% הנחה". */
+  gift_coupon?: boolean;
 }
 
 export interface PromoSummary {
