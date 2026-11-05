@@ -2395,7 +2395,7 @@ Runbook: `docs/admin/su11a65_runbook.md`.
   - 5xx → "try again" (the record is kept);
   - reauth_required or protected (the account exists) → "wrong password", and the record is cleared.
 - **Unchanged:** a sign-in network failure or another user's record never reaches the check.
-- **Difference from the app** (SU11B-5, `xxl-super-mobile src/app/delete-account.tsx:120-124`, not touched here): the app treats every check answer other than reauth or protected, including offline and 5xx, as deleted. Worth aligning in the next app version.
+- **Difference from the app** (SU11B-5, `xxl-super-mobile src/app/delete-account.tsx:120-124`, not touched here): the app treats every check answer other than reauth or protected, including offline and 5xx, as deleted. Fixed in SU11B-6 (mobile `a3988d1`, 1.2.3).
 
 **5.** `deploy/nginx/xxl-ratelimit-http.conf`: the header comment lists the eight heavy endpoints (comment only). The installed copy keeps the old comment, and nothing needs installing.
 
@@ -2434,7 +2434,7 @@ Runbook: `docs/admin/su11a65_runbook.md`.
 - **SU11A-65 gift coupons + promo search index + L1 web:** built, not deployed. After SU11A-64: run `docs/admin/su11a65_runbook.md` (migration as postgres with CONCURRENTLY, restart, timings, report, web deploy, browser checks). Then record the step 8 report (gift-coupon counts, the חומוס "why" lines, production timings) in the SU11A-65 entry.
   - **Decided (5 Nov):** a description-only match ranks after the name matches (SU11A-65 follow-up, same deploy).
   - **Pre-existing flake:** `/search?engine=v1&group_by=store` orders tied items differently on identical calls, so the SU11A-58 byte-identical test fails about 1 run in 3. It needs a tie-break in the v1 store grouping (a pricing path: its own session).
-  - **App (next version):** align the deletion check with the web. Treat as deleted only on deleted / pending from the server, not on offline / 5xx.
+  - **App:** the deletion check now matches the web (SU11B-6, mobile `a3988d1`, ships in 1.2.3).
 - **SU11A-60 promos page:** deployed 1 Nov 2026 (API restarted on 5a1c2fb, web da83ca4, guard MATCH). `docs/admin/su11a60_runbook.md`. Follow-up (not started): precompute `/promos/today` in the 14:30 build (cold call still ~11 s; cached after).
 - **SU11A-59 /chains + admin CORS + dashboard links:** deployed 1 Nov 2026. `docs/admin/su11a59_runbook.md`. Follow-up candidate (not started): `/stats` (scans all prices).
 - **SU11A-58 promo pins / hides:** in use on production by 1 Nov. `docs/admin/su11a58_runbook.md` (migration, restart, ONE web deploy for SU11A-57 + SU11A-58 from a PC with `web/.env.production`, checks). Open decision: whether a hide should also exclude a promotion from prices (options A / B / C in the SU11A-58 entry).
@@ -2450,7 +2450,7 @@ Runbook: `docs/admin/su11a65_runbook.md`.
   - **iOS 1.2.2 (2)** (EAS 4eaab3fc, mobile 65882ea) submitted to App Review 4 Nov 20:58 (submission 871055cd-5aab-48e7-8f41-b3a4af70e0d0), manual release; **Waiting for Review** as of 5 Nov. 1.2.2 (1) failed processing (ITMS-90683, fixed SU11B-3).
   - **RELEASE GATE (Dude, 4 Nov):** after approval do not press Release This Version until Dude decides about the seller name ("Lead Tour" → "Elad Tzur"); Apple Support case 103015749110 open (opened 1 Nov, nudged 3 Nov). After release: website badge switch (kit §9).
   - ASC set: age 13+, App Privacy published, Privacy Choices URL https://super.xxl.co.il/account/delete, Mac / Vision Pro off. DSA: non-trader / not in the EU; align to trader before any EU distribution.
-  - **Next: 1.2.3** (SU11B-5, mobile 130b610: add-to-basket on product page and search rows, SU11A-63 L1/L2): build iOS + Android from that commit only after 1.2.2 is approved (runbook K). Review account appreview@xxl.co.il: re-create if a reviewer deletes it.
+  - **Next: 1.2.3** (SU11B-5 + SU11B-6, mobile a3988d1: add-to-basket on product page and search rows, SU11A-63 L1/L2, deletion recovery fix): build iOS + Android from that commit only after 1.2.2 is approved (runbook K). Review account appreview@xxl.co.il: re-create if a reviewer deletes it.
   - Sign in with Apple is not required (email/password only). Guideline 1.2 items (terms, report, block, blocked list, contact) are live.
 - **Play:**
   - **Production: 9 (1.2.2)** (EAS 0992b1c3, 65882ea) published 4 Nov (submission 3), full rollout, Israel, managed publishing off. Closed testing Alpha: draft 8 (1.2.1) discarded, track inactive.

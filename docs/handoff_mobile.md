@@ -786,3 +786,13 @@ Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; 
   - **Android:** `blockedPermissions` += `USE_BIOMETRIC`, `USE_FINGERPRINT` (from expo-secure-store; no biometrics in the app). iOS keeps the SU11B-3 Face ID string (LAContext is still compiled in).
   - **Checks:** `ts.transpileModule` of the 8 touched files: 0 diagnostics. eslint with a temporary `eslint-config-expo/flat` config (deleted after): 28 errors / 1 warning, identical to HEAD (react-hooks/refs and react-hooks/set-state-in-effect in untouched code, plus the known `privacy.tsx` unused `View`); no new findings. i18n: 3 new keys, each with its `en:` text. `npx expo config --type introspect --json` (production) before/after: only `version` / `CFBundleShortVersionString` 1.2.2 → 1.2.3 and the two blocked permissions (manifest `tools:node="remove"`). Full tsc not run (Dude). Not tested on a device: retest list in runbook K.
   - **Docs:** runbook (release state, G1 = RELEASE gate, H done for 1.2.2, I, new section K for 1.2.3 with the Hebrew What's New and the `<iw-IL>` notes), kit (final ASC answers), handoff_super open items (Apple and Play), CLAUDE.md (SU11B-6, rules).
+- **2026-11-05 (SU11B-6, mobile `a3988d1`) deletion recovery never treats offline / 5xx as deleted (ships in 1.2.3, not built):**
+  - **Bug (SU11B-5):** `src/app/delete-account.tsx` treated every answer of the recovery check (after an unanswered DELETE, when the later sign-in fails with invalid credentials) as "deleted" unless it was reauth_required or protected. An offline or 5xx answer therefore signed the user out and showed "החשבון נמחק" without the server's confirmation.
+  - **Fix (`src/app/delete-account.tsx:113-137`):** the decision table of the website (scrp `web/src/utils/deleteAccountFlow.ts`, SU11A-65), so both behave the same:
+    - deleted (204 / 401 account_deleted) or pending (202) → deleted (`:126`), sign out and clear;
+    - offline / timeout → `he.auth.errNetwork` (`:130-133`), record kept, still signed in;
+    - 5xx / other http → `L.failed` ("נסו שוב"), record kept, still signed in;
+    - reauth_required / protected (the account exists) → record cleared (`:136`), then the wrong-password message.
+  - **Unchanged:** version 1.2.3; no new strings.
+  - **Checks:** `ts.transpileModule` of `delete-account.tsx`: 0 diagnostics. eslint with a temporary `eslint-config-expo/flat` config (deleted after): 28 errors / 1 warning, output identical to HEAD, none in `delete-account.tsx`. Full tsc not run (Dude).
+  - **Not tested on a device:** retest list in runbook K (item 6).

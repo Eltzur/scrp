@@ -243,13 +243,13 @@ Expected: `git log` shows the same commit as the iOS build 2 in B (SU11B-3 `6588
 
 ---
 
-## K. 1.2.3 update (SU11B-5, mobile `130b610`)
+## K. 1.2.3 update (SU11B-5, mobile `130b610`; SU11B-6 `a3988d1`)
 
-**Only AFTER Apple has approved 1.2.2.** One version in review at a time; a new upload or App content change while 1.2.2 is in review would mix the two (and on Play restarts the review). Build iOS and Android **from the same SU11B-5 commit** (`130b610` or a later docs-only `main`), iOS first, Android right after, no pull in between. Each run burns a build number: run each once. Expected numbers: iOS **1.2.3 (3)**, Android versionCode **10**.
+**Only AFTER Apple has approved 1.2.2.** One version in review at a time; a new upload or App content change while 1.2.2 is in review would mix the two (and on Play restarts the review). Build iOS and Android **from the same commit** (`a3988d1` = SU11B-5 + the SU11B-6 deletion fix, or a later docs-only `main`), iOS first, Android right after, no pull in between. Each run burns a build number: run each once. Expected numbers: iOS **1.2.3 (3)**, Android versionCode **10**.
 
 What changed in 1.2.3: add-to-basket on the product page (shared header, every tab) and on every search row (compact icon button); a filled, more visible basket button; account-deletion timeout recovery (SU11A-63 L1); reserved-basket recovery (L2); Android `USE_BIOMETRIC` / `USE_FINGERPRINT` removed from the manifest.
 
-1. **Pre-flight:** A, with the top commit = SU11B-5 `130b610` and tsc (Dude). A3: the same four purpose strings as 1.2.2.
+1. **Pre-flight:** A, with the top commit = SU11B-6 `a3988d1` and tsc (Dude). A3: the same four purpose strings as 1.2.2.
 2. **Builds:** `npx eas-cli@latest build -p ios --profile production` → log shows `Version 1.2.3`; then at once `npx eas-cli@latest build -p android --profile production` → `versionName 1.2.3`, versionCode 10. STOP on any other number.
 3. **iOS upload:** C (`eas submit -p ios --profile production --latest`). STOP on any ITMS mail.
 4. **D retest for 1.2.3** on the iPhone 12 (TestFlight) and an Android phone (internal testing):
@@ -259,6 +259,10 @@ What changed in 1.2.3: add-to-basket on the product page (shared header, every t
    4. Basket count and limit: signed out, add a 26th item from each of the three places → the 25-item message (with "להרשמה") appears each time; signed in, 150 limit message. Bumping an item already in the basket is allowed.
    5. Compare from the basket still works.
    6. **Account deletion, throwaway user only:** normal deletion; then a second throwaway user: tap "מחיקה לצמיתות" and switch **airplane mode on right after the tap** → an error (no connection) → airplane off → enter the password again and delete → the confirmation "החשבון נמחק" with the note "החיבור נקטע במהלך המחיקה…", signed out. (If the first request never left the phone, the second attempt simply deletes normally; both are correct.) Never with x@xxl.co.il, gplay@xxl.co.il or appreview@xxl.co.il.
+      **SU11B-6 recovery checks** (a third throwaway user; first make a deletion time out as above, so the app holds an unanswered attempt):
+      - after a deletion timeout, wrong password while offline (airplane mode on) → the offline message, still signed in;
+      - wrong password online while the account still exists → "wrong password", still signed in;
+      - the account still exists in Supabase after both.
    7. **Basket sync:** signed in on the phone with items; on super.xxl.co.il → my baskets → delete `__xxl_mobile_basket__`; back on the phone add an item → the website shows the basket again with all phone items.
    8. VoiceOver / TalkBack: the button reads "הוסף לסל: <product>" / "הסר מהסל: <product>" and "selected" when in the basket; the search row reads its name separately from its button.
    9. Dark mode on scan, product, search: the filled button and the outlined "בסל" state are clearly visible.
