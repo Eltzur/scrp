@@ -956,7 +956,8 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-62 (Nov 5) — promo search relevance (description > name start > contains > flavour; category boost; best-matching example), list cleanup ("-0%", coupon / threshold), admin pin coverage (cities + check-city warning), unfiltered lists empty without a query, SU11A-63 H2 (escaped, min 2 characters). Runbook `docs/admin/su11a62_runbook.md`. Not deployed.
 - SU11A-63 (Nov 4) — static security / reliability audit (read-only): `docs/security/su11a63_static_audit.md`.
 - SU11A-64 (Nov 5) — audit fixes: `/promos/bulk` caps + `item_codes` + row limit (H1), `/promos/today` key check + single-flight (M1), users email tombstone (M2), app basket hidden on the web / 409 on delete-rename (L2), nginx heavy group for `/promos/bulk|list|promoted|today` and `/admin/promos/search`. Runbook `docs/security/su11a64_runbook.md`. Not deployed.
-- SU11A-65 (Nov 5) — gift coupons on the promo lists ("מתנה בקופון", sorted after real discounts, own chip), promo search trigram indexes (migration su11a65; identical results), category-boost guard tests (the boost never adds rows; the חומוס lentils come from the description match), SU11A-63 L1 web deletion timeout. Runbook `docs/admin/su11a65_runbook.md`. Not deployed.
+- SU11A-65 (Nov 5) — gift coupons on the promo lists ("מתנה בקופון", sorted after real discounts, own chip), promo search trigram indexes (migration su11a65; identical results), category-boost guard tests (the boost never adds rows; the חומוס lentils come from the description match), SU11A-63 L1 web deletion timeout. Runbook `docs/admin/su11a65_runbook.md`. Deployed 5 Nov (with the a24f469 follow-up).
+- SU11A-66 (Nov 5) — Part A: read-only category coverage script `scripts/su11a66_category_coverage.py` (not yet run on the server) and the browse / search design proposal `docs/catalog/su11a66_categories_browse_design.md`; nothing built.
 - SU11A-56 (Oct 25) — catalog taxonomy v1.2 (`taxonomy_v1_2.csv`, `gs1_group_map_v1_2.csv`: D09.C11, D16.C08, D07.C08.S01 storage split), Sonnet 5.5 pilot on the graded AI audit (53% vs Haiku 64%: gate failed, no full re-check). Not applied.
 - SU11A-55 (Oct 25) — catalog: Dude's review as `docs/catalog/review_graded_v1.csv` (150 manual rows), taxonomy/rules v1.1 (`taxonomy_v1_1.csv`, `brand_category_hints_v1_1.csv`; head anchor, %, hard negatives, brand pin), AI audit sample `ai_audit_sample_v1.xlsx`. Not applied.
 - SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
@@ -2420,6 +2421,69 @@ Runbook: `docs/admin/su11a65_runbook.md`.
 - **Cause:** `/search?engine=v1&group_by=store` returns tied items in a different order on two identical calls with no curation at all (a missing tie-break in the v1 store grouping, a pricing path).
 - **Proof that SU11A-65 changes no price:** the full pricing snapshot (111 keys: search v1/v2, compare, city, store v2, product, basket, `/promos/bulk`, `/promos/{fk}`, the build hash; only the flaky `store … v1` keys left out) is identical between base and SU11A-65.
 
+### SU11A-66 (5 Nov 2026) - Part A: category coverage script + categories browse / search design (proposal); nothing built
+
+**Read-only script `scripts/su11a66_category_coverage.py`. NOT yet run on production** (no server access here). Dude runs it:
+
+    cd ~/scrp && ( ulimit -v 2000000; set -a; source .env; set +a; venv/bin/python3 -m scripts.su11a66_category_coverage ) 2>&1 | tee ~/su11a66_coverage.txt
+
+- **Session:** READ ONLY, statement_timeout 120 s. It reads `search_items`, `categories`, `item_categories`, and `category_suggestions` as counts only. It prints no user data.
+- **Sections, each with a timing:**
+  - a. the live universe, hidden pseudo rows, nameless rows, and items sold by at least 3 and at least 5 chains;
+  - b. coverage under the SU11A-57 display rule (usable at category, department only, none), by winning source and confidence;
+  - c. per department: %, plus the top 5 categories;
+  - d. nodes with 0, 1–4, 5–19 and more than 2,000 usable items, listed;
+  - e. item_categories rows per day over 14 days, by source (the build has no separate record: the per-day table also includes imports and edits), open suggestions, manual and reviewed rows;
+  - f. quality from the two graded repo CSVs, without the database;
+  - g. live alcohol and tobacco items.
+- `--only a,b` runs some sections; `--files-only` runs section f.
+- **Local check:** on the SU11A-65 throwaway Postgres 18 bench, with synthetic `search_items` (73,450 rows), 52k synthetic labels and su11a57 applied. All sections ran in 1.2 s, exit 0. That proves only that the script runs, not any figure.
+- **Record the server output here.**
+
+**Section f (repo files; it ran here):**
+- **review_graded_v1:**
+  - rule/high: 12.0% exact id wrong;
+  - gs1/high: 8.8% (department never wrong);
+  - AI rows: about 50%.
+  - These are the v1 labels, which the v1.1 fixes were written from, so the rates are not independent.
+- **ai_audit_graded_v1** (AI-only labels): "shown wrong" under the display rule:
+  - high 17.6%;
+  - medium 36.4%;
+  - low 30.3% (the department is wrong).
+- **Most errors:** D09, D08, D12, D07. The most common department move is D16 → D11.
+
+**Design (proposal):** `docs/catalog/su11a66_categories_browse_design.md`.
+- **Web:**
+  - a "קטגוריות" link in the header;
+  - `/categories/<id>/<slug>` pages, from department to sub-category;
+  - the search-result grid with add-to-basket, city / chain / sort / "רק במבצע" filters and load-more;
+  - a category filter and department facets on `/search` and `/compare`;
+  - links to and from the promos page;
+  - pre-rendered static shells, a sitemap and a canonical for SEO; the IS 5568 baseline.
+- **Mobile, recommended:** a department grid on the search tab's empty state, plus department chips after a search. There is no 5th tab. A `category/[id]` screen uses `search-row` (the SU11B-5 add-to-basket), and the tree and counts are cached for 24 h.
+- **API:**
+  - `GET /categories/counts`, computed per build stamp;
+  - `GET /categories/{id}/items`. Nationwide pages read `search_items` + `search_item_prices`. A city or chain page reuses the `db/search_filtered.py` candidate walk.
+  - `category` on `/search` and `/compare`;
+  - low labels only on department pages;
+  - caps, and `/categories/{id}/items` in xxl_heavy.
+- **Bench EXPLAIN** (synthetic): nationwide page 23–39 ms, page prices 20 ms, cheapest-first 43 ms. A city filter written as one join takes 0.6–2.7 s, but a walk batch of 200 / 600 / 1,600 candidates takes 42 / 120 / 313 ms. **No new index is needed.**
+- **Phasing:**
+  1. API + web: about 2 sessions;
+  2. mobile in the version after 1.2.3: 1 session;
+  3. labelling: 1 session plus Dude's grading.
+- **Open decisions** (recommendation in brackets):
+  - mobile placement (search-screen grid);
+  - low labels on category pages (no);
+  - MIN_BROWSE (5);
+  - default sort (popular);
+  - D10 (department shown, tobacco not linked);
+  - pre-rendering (yes);
+  - a popular-item labelling pass before phase 1 (yes);
+  - ship order (web first).
+
+---
+
 ## 📋 Open items / next steps (as of 5 Nov 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (verified, SU11A-53). Lawyer review of the terms is Dude's call.
@@ -2431,7 +2495,8 @@ Runbook: `docs/admin/su11a65_runbook.md`.
 - **SU11A-62 promo search + cleanup + pin coverage (+ SU11A-63 H2):** deployed 5 Nov 2026 (API 14:03, web MATCH). Still to do: run step 5 of `docs/admin/su11a62_runbook.md` and paste the report, so the before / after top 10 and the cleanup counts are recorded in the SU11A-62 entry.
 - **SU11A-64 audit fixes (H1, M1, M2, L2 web / API, nginx heavy group):** built, not deployed. Run `docs/security/su11a64_runbook.md` (web deploy first, then pull / restart, curl checks, nginx install with a backup outside `snippets/`, burst test, browser checks).
 - **SU11A-63 audit (`docs/security/su11a63_static_audit.md`):** H2 fixed in SU11A-62; H1, M1, M2 and L2 (web / API) in SU11A-64. L1 and the mobile half of L2 are in SU11B-5; L1 web in SU11A-65 (not deployed). L3 and L4 are deferred (low).
-- **SU11A-65 gift coupons + promo search index + L1 web:** built, not deployed. After SU11A-64: run `docs/admin/su11a65_runbook.md` (migration as postgres with CONCURRENTLY, restart, timings, report, web deploy, browser checks). Then record the step 8 report (gift-coupon counts, the חומוס "why" lines, production timings) in the SU11A-65 entry.
+- **SU11A-65 gift coupons + promo search index + L1 web (+ follow-up a24f469):** deployed and verified 5 Nov 2026 (Dude): promo search 0.1–0.5 s with the trigram indexes; 306 gift-coupon promotions (Rami Levy 278, Carrefour 28). Some of those are customer-compensation coupons (SU11A-66 Part B).
+  - **Admin promo search with a chain filter takes 8–10 s on production (5 Nov):** check whether it uses the SU11A-65 trigram path.
   - **Decided (5 Nov):** a description-only match ranks after the name matches (SU11A-65 follow-up, same deploy).
   - **Pre-existing flake:** `/search?engine=v1&group_by=store` orders tied items differently on identical calls, so the SU11A-58 byte-identical test fails about 1 run in 3. It needs a tie-break in the v1 store grouping (a pricing path: its own session).
   - **App:** the deletion check now matches the web (SU11B-6, mobile `a3988d1`, ships in 1.2.3).
@@ -2442,6 +2507,7 @@ Runbook: `docs/admin/su11a65_runbook.md`.
 - **Catalog:**
   - **SU11A-52 catalog (rules v1.1 since SU11A-55): built, NOT applied.** Run `docs/catalog/su11a52_runbook.md` (migration, pull, one build, import dry run then apply), then `--manual docs/catalog/review_graded_v1.csv` (Dude's 150 graded rows) and `--manual docs/catalog/ai_audit_graded_v1.csv` (100, SU11A-57). Taxonomy is v1.2 (SU11A-56). Next to grade: `disagreements_v1.csv` (regenerated for v1.2). Open: frozen chocolate-coated fruit (D06.C02 or D08.C01?); the 265 D04.C05 pickles without storage evidence; whether a better AI pass is worth it (Sonnet lost the pilot). Service rows and nameless names are handled by the same build;
   - **SU11A-57 categories tab + user suggestions:** built, not deployed. After su11a52 is applied: `docs/admin/su11a57_runbook.md` (migration, restart, manual-row imports); its web deploy and browser checks are now part of `docs/admin/su11a58_runbook.md`. The app button ships in build 9;
+  - **SU11A-66 categories browse / search:** run `scripts/su11a66_category_coverage.py` (command in the SU11A-66 entry) and record the output, then decide the open questions in `docs/catalog/su11a66_categories_browse_design.md` §8; phase 1 (API + web) is the next build session;
   - category / attribute faceted filters;
   - a switch to hide tobacco and alcohol;
   - optionally, move the location prompt to a contextual moment.
@@ -2462,4 +2528,4 @@ Runbook: `docs/admin/su11a65_runbook.md`.
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-66 (planned: categories coverage / design); then SU11A-67. SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
+Next free session ID: SU11A-67; then SU11A-68. SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
