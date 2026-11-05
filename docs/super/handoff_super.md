@@ -2371,7 +2371,20 @@ Runbook: `docs/admin/su11a65_runbook.md`.
 - **The likely cause is the description match** (SU11A-62 rank 0). The production descriptions were shown cut off ("2ב15 עדשים 500 גר' סוגת…", "2ב15.90 שדה בשקית…"). A multi-product promotion's description that also names חומוס ("… סוגת / חומוס …") matches every item of that promotion at rank 0. With the legume boost, such an item ranks even higher.
   - The fixture reproduces it: "אפונה וגזר לנדא 800 גרם" with the description "2ב15.90 שדה בשקית חומוס / אפונה" ranks first.
   - **Not verified on production:** the full descriptions were not available here. Runbook step 8 prints why each top-15 row matched, with the full description.
-- **Open decision (not changed here):** whether a description-only match should rank after the name matches. That changes the SU11A-62 order: the fixture's "חמאה 82%" from "מבצע שמנת וחמאה" would no longer lead.
+- **Follow-up (Dude, 5 Nov): a description-only match now ranks after the name matches.**
+  - **New tiers** (`db/query.py promo_match_sql`):
+    - 0 barcode;
+    - 1 name starts;
+    - 2 name contains (outside a flavour phrase);
+    - 3 description only (the term is not in the name);
+    - 4 flavour only;
+    - rank = tier × 2 − boost.
+  - **Where it applies:** list, grouped, promoted (the example), and the admin search (promotion order and sample). They all read the same rank.
+  - **Effects:**
+    - שמנת: "חמאה 82%" is no longer first;
+    - חומוס: "אפונה וגזר" (a description match, boosted) comes after "חומוס גרגירים" and "סלט חומוס".
+  - **Row sets:** the same as the SU11A-62 order. Only rows with a description match move: a description-only row goes down, a name + description row goes to its name tier (`test_description_only_rows_rank_after_name_matches`, `PROMO_RANK_DESC_FIRST` = the old order, tests only).
+  - **Speed:** the name test runs first, so description-only rows skip the flavour regexp. On the bench the speed is equal to the SU11A-62 rank: all cities 0.71–0.83 s against 0.69–0.82 s. EXPLAIN: 174 ms in Tel Aviv, 793 ms in all cities, with `idx_promos_description_trgm` and `idx_items_name_trgm` in both plans.
 
 **4. SU11A-63 L1, web** (`web/src/utils/deleteAccountFlow.ts`, used by `DeleteAccountPage.tsx`):
 - **Lost answer:** after a timeout or network failure on a SENT `DELETE /account`, the page retries once with the same fresh token. A finished deletion answers 401 `account_deleted`, which counts as deleted.
@@ -2419,7 +2432,7 @@ Runbook: `docs/admin/su11a65_runbook.md`.
 - **SU11A-64 audit fixes (H1, M1, M2, L2 web / API, nginx heavy group):** built, not deployed. Run `docs/security/su11a64_runbook.md` (web deploy first, then pull / restart, curl checks, nginx install with a backup outside `snippets/`, burst test, browser checks).
 - **SU11A-63 audit (`docs/security/su11a63_static_audit.md`):** H2 fixed in SU11A-62; H1, M1, M2 and L2 (web / API) in SU11A-64. L1 and the mobile half of L2 are in SU11B-5; L1 web in SU11A-65 (not deployed). L3 and L4 are deferred (low).
 - **SU11A-65 gift coupons + promo search index + L1 web:** built, not deployed. After SU11A-64: run `docs/admin/su11a65_runbook.md` (migration as postgres with CONCURRENTLY, restart, timings, report, web deploy, browser checks). Then record the step 8 report (gift-coupon counts, the חומוס "why" lines, production timings) in the SU11A-65 entry.
-  - **Decision for Dude:** should a promotion-description-only match (the חומוס lentils / peas case) rank after the name matches? Today it ranks first (SU11A-62 design).
+  - **Decided (5 Nov):** a description-only match ranks after the name matches (SU11A-65 follow-up, same deploy).
   - **Pre-existing flake:** `/search?engine=v1&group_by=store` orders tied items differently on identical calls, so the SU11A-58 byte-identical test fails about 1 run in 3. It needs a tie-break in the v1 store grouping (a pricing path: its own session).
   - **App (next version):** align the deletion check with the web. Treat as deleted only on deleted / pending from the server, not on offline / 5xx.
 - **SU11A-60 promos page:** deployed 1 Nov 2026 (API restarted on 5a1c2fb, web da83ca4, guard MATCH). `docs/admin/su11a60_runbook.md`. Follow-up (not started): precompute `/promos/today` in the 14:30 build (cold call still ~11 s; cached after).

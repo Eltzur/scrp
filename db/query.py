@@ -1794,15 +1794,22 @@ _FLAVOUR_RE = r"(^|\s)ו?ב?(טעם|טעמי|טעמים)(\s.*)?$"
 
 # SU11A-65: False = the pre-SU11A-65 WHERE (tests only).
 PROMO_MATCH_INDEXED = True
+# SU11A-65 follow-up: True = the SU11A-62 rank (description first; tests only).
+PROMO_RANK_DESC_FIRST = False
 
 
 def promo_match_sql(s: PromoSearch, name: str, desc: str, code: str) -> tuple[str, str, str, dict]:
     """(where, rank, name_tier, params) for promo search text over the given
-    columns. Lower rank = more relevant:
-        0  the promotion's description matches, or the exact barcode
+    columns. Lower rank = more relevant (SU11A-65 follow-up, Dude 5 Nov 2026):
+        0  the exact barcode
         1  the product name starts with the text
         2  the name contains it outside a flavour phrase
-        3  the name contains it only inside a flavour phrase
+        3  only the promotion's description matches (the text is not in the
+           name): a multi-product description ("2ב15 עדשים / חומוס", "מבצע
+           שמנת וחמאה") names products the item is not
+        4  the name contains it only inside a flavour phrase ("טעם X")
+    SU11A-62 ranked every description match 0; PROMO_RANK_DESC_FIRST = True
+    brings that back (tests only).
     rank = tier * 2, minus 1 for an item labelled in a category the text names.
     name_tier is the tier from the name alone (picks a promotion's example).
     The category boost only lowers the rank of rows the WHERE already admits:
@@ -1830,8 +1837,19 @@ def promo_match_sql(s: PromoSearch, name: str, desc: str, code: str) -> tuple[st
         where = f"({desc} {like} OR {code} = ANY({names}) OR {code} = :pq_exact)"
     else:   # the pre-SU11A-65 form (the old-vs-new test compares the two)
         where = f"({desc} {like} OR {name} {like} OR {code} = :pq_exact)"
-    rank = (f"((CASE WHEN {code} = :pq_exact OR {desc} {like} THEN 0 ELSE {name_tier} END) * 2"
-            f" - {boost})")
+    if PROMO_RANK_DESC_FIRST:   # the SU11A-62 order (tests only)
+        tier = f"CASE WHEN {code} = :pq_exact OR {desc} {like} THEN 0 ELSE {name_tier} END"
+    else:
+        # The name test first: a row whose name lacks the text skips the
+        # flavour regexp (most description-only rows of a multi-product
+        # promotion). Same tiers either way.
+        tier = (f"CASE WHEN {code} = :pq_exact THEN 0"
+                f" WHEN NOT COALESCE({name} {like}, false)"
+                f" THEN (CASE WHEN {desc} {like} THEN 3 ELSE 5 END)"
+                f" WHEN {name} ILIKE :pq_start ESCAPE '\\' THEN 1"
+                f" WHEN regexp_replace({name}, :pq_flavour, '') {like} THEN 2"
+                f" ELSE 4 END")
+    rank = f"(({tier}) * 2 - {boost})"
     return where, rank, name_tier, params
 
 

@@ -12,7 +12,15 @@ Written 5 Nov 2026 for Dude.
   They never show a percentage or a struck-through price. Before, they showed a "מבצע" badge on the promos page and "100% הנחה" in admin.
 - **"הנחה גדולה":** gift coupons come after every real per-item discount. The other sorts are unchanged.
 - **A new type chip "מתנה בקופון"** shows only gift coupons. The other type chips no longer include them.
-- **Promo search is faster:** the target is under 1.5 s for a search in a city and in all cities. Before, it took 3.3–4.0 s on production. The results are the same rows in the same order.
+- **Promo search is faster:** the target is under 1.5 s for a search in a city and in all cities. Before, it took 3.3–4.0 s on production.
+- **Promo search order (follow-up, Dude's decision):** the same rows as before, in a new order, best first:
+  1. an exact barcode;
+  2. the product name starts with the term;
+  3. the name contains it;
+  4. only the promotion's description contains it (the term is not in the name);
+  5. the term is only in a flavour phrase ("טעם X", "בטעם X", "בטעמי X").
+
+  Before, any description match came first. That put "חמאה 82%" (description "מבצע שמנת וחמאה") first for שמנת, and lentils and peas in the top 10 for חומוס. Within each level the chosen sort applies. The category boost still lifts an item by half a level and never adds rows.
 - **Account deletion on the website:** if the deletion went through on the server but the answer was lost (timeout or connection), the page no longer leaves the user stuck. It retries with the same sign-in. A later attempt that fails with "wrong password" first asks the server, and shows "החשבון נמחק" only if the server confirms it.
 
 **Prices:** nothing that prices changes: search, compare, basket, `/product`, `/promos/bulk`, promo badges, the search build and `/promos/today`.
@@ -199,7 +207,7 @@ cd ~/scrp && ( ulimit -v 2000000; set -a; source .env; set +a; venv/bin/python3 
 - `== indexes`: both indexes `valid=True`.
 - `plan reads idx_promos_description_trgm: yes`.
 - `== why: חומוס`: every line names `description`, `name` or `barcode`. No line ends with `<-- NO TEXT MATCH`.
-  - Lines that match only on `description` show why lentils or peas can appear: their promotion's description names חומוס. This is the open decision in the handoff, not a failure.
+  - Lines that match only on `description` (lentils, peas: their promotion's description names חומוס) come after every line that matches on `name`.
 - `== gift coupons`:
   - `gift_coupon_rows`, `gift_coupon_promotions`, `gift_coupon_cards`;
   - `free_unit_without_coupon_rows` (1+1 halves and the like; unchanged);
@@ -276,9 +284,24 @@ If Haifa shows no gift coupon on cream that day, use one of the step 8 examples 
 
 **Expect:**
 - Chickpea and hummus products first.
-- A lentil or pea card appears only if its promotion's description contains חומוס (step 8 shows which). Compare with the 5 Nov list: lentils and peas at positions 9–10.
+- A lentil or pea card appears only if its promotion's description contains חומוס (step 8 shows which), and only after every card whose name contains חומוס (and before flavour-only names such as "בטעם חומוס"). On 5 Nov lentils and peas were at positions 9–10.
 
-**STOP if** a card has חומוס neither in its name nor in its description. Paste the card text.
+**STOP if:**
+- a card has חומוס neither in its name nor in its description;
+- a lentil or pea card comes before a card whose name contains חומוס.
+
+Paste the card text.
+
+**11d-2. שמנת order**
+
+**[Browser]** The same page, search `שמנת`.
+
+**Expect:**
+- Real cream products first (שמנת מתוקה, שמנת חמוצה, שמנת לבישול…).
+- "חמאה" (or another product whose promotion description only mentions שמנת) is not first. It comes after every name match.
+- "טעם שמנת" snacks come last.
+
+**STOP if** a product without שמנת in its name is first.
 
 **11e. Account deletion (a throwaway user only)**
 
@@ -359,7 +382,7 @@ You can also keep the indexes after a code revert. The old code does not use the
   - `db/query.py`:
     - `_GIFT_COUPON_SQL`, `is_gift_coupon`, `PROMO_TYPE_FILTERS`, `_PROMO_SORTS["discount"]`;
     - the `gift_*` layouts, `count_gift_coupons`;
-    - `PROMO_MATCH_INDEXED` and `promo_match_sql`.
+    - `PROMO_MATCH_INDEXED`, `PROMO_RANK_DESC_FIRST` (tests only) and `promo_match_sql` (the rank tiers).
   - `api/models.py GroupedPromoItem.gift_coupon`.
   - `api/routers/admin_promos.py _promo_out` (`sample.gift_coupon`).
   - `scripts/su11a65_promo_report.py`.

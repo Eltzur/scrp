@@ -1,6 +1,7 @@
 """SU11A-62 promo search and list cleanup against a real Postgres:
-  * relevance: description > name starts with the text > name contains it >
-    only in a flavour phrase ("טעם שמנת"), a category the text names first
+  * relevance (SU11A-65 follow-up order): name starts with the text > name
+    contains it > only the description matches > only in a flavour phrase
+    ("טעם שמנת"), a category the text names first
     (low-confidence labels at department level only); the matching product is a
     promotion's example (public מבצעים מקודמים and the admin search), with the
     matching-product count;
@@ -28,13 +29,17 @@ FLAVOUR = re.compile(r"(^|\s)ו?ב?(טעם|טעמי|טעמים)(\s.*)?$")
 
 
 def tier(row: dict, q: str) -> int:
-    """The SQL rank (db.query.promo_match_sql) without a category boost."""
+    """The SQL rank (db.query.promo_match_sql) without a category boost; the
+    SU11A-65 follow-up order: barcode, name starts, name contains, description
+    only, flavour only."""
     name, desc = row.get("product_name") or "", row.get("promo_description") or ""
-    if q in desc or row["item_code"] == q:
+    if row["item_code"] == q:
         return 0
     if name.startswith(q):
         return 2
-    return 4 if q in FLAVOUR.sub("", name) else 6
+    if q in FLAVOUR.sub("", name):
+        return 4
+    return 8 if q in name else 6
 
 
 def code(n: int) -> str:
@@ -116,10 +121,11 @@ def test_list_relevance_order(api):
     """Description, then name start, then contains (category first), flavour
     last; each tier by discount. The 60% bagel and 70% snack never lead."""
     rows = api.get("/promos/list", params={"q": "שמנת"}).json()
-    # 7 description | 8 (20%), 1 (10%) start | 2 contains + category | 3 contains
-    # (its low label is below a department: no boost) | 9 (80%), 4 (60%), 6 (50%) flavour
-    assert items(rows) == [7, 8, 1, 2, 3, 9, 4, 6]
-    assert [tier(r, "שמנת") for r in rows] == [0, 2, 2, 4, 4, 6, 6, 6]   # 2 is 3 in SQL (boost)
+    # 8 (20%), 1 (10%) start | 2 contains + category | 3 contains (its low label
+    # is below a department: no boost) | 7 description only (SU11A-65 follow-up:
+    # "חמאה" is not cream) | 9 (80%), 4 (60%), 6 (50%) flavour
+    assert items(rows) == [8, 1, 2, 3, 7, 9, 4, 6]
+    assert [tier(r, "שמנת") for r in rows] == [2, 2, 4, 4, 6, 8, 8, 8]   # 2 is 3 in SQL (boost)
 
 
 def test_grouped_relevance_within_each_branch(api, eng):
@@ -142,7 +148,7 @@ def test_promoted_example_is_the_best_match(api, eng):
 def test_admin_search_relevance_example_and_matches(api):
     r = api.get("/admin/promos/search", params={"q": "שמנת"}, headers=H).json()["items"]
     order = [x["promo_id"] for x in r if x["promo_id"].startswith("S")]
-    assert order == ["S6", "S1", "S7", "S2", "S3", "S4", "S5"]
+    assert order == ["S1", "S7", "S2", "S3", "S6", "S4", "S5"]   # S6: description only (SU11A-65 follow-up)
     by = {x["promo_id"]: x for x in r}
     assert by["S4"]["sample"]["item_code"] == code(4) and by["S4"]["matches"] == 1   # not the 70% snack
     assert by["S7"]["sample"]["item_code"] == code(8) and by["S7"]["matches"] == 2   # start beats flavour
@@ -274,7 +280,8 @@ def test_report_script_before_and_after(eng, capsys, monkeypatch):
     after = after.split("== cleanup")[0]
     assert before.strip().splitlines()[0].split(" | ")[1] == "תן צאפ טבעות בטעם שמנת בצל 50 גרם"   # 80%, flavour
     assert "חמאה 82%" not in before                                         # description matches are new
-    assert after.strip().splitlines()[0].split(" | ")[1] == "חמאה 82%"
+    after_names = [ln.split(" | ")[1] for ln in after.strip().splitlines()]
+    assert after_names[0] == "שמנת חמוצה 15%" and "חמאה 82%" in after_names[1:]   # description only: after names
     assert "no_discount: " in out and "coupon: " in out and "ניקויבדיקה אפס" in out
 
 

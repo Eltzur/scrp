@@ -6,6 +6,8 @@
   * the indexable search WHERE (db.query.PROMO_MATCH_INDEXED) returns exactly
     the old rows in the old order, with and without the su11a65 indexes;
   * the category boost only re-ranks rows that match the text;
+  * the follow-up order: a description-only match ranks after the name
+    matches (same rows as the SU11A-62 order, only those rows move);
   * the su11a65 migration (twice) and its rollback.
 
 Data: the SU11A-62 fixture (tests/test_promo_search_su11a62_pg.py) plus the
@@ -178,13 +180,14 @@ def test_count_gift_coupons_and_report(api, eng, monkeypatch, capsys):
 
 def test_boost_only_reranks_text_matches(api):
     """q=חומוס: the legume category is boosted; a member whose name and
-    description lack the text (lentils, row 50) never appears; the
-    description match (52) does, as SU11A-62 designed."""
+    description lack the text (lentils, row 50) never appears. The
+    description-only match (52, "אפונה וגזר" from "… חומוס / אפונה") comes
+    after the name matches (SU11A-65 follow-up), even with the boost."""
     rows = _all(api, q="חומוס")
     got = items(rows)
     assert 50 not in got
-    assert {51, 52, 53} <= set(got)
-    assert got.index(51) < got.index(53)   # same tier (name starts); the boost lifts 51
+    # 51 name starts + boost, 53 name contains, 52 description only + boost
+    assert [n for n in got if n in (51, 52, 53)] == [51, 53, 52]
     for r in rows:
         assert "חומוס" in (r["product_name"] or "") + (r["promo_description"] or "") or r["item_code"] == "חומוס"
 
@@ -233,6 +236,43 @@ def test_indexed_where_is_identical_to_the_old_one(api, eng, monkeypatch):
     old = _snapshot(api, eng)
     assert new == old
     assert '"7299910000040"' in new and "עדשים כתומות" in new   # the terms do return rows
+
+
+def _desc_match(r, q) -> bool:
+    """Rows whose rank the follow-up changes: the description matches (not by
+    barcode). A description-only row moves after the name matches; a row whose
+    name matches too moves from the old description tier to its name tier."""
+    return q in (r.get("promo_description") or "") and r["item_code"] != q
+
+
+def test_description_only_rows_rank_after_name_matches(api, eng, monkeypatch):
+    """SU11A-65 follow-up: against the SU11A-62 order (PROMO_RANK_DESC_FIRST),
+    the same rows come back; only rows with a description match move (a
+    description-only row after the name matches, ahead of flavour-only names;
+    a name + description row to its name tier)."""
+    import db.query as Q
+    shemenet = items(_all(api, q="שמנת"))
+    assert shemenet[:2] == [8, 1] and shemenet.index(7) > shemenet.index(3)   # חמאה 82% not first
+    for q in TERMS:
+        for path, extra in (("/promos/list", {}), ("/promos/grouped", {"chain": "A"})):
+            monkeypatch.setattr(Q, "PROMO_RANK_DESC_FIRST", False)
+            new = _all(api, path, q=q, **extra)
+            monkeypatch.setattr(Q, "PROMO_RANK_DESC_FIRST", True)
+            old = _all(api, path, q=q, **extra)
+            key = lambda r: json.dumps(r, sort_keys=True, ensure_ascii=False, default=str)  # noqa: E731
+            assert sorted(map(key, new)) == sorted(map(key, old)), (path, q)
+            assert [key(r) for r in new if not _desc_match(r, q)] == [key(r) for r in old if not _desc_match(r, q)], (path, q)
+        for flag in (False, True):
+            monkeypatch.setattr(Q, "PROMO_RANK_DESC_FIRST", flag)
+            hits = api.get("/admin/promos/search", params={"q": q}, headers=H).json()["items"]
+            if flag:
+                assert sorted(x["promo_id"] for x in hits) == admin_ids, q
+            else:
+                admin_ids = sorted(x["promo_id"] for x in hits)
+    monkeypatch.setattr(Q, "PROMO_RANK_DESC_FIRST", False)
+    order = [x["promo_id"] for x in api.get("/admin/promos/search", params={"q": "שמנת"}, headers=H).json()["items"]
+             if x["promo_id"].startswith("S")]
+    assert order.index("S6") > order.index("S3")   # "מבצע שמנת וחמאה" after the name matches
 
 
 def _has_trgm(engine) -> bool:
