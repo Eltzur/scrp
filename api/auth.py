@@ -151,21 +151,54 @@ class ApiCodeError(Exception):
         self.code = code
 
 
+_UPSERT_USER_SQL = text("""
+    INSERT INTO users (id, email, terms_version, terms_accepted_at)
+    VALUES (:id, :email, :tv, :ta)
+    ON CONFLICT(id) DO UPDATE SET
+        email             = excluded.email,
+        terms_accepted_at = CASE WHEN users.terms_version IS NULL
+                                 THEN excluded.terms_accepted_at
+                                 ELSE users.terms_accepted_at END,
+        terms_version     = COALESCE(users.terms_version, excluded.terms_version)
+""")
+
+
+def orphan_email(user_id: str) -> str:
+    """The email a users row gets when a newer account takes its address
+    (SU11A-64). users.email is NOT NULL UNIQUE, so it cannot be NULL; this is
+    unique per id and can never be a real address (.local is reserved)."""
+    return f"orphaned+{user_id}@invalid.local"
+
+
 def _upsert_user(conn, user_id: str, email: str, payload: dict | None = None) -> None:
     """Create or refresh the users row. SU11A-44: also copies the sign-up terms
     consent from the token's user_metadata, in the same statement, only while
-    users.terms_version is still NULL (never overwrites; see api/terms.py)."""
+    users.terms_version is still NULL (never overwrites; see api/terms.py).
+
+    SU11A-64 (SU11A-63 M2): users.email is UNIQUE and the upsert resolves only
+    an id clash. An account deleted in the Supabase dashboard (not via DELETE
+    /account) and re-created with the same email has a NEW id, so its insert hit
+    the email constraint and every signed-in call answered 500. Now, in one
+    transaction, the old row's email becomes orphan_email(old id) and the new
+    row is inserted. Nothing of the old row moves to the new account (ratings,
+    baskets, blocks, consent and any ban stay with the old id). Logged with
+    ids only."""
+    from sqlalchemy.exc import IntegrityError
     version, accepted_at = consent_from_claims(payload)
-    conn.execute(text("""
-        INSERT INTO users (id, email, terms_version, terms_accepted_at)
-        VALUES (:id, :email, :tv, :ta)
-        ON CONFLICT(id) DO UPDATE SET
-            email             = excluded.email,
-            terms_accepted_at = CASE WHEN users.terms_version IS NULL
-                                     THEN excluded.terms_accepted_at
-                                     ELSE users.terms_accepted_at END,
-            terms_version     = COALESCE(users.terms_version, excluded.terms_version)
-    """), {"id": user_id, "email": email, "tv": version, "ta": accepted_at})
+    params = {"id": user_id, "email": email, "tv": version, "ta": accepted_at}
+    try:
+        with conn.begin_nested():
+            conn.execute(_UPSERT_USER_SQL, params)
+    except IntegrityError:
+        old = conn.execute(text("SELECT id FROM users WHERE email = :email AND id <> :id FOR UPDATE"),
+                           {"email": email, "id": user_id}).scalar() if email else None
+        if old is None:
+            conn.rollback()
+            raise
+        conn.execute(text("UPDATE users SET email = :tomb WHERE id = :old"),
+                     {"tomb": orphan_email(old), "old": old})
+        conn.execute(_UPSERT_USER_SQL, params)
+        log.warning("users: email taken over by a new account; old row %s tombstoned, new row %s", old, user_id)
     conn.commit()
 
 

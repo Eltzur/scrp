@@ -5,6 +5,7 @@ import { useAuth } from '../components/AuthContext';
 import { useBasket } from '../components/BasketContext';
 import { getSavedBaskets, getSavedBasket, deleteSavedBasket } from '../api/client';
 import type { SavedBasketSummary } from '../api/client';
+import { listedBaskets } from '../utils/savedBaskets';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('he-IL', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -29,7 +30,7 @@ export default function MyBasketsPage() {
   useEffect(() => {
     if (!user) return;
     getSavedBaskets()
-      .then(setBaskets)
+      .then(all => setBaskets(listedBaskets(all)))   // SU11A-64: not the app's synced basket
       .catch(() => setError('שגיאה בטעינת הסלים'))
       .finally(() => setLoading(false));
   }, [user]);

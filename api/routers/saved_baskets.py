@@ -11,6 +11,15 @@ from api.dependencies import get_db
 
 router = APIRouter(prefix="/baskets", tags=["Saved Baskets"])
 
+# SU11A-64 (SU11A-63 L2): the mobile app mirrors its basket into one row with
+# this name (xxl-super-mobile src/lib/basket-context.tsx SYNCED_BASKET_NAME).
+# It lists, creates and updates the items of that row; it never renames or
+# deletes it. The website hides it from "הסלים שלי". Here it cannot be deleted
+# or renamed, and no other basket can be renamed to it: 409. GET still lists
+# it (the app finds its row there).
+RESERVED_BASKET_NAME = "__xxl_mobile_basket__"
+_RESERVED_DETAIL = "reserved_basket: the app's synced basket cannot be deleted or renamed"
+
 
 # ---------------------------------------------------------------------------
 # Request / response shapes
@@ -36,14 +45,16 @@ class UpdateBasketRequest(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _owned_or_404(conn, basket_id: int, user_id: str) -> None:
-    """Raise 404 if basket doesn't exist or belongs to a different user."""
+def _owned_or_404(conn, basket_id: int, user_id: str) -> str:
+    """Raise 404 if basket doesn't exist or belongs to a different user.
+    Returns the basket's name."""
     row = conn.execute(
-        text("SELECT user_id FROM saved_baskets WHERE id = :id"),
+        text("SELECT user_id, name FROM saved_baskets WHERE id = :id"),
         {"id": basket_id},
     ).fetchone()
     if not row or row[0] != user_id:
         raise HTTPException(status_code=404)
+    return row[1]
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +109,10 @@ def update_basket(
     user=Depends(get_current_user),
     conn=Depends(get_db),
 ):
-    _owned_or_404(conn, basket_id, user["id"])
+    name = _owned_or_404(conn, basket_id, user["id"])
+    if body.name is not None and body.name != name and RESERVED_BASKET_NAME in (name, body.name):
+        conn.rollback()
+        raise HTTPException(status_code=409, detail=_RESERVED_DETAIL)
 
     clauses: list[str] = ["updated_at = now()"]
     params: dict = {"id": basket_id}
@@ -121,6 +135,8 @@ def update_basket(
 
 @router.delete("/{basket_id}", status_code=204)
 def delete_basket(basket_id: int, user=Depends(get_current_user), conn=Depends(get_db)):
-    _owned_or_404(conn, basket_id, user["id"])
+    if _owned_or_404(conn, basket_id, user["id"]) == RESERVED_BASKET_NAME:
+        conn.rollback()
+        raise HTTPException(status_code=409, detail=_RESERVED_DETAIL)
     conn.execute(text("DELETE FROM saved_baskets WHERE id = :id"), {"id": basket_id})
     conn.commit()

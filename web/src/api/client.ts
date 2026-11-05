@@ -11,6 +11,7 @@ export type StatsResponse   = components['schemas']['StatsResponse'];
 export type CityInfo        = components['schemas']['CityInfo'];
 
 import { supabase } from '../lib/supabase';
+import { mergePromoMaps, planPromosBulk } from '../utils/promoBulk';
 
 const http = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
@@ -254,13 +255,18 @@ export const getPromoCities = (): Promise<string[]> =>
 export const getPromoChains = (): Promise<PromoChain[]> =>
   http.get<PromoChain[]>('/promos/chains').then(r => r.data).catch(() => []);
 
-export const getPromosBulk = (
+/** SU11A-64: split into calls within the server caps and merged
+ *  (utils/promoBulk.ts); itemCodes = the barcodes on screen. A failed call
+ *  contributes nothing, as before. */
+export const getPromosBulk = async (
   stores: { chain_id: string; store_id: string }[],
+  itemCodes: string[],
 ): Promise<Record<string, PromoItem[]>> =>
-  http
-    .post<Record<string, PromoItem[]>>('/promos/bulk', { stores })
-    .then(r => r.data)
-    .catch(() => ({}));
+  mergePromoMaps(await Promise.all(planPromosBulk(stores, itemCodes).map(body =>
+    http
+      .post<Record<string, PromoItem[]>>('/promos/bulk', body)
+      .then(r => r.data)
+      .catch(() => ({} as Record<string, PromoItem[]>)))));
 
 // --- Product detail (GS1 enrichment) ---------------------------------------
 

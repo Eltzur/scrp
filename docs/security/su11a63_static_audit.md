@@ -179,6 +179,7 @@ PASS = static evidence supports it; GAP = see §5; N/A = not applicable; UNKNOWN
 ## 5. Gaps (new, deduplicated, ranked)
 
 ### GAP-H1 — High: `POST /promos/bulk` takes an unbounded store list and returns every promo row of those stores
+- **Status: fixed in SU11A-64, not deployed** (`docs/security/su11a64_runbook.md`). At most 300 stores and 1,000 barcodes per call (422), at most 50,000 rows per answer (422 `too_many_rows`); optional `item_codes`, which the web now sends, splitting longer store lists; `/promos/bulk` in the nginx heavy group. Tests: `tests/test_audit_fixes_su11a64_pg.py`.
 - **Flows:** g.
 - **Evidence:**
   - `api/routers/promos.py:23-42`: `stores: list[_StoreRef]`, with no `max_length`.
@@ -229,6 +230,7 @@ PASS = static evidence supports it; GAP = see §5; N/A = not applicable; UNKNOWN
   - PG test (fixture of `test_promos_page_su11a60_pg.py`, `UNFILTERED_CAP` patched to 5): `q=%` → at most 5 rows and no wildcard match; `q=" "` → capped; `q="50%"` matches the literal text only.
 
 ### GAP-M1 — Medium: the `/promos/today` cache key is caller-controlled, LRU of 256, with no single-flight
+- **Status: fixed in SU11A-64, not deployed** (`docs/security/su11a64_runbook.md`). `city` must be a known `city_canonical` and `chain_id` a known chain (422 `unknown_city` / `unknown_chain`; the check fails open if the tables cannot be read); one rebuild per key and worker; LRU 256 kept; `/promos/today` in the nginx heavy group.
 - **Flows:** g.
 - **Evidence:**
   - `db/query.py:2153-2189`: the key is `(limit, city, chain_id, curation)`, built from raw query strings (`promos.py:50-57`, with no validation).
@@ -250,6 +252,7 @@ PASS = static evidence supports it; GAP = see §5; N/A = not applicable; UNKNOWN
     - 10 threads on an expired key → 1 live call.
 
 ### GAP-M2 — Medium: a stale `users.email` row locks a re-created account out of every signed-in endpoint
+- **Status: fixed in SU11A-64, not deployed** (`docs/security/su11a64_runbook.md`). `users.email` is `NOT NULL UNIQUE`, so on the clash the old row's email becomes `orphaned+<old id>@invalid.local` and the new row is inserted, in one transaction; nothing moves to the new account; warning with ids only (`api/auth.py _upsert_user`).
 - **Flows:** a, and every signed-in endpoint.
 - **Evidence:**
   - `db/migrations/add_users_saved_baskets.sql:7`: `email TEXT NOT NULL UNIQUE`.
@@ -271,6 +274,7 @@ PASS = static evidence supports it; GAP = see §5; N/A = not applicable; UNKNOWN
   - Expect 200 and one `users` row (B, e) with the first fix, or 409 `email_conflict` with the second. Never a 500.
 
 ### GAP-L1 — Low: a client timeout after a successful server delete shows an error and leaves the user stuck
+- **Status:** mobile, SU11B-5 (`docs/handoff_mobile.md`). The web account-deletion page has the same pattern; not changed.
 - **Flows:** b.
 - **Evidence:**
   - Both clients abort `DELETE /account` at 15 s: mobile `src/api/client.ts:29,699-718`, web `client.ts:597-617`.
@@ -289,6 +293,7 @@ PASS = static evidence supports it; GAP = see §5; N/A = not applicable; UNKNOWN
   - Client unit test with fetch mocked: the first call aborts, the second answers 401 `account_deleted` → the result is `deleted`, `finishAccountDeletion` is called, and no error is shown.
 
 ### GAP-L2 — Low: the reserved mobile basket is visible, deletable and duplicable
+- **Status: web / API part fixed in SU11A-64, not deployed** (`docs/security/su11a64_runbook.md`): הסלים שלי does not list `__xxl_mobile_basket__`; DELETE / rename of it (and renaming another basket to it) is 409; GET still lists it. Mobile part (recreate on 404, lowest id on duplicates): SU11B-5. No unique index (duplicates stay possible; the app picks the lowest id).
 - **Flows:** d.
 - **Evidence:**
   - The web lists and deletes every saved basket, including the one named `__xxl_mobile_basket__` (`web/src/pages/MyBasketsPage.tsx:53-63,105-131`; no filter anywhere, by grep).
@@ -307,6 +312,7 @@ PASS = static evidence supports it; GAP = see §5; N/A = not applicable; UNKNOWN
   - Mobile unit test: a PUT that answers 404 → one POST, and the new id is used afterwards.
 
 ### GAP-L3 — Low: concurrent pin / hide creation can give a 500 or leave both a pin and a hide active
+- **Status:** deferred (low; a single admin today).
 - **Flows:** f.
 - **Evidence:**
   - `admin_promos.py:293-333`: `_guard_new` checks first, then `_insert` runs. There is no lock and no `IntegrityError` handling.
@@ -324,6 +330,7 @@ PASS = static evidence supports it; GAP = see §5; N/A = not applicable; UNKNOWN
     - pin plus hide → exactly one active row.
 
 ### GAP-L4 — Low: the category-suggestion daily cap is count-then-insert
+- **Status:** deferred (low).
 - **Flows:** e.
 - **Evidence:** `api/routers/categories.py:85-90` counts, and `:108-116` inserts later. Parallel requests for different items can each pass the count.
 - **Scenario:** 20 parallel POSTs for 20 different items at the 19th suggestion → up to about 39 stored. The impact is queue noise only.

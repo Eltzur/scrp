@@ -35,7 +35,9 @@ export default function ResultsList({
   const [promosByStore, setPromosByStore] = useState<PromoMap>({});
   const [promosLoading, setPromosLoading] = useState(false);
 
-  // Stable key for the unique set of stores in the current result.
+  // Stable key for the unique set of stores in the current result. SU11A-64:
+  // plus the barcodes, since the request now carries them (a טען עוד page
+  // whose stores are all known still needs its products' promos).
   const items = result?.items;
   const storeSetKey = useMemo(() => {
     if (!items?.length) return '';
@@ -45,7 +47,8 @@ export default function ResultsList({
         pairs.add(`${q.chain_id}/${q.store_id}`);
       }
     }
-    return Array.from(pairs).sort().join('|');
+    const codes = Array.from(new Set(items.map(item => item.product.item_code))).sort();
+    return `${Array.from(pairs).sort().join('|')}#${codes.join('|')}`;
   }, [items]);
 
   useEffect(() => {
@@ -73,7 +76,9 @@ export default function ResultsList({
       }
     }
 
-    getPromosBulk(stores).then(record => {
+    // SU11A-64: with the barcodes on screen (ProductCard reads only those).
+    const itemCodes = result.items.map(item => item.product.item_code);
+    getPromosBulk(stores, itemCodes).then(record => {
       setPromosByStore({ ...record });
       setPromosLoading(false);
     });

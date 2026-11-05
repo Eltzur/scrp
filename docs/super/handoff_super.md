@@ -955,6 +955,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-61 (Nov 1) — chat plan only (the promo follow-ups that became SU11A-62).
 - SU11A-62 (Nov 5) — promo search relevance (description > name start > contains > flavour; category boost; best-matching example), list cleanup ("-0%", coupon / threshold), admin pin coverage (cities + check-city warning), unfiltered lists empty without a query, SU11A-63 H2 (escaped, min 2 characters). Runbook `docs/admin/su11a62_runbook.md`. Not deployed.
 - SU11A-63 (Nov 4) — static security / reliability audit (read-only): `docs/security/su11a63_static_audit.md`.
+- SU11A-64 (Nov 5) — audit fixes: `/promos/bulk` caps + `item_codes` + row limit (H1), `/promos/today` key check + single-flight (M1), users email tombstone (M2), app basket hidden on the web / 409 on delete-rename (L2), nginx heavy group for `/promos/bulk|list|promoted|today` and `/admin/promos/search`. Runbook `docs/security/su11a64_runbook.md`. Not deployed.
 - SU11A-56 (Oct 25) — catalog taxonomy v1.2 (`taxonomy_v1_2.csv`, `gs1_group_map_v1_2.csv`: D09.C11, D16.C08, D07.C08.S01 storage split), Sonnet 5.5 pilot on the graded AI audit (53% vs Haiku 64%: gate failed, no full re-check). Not applied.
 - SU11A-55 (Oct 25) — catalog: Dude's review as `docs/catalog/review_graded_v1.csv` (150 manual rows), taxonomy/rules v1.1 (`taxonomy_v1_1.csv`, `brand_category_hints_v1_1.csv`; head anchor, %, hard negatives, brand pin), AI audit sample `ai_audit_sample_v1.xlsx`. Not applied.
 - SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
@@ -2225,6 +2226,61 @@ Runbook: `docs/admin/su11a62_runbook.md` (quiet-time check, pull, restart + heal
 - SU11A-64 (reserved): SU11A-63 H1 (`/promos/bulk` cap + heavy zone), M1 (`/promos/today` key + single-flight), M2, L2 backend, and the nginx strict group for `/promos/list`, `/promos/grouped` (already), `/promos/promoted` and `/admin/promos/search`.
 - Possibly: a trigram index if the description match makes all-cities search slow on production (runbook step 4 STOPs above 5 s).
 
+### SU11A-64 (5 Nov 2026) - SU11A-63 audit fixes H1, M1, M2, L2 (web / API); nginx heavy group for the promo endpoints; built, not deployed
+
+Runbook: `docs/security/su11a64_runbook.md`. The web deploy comes before the API restart, because the new web works with the old API. No migration. Context: SU11A-62 (a2644bf) was deployed on 5 Nov (API 14:03, web MATCH), and the live nginx rate-limit files matched the repo copies that day.
+
+**H1 `POST /promos/bulk`:**
+- **Callers:** only the web results list (`web/src/components/ResultsList.tsx:64-79`); the app has no caller (generated types only).
+  - It sends the distinct stores of the quotes on screen: up to 20 products x 14 chains = 280 a page with group_by=chain (one cheapest branch per chain, `db/query.py group_by_product`), and 20 with group_by=store. The list grows with טען עוד.
+  - It received every promo of those stores (about 900 a store on average), while `ProductCard` reads only the shown barcodes.
+- **Caps** (`api/routers/promos.py`):
+  - `BULK_MAX_STORES = 300`: one full page plus margin.
+  - `BULK_MAX_ITEMS = 1000` barcodes (50 pages).
+  - Ids at most 32 characters.
+  - All of these answer 422.
+  - Row limit `BULK_MAX_ROWS = 50,000` (LIMIT max+1 in SQL, then 422 `too_many_rows`).
+- **`item_codes`** (optional) keeps only those items' rows; the rows themselves are unchanged.
+- **Web** (`web/src/utils/promoBulk.ts`): sends the barcodes on screen, splits more than 300 stores or 1,000 barcodes into several calls and merges them. The effect key now includes the barcodes, so a טען עוד page whose stores are all known still gets its badges.
+- **Pricing:** the SU11A-58 byte-identical test (all fixture stores, no `item_codes`) is unchanged and green.
+
+**M1 `/promos/today`:**
+- `db/query.today_key_values`: every `stores.city_canonical` and `chains.chain_id`, cached for 600 s; fails open if the read fails.
+- The router answers 422 `unknown_city` / `unknown_chain` before any key is made.
+- `_today_key_lock`: single-flight per key and worker, with a re-check after the wait.
+- LRU stays at 256 keys; the TTL (300 s), load-stamp and curation invalidation are unchanged.
+
+**M2 users upsert** (`api/auth.py _upsert_user`):
+- `users.email` is `TEXT NOT NULL UNIQUE` (`add_users_saved_baskets.sql`), so it cannot be NULL.
+- On an email clash with another id, inside one transaction (a savepoint around the upsert): the old row's email becomes `orphan_email(old id)` = `orphaned+<old id>@invalid.local`, then the new row is inserted.
+- Nothing moves to the new account: ratings, baskets, blocks, consent and any `banned_at` stay with the old id. A ban therefore does not follow a re-created account; this is the accepted trade-off.
+- Warning logged with both ids, never the email. The hot path is unchanged (the extra statements run only on the clash).
+
+**L2:**
+- API (`api/routers/saved_baskets.py RESERVED_BASKET_NAME`): DELETE of `__xxl_mobile_basket__`, renaming it, or renaming another basket to it answers 409 `reserved_basket…`.
+- Create with that name, PUT of items and GET are unchanged: the app lists, creates and updates its row (`xxl-super-mobile src/lib/basket-context.tsx`, `src/api/client.ts:380-422`) and never renames or deletes it.
+- Web (`web/src/utils/savedBaskets.ts`): הסלים שלי does not list it.
+
+**nginx** (`deploy/nginx/xxl-ratelimit-api.conf` only; zones unchanged):
+- Exact-match locations with `xxl_heavy` (2 r/s, burst 10) plus `xxl_api` (10 r/s, burst 40) for `/promos/bulk`, `/promos/list`, `/promos/promoted`, `/promos/today` and `/admin/promos/search`. The admin console calls api-super (`VITE_API_URL`, `web/src/admin/api.ts:9-12`).
+- A CORS preflight (OPTIONS) also counts against the zone, so a bulk POST from the browser costs 2.
+- The comment in `xxl-ratelimit-http.conf` that lists the heavy endpoints is not updated: that file was left as installed.
+
+**Tests:**
+- `tests/test_audit_fixes_su11a64_pg.py` (12), covering:
+  - H1: caps, the row limit, `item_codes` equal to the filtered full answer;
+  - M1: 422 for unknown values with no key made, fail-open, six concurrent misses run one rebuild, the bounded cache;
+  - M2: clash gives 200, a new row and the old row tombstoned with its basket kept and the log without the email; the same id leaves the rows unchanged;
+  - L2: the app path unchanged, 409s, normal baskets unaffected.
+- `web/scripts/promo-bulk.test.mjs` (4).
+- Full Python suite with the throwaway Postgres: 890 passed + the 14 known `api/tests/test_smoke.py` failures.
+- Web: `tsc -b`, eslint 0, `npm run test:unit` 29, i18n parity, `vite build --manifest` + check:admin-chunk OK (main chunk 170.96 kB, gzip 47.63).
+
+**Not done:**
+- **L1 web:** the web deletion page has the same timeout pattern as the app.
+- **L3, L4:** deferred (low).
+- **Real bulk sizes:** the web's store counts on production searches were not measured; the reasoning is in the H1 bullet. Check in DevTools during runbook 7b.
+
 ## 📋 Open items / next steps (as of 5 Nov 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (verified, SU11A-53). Lawyer review of the terms is Dude's call.
@@ -2233,8 +2289,14 @@ Runbook: `docs/admin/su11a62_runbook.md` (quiet-time check, pull, restart + heal
 - **SU11A-49 security fixes:** built, not deployed. Run `docs/security/su11a49_runbook.md` (after or together with the SU11A-47 runbook; both restart scrp-api), then the web deploy. Then: review the compliance drafts in `docs/compliance/` (with an advisor for the לאימות items), the sudo checks in the SU11A-48 review, CSP enforcement after a clean week, and the open findings F-06 to F-23.
 - **SU11A-47 search speed:** built, not deployed. Run `docs/super/su11a47_search_speed_runbook.md` (migration, build, check-precomputed, restart, curl), then the web deploy. Mobile suggestions ship in build 9.
 - **SU11A-54 admin console:** built, not deployed. Run `docs/admin/su11a54_runbook.md` (DNS, Supabase TOTP, allowlist, migration, restart, certificate + site, web deploy, first TOTP enrolment). From then on every /admin call needs 2FA. Next phases: settings, stores (categories: SU11A-57).
-- **SU11A-62 promo search + cleanup + pin coverage (+ SU11A-63 H2):** built, not deployed. Run `docs/admin/su11a62_runbook.md` (API restart and web deploy close together), then paste the step-5 report so the before / after top 10 and the cleanup counts are recorded in the SU11A-62 entry.
-- **SU11A-63 audit (`docs/security/su11a63_static_audit.md`):** H2 fixed in SU11A-62 (not deployed). SU11A-64 is reserved for H1, M1, M2, the backend half of L2 and the nginx strict group for the promo endpoints. L1 and the mobile half of L2 belong to SU11B-5.
+- **SU11A-62 promo search + cleanup + pin coverage (+ SU11A-63 H2):** deployed 5 Nov 2026 (API 14:03, web MATCH). Still to do: run step 5 of `docs/admin/su11a62_runbook.md` and paste the report, so the before / after top 10 and the cleanup counts are recorded in the SU11A-62 entry.
+- **SU11A-64 audit fixes (H1, M1, M2, L2 web / API, nginx heavy group):** built, not deployed. Run `docs/security/su11a64_runbook.md` (web deploy first, then pull / restart, curl checks, nginx install with a backup outside `snippets/`, burst test, browser checks).
+- **SU11A-63 audit (`docs/security/su11a63_static_audit.md`):** H2 fixed in SU11A-62; H1, M1, M2 and L2 (web / API) in SU11A-64. L1 and the mobile half of L2 are in SU11B-5. L3 and L4 are deferred (low).
+- **SU11A-65 (queued, reserved): how promo-list gift coupons ("קופון … 1 יח' מתנה") are shown.**
+  - On the promos page they show a "מבצע" badge with the shelf price and no discount figure.
+  - In admin they read "100% הנחה".
+  - They float to the top of the "הנחה גדולה" sort.
+  - Decide the display (and whether they belong in the list) before changing code.
 - **SU11A-60 promos page:** deployed 1 Nov 2026 (API restarted on 5a1c2fb, web da83ca4, guard MATCH). `docs/admin/su11a60_runbook.md`. Follow-up (not started): precompute `/promos/today` in the 14:30 build (cold call still ~11 s; cached after).
 - **SU11A-59 /chains + admin CORS + dashboard links:** deployed 1 Nov 2026. `docs/admin/su11a59_runbook.md`. Follow-up candidate (not started): `/stats` (scans all prices).
 - **SU11A-58 promo pins / hides:** in use on production by 1 Nov. `docs/admin/su11a58_runbook.md` (migration, restart, ONE web deploy for SU11A-57 + SU11A-58 from a PC with `web/.env.production`, checks). Open decision: whether a hide should also exclude a promotion from prices (options A / B / C in the SU11A-58 entry).
@@ -2262,4 +2324,4 @@ Runbook: `docs/admin/su11a62_runbook.md` (quiet-time check, pull, restart + heal
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-64, reserved for the SU11A-63 audit fixes (H1 / M1 / M2 / L2 backend + nginx strict group for the promo endpoints); then SU11A-65. SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
+Next free session ID: SU11A-65, reserved for the gift-coupon display decision (see Open items); then SU11A-66. SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).

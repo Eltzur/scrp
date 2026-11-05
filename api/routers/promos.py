@@ -1,15 +1,17 @@
-from typing import Optional
+from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy.engine import Connection
 
 from api import categories as cats
+from api.auth import ApiCodeError
 from api.dependencies import get_db
 from api.models import FlatPromoItem, GroupedPromoItem, HotPromoItem, PromoItem
 from db.promo_curation import get_curation
 from db.query import (
-    PROMO_Q_MAX, clean_promo_q, fetch_flat_promos, fetch_grouped_promos, fetch_promo_chains, fetch_promo_cities,
-    fetch_promoted_promos, fetch_promos, fetch_promos_bulk, fetch_today_promos, lookup_store_fk,
+    PROMO_Q_MAX, PromoBulkTooLarge, clean_promo_q, fetch_flat_promos, fetch_grouped_promos, fetch_promo_chains,
+    fetch_promo_cities, fetch_promoted_promos, fetch_promos, fetch_promos_bulk, fetch_today_promos,
+    lookup_store_fk, today_key_values,
 )
 
 # SU11A-62: a list read with no chain, category, search text or branch scanned
@@ -21,13 +23,30 @@ from db.query import (
 router = APIRouter(tags=["Promos"])
 
 
+# SU11A-64 (SU11A-63 H1): /promos/bulk read every promo of an unbounded store
+# list. The only caller is the web results list (web/src/components/
+# ResultsList.tsx): the distinct stores of the quotes on screen, at most 20
+# products x 14 chains = 280 a page (group_by=store: 20), more after טען עוד.
+# The web now sends at most BULK_MAX_STORES stores per call (more = several
+# calls) plus the barcodes on screen. Above the caps: 422. An answer above
+# BULK_MAX_ROWS rows: 422 too_many_rows (a barcode list keeps a normal page far
+# below it: rows = stores x promos of the shown items). The rows themselves do
+# not change: this is a pricing path (promo badges).
+BULK_MAX_STORES = 300
+BULK_MAX_ITEMS = 1000
+BULK_MAX_ROWS = 50_000
+_Id = Annotated[str, StringConstraints(min_length=1, max_length=32)]
+
+
 class _StoreRef(BaseModel):
-    chain_id: str
-    store_id: str
+    chain_id: _Id
+    store_id: _Id
 
 
 class _PromoBulkRequest(BaseModel):
-    stores: list[_StoreRef]
+    stores: list[_StoreRef] = Field(..., max_length=BULK_MAX_STORES)
+    item_codes: list[_Id] | None = Field(None, max_length=BULK_MAX_ITEMS,
+                                         description="Only these barcodes (the web sends the ones on screen)")
 
 
 @router.post(
@@ -39,8 +58,16 @@ def promos_bulk(
     body: _PromoBulkRequest,
     conn: Connection = Depends(get_db),
 ):
+    """At most BULK_MAX_STORES stores and BULK_MAX_ITEMS barcodes (422 above),
+    and at most BULK_MAX_ROWS rows in the answer (422 too_many_rows: send
+    item_codes or fewer stores)."""
     pairs = [(s.chain_id, s.store_id) for s in body.stores]
-    return fetch_promos_bulk(conn, pairs)
+    try:
+        return fetch_promos_bulk(conn, pairs, item_codes=body.item_codes, max_rows=BULK_MAX_ROWS)
+    except PromoBulkTooLarge:
+        raise HTTPException(status_code=422, detail=(
+            f"too_many_rows: the answer exceeds {BULK_MAX_ROWS} promo rows; "
+            "send item_codes or fewer stores")) from None
 
 
 @router.get(
@@ -53,7 +80,15 @@ def promos_today(
     chain_id: Optional[str] = Query(None, description="Filter by chain_id"),
     conn: Connection = Depends(get_db),
 ):
-    """SU11A-58: admin pins first, hidden promotions left out (db/promo_curation.py)."""
+    """SU11A-58: admin pins first, hidden promotions left out (db/promo_curation.py).
+    SU11A-64: city must be a known city_canonical and chain_id a known chain
+    (422 unknown_city / unknown_chain), so made-up values never become cache keys."""
+    known = today_key_values(conn)
+    if known is not None:
+        if city is not None and city not in known[0]:
+            raise ApiCodeError(422, "unknown_city")
+        if chain_id is not None and chain_id not in known[1]:
+            raise ApiCodeError(422, "unknown_chain")
     cur = get_curation(conn)
     return fetch_today_promos(conn, city=city, chain_id=chain_id, curation=cur)
 

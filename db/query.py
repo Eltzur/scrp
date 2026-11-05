@@ -1381,16 +1381,27 @@ def _fetch_promos_all(conn: Connection, store_fk: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+class PromoBulkTooLarge(Exception):
+    """SU11A-64 (SU11A-63 H1): a /promos/bulk answer above max_rows rows."""
+
+
 def _fetch_promos_bulk_all(
     conn: Connection,
     pairs: list[tuple[str, str]],
+    item_codes: list[str] | None = None,
+    max_rows: int | None = None,
 ) -> dict[str, list[dict]]:
     """Return active promos for many stores in one query.
 
     pairs: list of (chain_id, store_id).
     Returns dict keyed by "chain_id/store_id" → list of promo dicts.
+
+    SU11A-64: item_codes (optional) keeps only those items' promos - the web
+    sends the barcodes on screen, the only ones its badges read. max_rows: at
+    most that many rows are read (LIMIT max_rows + 1); more raises
+    PromoBulkTooLarge instead of building a huge answer. Neither changes a row.
     """
-    if not pairs:
+    if not pairs or item_codes == []:
         return {}
 
     placeholders = []
@@ -1399,6 +1410,14 @@ def _fetch_promos_bulk_all(
         placeholders.append(f"(:c{i}, :s{i})")
         params[f"c{i}"] = chain_id
         params[f"s{i}"] = store_id
+    codes = ""
+    if item_codes is not None:
+        codes = "AND p.item_code = ANY(:codes)"
+        params["codes"] = sorted(set(item_codes))
+    limit = ""
+    if max_rows is not None:
+        limit = "LIMIT :max_rows"
+        params["max_rows"] = max_rows + 1
 
     rows = conn.execute(text(f"""
         SELECT
@@ -1430,8 +1449,12 @@ def _fetch_promos_bulk_all(
         LEFT JOIN prices pr ON pr.store_fk = p.store_fk AND pr.item_code = p.item_code
         WHERE (s.chain_id, s.store_id) IN ({', '.join(placeholders)})
           AND (p.promo_end >= NOW() OR p.promo_end IS NULL)
+          {codes}
         ORDER BY s.chain_id, s.store_id, p.item_code
+        {limit}
     """), params).mappings().all()
+    if max_rows is not None and len(rows) > max_rows:
+        raise PromoBulkTooLarge(max_rows)
 
     result: dict[str, list[dict]] = {}
     for row in rows:
@@ -2263,10 +2286,12 @@ def fetch_promos(conn: Connection, store_fk: int) -> list[dict]:
     return _fetch_promos_all(conn, store_fk)
 
 
-def fetch_promos_bulk(conn: Connection, pairs: list[tuple[str, str]]) -> dict[str, list[dict]]:
+def fetch_promos_bulk(conn: Connection, pairs: list[tuple[str, str]], item_codes: list[str] | None = None,
+                      max_rows: int | None = None) -> dict[str, list[dict]]:
     """Rows carry (chain_id, store_id), not store_fk: a key is dropped only
-    when no live store shares it (Liveness.dead_pairs)."""
-    result = _fetch_promos_bulk_all(conn, pairs)
+    when no live store shares it (Liveness.dead_pairs). item_codes / max_rows:
+    see _fetch_promos_bulk_all (may raise PromoBulkTooLarge)."""
+    result = _fetch_promos_bulk_all(conn, pairs, item_codes=item_codes, max_rows=max_rows)
     lv = get_liveness()
     if lv is None:
         return result
@@ -2293,15 +2318,65 @@ def _refill(fetch, want: int, keep, start: int) -> list[dict]:
 # rebuilt when the load stamp or the curation changes, or after TODAY_TTL_S (a
 # promo ending inside that window can show up to TODAY_TTL_S late). If the
 # database fails, the last answer for the key is served.
+#
+# SU11A-64 (SU11A-63 M1): the router accepts only a known city / chain
+# (today_key_values), so a key cannot be made up to push the default one out
+# of the TODAY_MAX_KEYS LRU; and a miss is single-flight per key and worker
+# (_today_key_lock): concurrent misses for one key run ONE ~11 s rebuild, the
+# others wait for it and read the fresh entry.
 TODAY_TTL_S = 300.0
 TODAY_MAX_KEYS = 256
 _today_lock = threading.Lock()
 _today_cache: OrderedDict[tuple, tuple[object, float, list[dict]]] = OrderedDict()
+_today_key_locks: dict[tuple, threading.Lock] = {}
+
+TODAY_KEYS_TTL_S = 600.0
+_today_keys: tuple[float, frozenset, frozenset] | None = None
 
 
 def reset_today_cache() -> None:
+    global _today_keys
     with _today_lock:
         _today_cache.clear()
+        _today_key_locks.clear()
+        _today_keys = None
+
+
+def today_key_values(conn: Connection) -> tuple[frozenset, frozenset] | None:
+    """(cities, chain_ids) /promos/today accepts: every stores.city_canonical
+    and every chains.chain_id (dead stores too: a known city is never refused).
+    Cached TODAY_KEYS_TTL_S per worker; both tables are small. None when they
+    cannot be read: the caller then skips the check (fail open; the LRU still
+    bounds the cache)."""
+    global _today_keys
+    now = time.monotonic()
+    with _today_lock:
+        cached = _today_keys
+    if cached is not None and now - cached[0] < TODAY_KEYS_TTL_S:
+        return cached[1], cached[2]
+    try:
+        cities = frozenset(r[0] for r in conn.execute(text(
+            "SELECT DISTINCT city_canonical FROM stores WHERE city_canonical IS NOT NULL")))
+        chains = frozenset(r[0] for r in conn.execute(text("SELECT chain_id FROM chains")))
+        conn.rollback()
+    except Exception as exc:  # noqa: BLE001 - fail open, see docstring
+        log.info("/promos/today: key check unavailable (%s)", type(exc).__name__)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return None
+    with _today_lock:
+        _today_keys = (now, cities, chains)
+    return cities, chains
+
+
+def _today_key_lock(key: tuple) -> threading.Lock:
+    with _today_lock:
+        lk = _today_key_locks.get(key)
+        if lk is None:
+            lk = _today_key_locks[key] = threading.Lock()
+        return lk
 
 
 def _load_stamp(conn: Connection) -> object:
@@ -2317,20 +2392,33 @@ def fetch_today_promos(
 ) -> list[dict]:
     """fetch_today_promos_live, cached (see TODAY_TTL_S). Returns copies."""
     key = (limit, city, chain_id, curation)
-    now = time.monotonic()
     with _today_lock:
         hit = _today_cache.get(key)
+
+    def fresh(h, stamp):
+        return h is not None and h[0] == stamp and time.monotonic() - h[1] < TODAY_TTL_S
+
     try:
         stamp = _load_stamp(conn)
-        if hit is not None and hit[0] == stamp and now - hit[1] < TODAY_TTL_S:
+        if fresh(hit, stamp):
             rows = hit[2]
         else:
-            rows = fetch_today_promos_live(conn, limit=limit, city=city, chain_id=chain_id, curation=curation)
-            with _today_lock:
-                _today_cache[key] = (stamp, now, rows)
-                _today_cache.move_to_end(key)
-                while len(_today_cache) > TODAY_MAX_KEYS:
-                    _today_cache.popitem(last=False)
+            with _today_key_lock(key):              # single-flight per key
+                with _today_lock:
+                    hit = _today_cache.get(key)
+                if fresh(hit, stamp):               # built while this request waited
+                    rows = hit[2]
+                else:
+                    rows = fetch_today_promos_live(conn, limit=limit, city=city, chain_id=chain_id,
+                                                   curation=curation)
+                    with _today_lock:
+                        _today_cache[key] = (stamp, time.monotonic(), rows)
+                        _today_cache.move_to_end(key)
+                        while len(_today_cache) > TODAY_MAX_KEYS:
+                            _today_cache.popitem(last=False)
+                        for k in [k for k, lk in _today_key_locks.items()
+                                  if k not in _today_cache and not lk.locked()]:
+                            del _today_key_locks[k]
     except Exception as exc:
         if hit is None:
             raise
