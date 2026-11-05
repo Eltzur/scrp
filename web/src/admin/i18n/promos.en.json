@@ -29,7 +29,8 @@
     "price": "₪{{price}}",
     "rate": "{{rate}}% off",
     "gift_coupon": "Gift with a coupon",
-    "gift_qty": "{{n}} free"
+    "gift_qty": "{{n}} free",
+    "compensation": "Customer compensation — hidden from the lists"
   },
   "coverage": {
     "none": "Shown in no city: the promotion has no rows in force at live branches on the promo lists",

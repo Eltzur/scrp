@@ -1869,10 +1869,24 @@ def as_promo_search(q) -> PromoSearch | None:
 #   coupon       a basket row (no per-item price) whose description is a coupon
 #                or a spend threshold ("קופון איש 50 מעל 249", "מעל ₪100").
 #                A row with a real per-item discount is a unit row and stays.
+#   compensation SU11A-66: the promotion description names a customer
+#                compensation ("קופון פיצוי לקוח 20שח …", "35ש"ח-קופון פיצוי
+#                פריניר"): a coupon issued to one customer, not a public offer,
+#                whatever its shape (some read "מתנה בקופון" by the SU11A-65
+#                rule). פיצוי, the defective spelling פצוי, and the plural.
+#                Words that only look alike stay (פיצוחים, פיצה: no וי after צ).
+#                The admin search still lists them, flagged `compensation`.
 _NO_DISCOUNT_SQL = "discount_pct = 0"
 _COUPON_SQL = "(promo_type = 'basket' AND COALESCE(promo_description, '') ~ :coupon_re)"
-CLEANUP_RULES = {"no_discount": _NO_DISCOUNT_SQL, "coupon": _COUPON_SQL}
+_COMPENSATION_SQL = "(COALESCE(promo_description, '') ~ :compensation_re)"
+CLEANUP_RULES = {"no_discount": _NO_DISCOUNT_SQL, "coupon": _COUPON_SQL, "compensation": _COMPENSATION_SQL}
 _COUPON_RE = r"קופון|מעל\s*₪?\s*[0-9]"
+_COMPENSATION_RE = r"פי?צוי"
+
+
+def is_compensation(description: str | None) -> bool:
+    """The _COMPENSATION_SQL rule in Python (the admin promotion search)."""
+    return re.search(_COMPENSATION_RE, description or "") is not None
 
 
 def _layout_tail(layout: str, order_by: str, pin_first: str, rel_first: str = "") -> str:
@@ -1914,6 +1928,26 @@ def _layout_tail(layout: str, order_by: str, pin_first: str, rel_first: str = ""
         )
         SELECT * FROM grouped WHERE gift_coupon
         ORDER BY chain_id, promo_id, item_code, store_fk
+        LIMIT :limit"""
+    if layout.startswith("cleanup_by_chain:"):
+        rule = CLEANUP_RULES[layout.split(":", 1)[1]]
+        return f"""
+        )
+        SELECT chain_id, chain_name, count(*) AS rows, count(DISTINCT promo_id) AS promotions,
+               count(DISTINCT item_code) AS items
+        FROM grouped WHERE COALESCE({rule}, false)
+        GROUP BY chain_id, chain_name ORDER BY rows DESC, chain_id"""
+    if layout.startswith("cleanup_promotions:"):
+        # one row per promotion (its first item), spread over the chains
+        rule = CLEANUP_RULES[layout.split(":", 1)[1]]
+        return f"""
+        ), firsts AS (
+            SELECT DISTINCT ON (chain_id, promo_id) *
+            FROM grouped WHERE COALESCE({rule}, false)
+            ORDER BY chain_id, promo_id, item_code, store_fk
+        )
+        SELECT * FROM firsts
+        ORDER BY ROW_NUMBER() OVER (PARTITION BY chain_id ORDER BY promo_id), chain_id, promo_id
         LIMIT :limit"""
     if layout.startswith("cleanup_examples:"):
         rule = CLEANUP_RULES[layout.split(":", 1)[1]]
@@ -2037,7 +2071,8 @@ def _fetch_grouped_promos_raw(
       * layouts "gift_count", "gift_by_chain", "gift_examples": the
         count_gift_coupons diagnostic.
     """
-    params: dict = {"limit": limit, "offset": offset, "coupon_re": _COUPON_RE, "gift_coupon_re": _GIFT_COUPON_RE}
+    params: dict = {"limit": limit, "offset": offset, "coupon_re": _COUPON_RE, "gift_coupon_re": _GIFT_COUPON_RE,
+                    "compensation_re": _COMPENSATION_RE}
     where = ""
     search = as_promo_search(q)
     rank_col = ""
@@ -2124,7 +2159,7 @@ def _fetch_grouped_promos_raw(
     report = layout.startswith("cleanup")   # the cleanup report reads the rows the rules remove
     open_grouped = (", grouped AS (" if layout in ("flat", "promoted", "coverage") or report
                     or layout.startswith("gift_") else "")
-    cleanup = "" if report or legacy else f"AND NOT COALESCE({_NO_DISCOUNT_SQL}, false) AND NOT {_COUPON_SQL}"
+    cleanup = "" if report or legacy else " ".join(f"AND NOT COALESCE({sql}, false)" for sql in CLEANUP_RULES.values())
     rel_out = ", match_rank" if rank_col else ""
     rel_first = "match_rank, " if rank_col else ""
 
@@ -2211,7 +2246,8 @@ def _fetch_grouped_promos_raw(
         -- than shelf, or a negative shelf price). NULL is kept: that is either
         -- "no shelf price to compare" or a basket row, neither a data error.
         WHERE (discount_pct IS NULL OR discount_pct BETWEEN 0 AND 100)
-          -- SU11A-62 list cleanup: no "-0%" cards, no coupon / threshold cards.
+          -- SU11A-62 list cleanup: no "-0%" cards, no coupon / threshold cards;
+          -- SU11A-66: no customer-compensation coupons.
           {cleanup}
           {having}
         -- The trailing (store_fk, item_code, promo_id) is UNIQUE, which makes
@@ -2688,6 +2724,24 @@ def count_promo_list_cleanup(conn: Connection, examples: int = 10, **args) -> di
         out["examples"][name] = _fetch_grouped_promos_raw(
             conn, layout=f"cleanup_examples:{name}", live_fks=live, limit=examples, **args)
     return out
+
+
+def count_compensation(conn: Connection, examples: int = 10, **args) -> dict:
+    """SU11A-66 diagnostic, read-only: the customer-compensation rows the list
+    cleanup removes (live stores, in force; before the other cleanup rules),
+    per chain, and up to `examples` promotions spread over the chains. Same
+    filters as fetch_grouped_promos. Unfiltered it reads every active promo:
+    run it at a quiet time."""
+    lv = get_liveness()
+    live = None if lv is None else lv.live_fks
+    by_chain = _fetch_grouped_promos_raw(conn, layout="cleanup_by_chain:compensation", live_fks=live, **args)
+    return {
+        "counts": {"rows": sum(int(r["rows"]) for r in by_chain),
+                   "promotions": sum(int(r["promotions"]) for r in by_chain)},
+        "by_chain": by_chain,
+        "examples": _fetch_grouped_promos_raw(conn, layout="cleanup_promotions:compensation", live_fks=live,
+                                              limit=examples, **args),
+    }
 
 
 def count_gift_coupons(conn: Connection, examples: int = 10, **args) -> dict:

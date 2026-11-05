@@ -37,7 +37,7 @@ from api import categories as cats
 from api.auth import ApiCodeError, require_admin_mfa
 from api.dependencies import get_db
 from db import promo_curation
-from db.query import clean_promo_q, fetch_promo_coverage, is_gift_coupon, promo_match_sql
+from db.query import clean_promo_q, fetch_promo_coverage, is_compensation, is_gift_coupon, promo_match_sql
 
 router = APIRouter(tags=["Admin"], dependencies=[Depends(require_admin_mfa)])
 
@@ -159,6 +159,8 @@ def _promo_out(r) -> dict:
         "promo_description": r["promo_description"], "stores": int(r["stores"] or 0),
         "items": int(r["items"] or 0), "promo_start": r["promo_start"], "promo_end": r["promo_end"],
         "live": bool(r["live"]),
+        # SU11A-66: a customer-compensation coupon; the public lists leave it out.
+        "compensation": is_compensation(r["promo_description"]),
         "sample": None if r["item_code"] is None else {
             "item_code": r["item_code"], "item_name": r["item_name"],
             "min_qty": None if r["min_qty"] is None else float(r["min_qty"]),

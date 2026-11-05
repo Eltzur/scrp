@@ -957,7 +957,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-63 (Nov 4) — static security / reliability audit (read-only): `docs/security/su11a63_static_audit.md`.
 - SU11A-64 (Nov 5) — audit fixes: `/promos/bulk` caps + `item_codes` + row limit (H1), `/promos/today` key check + single-flight (M1), users email tombstone (M2), app basket hidden on the web / 409 on delete-rename (L2), nginx heavy group for `/promos/bulk|list|promoted|today` and `/admin/promos/search`. Runbook `docs/security/su11a64_runbook.md`. Not deployed.
 - SU11A-65 (Nov 5) — gift coupons on the promo lists ("מתנה בקופון", sorted after real discounts, own chip), promo search trigram indexes (migration su11a65; identical results), category-boost guard tests (the boost never adds rows; the חומוס lentils come from the description match), SU11A-63 L1 web deletion timeout. Runbook `docs/admin/su11a65_runbook.md`. Deployed 5 Nov (with the a24f469 follow-up).
-- SU11A-66 (Nov 5) — Part A: read-only category coverage script `scripts/su11a66_category_coverage.py` (not yet run on the server) and the browse / search design proposal `docs/catalog/su11a66_categories_browse_design.md`; nothing built.
+- SU11A-66 (Nov 5) — Part A: read-only category coverage script `scripts/su11a66_category_coverage.py` (not yet run on the server) and the browse / search design proposal `docs/catalog/su11a66_categories_browse_design.md`; nothing built. Part B: customer-compensation coupons ("פיצוי") left out of `/promos/list|grouped|promoted`, flagged in admin search. Runbook `docs/admin/su11a66b_runbook.md`. Not deployed.
 - SU11A-56 (Oct 25) — catalog taxonomy v1.2 (`taxonomy_v1_2.csv`, `gs1_group_map_v1_2.csv`: D09.C11, D16.C08, D07.C08.S01 storage split), Sonnet 5.5 pilot on the graded AI audit (53% vs Haiku 64%: gate failed, no full re-check). Not applied.
 - SU11A-55 (Oct 25) — catalog: Dude's review as `docs/catalog/review_graded_v1.csv` (150 manual rows), taxonomy/rules v1.1 (`taxonomy_v1_1.csv`, `brand_category_hints_v1_1.csv`; head anchor, %, hard negatives, brand pin), AI audit sample `ai_audit_sample_v1.xlsx`. Not applied.
 - SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
@@ -2421,7 +2421,7 @@ Runbook: `docs/admin/su11a65_runbook.md`.
 - **Cause:** `/search?engine=v1&group_by=store` returns tied items in a different order on two identical calls with no curation at all (a missing tie-break in the v1 store grouping, a pricing path).
 - **Proof that SU11A-65 changes no price:** the full pricing snapshot (111 keys: search v1/v2, compare, city, store v2, product, basket, `/promos/bulk`, `/promos/{fk}`, the build hash; only the flaky `store … v1` keys left out) is identical between base and SU11A-65.
 
-### SU11A-66 (5 Nov 2026) - Part A: category coverage script + categories browse / search design (proposal); nothing built
+### SU11A-66 (5 Nov 2026) - Part A: category coverage script + categories browse / search design (proposal); Part B: compensation coupons hidden from the promo lists; B built, not deployed
 
 **Read-only script `scripts/su11a66_category_coverage.py`. NOT yet run on production** (no server access here). Dude runs it:
 
@@ -2482,6 +2482,44 @@ Runbook: `docs/admin/su11a65_runbook.md`.
   - a popular-item labelling pass before phase 1 (yes);
   - ship order (web first).
 
+**Part B: customer-compensation coupons hidden from the promo lists.** Runbook: `docs/admin/su11a66b_runbook.md` (no migration).
+- **Production evidence (5 Nov, Dude):**
+  - "קופון פיצוי לקוח 20שח מוצרי שסטוביץ" (Rami Levy, 797 products in one promotion);
+  - "קופון פיצוי לקוח 2 יחידות תפוגן" (Carrefour);
+  - "35ש"ח-קופון פיצוי פריניר" (Shufersal).
+  - These are coupons issued to one customer, not public offers. Since SU11A-65 some of them read "מתנה בקופון".
+- **Rule** (`db/query.py _COMPENSATION_SQL`, `_COMPENSATION_RE = פי?צוי`; the same rule in Python as `is_compensation`): the promotion description contains פיצוי, the defective spelling פצוי, or the plural, whatever the row's shape.
+  - It is a third SU11A-62 cleanup rule (`CLEANUP_RULES["compensation"]`), so it applies to list, grouped and promoted (pins too) and to the admin coverage, which now shows none for them.
+  - Look-alikes stay: פיצוחים and פיצה have no וי after the צ.
+- **Admin:** `/admin/promos/search` still lists them, with `compensation: true`. The card shows "פיצוי ללקוח — מוסתר מהרשימות" in place of the coverage (`web/src/admin/screens/promos/PromoCard.tsx`, admin i18n he / en).
+- **Unchanged:**
+  - `/promos/today`: it has no list cleanup. Compensation rows can still appear there, so it is open whether to apply the rule there too;
+  - pricing (`/promos/bulk` still returns them; the test checks this) and the search build.
+- **Counts: production not measured here** (no server access). There is also no local copy of production promo descriptions, so the spelling variants and false positives could not be checked against real data.
+  - `scripts/su11a65_promo_report.py --compensation-only` (part 5, runbook step 6) prints, on the server:
+    - rows and promotions per chain on the lists;
+    - 10 promotions spread over the chains;
+    - every matched description WITHOUT "קופון" (possible false positives);
+    - the near misses (פיצו / פצו / compens not matched).
+  - `count_promo_list_cleanup` now also reports `compensation`. Record the step 6 output here.
+- **Tests:**
+  - `tests/test_promo_su11a66b_pg.py`, 8 tests:
+    - lists and search text;
+    - the gift chip;
+    - a pinned compensation promotion is not in promoted;
+    - the admin flag and empty coverage, also for the defective spelling;
+    - Python = SQL;
+    - nothing else moves (list in three sorts, grouped, and with text: the old rows minus the compensation rows, in the same order);
+    - `/promos/bulk` still prices them;
+    - the counts and the report.
+  - `tests/test_promo_search_su11a62_pg.py test_cleanup_counts` now expects the new `compensation` key.
+  - **Full Python suite on the throwaway Postgres 18:** 910 passed, plus the 14 known `api/tests/test_smoke.py` failures. The SU11A-58 byte-identical test is the known `/search … group_by=store` v1 tie-order flake (`store חלב v1`): it failed in the first full run and in 2 of 4 separate runs, and passed in the final full run.
+  - **Web:**
+    - `scripts/gift-coupon.test.mjs` has a new admin-card test; `npm run test:unit` 45 pass;
+    - `tsc -b` and eslint are clean;
+    - i18n parity (287 + 183 lazy);
+    - the vite build passes the admin-chunk guard; the main chunk is 173.17 kB (gzip 48.14), unchanged.
+
 ---
 
 ## 📋 Open items / next steps (as of 5 Nov 2026)
@@ -2497,6 +2535,7 @@ Runbook: `docs/admin/su11a65_runbook.md`.
 - **SU11A-63 audit (`docs/security/su11a63_static_audit.md`):** H2 fixed in SU11A-62; H1, M1, M2 and L2 (web / API) in SU11A-64. L1 and the mobile half of L2 are in SU11B-5; L1 web in SU11A-65 (not deployed). L3 and L4 are deferred (low).
 - **SU11A-65 gift coupons + promo search index + L1 web (+ follow-up a24f469):** deployed and verified 5 Nov 2026 (Dude): promo search 0.1–0.5 s with the trigram indexes; 306 gift-coupon promotions (Rami Levy 278, Carrefour 28). Some of those are customer-compensation coupons (SU11A-66 Part B).
   - **Admin promo search with a chain filter takes 8–10 s on production (5 Nov):** check whether it uses the SU11A-65 trigram path.
+- **SU11A-66 Part B (compensation coupons hidden from the promo lists):** built, not deployed. Run `docs/admin/su11a66b_runbook.md` (pull, restart, curl checks, report `--compensation-only`, web deploy for the admin note, browser checks), then record the step 6 counts in the SU11A-66 entry. Open: also hide them on `/promos/today`?
   - **Decided (5 Nov):** a description-only match ranks after the name matches (SU11A-65 follow-up, same deploy).
   - **Pre-existing flake:** `/search?engine=v1&group_by=store` orders tied items differently on identical calls, so the SU11A-58 byte-identical test fails about 1 run in 3. It needs a tie-break in the v1 store grouping (a pricing path: its own session).
   - **App:** the deletion check now matches the web (SU11B-6, mobile `a3988d1`, ships in 1.2.3).

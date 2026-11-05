@@ -251,7 +251,7 @@ def test_cleanup_counts(eng):
         with eng.connect() as c:
             out = Q.count_promo_list_cleanup(c, q="ניקויבדיקה")
             assert out["counts"] == {"rows_before_cleanup": 5 * len(eng.a_live), "no_discount": len(eng.a_live),
-                                     "coupon": 2 * len(eng.a_live)}
+                                     "coupon": 2 * len(eng.a_live), "compensation": 0}   # SU11A-66 rule
             assert {r["item_code"] for r in out["examples"]["no_discount"]} == {code(20)}
             assert {r["item_code"] for r in out["examples"]["coupon"]} == {code(21), code(22)}
             whole = Q.count_promo_list_cleanup(c, examples=10)

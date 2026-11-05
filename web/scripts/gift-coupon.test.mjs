@@ -101,6 +101,18 @@ test('admin card: "מתנה בקופון", never "100% הנחה"', () => {
   assert.ok(old.includes('100%'));
 });
 
+test('admin card: a compensation coupon says it is hidden from the lists (SU11A-66)', () => {
+  const p = { chain_id: 'R', chain_name: 'רמי לוי', promo_id: '9', promo_description: 'קופון פיצוי לקוח 20שח מוצרי שסטוביץ',
+    stores: 3, items: 797, promo_start: null, promo_end: null, live: true, cities: [], compensation: true,
+    sample: { item_code: '7290000000001', item_name: 'וופל', min_qty: 1, discount_price: null, discount_rate: 100,
+      gift_coupon: true } };
+  const html = m.card(p);
+  assert.ok(html.includes('פיצוי ללקוח — מוסתר מהרשימות') && html.includes('role="note"'), html);
+  assert.ok(!html.includes('לא מוצג באף עיר'));   // the note replaces the "shown nowhere" warning
+  const plain = m.card({ ...p, compensation: false });
+  assert.ok(!plain.includes('פיצוי ללקוח') && plain.includes('לא מוצג באף עיר'));
+});
+
 test('the type chip is on the page and reads the URL', () => {
   const seed = [[['cities'], [{ city: 'חיפה', chain_count: 1, store_count: 1, chain_ids: ['R'] }]],
     [['category-tree'], { version: 'v1', nodes: [] }]];

@@ -173,6 +173,8 @@ export interface PromoSample {
 export interface PromoSummary {
   chain_id: string; chain_name: string | null; promo_id: string; promo_description: string | null;
   stores: number; items: number; promo_start: string | null; promo_end: string | null; live: boolean;
+  /** SU11A-66: a customer-compensation coupon ("פיצוי"); the public promo lists leave it out. */
+  compensation?: boolean;
   sample: PromoSample | null;
   /** SU11A-62: cities where it shows on the public promo lists (search hits, pins). */
   cities?: string[];

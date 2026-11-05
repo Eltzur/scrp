@@ -83,7 +83,13 @@ export default function PromoCard({ p, children, term, matches, checkCity }: {
         {!p.live ? <span className="font-semibold text-rose-800">{t(`${K}.card.ended`)}</span>
           : p.promo_end ? t(`${K}.card.until`, { date: fmtDate(p.promo_end) }) : t(`${K}.card.no_end`)}
       </p>
-      {p.cities && <Coverage cities={p.cities} checkCity={checkCity} />}
+      {/* SU11A-66: compensation coupons never reach the public lists, so the
+          note replaces the coverage ("shown in no city" would only repeat it). */}
+      {p.compensation ? (
+        <p role="note" className="mt-2 flex gap-1.5 items-start text-xs font-semibold text-amber-900">
+          <AlertTriangle size={14} className="shrink-0 mt-0.5" aria-hidden="true" /> {t(`${K}.card.compensation`)}
+        </p>
+      ) : p.cities && <Coverage cities={p.cities} checkCity={checkCity} />}
       {children}
     </div>
   );

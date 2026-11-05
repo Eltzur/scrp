@@ -8,6 +8,13 @@
   4. gift coupons on the promo lists (db/query.py _GIFT_COUPON_SQL): rows,
      promotions, cards, per chain, 10 examples, plus free units WITHOUT a
      coupon (unchanged, for context). Reads every active promo once (~1 min).
+  5. SU11A-66 Part B: customer-compensation coupons ("פיצוי") that the list
+     cleanup now removes: rows / promotions per chain on the lists (live
+     stores, in force), 10 promotions spread over the chains, and the spelling
+     check on all in-force promo descriptions: distinct descriptions the rule
+     matches WITHOUT "קופון" (possible false positives), and near misses
+     (פיצו / פצו / "compens" that the rule does not match). Reads every
+     active promo (~1-2 min).
 
 Read-only: the session is READ ONLY with a statement_timeout. No user data is
 read or printed. Run it at a quiet time.
@@ -17,6 +24,7 @@ Server:
     set -a; source .env; set +a
     venv/bin/python3 -m scripts.su11a65_promo_report              # all parts
     venv/bin/python3 -m scripts.su11a65_promo_report --no-gifts   # skip part 4 (the full read)
+    venv/bin/python3 -m scripts.su11a65_promo_report --compensation-only   # part 5 only
 """
 from __future__ import annotations
 
@@ -29,7 +37,7 @@ from sqlalchemy import event, text
 from api import categories as cats
 from db.db import connect
 from db.promo_curation import get_curation
-from db.query import count_gift_coupons, fetch_flat_promos
+from db.query import _COMPENSATION_RE, count_compensation, count_gift_coupons, fetch_flat_promos
 
 TLV = "תל אביב-יפו"
 TIMEOUT = "120s"
@@ -121,21 +129,65 @@ def gifts(conn) -> None:
               f" | shelf {shelf} | min_qty {qty} | {(r.get('promo_description') or '')[:60]}")
 
 
+# Part 5 spelling check: every in-force promo description (not only the lists).
+_DESC_CHECK_SQL = """
+    SELECT s.chain_id, p.promo_description AS d, count(*) AS rows, count(DISTINCT p.promo_id) AS promotions
+    FROM promos p JOIN stores s ON s.id = p.store_fk
+    WHERE (p.promo_end >= now() OR p.promo_end IS NULL) AND {cond}
+    GROUP BY 1, 2 ORDER BY rows DESC LIMIT 20"""
+
+
+def compensation(conn) -> None:
+    t0 = time.monotonic()
+    out = count_compensation(conn, examples=10)
+    conn.rollback()
+    print(f"\n== compensation coupons hidden from the lists ({time.monotonic() - t0:.1f} s)")
+    print(f"  rows: {out['counts']['rows']}, promotions: {out['counts']['promotions']}")
+    print(" by chain:")
+    for r in out["by_chain"]:
+        print(f"  {r['chain_name'] or r['chain_id']}: {r['rows']} rows, {r['promotions']} promotions, {r['items']} items")
+    print(" examples (one item per promotion):")
+    for r in out["examples"]:
+        print(f"  {r.get('chain_name') or r['chain_id']} | {r['promo_id']} | {(r.get('promo_description') or '')[:70]}"
+              f" | {r.get('product_name') or r['item_code']}{' | gift_coupon' if r.get('gift_coupon') else ''}")
+    t0 = time.monotonic()
+    checks = (
+        ("matched WITHOUT 'קופון' (possible false positives)",
+         "COALESCE(p.promo_description, '') ~ :re AND COALESCE(p.promo_description, '') !~ 'קופון'"),
+        ("near misses NOT matched (פיצו / פצו / compens)",
+         "COALESCE(p.promo_description, '') ~* '(פיצו|פצו|compens)' AND COALESCE(p.promo_description, '') !~ :re"),
+    )
+    for title, cond in checks:
+        rows = conn.execute(text(_DESC_CHECK_SQL.format(cond=cond)), {"re": _COMPENSATION_RE}).mappings().all()
+        conn.rollback()
+        print(f" {title}: {len(rows)} distinct descriptions (top 20 by rows)")
+        for r in rows:
+            print(f"  {r['chain_id']} | {r['rows']} rows, {r['promotions']} promotions | {(r['d'] or '')[:80]}")
+    print(f" (spelling check {time.monotonic() - t0:.1f} s)")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--terms", nargs="*", default=["שמנת", "חומוס"])
     ap.add_argument("--no-gifts", action="store_true", help="skip part 4 (the full read)")
+    ap.add_argument("--no-compensation", action="store_true", help="skip part 5 (SU11A-66)")
+    ap.add_argument("--compensation-only", action="store_true", help="part 5 only (SU11A-66)")
     a = ap.parse_args()
     with connect() as conn:
         conn.execute(text("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY"))
         conn.execute(text(f"SET statement_timeout = '{TIMEOUT}'"))
         conn.commit()
+        if a.compensation_only:
+            compensation(conn)
+            return
         indexes(conn)
         conn.rollback()
         timings(conn, a.terms)
         why(conn, "חומוס", TLV)
         if not a.no_gifts:
             gifts(conn)
+        if not a.no_compensation:
+            compensation(conn)
 
 
 if __name__ == "__main__":
