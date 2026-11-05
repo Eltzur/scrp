@@ -959,6 +959,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-65 (Nov 5) — gift coupons on the promo lists ("מתנה בקופון", sorted after real discounts, own chip), promo search trigram indexes (migration su11a65; identical results), category-boost guard tests (the boost never adds rows; the חומוס lentils come from the description match), SU11A-63 L1 web deletion timeout. Runbook `docs/admin/su11a65_runbook.md`. Deployed 5 Nov (with the a24f469 follow-up).
 - SU11A-66 (Nov 5) — Part A: read-only category coverage script `scripts/su11a66_category_coverage.py` (not yet run on the server) and the browse / search design proposal `docs/catalog/su11a66_categories_browse_design.md`; nothing built. Part B: customer-compensation coupons ("פיצוי") left out of `/promos/list|grouped|promoted`, flagged in admin search. Runbook `docs/admin/su11a66b_runbook.md`. Not deployed.
 - SU11A-67 (Nov 5) — category browse pages: `/categories/browse-tree` + `/categories/{id}/items` (visibility rule: manual / gs1 + rule high-medium / ai high; linked at 5; tobacco 404), web `/categories` pages with the search card grid, header link, nginx heavy location. Runbook `docs/catalog/su11a67_runbook.md`. Not deployed.
+- SU11A-68 (Nov 6) — categories phase 1b: `q` inside a category (search v2's matcher, restricted), city "cheapest" by the city's own price, `category` on /search and /compare (+ /categories/dominant, "הצג רק ב..."), category SEO (indexable, canonical, noindex on filters, BreadcrumbList, sitemap from the live tree at deploy), home categories section. Runbook `docs/catalog/su11a68_runbook.md`. Not deployed.
 - SU11A-56 (Oct 25) — catalog taxonomy v1.2 (`taxonomy_v1_2.csv`, `gs1_group_map_v1_2.csv`: D09.C11, D16.C08, D07.C08.S01 storage split), Sonnet 5.5 pilot on the graded AI audit (53% vs Haiku 64%: gate failed, no full re-check). Not applied.
 - SU11A-55 (Oct 25) — catalog: Dude's review as `docs/catalog/review_graded_v1.csv` (150 manual rows), taxonomy/rules v1.1 (`taxonomy_v1_1.csv`, `brand_category_hints_v1_1.csv`; head anchor, %, hard negatives, brand pin), AI audit sample `ai_audit_sample_v1.xlsx`. Not applied.
 - SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
@@ -2637,6 +2638,115 @@ Runbook: `docs/catalog/su11a67_runbook.md`. No migration.
 
 ---
 
+### SU11A-68 (6 Nov 2026) - categories phase 1b: category search, category filter on search / compare, city "cheapest", category SEO, home link; built, not deployed
+
+Runbook: `docs/catalog/su11a68_runbook.md`. No migration, no nginx change.
+- **Order:** quiet time → pull → restart → curl checks → web deploy (it now refreshes the sitemap's category block from the live tree) → browser checks.
+- **Context:** SU11A-67 (296b918) was deployed and verified on 5 Nov:
+  - nationwide pages 0.17–0.29 s;
+  - Tel Aviv 0.43–0.53 s;
+  - nginx installed.
+
+**1. City "cheapest"** (`db/category_browse.py` `_city_cheapest`, `_CITY_PRICE_SQL`):
+- **Before:** in a city, sort=cheapest walked the candidates in the nationwide-cheapest order.
+- **Now:** the walk's filter statement also returns each item's lowest price in the city's live stores, and the page is sorted by it.
+  - The price is the shelf price, or the promo pick when it beats the shelf, or discount_price / min_qty for a promo-only quote. That is the price the card shows.
+  - The promo part is one aggregate per (store, item): the lowest direct unit price, and the deepest under-100% rate applied to the shelf price. `LEAST` with the shelf gives exactly the `_PROMO_PICK_SQL` result without its per-row LATERAL (1.8 s → 0.76 s cold on the bench).
+- **Exactness:** tested against `fetch_prices` (the shown order equals the live order, with ties by name), including with chain and on_promo.
+- **Approximation:** up to `CITY_CHEAPEST_CEILING` = 4,000 candidates, walked in the nationwide-cheapest order in batches of 2,000 / 4,000.
+  - Every production category except D15.C04 (4,479) is under the ceiling, so its order is exact.
+  - Above it (D15.C04 and the departments), only the 4,000 nationally cheapest are considered, and total_exact is false.
+- **Cache:** the walk is cached per worker for 5 minutes per (category, city, chain, on_promo, q, build), so "טען עוד" pages reuse it.
+- **Bench, Tel Aviv:**
+  - a 4,256-item category: 0.76 s cold, 0.1 s cached;
+  - department D03 (6,467): 0.77 s;
+  - offset 1,980: 0.78–0.88 s;
+  - the first 120 shown prices are non-decreasing.
+
+**2. Search inside a category:**
+- **API:** `q` on `GET /categories/{id}/items`.
+- **Matcher:** search v2's own (`search_v2.ranked_candidates`: normalisation, aliases, barcode, one typo round, LIKE-escaped), with an extra SQL restriction to the category's visible live items (`category_browse.search_restrict`, an `EXISTS` on `item_categories` with `VISIBLE_SQL`).
+- **Why v2:** SEARCH_V2=on has served unfiltered `/search` (the app) since 21 Oct. The handoff records SEARCH_V2_FILTERED as not switched on, so the web's city searches still run the old v1 matcher. The category pages already page from search v2's `search_items`, so v2 is the matcher that fits them. No new matcher.
+- **Rules:**
+  - text as `clean_promo_q`: strip, and under 2 characters besides % _ \ and spaces the text is ignored (`q: null` in the answer);
+  - more than 100 characters → 422;
+  - `%` and `_` are literal.
+- **Order:** text relevance (v2 tier) first, then the chosen sort.
+- **Paths:**
+  - no city: the v2 candidates (at most 3,000) are filtered by chain / on_promo through `search_item_prices`, paged in Python and priced from the build;
+  - a city: the same walk as without text.
+- The answer echoes `q` and `corrected_from`.
+- **Web:** a labelled search box "חיפוש ב<קטגוריה>", debounced 350 ms (one request per pause; the path is in xxl_heavy). `q` is in the URL, and Back follows it.
+
+**Bench:**
+
+| Request | Time |
+|---|---|
+| category + q, no city | 30–137 ms |
+| category + q, Tel Aviv | 110–454 ms |
+| category + q, Tel Aviv, cheapest | 0.39–0.50 s cold, 0.13 s warm |
+
+**3. Category filter on `/search` and `/compare`:**
+- **API:** `category=<node id>` (`api/routers/search.py _category_filter`), the same visibility predicate, on every engine path:
+  - v2: the restriction in its candidate SQL, and the response-cache key gains the category;
+  - filtered (SU11A-50): the restriction in its candidates;
+  - old v1 path: the name matches are filtered by `category_browse.visible_codes` (cached 10 min per worker) before the 1,000 cap.
+- A malformed, unknown, inactive or tobacco id → 422 `unknown_category`.
+- **Without the parameter:** the SQL text, the calls (test fakes check the exact kwargs) and the cache keys are unchanged.
+- **`GET /categories/dominant?code=...`** (at most 60 codes, else 422): the deepest browsable node that at least 60% (and at least 4) of the codes share by visible label; tobacco never.
+- **Web** (`components/searchCategory/SearchCategoryTools.tsx`, lazy):
+  - a "קטגוריה" select from the browse tree;
+  - "הצג רק ב<קטגוריה>" from `/categories/dominant` on the first page.
+- **Carry-over:** HomePage reads `?q=&category=`. The category page's "חיפוש "<q>" בכל האתר" link opens `/?q=…&category=<id>`.
+
+**Bench:**
+
+| Request | Time |
+|---|---|
+| v2 + category | 34–39 ms (31–35 ms without) |
+| filtered, Tel Aviv, + category | 110–291 ms |
+| old /compare, Tel Aviv, + category | 110–598 ms |
+
+**4. SEO:**
+- **Route rules:** `utils/seoMeta.ts` makes `/categories` and `/categories/<id>` indexable, with the clean canonical. An unknown id stays noindex.
+- **Per node:** the page sets its own head once its data is in (`utils/categorySeo.ts`, lazy):
+  - title "<קטגוריה> — השוואת מחירים בכל הרשתות | SUPER XXL";
+  - a Hebrew description with the path and count;
+  - the canonical without parameters;
+  - noindex on any filtered view (city / chain / sort / promo / q / offset);
+  - `BreadcrumbList` JSON-LD (`script#ld-breadcrumb`, removed on leaving).
+- **Sitemap: generated at deploy time from the API.** `web/scripts/sitemap-categories.mjs` rewrites the marked block of the built `sitemap-super.xml` with `/categories`, the departments and every linked category / sub-category of the live `/categories/browse-tree`. `scripts/deploy_frontend.ps1` runs it after the build check.
+  - **Why the API:** "linked" depends on the per-build counts on production, which no committed snapshot can know, and this needs no commit per build.
+  - **Fallback:** the committed block (`/categories` + D01–D16) stays, with a yellow warning.
+- **Pre-rendering: deferred.** The web is a client-rendered Vite SPA. Pre-rendering needs a build-time render of the category routes with their data (an SSR entry plus a node render step per URL), about one session; it is not a framework migration. Google renders the client-set tags meanwhile.
+
+**5. Home page:** a lazy "קטגוריות" section (`components/searchCategory/HomeCategories.tsx`) under the search box on the start screen: the departments plus "לכל הקטגוריות".
+
+**Size:** main chunk 173.62 → 175.13 kB (+1.51 kB, gzip +0.54), within the 2 kB budget. New lazy chunks: SearchCategoryTools 1.9 kB, HomeCategories 1.3 kB; CategoriesPage 10.8 kB; the shared strings 4.7 kB.
+
+**Tests:**
+- **`tests/test_category_su11a68_pg.py`** (33):
+  - city cheapest = live price order ×3 cities, with chain and on_promo, one walk across pages;
+  - q = the v2 matcher ∩ the category, relevance then sort, with a city and with city cheapest;
+  - q ignored ×6, escaping of % and _, the 100 / 101 cap;
+  - category on /search and /compare on all 6 engine paths (only visible items under the node, the unfiltered answer's order);
+  - 422 ×10 (tobacco, unknown, inactive, malformed);
+  - unchanged without the parameter;
+  - dominant (deepest / department / under 4 / hidden labels / tobacco / over 60).
+- **Web:**
+  - `scripts/categories-page.test.mjs` 12 (q URL state, cap, ignored text, the carry-over URLs, the filtered-view rule, the rendered search box and link);
+  - `scripts/categories-seo.test.mjs` 5 (route rules, the node head, JSON-LD, the sitemap paths: linked only, no tobacco, idempotent, every URL indexable);
+  - `npm run test:unit` 62 pass, including the deploy guard;
+  - `tsc -b`, eslint, i18n parity (287 + 216 lazy), the vite build and the admin-chunk guard are clean.
+- **Full Python suite on PG18:** 967 passed, plus the 14 known `test_smoke` failures. The known SU11A-58 flake (`/search group_by=store` v1 tie order, a pricing path not touched here) passed in the full run and failed 2 of 3 separate runs (`store חלב v1`, `store תנובה v1`).
+
+**Deferred / open:**
+- Pre-rendering (above).
+- The city "cheapest" approximation above 4,000 candidates.
+- The departments-only fallback sitemap when the deploy cannot read the API.
+
+---
+
 ## 📋 Open items / next steps (as of 5 Nov 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (verified, SU11A-53). Lawyer review of the terms is Dude's call.
@@ -2662,12 +2772,17 @@ Runbook: `docs/catalog/su11a67_runbook.md`. No migration.
   - Play installs from the Google Cloud Storage statistics export;
   - App Store downloads / impressions through an App Store Connect API key with the Sales / Analytics role;
   - app usage as API calls per platform.
+- **SU11A-70 (planned): view modes for search / category / promos results**, remembered per user:
+  - grid (today);
+  - list: a compact row with the name, the cheapest price and chain, the chains count, the savings and the add button; per-chain prices on expand;
+  - comparison table: products × chains, for short lists.
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
 - **Catalog:**
   - **SU11A-52 catalog (rules v1.1 since SU11A-55): built, NOT applied.** Run `docs/catalog/su11a52_runbook.md` (migration, pull, one build, import dry run then apply), then `--manual docs/catalog/review_graded_v1.csv` (Dude's 150 graded rows) and `--manual docs/catalog/ai_audit_graded_v1.csv` (100, SU11A-57). Taxonomy is v1.2 (SU11A-56). Next to grade: `disagreements_v1.csv` (regenerated for v1.2). Open: frozen chocolate-coated fruit (D06.C02 or D08.C01?); the 265 D04.C05 pickles without storage evidence; whether a better AI pass is worth it (Sonnet lost the pilot). Service rows and nameless names are handled by the same build;
   - **SU11A-57 categories tab + user suggestions:** built, not deployed. After su11a52 is applied: `docs/admin/su11a57_runbook.md` (migration, restart, manual-row imports); its web deploy and browser checks are now part of `docs/admin/su11a58_runbook.md`. The app button ships in build 9;
-  - **SU11A-67 category browse pages (API + web):** built, not deployed. Run `docs/catalog/su11a67_runbook.md` (pull, restart, curl timings, nginx, web deploy, browser checks) and record the step 4 timings in the SU11A-67 entry. The SU11A-66 coverage report ran on 5 Nov (numbers in the SU11A-67 entry);
-  - **SU11A-68 (next):** the category filter on `/search` and `/compare` (+ department facets), SEO pre-render of the department / linked category pages, sitemap entries, canonical; until then the browse pages are noindex;
+  - **SU11A-67 deployed and verified 5 Nov** (nationwide 0.17–0.29 s, Tel Aviv 0.43–0.53 s, nginx installed);
+  - **SU11A-68 category search / search filter / city cheapest / SEO:** built, not deployed. Run `docs/catalog/su11a68_runbook.md`, then record the step 4 timings and the sitemap URL count in the SU11A-68 entry;
+  - **Category pre-rendering (deferred from SU11A-68):** a build-time render of `/categories` and the linked node pages (an SSR entry + a node render step per sitemap URL), about one session; until then Google renders the client-set tags;
   - **Phase 3 (labelling):** a pass over popular department-only items (low labels and ai medium, which the browse pages hide), from the SU11A-57 queues by chains_live;
   - **Mobile browse:** in the app version after 1.2.3 (design §4: department grid on the search screen);
   - category / attribute faceted filters;
@@ -2690,4 +2805,4 @@ Runbook: `docs/catalog/su11a67_runbook.md`. No migration.
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-68 (planned: search/compare category filter + SEO); then SU11A-69 (planned: admin statistics dashboard). SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
+Next free session ID: SU11A-69 (planned: admin statistics dashboard); then SU11A-70 (planned: result view modes). SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).

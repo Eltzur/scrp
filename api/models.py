@@ -98,6 +98,8 @@ class CategoryItemsResult(BaseModel):
     total_exact: bool = True
     has_more: bool = False
     sort: str
+    q: str | None = Field(None, description="SU11A-68: the search text used (null = none, or ignored as under 2 characters)")
+    corrected_from: str | None = Field(None, description="SU11A-68: the text as typed, when a typo correction was applied")
     items: list[CategoryItem]
 
 

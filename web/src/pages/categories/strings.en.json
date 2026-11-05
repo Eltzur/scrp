@@ -22,5 +22,14 @@
   "back": "All categories",
   "error": "We could not load the categories.",
   "retry": "Try again",
-  "loading": "Loading…"
+  "loading": "Loading…",
+  "search_label": "Search in {{name}}",
+  "search_placeholder": "Product name, brand or barcode",
+  "search_all": "Search \"{{q}}\" on the whole site",
+  "corrected": "Showing results for \"{{q}}\".",
+  "home_title": "Categories",
+  "home_all": "All categories",
+  "only_in": "Show only in {{name}}",
+  "category_filter": "Category",
+  "all_categories": "All categories"
 }

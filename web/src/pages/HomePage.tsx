@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import XxlLogo from '../components/XxlLogo';
 import SearchBar from '../components/SearchBar';
@@ -13,13 +14,21 @@ import { useSearch, useCompare } from '../api/hooks';
 import { searchProducts, compareProducts, getProduct, isBusyError } from '../api/client';
 import type { ProductWithPrices, CityInfo } from '../api/client';
 import { defaultCity, rememberCity, storedCity } from '../utils/city';
+// SU11A-68: the category tools and the home categories section are lazy chunks.
+const SearchCategoryTools = lazy(() => import('../components/searchCategory/SearchCategoryTools'));
+const HomeCategories      = lazy(() => import('../components/searchCategory/HomeCategories'));
+const NODE_ID = /^D\d{2}(\.C\d{2}(\.S\d{2})?)?$/;
 
 const DEFAULT_FILTERS: FilterState = {
   city:        null,
   chain:       null,
   compareMode: true,
   groupBy:     'chain',
+  category:    null,
 };
+
+/** SU11A-68: the category part of a search request; absent without one (the request is as before). */
+const catOpt = (f: FilterState) => (f.category ? { category: f.category } : {});
 
 // City resolution lives in utils/city so PromosPage defaults to the same city
 // this page is searching in. Behaviour here is unchanged.
@@ -42,22 +51,28 @@ function useActiveResults(query: string, filters: FilterState) {
   const city    = filters.city?.length  ? filters.city  : undefined;
   const chain   = filters.chain?.length ? filters.chain : undefined;
   const groupBy = filters.groupBy;
-  const search  = useSearch(query, { city, chain, group_by: groupBy, limit: PAGE_SIZE }, !filters.compareMode);
-  const compare = useCompare(query, { city, limit: PAGE_SIZE }, filters.compareMode);
+  const search  = useSearch(query, { city, chain, group_by: groupBy, limit: PAGE_SIZE, ...catOpt(filters) }, !filters.compareMode);
+  const compare = useCompare(query, { city, limit: PAGE_SIZE, ...catOpt(filters) }, filters.compareMode);
   return filters.compareMode ? compare : search;
 }
 
 export default function HomePage({ cities }: { cities: CityInfo[] }) {
   const { t, i18n }   = useTranslation();
   const lang          = i18n.language.startsWith('he') ? 'he' : 'en' as const;
-  const [query,   setQuery]   = useState('');
-  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  // SU11A-68: a link from a category page ("חיפוש בכל האתר") opens /?q=...&category=...
+  const [params] = useSearchParams();
+  const [initial] = useState(() => {
+    const c = params.get('category') ?? '';
+    return { q: (params.get('q') ?? '').slice(0, 200), category: NODE_ID.test(c) ? c : null };
+  });
+  const [query,   setQuery]   = useState(initial.q);
+  const [filters, setFilters] = useState<FilterState>({ ...DEFAULT_FILTERS, category: initial.category });
   const queryClient           = useQueryClient();
 
   const [extraItems,  setExtraItems]  = useState<ProductWithPrices[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [lastQuery,   setLastQuery]   = useState('');
-  const [lastFilters, setLastFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const [lastQuery,   setLastQuery]   = useState(initial.q);
+  const [lastFilters, setLastFilters] = useState<FilterState>({ ...DEFAULT_FILTERS, category: initial.category });
   const [lastHasMore, setLastHasMore] = useState(false);
   // True once a load-more has finished, so has_more comes from the last page
   // even when that page added nothing (extraItems.length alone can't tell).
@@ -131,8 +146,8 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
       const chain   = lastFilters.chain?.length ? lastFilters.chain : undefined;
       const groupBy = filters.compareMode ? 'chain' : lastFilters.groupBy;
       const fetchPage = (offset: number) => filters.compareMode
-        ? compareProducts(lastQuery, { city, limit: PAGE_SIZE, offset })
-        : searchProducts(lastQuery, { city, chain, group_by: lastFilters.groupBy, limit: PAGE_SIZE, offset });
+        ? compareProducts(lastQuery, { city, limit: PAGE_SIZE, offset, ...catOpt(lastFilters) })
+        : searchProducts(lastQuery, { city, chain, group_by: lastFilters.groupBy, limit: PAGE_SIZE, offset, ...catOpt(lastFilters) });
 
       const seen = new Set([...data.items, ...extraItems].map(it => rowKey(it, groupBy)));
       let offset = nextOffset.current ?? data.items.length;
@@ -167,7 +182,14 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
           <XxlLogo variant="hero" lang={lang} className="w-full max-w-2xl" />
         </section>
 
-        <SearchBar onSearch={handleSearch} onOpenProduct={handleOpenProduct} />
+        <SearchBar onSearch={handleSearch} onOpenProduct={handleOpenProduct} initialValue={initial.q} />
+
+        {/* SU11A-68: the departments, on the start screen (results take its place) */}
+        {!query && (
+          <Suspense fallback={<div className="min-h-[7rem]" />}>
+            <HomeCategories />
+          </Suspense>
+        )}
 
         {/* SU11A-53: the app section, on the start screen only (results take its place) */}
         {!query && (
@@ -182,6 +204,16 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
           <Filters filters={filters} onChange={handleFiltersChange} cities={cities} />
           <StatsBar />
         </div>
+
+        {(query.trim().length >= 2 || filters.category) && (
+          <Suspense fallback={<div className="min-h-[34px]" />}>
+            <SearchCategoryTools
+              category={filters.category ?? null}
+              onChange={id => handleFiltersChange({ ...filters, category: id })}
+              itemCodes={data?.items.map(it => it.product.item_code) ?? []}
+            />
+          </Suspense>
+        )}
 
         <FreshnessStrip />
 

@@ -3,6 +3,27 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://super.xxl.co.il/</loc><lastmod>2026-10-18</lastmod></url>
   <url><loc>https://super.xxl.co.il/promos</loc><lastmod>2026-10-18</lastmod></url>
+  <!-- SU11A-68: category URLs. The deploy rewrites this block from the live browse tree
+       (web/scripts/sitemap-categories.mjs); committed: /categories and the 16 departments. -->
+  <!-- categories:start -->
+  <url><loc>https://super.xxl.co.il/categories</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://super.xxl.co.il/categories/D01</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://super.xxl.co.il/categories/D02</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://super.xxl.co.il/categories/D03</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://super.xxl.co.il/categories/D04</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://super.xxl.co.il/categories/D05</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://super.xxl.co.il/categories/D06</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://super.xxl.co.il/categories/D07</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://super.xxl.co.il/categories/D08</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://super.xxl.co.il/categories/D09</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://super.xxl.co.il/categories/D10</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://super.xxl.co.il/categories/D11</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://super.xxl.co.il/categories/D12</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://super.xxl.co.il/categories/D13</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://super.xxl.co.il/categories/D14</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://super.xxl.co.il/categories/D15</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://super.xxl.co.il/categories/D16</loc><lastmod>2026-11-05</lastmod></url>
+  <!-- categories:end -->
   <url><loc>https://super.xxl.co.il/privacy</loc><lastmod>2026-10-18</lastmod></url>
   <url><loc>https://super.xxl.co.il/disclaimer</loc><lastmod>2026-10-18</lastmod></url>
   <url><loc>https://super.xxl.co.il/accessibility</loc><lastmod>2026-10-18</lastmod></url>

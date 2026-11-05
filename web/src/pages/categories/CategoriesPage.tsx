@@ -12,24 +12,27 @@
  * with its own strings (./strings.ts). SEO (pre-render, sitemap) is SU11A-68:
  * until then these paths are noindex (utils/seoMeta.ts treats them as unknown).
  */
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery, useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { isAxiosError } from 'axios';
-import { ChevronLeft, Loader2 } from 'lucide-react';
+import { ChevronLeft, Loader2, Search } from 'lucide-react';
 import { getBrowseTree, getCategoryItems, type BrowseNode, type CategoryItemsResult } from '../../api/categoryBrowse';
 import type { SearchResult } from '../../api/client';
 import { useChains, useCities } from '../../api/hooks';
 import ResultsList from '../../components/ResultsList';
 import { rememberCity, rememberedCity } from '../../utils/city';
 import {
-  CATEGORY_SORTS, categoryParams, findNode, isNodeId, itemsRequest, nextOffset, nodeName, readCategoryView,
-  type CategorySort,
+  CATEGORY_Q_MAX, CATEGORY_SORTS, categoryParams, categorySearchText, findNode, hasViewFilters, isNodeId, itemsRequest,
+  nextOffset, nodeName, readCategoryView, searchPageUrl, type CategorySort,
 } from '../../utils/categoryView';
+import { applyCategoryHead, categoryHead, removeCategoryHead } from '../../utils/categorySeo';
 import { K } from './strings';
 
 const TREE_STALE = 10 * 60 * 1000;
+/** SU11A-68: one request per typing pause (the items path is in nginx's xxl_heavy group). */
+export const CATEGORY_SEARCH_DEBOUNCE_MS = 350;
 
 function useTree() {
   return useQuery({
@@ -155,8 +158,21 @@ function CategoryPage({ id }: { id: string }) {
   const set = (changes: Parameters<typeof categoryParams>[1]) =>
     setParams(prev => categoryParams(prev, changes), { replace: true });
 
+  // SU11A-68: search inside the category. The box updates the URL after a
+  // pause; Back / a shared link changes q under the box, and the box follows.
+  const [qInput, setQInput] = useState(view.q);
+  useEffect(() => {
+    if (qInput.trim() === view.q.trim()) return;
+    const h = setTimeout(() => set({ q: qInput }), CATEGORY_SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- set is stable in effect
+  }, [qInput]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- mirror the URL into the input
+  useEffect(() => { setQInput(cur => (cur.trim() === view.q.trim() ? cur : view.q)); }, [view.q]);
+  const qText = categorySearchText(view.q);
+
   const list = useInfiniteQuery({
-    queryKey: ['category-items', id, city, view.chain, view.sort, view.promo],
+    queryKey: ['category-items', id, city, view.chain, view.sort, view.promo, qText],
     queryFn: ({ pageParam, signal }) => getCategoryItems(id, itemsRequest({ ...view, city }, '', pageParam), signal),
     initialPageParam: 0,
     getNextPageParam: (last: CategoryItemsResult, all: CategoryItemsResult[]) => nextOffset(last, all),
@@ -184,9 +200,20 @@ function CategoryPage({ id }: { id: string }) {
     };
   }, [list.data, list.hasNextPage, title, id]);
 
+  // SU11A-68: the node's own title / description / canonical / breadcrumbs,
+  // after App's generic tags for the path (a timeout: a cached page renders in
+  // the same commit as the route change, before App's effect).
+  const filteredUrl = hasViewFilters(params);
+  useEffect(() => {
+    if (!first) return;
+    const h = setTimeout(() => applyCategoryHead(categoryHead(first.path, first.count, filteredUrl)), 0);
+    return () => clearTimeout(h);
+  }, [first, filteredUrl]);
+  useEffect(() => removeCategoryHead, []);
+
   if (notFound) return <LoadError notFound />;
 
-  const filtered = !!(view.chain || view.promo);
+  const filtered = !!(view.chain || view.promo || qText);
   const countText = first
     ? t(first.total_exact ? `${K}.items_count` : `${K}.items_about`, { count: first.total })
     : undefined;
@@ -202,9 +229,23 @@ function CategoryPage({ id }: { id: string }) {
 
       <form
         aria-label={t(`${K}.filters_label`)}
-        onSubmit={e => e.preventDefault()}
+        onSubmit={e => { e.preventDefault(); set({ q: qInput }); }}
         className="flex flex-wrap items-end gap-3 mb-4 rounded-xl border border-gray-200 bg-white p-3"
       >
+        <label className="flex flex-col text-xs font-medium text-gray-700 grow min-w-[12rem]">
+          {t(`${K}.search_label`, { name: title })}
+          <span className="relative mt-1">
+            <Search size={14} aria-hidden="true" className="absolute top-1/2 -translate-y-1/2 start-2 text-gray-500" />
+            <input
+              type="search"
+              value={qInput}
+              maxLength={CATEGORY_Q_MAX}
+              onChange={e => setQInput(e.target.value)}
+              placeholder={t(`${K}.search_placeholder`)}
+              className="w-full min-h-[36px] rounded-lg border border-gray-300 bg-white ps-7 pe-2 text-sm text-gray-900"
+            />
+          </span>
+        </label>
         <label className="flex flex-col text-xs font-medium text-gray-700">
           {t(`${K}.city_label`)}
           <select
@@ -248,13 +289,22 @@ function CategoryPage({ id }: { id: string }) {
         </label>
       </form>
 
+      {qText && (
+        <p className="mb-3 text-sm text-gray-700">
+          {first?.corrected_from && <span className="me-2">{t(`${K}.corrected`, { q: first.q })}</span>}
+          <Link to={searchPageUrl(qText, id)} className="font-medium text-emerald-800 underline underline-offset-2 hover:text-emerald-900">
+            {t(`${K}.search_all`, { q: qText })}
+          </Link>
+        </p>
+      )}
+
       {result && result.items.length === 0 && !list.isPlaceholderData ? (
         <div className="rounded-xl border border-gray-200 bg-white p-6 text-center" role="status">
           <p className="text-gray-800">{t(`${K}.empty`)}</p>
           {filtered && (
             <button
               type="button"
-              onClick={() => set({ chain: '', promo: false })}
+              onClick={() => { setQInput(''); set({ chain: '', promo: false, q: '' }); }}
               className="mt-3 px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-800 hover:border-emerald-600"
             >
               {t(`${K}.clear_filters`)}

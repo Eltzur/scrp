@@ -303,8 +303,10 @@ class Walk:
 # ---------------------------------------------------------------------------
 
 def run(conn: Connection, q: str, *, limit: int, offset: int, city: list[str] | None = None,
-        chain: list[str] | None = None, group_by: str = "chain", compare_only: bool = False) -> FilteredResult:
-    """The filtered answer. Raises Unsupported / V2Unavailable / anything -> old path."""
+        chain: list[str] | None = None, group_by: str = "chain", compare_only: bool = False,
+        restrict: tuple[str, dict] | None = None) -> FilteredResult:
+    """The filtered answer. Raises Unsupported / V2Unavailable / anything -> old path.
+    restrict (SU11A-68): an extra candidate condition (search_v2._ranked)."""
     t = {"start": time.perf_counter()}
 
     def lap(name: str) -> None:
@@ -333,7 +335,7 @@ def run(conn: Connection, q: str, *, limit: int, offset: int, city: list[str] | 
     if len(V.normalize(q).replace(" ", "")) < 2:
         return empty
 
-    ranked, corrected_from = V.ranked_candidates(conn, q, aliases, first_limit=STREAM_FIRST)
+    ranked, corrected_from = V.ranked_candidates(conn, q, aliases, first_limit=STREAM_FIRST, restrict=restrict)
     lap("candidates")
     if not ranked.total:
         return empty

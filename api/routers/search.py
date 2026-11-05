@@ -1,6 +1,7 @@
 from __future__ import annotations
 import logging
 import os
+import re
 import time
 from typing import Literal
 from fastapi import APIRouter, Depends, Query, Request
@@ -10,6 +11,7 @@ from sqlalchemy.engine import Connection
 
 from api.models import (SearchResult, SearchResultV2, ProductWithPrices, Product, PriceQuote,
                         SuggestResponse, SuggestItem)
+from api.auth import ApiCodeError
 from api.dependencies import get_db
 from api.response_cache import ResponseCache
 from db import search_filtered, search_v2
@@ -18,6 +20,7 @@ from db.search_norm import normalize
 
 router = APIRouter(tags=["Search"])
 log = logging.getLogger(__name__)
+_CATEGORY_ID = re.compile(r"^D\d{2}(\.C\d{2}(\.S\d{2})?)?$")
 
 
 def _build_result(
@@ -29,9 +32,14 @@ def _build_result(
     chain_id: list[str] | None,
     compare_only: bool,
     group_by: Literal["chain", "store"] = "chain",
+    allowed: frozenset | None = None,
 ) -> SearchResult:
     words    = query.split()
     barcodes, tiers = find_barcodes_with_relevance(conn, words)
+    if allowed is not None:
+        # SU11A-68 category filter: only name matches with a visible label
+        # under the node (db/category_browse.py visible_codes), before the cap.
+        barcodes = [b for b in barcodes if b in allowed]
     if not barcodes:
         return SearchResult(query=query, total_matches=0, comparable_count=0, has_more=False, items=[])
 
@@ -206,6 +214,7 @@ def search(
     chain:    list[str] | None   = Query(None, description="Filter to chain_ids (repeat param for multiple)"),
     group_by: Literal["chain", "store"] = Query("chain", description="Group results by chain or individual store"),
     engine:   str | None = Query(None, description="Search engine: 'v2' (used when SEARCH_V2=test or on) or 'v1' (forces the old engine); other values are ignored"),
+    category: str | None = Query(None, max_length=32, description="SU11A-68: only items with a visible label under this category node (422 unknown_category; tobacco is not a filter)"),
     conn:     Connection = Depends(get_db),
     request:  Request = None,
     response: Response = None,
@@ -216,15 +225,17 @@ def search(
     Supports pagination via offset. group_by=store returns one row per store.
     """
     t0 = time.perf_counter()
+    restrict, allowed = _category_filter(conn, category)
     if _use_v2(_v2_mode(), engine, city, chain, group_by):
-        v2 = _search_v2(q, conn, limit, offset, city, _signed_in(request))
+        v2 = _search_v2(q, conn, limit, offset, city, _signed_in(request), restrict=restrict, category=category)
         if v2 is not None:
             return v2
     elif (city or chain or group_by != "chain") and _use_filtered(_filtered_mode(), engine):
-        fr = _search_filtered(q, conn, limit, offset, city, chain, group_by, compare_only=False)
+        fr = _search_filtered(q, conn, limit, offset, city, chain, group_by, compare_only=False, restrict=restrict)
         if fr is not None:
             return fr
-    result = _build_result(q, conn, limit, offset, city, chain, compare_only=False, group_by=group_by)
+    result = _build_result(q, conn, limit, offset, city, chain, compare_only=False, group_by=group_by,
+                           allowed=allowed() if allowed else None)
     if response is not None:
         response.headers["Server-Timing"] = f"total;dur={_ms(t0)}"
     return result
@@ -282,8 +293,25 @@ def _use_filtered(mode: str, engine: str | None) -> bool:
     return True
 
 
+def _category_filter(conn: Connection, category: str | None):
+    """SU11A-68: (restrict for search v2 / the filtered path, a loader of the
+    allowed barcodes for the old path), or (None, None) without a category.
+    422 unknown_category for a malformed, unknown, inactive or tobacco id."""
+    if not isinstance(category, str):     # None, or the Query default when called directly
+        return None, None
+    from db import category_browse as B
+    if not _CATEGORY_ID.match(category):
+        raise ApiCodeError(422, "unknown_category")
+    try:
+        restrict = B.search_restrict(conn, category)
+    except B.NotFound:
+        conn.rollback()
+        raise ApiCodeError(422, "unknown_category") from None
+    return restrict, (lambda: B.visible_codes(conn, category))
+
+
 def _search_filtered(q: str, conn: Connection, limit: int, offset: int, city, chain,
-                     group_by: str, compare_only: bool) -> Response | None:
+                     group_by: str, compare_only: bool, restrict=None) -> Response | None:
     """The filtered v2 answer, or None (the caller then uses the old path).
 
     /search answers carry engine="v2" and corrected_from like an unfiltered v2
@@ -294,7 +322,8 @@ def _search_filtered(q: str, conn: Connection, limit: int, offset: int, city, ch
     try:
         with conn.begin_nested():
             r = search_filtered.run(conn, q, limit=limit, offset=offset, city=city, chain=chain,
-                                    group_by=group_by, compare_only=compare_only)
+                                    group_by=group_by, compare_only=compare_only,
+                                    **({"restrict": restrict} if restrict else {}))
     except search_filtered.Unsupported as exc:
         log.info("filtered search not available here, using the old path: %s", exc)
         return None
@@ -346,7 +375,7 @@ def _json(body: bytes, timing: str, signed_in: bool) -> Response:
 
 
 def _search_v2(q: str, conn: Connection, limit: int, offset: int, city,
-               signed_in: bool = False) -> Response | None:
+               signed_in: bool = False, restrict=None, category: str | None = None) -> Response | None:
     """The v2 answer, or None after logging why (the caller then uses the old path).
 
     Runs inside a SAVEPOINT: a failed v2 statement would otherwise abort the
@@ -355,12 +384,15 @@ def _search_v2(q: str, conn: Connection, limit: int, offset: int, city,
     t0 = time.perf_counter()
     try:
         key = ("search", normalize(q), limit, offset, "chain")
+        if isinstance(category, str) and category:
+            key += (("category", category),)       # SU11A-68; the key is unchanged without one
         with conn.begin_nested():
             stamp = search_v2.built_stamp(conn)
             hit = _cache.get(key, stamp, q) if not city else None
             if hit is not None:
                 return _json(hit, f"cache;desc=hit, total;dur={_ms(t0)}", signed_in)
-            r = search_v2.run(conn, q, limit=limit, offset=offset, city=city)
+            r = search_v2.run(conn, q, limit=limit, offset=offset, city=city,
+                              **({"restrict": restrict} if restrict else {}))
         result = SearchResultV2(
             query=r.query,
             total_matches=r.total_matches,
@@ -434,6 +466,7 @@ def compare(
     offset: int           = Query(0, ge=0, description="Pagination offset"),
     city:   list[str] | None  = Query(None, description="Filter to stores in these cities (repeat param for multiple)"),
     engine: str | None = Query(None, description="'v2' (used when SEARCH_V2_FILTERED=test or on) or 'v1' (forces the old path); other values are ignored"),
+    category: str | None = Query(None, max_length=32, description="SU11A-68: only items with a visible label under this category node (422 unknown_category)"),
     conn:   Connection = Depends(get_db),
     response: Response = None,
 ):
@@ -442,11 +475,13 @@ def compare(
     delta_from_cheapest on each quote showing how much more expensive vs the cheapest chain.
     """
     t0 = time.perf_counter()
+    restrict, allowed = _category_filter(conn, category)
     if _use_filtered(_filtered_mode(), engine):
-        fr = _search_filtered(q, conn, limit, offset, city, None, "chain", compare_only=True)
+        fr = _search_filtered(q, conn, limit, offset, city, None, "chain", compare_only=True, restrict=restrict)
         if fr is not None:
             return fr
-    result = _build_result(q, conn, limit, offset, city, chain_id=None, compare_only=True)
+    result = _build_result(q, conn, limit, offset, city, chain_id=None, compare_only=True,
+                           allowed=allowed() if allowed else None)
     if response is not None:
         response.headers["Server-Timing"] = f"total;dur={_ms(t0)}"
     return result

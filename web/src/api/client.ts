@@ -43,12 +43,15 @@ export interface SearchOpts {
   city?: string[] | null;
   chain?: string[] | null;
   group_by?: 'chain' | 'store';
+  /** SU11A-68: a category node id (db/category_browse.py visibility). */
+  category?: string;
 }
 
 export interface CompareOpts {
   limit?: number;
   offset?: number;
   city?: string[] | null;
+  category?: string;
 }
 
 // signal (SU11A-47): React Query aborts a superseded search, so a fast typist

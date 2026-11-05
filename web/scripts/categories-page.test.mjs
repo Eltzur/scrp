@@ -10,7 +10,8 @@ import { dirname, join } from 'node:path';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import {
-  CATEGORY_OFFSET_MAX, categoryParams, findNode, isNodeId, itemsRequest, nextOffset, readCategoryView,
+  CATEGORY_OFFSET_MAX, categoryPageUrl, categoryParams, categorySearchText, findNode, hasViewFilters, isNodeId,
+  itemsRequest, nextOffset, readCategoryView, searchPageUrl,
 } from '../src/utils/categoryView.ts';
 
 const web = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -90,9 +91,9 @@ const PAGE = {
 // ------------------------------------------------------------------ URL state
 
 test('readCategoryView: defaults, allowed sorts only, city absent vs all cities', () => {
-  assert.deepEqual(readCategoryView(new URLSearchParams('')), { city: null, chain: '', sort: 'popular', promo: false });
+  assert.deepEqual(readCategoryView(new URLSearchParams('')), { city: null, chain: '', sort: 'popular', promo: false, q: '' });
   const v = readCategoryView(new URLSearchParams('city=&chain=A&sort=cheapest&promo=1'));
-  assert.deepEqual(v, { city: '', chain: 'A', sort: 'cheapest', promo: true });
+  assert.deepEqual(v, { city: '', chain: 'A', sort: 'cheapest', promo: true, q: '' });
   assert.equal(readCategoryView(new URLSearchParams('sort=price')).sort, 'popular');
   assert.equal(readCategoryView(new URLSearchParams('promo=yes')).promo, false);
 });
@@ -109,8 +110,34 @@ test('itemsRequest: the URL city, else the remembered one; on_promo / sort only 
   const v = readCategoryView(new URLSearchParams(''));
   assert.deepEqual(itemsRequest(v, 'חיפה'), { city: 'חיפה', limit: 30, offset: 0 });
   assert.deepEqual(itemsRequest({ ...v, city: '' }, 'חיפה', 60), { limit: 30, offset: 60 });
-  assert.deepEqual(itemsRequest({ city: null, chain: 'A', sort: 'cheapest', promo: true }, '', 30),
+  assert.deepEqual(itemsRequest({ city: null, chain: 'A', sort: 'cheapest', promo: true, q: '' }, '', 30),
     { chain: 'A', sort: 'cheapest', on_promo: true, limit: 30, offset: 30 });
+});
+
+test('SU11A-68 q: kept in the URL, capped at 100, sent only with 2+ real characters', () => {
+  const v = readCategoryView(new URLSearchParams('q=' + encodeURIComponent('  חלב  ')));
+  assert.equal(v.q, '  חלב  ');
+  assert.equal(categoryParams(new URLSearchParams(''), { q: ' חלב ' }).get('q'), 'חלב');
+  assert.equal(categoryParams(new URLSearchParams('q=x'), { q: '' }).has('q'), false);
+  assert.equal(readCategoryView(new URLSearchParams('q=' + 'א'.repeat(150))).q.length, 100);
+  assert.deepEqual(itemsRequest({ ...v }, ''), { q: 'חלב', limit: 30, offset: 0 });
+  for (const junk of ['%', ' ', 'ח', '%_', '\\', '_ח']) {
+    assert.equal(categorySearchText(junk), '', JSON.stringify(junk));
+    assert.equal(itemsRequest({ ...v, q: junk }, '').q, undefined);
+  }
+  assert.equal(categorySearchText('ח%'), '');
+  assert.equal(categorySearchText('ab  cd'), 'ab cd');
+});
+
+test('SU11A-68 carry-over URLs and the filtered-view rule', () => {
+  assert.equal(searchPageUrl('חלב 3%', 'D02.C01'), '/?' + new URLSearchParams({ q: 'חלב 3%', category: 'D02.C01' }));
+  assert.equal(searchPageUrl('  '), '/');
+  assert.equal(categoryPageUrl('D02', 'גבינה'), '/categories/D02?q=' + encodeURIComponent('גבינה'));
+  assert.equal(categoryPageUrl('D02'), '/categories/D02');
+  assert.equal(hasViewFilters(new URLSearchParams('')), false);
+  for (const k of ['city=', 'chain=A', 'sort=name', 'promo=1', 'q=x', 'offset=30'])
+    assert.equal(hasViewFilters(new URLSearchParams(k)), true, k);
+  assert.equal(hasViewFilters(new URLSearchParams('utm_source=x')), false);
 });
 
 test('nextOffset: the loaded count, none at the end or past the API cap', () => {
@@ -132,7 +159,7 @@ test('isNodeId and findNode', () => {
 // ------------------------------------------------------------------ rendering
 
 const m = await load();
-const key = (id, city = '', chain = '', sort = 'popular', promo = false) => ['category-items', id, city, chain, sort, promo];
+const key = (id, city = '', chain = '', sort = 'popular', promo = false, q = '') => ['category-items', id, city, chain, sort, promo, q];
 const seed = (extra = []) => [[['cities'], [{ city: 'חיפה', chain_count: 1, store_count: 1, chain_ids: ['A'] }]],
   [['chains'], [{ chain_id: 'A', name: 'רשת א', total_barcodes: 1, total_stores_loaded: 1 }]],
   [['browse-tree'], TREE], ...extra];
@@ -176,4 +203,16 @@ test('an estimated total reads "כ-N"; an empty result has its own state', () =>
 test('a malformed id is "not found" without a request', () => {
   const html = m.page('/categories/xyz', seed());
   assert.ok(html.includes('הקטגוריה לא נמצאה') && html.includes('href="/categories"'));
+});
+
+test('SU11A-68: the category page has a labelled search box and "search the whole site" with q', () => {
+  const url = '/categories/D02.C01?city=&q=' + encodeURIComponent('חלב');
+  const html = m.page(url, seed([[key('D02.C01', '', '', 'popular', false, 'חלב'), { pages: [{ ...PAGE, q: 'חלב' }], pageParams: [0] }]]));
+  assert.match(html, /type="search"/);
+  assert.ok(html.includes('חיפוש בחלב'), 'the box label names the category');
+  assert.ok(html.includes('maxLength="100"') || html.includes('maxlength="100"'));
+  const href = '/?' + new URLSearchParams({ q: 'חלב', category: 'D02.C01' }).toString().replace(/&/g, '&amp;');
+  assert.ok(html.includes(`href="${href}"`), 'carry-over link');
+  const none = m.page('/categories/D02.C01?city=', seed([[key('D02.C01'), { pages: [PAGE], pageParams: [0] }]]));
+  assert.ok(!none.includes('בכל האתר'));
 });

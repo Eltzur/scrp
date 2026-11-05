@@ -36,6 +36,9 @@ export interface CategoryItemsResult {
   total_exact: boolean;
   has_more: boolean;
   sort: string;
+  /** SU11A-68: the search text used (null = none, or under 2 characters). */
+  q?: string | null;
+  corrected_from?: string | null;
   items: (ProductWithPrices & { category_id: string | null })[];
 }
 
@@ -44,12 +47,22 @@ export interface CategoryItemsParams {
   chain?: string;
   sort?: string;
   on_promo?: boolean;
+  q?: string;
   limit?: number;
   offset?: number;
 }
 
 export const getBrowseTree = (signal?: AbortSignal): Promise<BrowseTree> =>
   http.get<BrowseTree>('/categories/browse-tree', { signal }).then(r => r.data);
+
+export interface DominantCategory extends CategoryRef { share: number }
+
+/** SU11A-68: the node most of a result page shares (null = none). At most 60 barcodes. */
+export const getDominantCategory = (codes: string[], signal?: AbortSignal): Promise<DominantCategory | null> =>
+  http.get<{ category: DominantCategory | null }>('/categories/dominant', {
+    params: { code: codes.slice(0, 60) },   // the shared serializer repeats code=...
+    signal,
+  }).then(r => r.data.category);
 
 export const getCategoryItems = (id: string, params: CategoryItemsParams, signal?: AbortSignal): Promise<CategoryItemsResult> =>
   http.get<CategoryItemsResult>(`/categories/${encodeURIComponent(id)}/items`, { params, signal }).then(r => r.data);

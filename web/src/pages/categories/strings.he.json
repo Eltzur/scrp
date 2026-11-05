@@ -22,5 +22,14 @@
   "back": "לכל הקטגוריות",
   "error": "לא הצלחנו לטעון את הקטגוריות.",
   "retry": "נסו שוב",
-  "loading": "טוען…"
+  "loading": "טוען…",
+  "search_label": "חיפוש ב{{name}}",
+  "search_placeholder": "שם מוצר, מותג או ברקוד",
+  "search_all": "חיפוש \"{{q}}\" בכל האתר",
+  "corrected": "מציג תוצאות עבור \"{{q}}\".",
+  "home_title": "קטגוריות",
+  "home_all": "לכל הקטגוריות",
+  "only_in": "הצג רק ב{{name}}",
+  "category_filter": "קטגוריה",
+  "all_categories": "כל הקטגוריות"
 }

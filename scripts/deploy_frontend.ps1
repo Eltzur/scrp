@@ -34,6 +34,12 @@ if ($LASTEXITCODE -ne 0) {
     Fail "STOP: this build is not a production build (see FAIL lines above). Nothing was uploaded. Deploy from a PC that has web/.env.production."
 }
 
+# SU11A-68: the sitemap's category URLs from the live browse tree (linked nodes
+# of the current build). On failure the committed block stays (departments only).
+Write-Host "Refreshing the category URLs in the sitemap..."
+node web/scripts/sitemap-categories.mjs https://api-super.xxl.co.il/categories/browse-tree web/dist/sitemap-super.xml web/dist/sitemap-super.xml
+if ($LASTEXITCODE -ne 0) { Write-Host "WARN: sitemap category URLs not refreshed (exit $LASTEXITCODE); the committed departments-only block is deployed." -ForegroundColor Yellow }
+
 Write-Host "Uploading to Kamatera..."
 scp -r web/dist/* "${Server}:${WebRoot}/"
 if ($LASTEXITCODE -ne 0) {

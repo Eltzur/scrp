@@ -3,7 +3,9 @@
 GET  /categories/tree                     public, cached: the active taxonomy for the picker
 GET  /categories/browse-tree              SU11A-67: departments -> categories -> sub-categories with
                                           visible live item counts (db/category_browse.py), cached per build
-GET  /categories/{id}/items               SU11A-67: a browse page (city / chain / sort / on_promo, paged)
+GET  /categories/{id}/items               SU11A-67: a browse page (city / chain / sort / on_promo, paged);
+                                          SU11A-68: q (search v2's matcher inside the category)
+GET  /categories/dominant                 SU11A-68: the node most of a result page shares ("הצג רק ב...")
 GET  /items/{code}/category               the item's category path (department › category ›
                                           sub-category); a LOW-confidence label shows the
                                           department only (api/categories.public_path)
@@ -81,6 +83,25 @@ def categories_browse_tree(response: Response, conn: Connection = Depends(get_db
 
 
 _NODE_ID = re.compile(r"^D\d{2}(\.C\d{2}(\.S\d{2})?)?$")
+Q_MAX = 100
+
+
+@router.get("/categories/dominant", summary="The category most of these items share (SU11A-68)")
+def categories_dominant(
+    response: Response,
+    code: list[str] = Query(..., description="Barcodes of a result page (at most 60, 422 above)"),
+    conn: Connection = Depends(get_db),
+):
+    """{category: {id, level, name_he, name_en, share} | null}: the deepest
+    browsable node that >= 60% (and >= 4) of the barcodes share by visible
+    label (db/category_browse.py dominant_category). Tobacco never."""
+    if len(code) > B.DOMINANT_CODES_MAX:
+        raise ApiCodeError(422, "too_many_codes")
+    codes = [c for c in code if 1 <= len(c) <= 32]
+    cat = B.dominant_category(conn, codes)
+    conn.rollback()
+    response.headers["Cache-Control"] = "public, max-age=300"
+    return {"category": cat}
 
 
 @router.get("/categories/{category_id}/items", response_model=CategoryItemsResult,
@@ -94,9 +115,14 @@ def category_items(
     on_promo: bool = Query(False, description="Only items with a promo in force (see db/category_browse.py)"),
     limit: int = Query(30, ge=1, le=B.LIMIT_MAX),
     offset: int = Query(0, ge=0, le=B.OFFSET_MAX),
+    q: str | None = Query(None, max_length=Q_MAX, description="SU11A-68: search text inside the category "
+                          "(search v2's matcher; under 2 real characters it is ignored)"),
     conn: Connection = Depends(get_db),
 ):
     """The category's visible live items with the search card's prices.
+    SU11A-68: q filters by text with search v2's matcher; text relevance first,
+    then the sort. sort=cheapest with a city orders by the city's own lowest
+    price (the price the card shows).
     404 category_not_found for an unknown, inactive or tobacco id. Without a
     city the page comes from the search build; with one, from the city's live
     stores (the filtered-search walk)."""
@@ -111,7 +137,7 @@ def category_items(
             raise ApiCodeError(422, "unknown_chain")
     try:
         page = B.items_page(conn, category_id, city=city or None, chain=chain or None, sort=sort,
-                            on_promo=on_promo, limit=limit, offset=offset)
+                            on_promo=on_promo, limit=limit, offset=offset, q=q)
     except B.NotFound:
         conn.rollback()
         raise ApiCodeError(404, "category_not_found") from None
@@ -134,7 +160,7 @@ def category_items(
         children=[{"id": c["id"], "level": c["level"], "name_he": c["name_he"], "name_en": c["name_en"],
                    "count": c["count"]} for c in info["children"]],
         count=info["count"], total=page.total, total_exact=page.total_exact, has_more=page.has_more,
-        sort=sort,
+        sort=sort, q=page.q, corrected_from=page.corrected_from,
         items=[CategoryItem(**_to_model(p).model_dump(), category_id=p.get("category_id")) for p in page.products],
     )
 

@@ -9,6 +9,8 @@ export interface FilterState {
   chain: string[] | null;
   compareMode: boolean;
   groupBy: 'chain' | 'store';
+  /** SU11A-68: a category node id (the search page's category tools), null = all. */
+  category?: string | null;
 }
 
 interface MultiSelectProps {

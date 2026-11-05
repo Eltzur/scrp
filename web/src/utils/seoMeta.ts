@@ -52,6 +52,15 @@ const SUPER_ROUTES: Record<string, RouteMeta> = {
     description: 'מבצעי השבוע ברשתות השיווק בישראל לפי עיר, רשת וסניף: שופרסל, רמי לוי, יוחננוף, ויקטורי ועוד.',
     home: 'super',
   },
+  // SU11A-68: the category browse pages are indexable. A node page's own
+  // title / description / breadcrumbs come from utils/categorySeo.ts once its
+  // data has loaded; until then (and for crawlers that do not wait) the
+  // generic one below, with the canonical of the clean URL.
+  '/categories': {
+    title: 'קטגוריות — השוואת מחירים בכל הרשתות | SUPER XXL',
+    description: 'כל מוצרי הסופרמרקט לפי מחלקה וקטגוריה, עם המחיר הזול בכל רשת: שופרסל, רמי לוי, יוחננוף, ויקטורי ועוד.',
+    home: 'super',
+  },
   '/login': { title: 'התחברות | SUPER XXL', description: 'התחברות לחשבון SUPER XXL.', home: 'super', noindex: true },
   '/signup': { title: 'הרשמה | SUPER XXL', description: 'פתיחת חשבון ב-SUPER XXL.', home: 'super', noindex: true },
   '/reset-password': { title: 'איפוס סיסמה | SUPER XXL', description: 'איפוס הסיסמה לחשבון SUPER XXL בקוד שנשלח במייל.', home: 'super', noindex: true },
@@ -60,6 +69,14 @@ const SUPER_ROUTES: Record<string, RouteMeta> = {
   '/favorites': { title: 'המועדפים שלי | SUPER XXL', description: 'המוצרים שסימנת כמועדפים.', home: 'super', noindex: true },
   '/my-ratings': { title: 'הדירוגים שלי | SUPER XXL', description: 'הדירוגים שכתבת למוצרים.', home: 'super', noindex: true },
 };
+
+/** SU11A-68: /categories/<node id> (the id format of db/category_browse.py); null otherwise. */
+export const CATEGORY_PATH = /^\/categories\/D\d{2}(\.C\d{2}(\.S\d{2})?)?$/;
+function categoryNodeMeta(path: string): RouteMeta | null {
+  return CATEGORY_PATH.test(path)
+    ? { title: 'קטגוריה — השוואת מחירים בכל הרשתות | SUPER XXL', description: SUPER_ROUTES['/categories'].description, home: 'super' }
+    : null;
+}
 
 // Pages registered outside AppShell. Legal titles take the host's brand.
 function standaloneMeta(path: string, brand: string): RouteMeta | null {
@@ -116,7 +133,7 @@ export function resolveRouteMeta(pathname: string, portalHost: boolean): Resolve
       ? { title: PORTAL_HOME_TITLE, description: PORTAL_HOME_DESC, home: 'portal' }
       : { title: SUPER_HOME_TITLE, description: SUPER_HOME_DESC, home: 'super' };
   } else {
-    meta = standaloneMeta(path, brand) ?? SUPER_ROUTES[path] ?? null;
+    meta = standaloneMeta(path, brand) ?? SUPER_ROUTES[path] ?? categoryNodeMeta(path);
   }
   const currentOrigin = portalHost ? PORTAL_ORIGIN : SUPER_ORIGIN;
   const playApp = portalHost ? null : `app-id=${PLAY_APP_ID}`;
@@ -146,7 +163,7 @@ export function resolveRouteMeta(pathname: string, portalHost: boolean): Resolve
   };
 }
 
-function setMeta(attr: 'name' | 'property', key: string, value: string): void {
+export function setMeta(attr: 'name' | 'property', key: string, value: string): void {
   let el = document.head.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`);
   if (!el) {
     el = document.createElement('meta');

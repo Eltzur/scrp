@@ -480,8 +480,13 @@ def _candidates(conn: Connection, groups: list[Group]) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def _ranked(conn: Connection, groups: list[Group], q_norm: str, first_limit: int | None = None) -> Ranked:
+def _ranked(conn: Connection, groups: list[Group], q_norm: str, first_limit: int | None = None,
+            restrict: tuple[str, dict] | None = None) -> Ranked:
     """The query's candidates as a Ranked stream (SU11A-50); total 0 = no match.
+
+    restrict (SU11A-68): an extra SQL condition on search_items (" AND ...",
+    params), e.g. db/category_browse.py search_restrict; None = the SQL is
+    exactly as before.
 
     first_limit: rows in the first fetch (default _STREAM_FIRST); each further
     fetch is 8x the previous one, so a walk to 3,000 (plus the look-ahead row) needs two statements at 600.
@@ -490,17 +495,18 @@ def _ranked(conn: Connection, groups: list[Group], q_norm: str, first_limit: int
     if not clause:
         return Ranked.from_list([], groups, q_norm)
     ct, ct_params = coarse_tier_sql(groups, q_norm)
+    r_sql, r_params = restrict or ("", {})
     sql = text(f"""
         SELECT {_COLS}, {ct} AS ct,
                count(*) OVER () AS n_total,
                count(*) FILTER (WHERE chains_live >= 2) OVER () AS n_comparable
         FROM search_items
-        WHERE NOT is_pseudo AND {clause}
+        WHERE NOT is_pseudo AND {clause}{r_sql}
         ORDER BY ct, (chains_live < 2), popularity DESC, chains_live DESC, length(name_norm),
                  item_code COLLATE "C"
         LIMIT :lim OFFSET :off
     """)
-    p = {**params, **ct_params}
+    p = {**params, **ct_params, **r_params}
     counts: list[int] = []
 
     def fetch(limit: int, offset: int) -> list[dict]:
@@ -522,33 +528,36 @@ def _ranked(conn: Connection, groups: list[Group], q_norm: str, first_limit: int
 
 
 def ranked_candidates(conn: Connection, q: str, aliases: dict,
-                      first_limit: int | None = None) -> tuple[Ranked, str | None]:
+                      first_limit: int | None = None,
+                      restrict: tuple[str, dict] | None = None) -> tuple[Ranked, str | None]:
     """(candidates, corrected_from): a barcode, the words, or one typo round.
 
     The candidate step shared by run() and the filtered path (db/search_filtered.py).
+    restrict (SU11A-68): see _ranked; also applied to the barcode lookup.
     """
     q_norm = normalize(q)
     variants = barcode_variants(q_norm)
-    cands = _barcode(conn, variants) if variants else []
+    cands = (_barcode(conn, variants, restrict) if restrict else _barcode(conn, variants)) if variants else []
     if cands:
         return Ranked.from_list(cands, [], q_norm), None
     groups = apply_aliases(tokenize(q_norm), aliases)
     if not groups:
         return Ranked.from_list([], [], q_norm), None
-    ranked = _ranked(conn, groups, q_norm, first_limit)
+    ranked = _ranked(conn, groups, q_norm, first_limit, restrict)
     if ranked.total:
         return ranked, None
     fixed = _correct(conn, groups)
     if fixed:
-        again = _ranked(conn, fixed, q_norm, first_limit)
+        again = _ranked(conn, fixed, q_norm, first_limit, restrict)
         if again.total:
             return again, q
     return ranked, None
 
 
-def _barcode(conn: Connection, codes: list[str]) -> list[dict]:
-    rows = conn.execute(text(f"SELECT {_COLS} FROM search_items WHERE item_code IN :c")
-                        .bindparams(bindparam("c", expanding=True)), {"c": codes}).mappings().all()
+def _barcode(conn: Connection, codes: list[str], restrict: tuple[str, dict] | None = None) -> list[dict]:
+    r_sql, r_params = restrict or ("", {})
+    rows = conn.execute(text(f"SELECT {_COLS} FROM search_items WHERE item_code IN :c{r_sql}")
+                        .bindparams(bindparam("c", expanding=True)), {"c": codes, **r_params}).mappings().all()
     return [dict(r) for r in rows]
 
 
@@ -594,7 +603,8 @@ class V2Result:
 
 
 def run(conn: Connection, q: str, limit: int = 30, offset: int = 0,
-        city: list[str] | None = None, precomputed: bool = True) -> V2Result:
+        city: list[str] | None = None, precomputed: bool = True,
+        restrict: tuple[str, dict] | None = None) -> V2Result:
     """The v2 search. Raises V2Unavailable (or anything else) -> caller falls back.
 
     precomputed=False forces the live price fetch (compare_search_v2). A city
@@ -614,7 +624,7 @@ def run(conn: Connection, q: str, limit: int = 30, offset: int = 0,
     if len(q_norm.replace(" ", "")) < 2:
         return empty
 
-    ranked, corrected_from = ranked_candidates(conn, q, aliases)
+    ranked, corrected_from = ranked_candidates(conn, q, aliases, restrict=restrict)
     lap("candidates")
 
     # SU11A-50: counted in SQL; only the rows up to the page are ranked here.
