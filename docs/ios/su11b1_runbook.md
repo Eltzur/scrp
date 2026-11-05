@@ -2,12 +2,21 @@
 
 Dude runs every step. CC prepared the config (mobile repo: SU11B-1 `85eb6a6`, SU11B-2 `c56e27f`, **SU11B-3 `65882ea`**) and the kit `docs/ios/su11b1_app_store_kit.md`. **Version 1.2.2** (SU11B-2); **iOS build 1.2.2 (2)**, Android versionCode 9 — both from the SU11B-3 commit `65882ea`.
 
+**Release state (SU11B-5, 5 Nov 2026):**
+- **iOS 1.2.2 (2)** (EAS `4eaab3fc`, mobile `65882ea`): submitted to App Review **4 Nov 20:58** (submission `871055cd-5aab-48e7-8f41-b3a4af70e0d0`), release option "Manually release this version"; **Waiting for Review** as of 5 Nov. **H is done for 1.2.2.**
+- **iOS 1.2.2 (1)** (EAS `80074645`, `c56e27f`): failed processing with ITMS-90683 (below; fixed in SU11B-3).
+- **Android 9 (1.2.2)** (EAS `0992b1c3`, `65882ea`): **published to Play Production 4 Nov** (submission 3), full rollout, Israel, managed publishing off. Closed testing – Alpha: draft 8 (1.2.1) discarded, track inactive. Play release notes use the language tag **`iw-IL`** (`he-IL` is rejected).
+- **Play trader status:** account declared **TRADER** (XXL Enterprises, D-U-N-S, address, phone and email shown publicly under "App support"); app-level declaration published 5 Nov (submission 4), ToS URL https://xxl.co.il/disclaimer. **Apple DSA stays "non-trader / not distributing in the EU"** (iOS is Israel only); align Apple to trader before any EU distribution.
+- **Lesson:** a Play App content / policy change submitted while a release is in review restarts that review. Submit such changes only when nothing is in review.
+- **Seller-name decision (Dude, 4 Nov):** the gate moved from Submit to **RELEASE** (G1). Apple Support case **103015749110** (opened 1 Nov, nudged 3 Nov) is still open.
+- **Next: 1.2.3** (SU11B-5, mobile `130b610`): section K, only after Apple has approved 1.2.2.
+
 **Build 1.2.2 (1) rejected (SU11B-3 record):** EAS build `80074645` (commit `c56e27f`) was uploaded and Apple rejected it in processing with **ITMS-90683** "Missing purpose string in Info.plist — NSMotionUsageDescription" (expo-location references `CMMotionActivityManager`; SU11B-1 had set `motionUsagePermission` false). SU11B-3 adds NSMotionUsageDescription plus NSMicrophoneUsageDescription, NSFaceIDUsageDescription and NSPhotoLibraryUsageDescription (each an honest Hebrew "the app never uses / never requests it" text). Build 1 stays in App Store Connect as invalid and is never used; B runs again and produces build 2.
 
 **Decisions recorded (Dude, SU11B-2):** placeholder drawer rows hidden on all platforms; version 1.2.2; age rating: alcohol/tobacco "Infrequent" → **13+**; review account created at step D. **GS1 (SU11B-3): CLOSED** — Dude confirmed on 2 Nov 2026 that the GS1 service terms cover public price comparison; Content Rights: third-party content Yes, necessary rights Yes.
 Rules: passwords and 2FA codes are typed only into the EAS prompt or the Apple / Google page, never into chat or files. Throwaway users only for deletion tests; never delete `x@xxl.co.il` or `gplay@xxl.co.il`. Each `eas build` run burns a build number / versionCode: run each build once.
 
-Order: A (checks) → B (iOS build) → **J step 1 (Android build, right after B, same commit)** → C (submit to App Store Connect) → D (TestFlight test) → E (listing) → F (screenshots) → **G (HARD STOP: name "Elad Tzur")** → H (submit for review) → I (release + website). The Android upload to Play (J step 2 on) can follow D's checks.
+Order: A (checks) → B (iOS build) → **J step 1 (Android build, right after B, same commit)** → C (submit to App Store Connect) → D (TestFlight test) → E (listing) → F (screenshots) → G (name check; now the RELEASE gate) → H (submit for review: **done for 1.2.2, 4 Nov**) → **I (after approval: Dude decides on the name → Release This Version → website badge)** → K (1.2.3 update). The Android upload to Play (J step 2 on) can follow D's checks.
 
 **B and J must be built from the same commit (the SU11B-3 commit `65882ea` or a later docs-only state of `main`): iOS build 2 first, Android build 9 right after. Do not pull or change anything between the two builds.**
 
@@ -167,11 +176,11 @@ Version page → Previews and Screenshots → iPhone → **6.5" Display** → dr
 
 ---
 
-## G. HARD STOP before any submission
+## G. The seller-name gate — now a RELEASE gate
 
-**Do not press "Add for Review" / "Submit for Review" until G1 passes.** G1 is the only remaining hard stop (G2 closed in SU11B-3).
+**Decision (Dude, 4 Nov 2026):** submitting for review no longer waits for the name. **Do not RELEASE ("Pending Developer Release" → "Release This Version") until Dude decides about the name.** 1.2.2 was submitted with "Manually release this version", so approval alone publishes nothing. Apple Support case 103015749110 (opened 1 Nov, nudged 3 Nov) is open.
 
-### G1 — the seller / team name reads "Elad Tzur" (not "Lead Tour")
+### G1 — RELEASE gate: the seller / team name ("Elad Tzur", currently "Lead Tour")
 
 Check both:
 
@@ -179,7 +188,7 @@ Check both:
 1. developer.apple.com/account → **Membership details** → "Entity name" / "Team name".
 2. App Store Connect → top-right account menu (team switcher) shows the team name; and the App Store Connect app page → App Information → the seller line in the product-page preview, if shown.
 
-If either still says "Lead Tour": stop here; building, TestFlight and the listing stay ready. Follow up with Apple Developer Support on the open case.
+If either still says "Lead Tour" when Apple approves: the version waits in "Pending Developer Release" until Dude decides (release as is, or wait for the fix). Follow up on case 103015749110.
 
 ### G2 — GS1 public-display rights: CLOSED (2 Nov 2026)
 
@@ -187,7 +196,9 @@ Dude confirmed on 2 Nov 2026 that the GS1 service terms cover public price compa
 
 ---
 
-## H. Submit for review (only after G1 passes)
+## H. Submit for review — DONE for 1.2.2 (4 Nov 20:58, submission 871055cd-5aab-48e7-8f41-b3a4af70e0d0)
+
+For later versions (section K):
 
 [Browser]
 Version page → **Add for Review** → **Submit to App Review**. Expected: status "Waiting for Review", then "In Review" (typically 24–48 h). If rejected: copy the Resolution Center text (no credentials) to the chat; do not reply to Apple before the chat has reviewed it.
@@ -196,6 +207,7 @@ Version page → **Add for Review** → **Submit to App Review**. Expected: stat
 
 ## I. After approval
 
+0. **Dude decides about the seller name (G1).** Until then, do nothing on this page.
 1. [Browser] Status "Pending Developer Release" → **Release This Version**. Check the public page `https://apps.apple.com/il/app/id6829450422` loads (can take a few hours).
 2. Website badge switch: kit §9 — a CC prompt prepares it (web code + Apple's badge file), then Dude deploys **from the home PC**:
 
@@ -226,6 +238,40 @@ Expected: `git log` shows the same commit as the iOS build 2 in B (SU11B-3 `6588
 [Browser]
 1. Download the `.aab` from the EAS build page.
 2. Play Console → SUPER XXL → (optional first) Testing → Internal testing → Create release → upload → roll out to testers; check on a phone (terms bidi, search suggestions, category suggestion button). Promote to Production, or:
-3. Production → Create new release → add from library / upload the AAB → release notes (Hebrew, e.g. "גרסה 1.2.2: הצעות חיפוש תוך כדי הקלדה, הצעת קטגוריה למוצר ותיקוני תצוגה") → Next → countries unchanged (Israel) → Start rollout to Production (100%).
+3. Production → Create new release → add from library / upload the AAB → release notes in `<iw-IL>` (Hebrew; `he-IL` is rejected), e.g. "גרסה 1.2.2: הצעות חיפוש תוך כדי הקלדה, הצעת קטגוריה למוצר ותיקוני תצוגה") → Next → countries unchanged (Israel) → Start rollout to Production (100%).
 4. App bundle explorer → Permissions: INTERNET, CAMERA, ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION, VIBRATE, ACCESS_NETWORK_STATE (+ the signature-level DYNAMIC_RECEIVER permission). STOP if READ/WRITE_EXTERNAL_STORAGE or SYSTEM_ALERT_WINDOW appear.
 
+---
+
+## K. 1.2.3 update (SU11B-5, mobile `130b610`)
+
+**Only AFTER Apple has approved 1.2.2.** One version in review at a time; a new upload or App content change while 1.2.2 is in review would mix the two (and on Play restarts the review). Build iOS and Android **from the same SU11B-5 commit** (`130b610` or a later docs-only `main`), iOS first, Android right after, no pull in between. Each run burns a build number: run each once. Expected numbers: iOS **1.2.3 (3)**, Android versionCode **10**.
+
+What changed in 1.2.3: add-to-basket on the product page (shared header, every tab) and on every search row (compact icon button); a filled, more visible basket button; account-deletion timeout recovery (SU11A-63 L1); reserved-basket recovery (L2); Android `USE_BIOMETRIC` / `USE_FINGERPRINT` removed from the manifest.
+
+1. **Pre-flight:** A, with the top commit = SU11B-5 `130b610` and tsc (Dude). A3: the same four purpose strings as 1.2.2.
+2. **Builds:** `npx eas-cli@latest build -p ios --profile production` → log shows `Version 1.2.3`; then at once `npx eas-cli@latest build -p android --profile production` → `versionName 1.2.3`, versionCode 10. STOP on any other number.
+3. **iOS upload:** C (`eas submit -p ios --profile production --latest`). STOP on any ITMS mail.
+4. **D retest for 1.2.3** on the iPhone 12 (TestFlight) and an Android phone (internal testing):
+   1. Scan result: add to basket, button turns to "בסל" (outlined + check), tap again removes.
+   2. Product page: the button sits under the category line on **each** tab (מחירים / מידע / ביקורות); state matches the basket.
+   3. Search rows: tapping the icon button toggles the basket and does **not** open the product; tapping the name area opens the product (prices tab).
+   4. Basket count and limit: signed out, add a 26th item from each of the three places → the 25-item message (with "להרשמה") appears each time; signed in, 150 limit message. Bumping an item already in the basket is allowed.
+   5. Compare from the basket still works.
+   6. **Account deletion, throwaway user only:** normal deletion; then a second throwaway user: tap "מחיקה לצמיתות" and switch **airplane mode on right after the tap** → an error (no connection) → airplane off → enter the password again and delete → the confirmation "החשבון נמחק" with the note "החיבור נקטע במהלך המחיקה…", signed out. (If the first request never left the phone, the second attempt simply deletes normally; both are correct.) Never with x@xxl.co.il, gplay@xxl.co.il or appreview@xxl.co.il.
+   7. **Basket sync:** signed in on the phone with items; on super.xxl.co.il → my baskets → delete `__xxl_mobile_basket__`; back on the phone add an item → the website shows the basket again with all phone items.
+   8. VoiceOver / TalkBack: the button reads "הוסף לסל: <product>" / "הסר מהסל: <product>" and "selected" when in the basket; the search row reads its name separately from its button.
+   9. Dark mode on scan, product, search: the filled button and the outlined "בסל" state are clearly visible.
+   10. RTL: on the button the icon is on the right of the text; on search rows the button is at the left end of the row, after the chevron.
+5. **App Store Connect:** version page "+" → new version **1.2.3** → "What's New" (Hebrew):
+   ```
+   גרסה 1.2.3: הוספה לסל ישירות מעמוד המוצר ומתוצאות החיפוש, כפתור סל בולט יותר, ושיפורי אמינות במחיקת חשבון ובסנכרון הסל.
+   ```
+   → select build 1.2.3 (3) → **screenshots retaken on 1.2.3** showing the new button (product page and search rows; same five screens as kit §7, slot "iPhone with Dynamic Island (medium display)"), raw files in `C:\xxl-archive\ios_screens\1.2.3\raw` (not in the repo) → App Privacy and age rating **unchanged** (no new data; no ads / no ממומן) → Add for Review → Submit. Release option: "Manually release this version" (G1 still applies until Dude decides).
+6. **Play:** Production → Create new release → the 1.2.3 AAB → release notes:
+   ```
+   <iw-IL>
+   גרסה 1.2.3: הוספה לסל ישירות מעמוד המוצר ומתוצאות החיפוש, כפתור סל בולט יותר, ושיפורי אמינות במחיקת חשבון ובסנכרון הסל.
+   </iw-IL>
+   ```
+   → App bundle explorer → Permissions: **no `USE_BIOMETRIC` / `USE_FINGERPRINT`** (STOP if either is listed), and as in J step 4 otherwise → rollout. Do not submit App content changes while this is in review.

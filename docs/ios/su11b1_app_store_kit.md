@@ -9,13 +9,15 @@ Prepared 1 Nov 2026. Source facts: `docs/store_privacy_inventory.md` (SU11A-38),
 | App Store Connect app | SUPER XXL, Apple ID (ascAppId) **6829450422** |
 | Bundle ID | `il.co.xxl.supermarket` |
 | SKU | `superxxl-ios-001` |
-| Team | Individual, Team ID **V46QVK4YSA**; seller shown on the store: **Elad Tzur** (must read so before Submit for Review; it currently reads "Lead Tour") |
-| Version | **1.2.2** (SU11B-2; same as Android build 9); build number from EAS (remote, auto-increment). **Submit build 1.2.2 (2)** (SU11B-3 commit); build 1.2.2 (1) was rejected in processing (ITMS-90683, missing NSMotionUsageDescription) |
+| Team | Individual, Team ID **V46QVK4YSA**; seller name currently "Lead Tour" (should read **Elad Tzur**). **Gate (Dude, 4 Nov): do not RELEASE until Dude decides about the name**; Apple Support case 103015749110 open |
+| Version | **1.2.2** (SU11B-2; same as Android build 9); build number from EAS (remote, auto-increment). **1.2.2 (2) submitted to App Review 4 Nov 2026 20:58** (EAS `4eaab3fc`, mobile `65882ea`, manual release; Waiting for Review 5 Nov); build 1.2.2 (1) was rejected in processing (ITMS-90683, missing NSMotionUsageDescription). Next: 1.2.3 (SU11B-5), after 1.2.2 is approved |
 | Devices | iPhone only (`supportsTablet: false`) |
 | Primary language | Hebrew |
 | Categories | Primary: Shopping; secondary: Food & Drink |
 | Price / availability | Free; Israel only |
-| DSA (EU) | Non-trader; not distributed in the EU |
+| DSA (EU) | Non-trader; not distributed in the EU. (Google Play declares the account TRADER since 5 Nov; align Apple to trader before any EU distribution.) |
+| Privacy Choices URL | https://super.xxl.co.il/account/delete (entered in ASC) |
+| Mac / Apple Vision Pro availability | **Off** (iPhone app not offered on Apple silicon Macs or Vision Pro) |
 
 ---
 
@@ -28,7 +30,7 @@ Counts are Unicode characters, as App Store Connect counts them (checked with Py
 SUPER XXL
 ```
 
-**Subtitle** (≤30) — 23 characters (already entered in ASC)
+**Subtitle** (≤30) — 23 characters. Entered in ASC as below (**check against ASC**: SU11B-5 had no screenshot of the field to confirm the exact text)
 ```
 השוואת מחירי סופרמרקטים
 ```
@@ -106,6 +108,8 @@ Derived from `docs/store_privacy_inventory.md` §C and §A; matches the privacy 
 
 **Tracking:** No data is used to track. No ATT prompt. `NSPrivacyTracking` = false, no tracking domains.
 
+**Final, as PUBLISHED in App Store Connect (SU11B-5, 4 Nov 2026):** Email Address, User ID, Other User Content: linked, App Functionality only; Search History: not linked, App Functionality; no tracking. Matches the table above and `ios.privacyManifests`.
+
 Answer flow in App Store Connect (App Privacy → Get Started): "Yes, we collect data" → tick Email Address, User ID, Other User Content, Search History → for each: purposes = App Functionality only; linked = Yes for the first three, No for Search History; tracking = No for all.
 
 ---
@@ -131,6 +135,8 @@ App Store Connect → App Information → Age Rating → Edit. Answers:
 | Medical or treatment information, health / wellness topics | None | Nutrition facts and Health Ministry labels are product-label data, not medical advice. |
 | Weapons | None | |
 | Made for Kids | No | |
+
+**Final answers as entered (SU11B-5): 13+.** Alcohol/tobacco: Infrequent; user-generated content: Yes; social media / messaging and chat / advertising / unrestricted web access: No; everything else as in the table. **Advertising = No because the app shows no sponsored content; if an app version shows ממומן promos, change it to Yes before submitting.**
 
 **Decision (Dude, SU11B-2): alcohol/tobacco "Infrequent" → 13+.** Google Play rated the same app PEGI 3 / Everyone; the difference is Apple's alcohol/tobacco question. App Store Connect computes the final rating from the answers — confirm it shows 13+ before saving.
 
@@ -207,7 +213,9 @@ Labels quoted above were checked against `src/i18n/he.ts` at SU11B-1 (`scan.manu
 
 **Required (Apple spec as of 2026, iPhone-only app):** one set for **6.9"** (1320×2868, 1290×2796 or 1260×2736 portrait) **or**, if no 6.9" set is provided, **6.5"** (1242×2688 or 1284×2778 portrait). Smaller sizes are scaled from these. 1–10 screenshots per set, PNG or JPEG, no alpha. No iPad set (`supportsTablet: false`). Re-check the "iPhone 6.9" Display" box on the version page: App Store Connect states there whether 6.5" is accepted in its place.
 
-**Plan:** the iPhone 12 captures 1170×2532 (19.5:9). 1242×2688 is the same aspect ratio (scale 1.0615 on both axes, 2532 × 1.0615 = 2687.8 → 2688), so a straight resize with no crop or padding gives a valid **6.5"** set. Upload it in the 6.5" slot and leave 6.9" empty. (Reaching 1290×2796 would need a 0.15% non-uniform stretch or a 4 px crop; not worth it.)
+**Used for 1.2.2 (SU11B-5 record):** the iPhone 12 screenshots went into the slot **"iPhone with Dynamic Island (medium display)"**; raw files in `C:\xxl-archive\ios_screens\1.2.2\raw` (not in the repo). For 1.2.3 retake them showing the new basket button and keep them in `C:\xxl-archive\ios_screens\1.2.3\raw`.
+
+**Plan (original):** the iPhone 12 captures 1170×2532 (19.5:9). 1242×2688 is the same aspect ratio (scale 1.0615 on both axes, 2532 × 1.0615 = 2687.8 → 2688), so a straight resize with no crop or padding gives a valid **6.5"** set. Upload it in the 6.5" slot and leave 6.9" empty. (Reaching 1290×2796 would need a 0.15% non-uniform stretch or a 4 px crop; not worth it.)
 
 **Screens (5), in this order, light mode, Hebrew, signed in with the review account, Wi-Fi + full battery icons:**
 1. **Product** — scan result / product-detail of milk 7290004131074, "קרוב אלי" list with distances.

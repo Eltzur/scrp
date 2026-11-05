@@ -2156,16 +2156,19 @@ Runbook: `docs/admin/su11a60_runbook.md`. No migration. Goal: no chain gets free
   - category / attribute faceted filters;
   - a switch to hide tobacco and alcohol;
   - optionally, move the location prompt to a contextual moment.
-- **Apple (SU11B series, `docs/handoff_mobile.md` SU11B-1):**
-  - Individual account (Team V46QVK4YSA), App Store Connect app SUPER XXL (ascAppId 6829450422), bundle `il.co.xxl.supermarket`, Israel only. iOS config, privacy manifest and submit profile done in SU11B-1.
-  - Next: first EAS iOS build, TestFlight on the iPhone 12, listing, screenshots: `docs/ios/su11b1_runbook.md` with the copy and answers in `docs/ios/su11b1_app_store_kit.md`.
-  - **HARD STOP:** no Submit for Review until the Apple team/legal name reads "Elad Tzur" (it shows "Lead Tour").
-  - GS1 public display: CLOSED 2 Nov 2026 (Dude: the GS1 service terms cover public price comparison; Content Rights Yes / Yes, SU11B-3). Age rating 13+ (Dude, SU11B-2). iOS build 1.2.2 (1) was rejected (ITMS-90683; fix SU11B-3 `65882ea`); next: build 1.2.2 (2) + Android 9 from that commit. Open: review account appreview@xxl.co.il (Supabase Add user, not in DELETE_PROTECTED_USER_IDS).
+- **Apple (SU11B series, `docs/handoff_mobile.md` SU11B-1 … SU11B-5):**
+  - Individual account (Team V46QVK4YSA), App Store Connect app SUPER XXL (ascAppId 6829450422), bundle `il.co.xxl.supermarket`, Israel only.
+  - **iOS 1.2.2 (2)** (EAS 4eaab3fc, mobile 65882ea) submitted to App Review 4 Nov 20:58 (submission 871055cd-5aab-48e7-8f41-b3a4af70e0d0), manual release; **Waiting for Review** as of 5 Nov. 1.2.2 (1) failed processing (ITMS-90683, fixed SU11B-3).
+  - **RELEASE GATE (Dude, 4 Nov):** after approval do not press Release This Version until Dude decides about the seller name ("Lead Tour" → "Elad Tzur"); Apple Support case 103015749110 open (opened 1 Nov, nudged 3 Nov). After release: website badge switch (kit §9).
+  - ASC set: age 13+, App Privacy published, Privacy Choices URL https://super.xxl.co.il/account/delete, Mac / Vision Pro off. DSA: non-trader / not in the EU; align to trader before any EU distribution.
+  - **Next: 1.2.3** (SU11B-5, mobile 130b610: add-to-basket on product page and search rows, SU11A-63 L1/L2): build iOS + Android from that commit only after 1.2.2 is approved (runbook K). Review account appreview@xxl.co.il: re-create if a reviewer deletes it.
   - Sign in with Apple is not required (email/password only). Guideline 1.2 items (terms, report, block, blocked list, contact) are live.
 - **Play:**
-  - **Production LIVE since 23 Oct 2026** (build 8, 1.2.1, Israel, "XXL Team", IARC / PEGI 3). The website badge and banner (SU11A-53) are built; Dude deploys the web.
+  - **Production: 9 (1.2.2)** (EAS 0992b1c3, 65882ea) published 4 Nov (submission 3), full rollout, Israel, managed publishing off. Closed testing Alpha: draft 8 (1.2.1) discarded, track inactive.
+  - Account declared **TRADER** (XXL Enterprises, D-U-N-S, address, phone, email public under "App support"); app-level declaration published 5 Nov (submission 4), ToS URL https://xxl.co.il/disclaimer.
+  - Release notes use the language tag `iw-IL` (`he-IL` is rejected). Never submit App content / policy changes while a release is in review (it restarts the review).
+  - Next: versionCode 10 = 1.2.3, from the same commit as iOS 1.2.3; check the permissions no longer list USE_BIOMETRIC / USE_FINGERPRINT.
   - plan Play Billing.
-  - Next build is versionCode 9 (carries the SU11A-46 terms bidi fix, the SU11A-47 search suggestions and the SU11A-57 category suggestion button).
 - **SEO:** built in SU11A-46. After the web deploy: submit the sitemaps in Search Console (see the SU11A-46 entry) and request indexing of the key pages. Optional nginx www -> apex redirect on 443.
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
