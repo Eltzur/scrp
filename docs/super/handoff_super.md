@@ -2722,6 +2722,8 @@ Runbook: `docs/catalog/su11a68_runbook.md`. No migration, no nginx change.
 
 **5. Home page:** a lazy "קטגוריות" section (`components/searchCategory/HomeCategories.tsx`) under the search box on the start screen: the departments plus "לכל הקטגוריות".
 
+**Subtitle:** the `/categories` page subtitle (`strings.{he,en}.json` `intro`) now reads "כל המוצרים לפי קטגוריות, עם המחיר הזול ביותר." / "All products by category, with the lowest price." (no mention of chains). The SEO meta descriptions are unchanged.
+
 **Size:** main chunk 173.62 → 175.13 kB (+1.51 kB, gzip +0.54), within the 2 kB budget. New lazy chunks: SearchCategoryTools 1.9 kB, HomeCategories 1.3 kB; CategoriesPage 10.8 kB; the shared strings 4.7 kB.
 
 **Tests:**

@@ -1,6 +1,6 @@
 {
   "title": "Categories",
-  "intro": "Every product by department, with the cheapest price at each chain.",
+  "intro": "All products by category, with the lowest price.",
   "breadcrumbs": "Breadcrumbs",
   "home": "Categories",
   "items_count": "{{count}} products",
