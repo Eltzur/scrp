@@ -126,7 +126,7 @@ All in Postgres on the Kamatera VM except where noted. Deletion = `DELETE /accou
 |---|---|---|---|
 | journald, `scrp-api` (gunicorn + UvicornWorker access log) | `<client IP> - "METHOD /path?query HTTP/1.1" status`. Real client IP (uvicorn honours `X-Forwarded-For` from nginx on 127.0.0.1; 2,998 of 3,000 sampled lines are non-loopback). Path includes **search text** (`/search?q=…`) and **barcodes**. No user agent, no Authorization header, no body. | 30 days (`/etc/systemd/journald.conf.d/scrp.conf`: MaxRetentionSec=30day, MaxFileSec=1day — installed); current size 108 MB | `systemctl cat scrp-api`: `--access-logfile - --error-logfile -`, `StandardOutput=journal` |
 | journald, app log lines | user_id on account deletion / Supabase admin delete (`api/routers/account.py:109-111`, `api/supabase_admin.py:56-67`); user_id + item on auto-hidden ratings (`api/routers/ratings.py:179`); rating id + item on moderation (`api/routers/ratings.py:459, 482`); mail recipient (info@) + subject (`api/mailer.py:166`). **No emails, tokens or passwords** (SU11A-32). One caveat: `search.py:206` logs a traceback on a v2 failure, which can include SQL parameters (the search text). | 30 days | as cited |
-| nginx `/var/log/nginx/api-super.access.log`, `access.log` | default `combined`: IP, time, request line (path + query string), status, bytes, referrer, **user agent** (no custom `log_format` in nginx.conf or sites) | 14 days (`/etc/logrotate.d/nginx`: daily, rotate 14) | server config |
+| nginx `/var/log/nginx/api-super.access.log`, `access.log` | default `combined`: IP, time, request line (path + query string), status, bytes, referrer, **user agent** (no custom `log_format` in nginx.conf or sites). SU11A-69: `access.log` adds the site name (`$host`, not personal data) once its runbook step 5 is run | 14 days (`/etc/logrotate.d/nginx`: daily, rotate 14) | server config |
 | Supabase logs | auth requests (IP, UA, email on events) | Supabase plan-dependent — unknown | — |
 
 ## 7. Third parties that receive user data
@@ -317,3 +317,13 @@ The in-app summary must only restate the web policy, so deploy D1 first.
   - The console reads ratings, reports and ban flags that already exist, and shows no user email or id.
   - The moderation queue API stopped returning user ids.
   - The Data safety / App Privacy answers do not change.
+
+## H. Updates (6 Nov 2026, SU11A-69: admin statistics)
+
+- **No change to Apple App Privacy or Google Play Data safety.** The admin statistics (`scrp-stats.timer`, `stats_daily`) are daily aggregate counts derived from the existing server logs (section 6) and, once connected, from GA4 and the stores' own reports. They store no IP address, user agent, full URL, query string, user id or email (`scripts/stats_logs.py`, `db/stats.py check_dimension`; tests `tests/test_stats_su11a69.py`). The visitor estimate hashes IP + user agent with a random salt held in memory for one run only; only the count is kept.
+- The app sends nothing new: the platform split uses the user agent its HTTP stacks already send (okhttp / CFNetwork). An optional future `X-XXL-Client: ios|android/<version>` header would carry no identifier and would not be personal data either.
+- The only log change is the site name (`$host`) at the end of `access.log` lines (`deploy/nginx/xxl-log-format.conf`). Retention is unchanged (14 days).
+- **Web privacy policy coverage** (`web/src/pages/PrivacyPolicyPage.tsx`):
+  - line 50 ("לוגים טכניים") covers the server logs: IP, time, the requested address with search text, browser or app type, purpose security and operation, retention 14 / 30 days;
+  - lines 48, 70 and 79 cover GA4, consent-gated.
+  - Aggregate statistics from those logs fall under "תפעול". An optional, clearer wording for Dude to decide on: add "ולהפקת סטטיסטיקות שימוש מצטברות" after "למטרות אבטחה ותפעול".

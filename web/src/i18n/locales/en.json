@@ -229,6 +229,7 @@
       "audit": "Audit log",
       "categories": "Categories",
       "promos": "Promos",
+      "stats": "Statistics",
       "soon": "Coming soon: settings, branches"
     },
     "status": {
@@ -269,7 +270,13 @@
       "active_pins": "Pinned promotions",
       "active_hides": "Hidden promotions",
       "curation_expired": "Expired",
-      "open_tab": "Open the {{tab}} tab"
+      "open_tab": "Open the {{tab}} tab",
+      "stats": "Traffic and usage",
+      "stats_web": "Website page views",
+      "stats_visitors": "Visitors (estimate)",
+      "stats_api": "API requests (web and apps)",
+      "stats_day": "As of {{day}}",
+      "stats_none": "No data yet: the daily collection has not run."
     },
     "rating": {
       "score": "Rated {{n}} of 3",
@@ -346,6 +353,9 @@
     },
     "promos": {
       "title": "Promos"
+    },
+    "stats": {
+      "title": "Statistics"
     }
   }
 }

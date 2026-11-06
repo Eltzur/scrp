@@ -7,7 +7,7 @@ import { fmtBytes, fmtDate, freshness } from '../format';
 import { tabHref } from '../nav';
 
 /** לוח בקרה: chain freshness, search build stamps, counters, server (SU11A-54).
- * SU11A-59: the reviews, categories and promos card titles link to their tabs. */
+ * SU11A-59: the reviews, categories and promos card titles link to their tabs; SU11A-69: the stats card. */
 const DOT = {
   today: 'bg-emerald-600',
   yesterday: 'bg-amber-500',
@@ -128,6 +128,22 @@ export default function StatusScreen() {
             <Row label={t('admin.status.active_hides')} value={s.promo_curation?.active_hides} />
             <Row label={t('admin.status.curation_expired')} value={s.promo_curation?.expired} />
           </dl>
+        </Card>
+
+        {/* SU11A-69: the latest collected day; null until su11a69_stats.sql is applied. */}
+        <Card title={t('admin.status.stats')} href={tabHref('stats')} linkLabel={open('stats')}>
+          {s.stats?.web || s.stats?.api ? (
+            <>
+              <dl>
+                <Row label={t('admin.status.stats_web')} value={s.stats.web?.page_views.toLocaleString('he-IL')} />
+                <Row label={t('admin.status.stats_visitors')} value={s.stats.web?.visitors.toLocaleString('he-IL')} />
+                <Row label={t('admin.status.stats_api')} value={s.stats.api?.calls.toLocaleString('he-IL')} />
+              </dl>
+              <p className="text-xs text-gray-500 mt-2">
+                {t('admin.status.stats_day', { day: s.stats.web?.day ?? s.stats.api?.day })}
+              </p>
+            </>
+          ) : <p className="text-sm text-gray-600">{t('admin.status.stats_none')}</p>}
         </Card>
 
         <Card title={t('admin.status.counters')}>

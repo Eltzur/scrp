@@ -62,10 +62,11 @@ test('a card with href has a real link in its heading, with the hint for screen 
   assert.doesNotMatch(m.card({ title: 'בניית החיפוש' }), /<a /);
 });
 
-test('the dashboard links reviews, categories and promos only', () => {
+test('the dashboard links reviews, categories, promos and (SU11A-69) stats only', () => {
   const src = readFileSync(join(web, 'src/admin/screens/StatusScreen.tsx'), 'utf8');
   const hrefs = [...src.matchAll(/href=\{tabHref\(([^)]*\))/g)].map(x => x[1]);
-  assert.equal(hrefs.length, 3);
+  assert.equal(hrefs.length, 4);
+  assert.ok(hrefs.some(h => h.startsWith("'stats'")));
   assert.ok(hrefs.some(h => h.startsWith("'queue'")));
   assert.ok(src.includes("href={tabHref('categories', (s.category_suggestions?.pending ?? 0) > 0 ? 'suggestions' : undefined)}"));
   assert.ok(hrefs.some(h => h.startsWith("'promos', 'pins'")));

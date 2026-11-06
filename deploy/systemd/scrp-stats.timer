@@ -1,0 +1,13 @@
+[Unit]
+Description=XXL — daily admin statistics timer (03:30 Israel time)
+
+[Timer]
+# Inline timezone — TimeZone= is not a valid [Timer] key (SU10S-8).
+# 03:30: after midnight (yesterday is complete), before the 04:00 backup and the
+# 04:00-04:30 quiet window, far from the 10:00 load and the 14:30 build.
+OnCalendar=*-*-* 03:30:00 Asia/Jerusalem
+Persistent=true
+Unit=scrp-stats.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,33 @@
+[Unit]
+Description=XXL — daily admin statistics (nginx log counts + GA4 / Play / App Store when connected)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=dude
+Group=dude
+# Least privilege for /var/log/nginx (www-data:adm, mode 0640): the adm group
+# for THIS process only; dude's own login is not added to adm (SU11A-69).
+SupplementaryGroups=adm
+WorkingDirectory=/home/dude/scrp
+# DATABASE_URL and the stats_* settings come from .env (systemd's
+# EnvironmentFile sets the process environment; the script never reads .env).
+EnvironmentFile=/home/dude/scrp/.env
+
+# SU11A-69. Streams the logs and stores daily COUNTS only (stats_daily): never
+# an IP, a user agent, a URL with its query string, a token or a key.
+# Bounded: the visitor sets are capped in scripts/stats_logs.py; a runaway run
+# is stopped here instead of pressing the 3.8 GiB box (CLAUDE.md rule 8).
+MemoryMax=400M
+TimeoutStartSec=30min
+Nice=10
+IOSchedulingClass=idle
+ExecStart=/home/dude/scrp/venv/bin/python3 -m scripts.stats_collect
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=scrp-stats
+
+[Install]
+WantedBy=multi-user.target

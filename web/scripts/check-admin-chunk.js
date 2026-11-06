@@ -45,9 +45,9 @@ const staticFiles = [...seen].map(k => manifest[k]?.file).filter(Boolean);
 for (const f of staticFiles) {
   const js = readFileSync(join(dist, f), 'utf8');
   // Admin API paths only: the MFA calls live in supabase-js, which the shop loads anyway.
-  // SU11A-57: the category admin paths too; SU11A-58: the promo ones.
+  // SU11A-57: the category admin paths too; SU11A-58: the promo ones; SU11A-69: stats.
   for (const needle of ['/admin/me', '/admin/status', '/admin/audit', '/admin/ratings/history',
-    '/admin/categories', '/admin/category-suggestions', '/admin/promos']) {
+    '/admin/categories', '/admin/category-suggestions', '/admin/promos', '/admin/stats']) {
     if (js.includes(needle)) problems.push(`${f} contains "${needle}"`);
   }
 }

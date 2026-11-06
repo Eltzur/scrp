@@ -1,0 +1,89 @@
+{
+  "intro": "Daily aggregate counts only: no IP addresses, browser identifiers, search text or user details. Collected once a day (03:30) for the previous day.",
+  "range": "Range",
+  "range_days": "{{n}} days",
+  "refresh": "Refresh",
+  "updated_as_of": "Updated to {{day}}",
+  "state": {
+    "ok": "Connected",
+    "error": "Last collection failed",
+    "not_connected": "Not connected",
+    "never_run": "Not collected yet",
+    "unavailable": "Unavailable"
+  },
+  "last_error": "Last error: {{error}}",
+  "unavailable_hint": "The statistics tables do not exist yet: apply the SU11A-69 migration.",
+  "never_run_hint": "The daily collection has not run for this source yet.",
+  "hints": {
+    "ga4": "Missing the Google service-account key and the GA4 property id. SU11A-69 runbook, \"Connect later: GA4\".",
+    "play": "Missing the Google service-account key and the Play Console bucket id. SU11A-69 runbook, \"Connect later: Google Play\".",
+    "appstore": "Missing a separate App Store Connect key with the Sales and Reports role. SU11A-69 runbook, \"Connect later: App Store\"."
+  },
+  "notes": {
+    "no_host": "Some log lines have no site name and were counted as \"unknown\": finish runbook step 5 (the nginx log format).",
+    "partial": "Days the logs did not fully cover were not stored.",
+    "analytics_request_missing": "Impressions and product page views: the one-time Analytics Reports request is missing (runbook, App Store, step 5)."
+  },
+  "web": {
+    "title": "Website",
+    "host": "Site",
+    "page_views": "Page views",
+    "visitors": "Visitors (estimate)",
+    "bots": "Bots",
+    "ga4_users": "GA4 users",
+    "ga4_page_views": "GA4 views",
+    "total": "Total",
+    "unknown_host": "Unknown",
+    "chart": "Page views per day",
+    "series_nginx": "Server logs (nginx)",
+    "series_ga4": "Google Analytics",
+    "why_title": "Why do the numbers differ?",
+    "why": "The server logs count every page load by a person (bots are counted separately), including people who block cookies or ads. GA4 counts only visitors who accepted cookies and whose browser does not block Google Analytics, so it is always lower. Log \"visitors\" is an estimate: distinct network + browser pairs per day, counted in memory only and stored as a number.",
+    "ga4_note": "GA4 counts only visitors who accepted cookies and do not block Google Analytics.",
+    "top_paths": "Most viewed pages",
+    "other_route": "(other pages)",
+    "top_referrers": "Referrers",
+    "direct": "(direct)",
+    "ip_ref": "(IP address)",
+    "views": "Views",
+    "page": "Page"
+  },
+  "api": {
+    "title": "App and website usage (API requests)",
+    "platform": "Platform",
+    "calls": "Requests",
+    "share": "Share",
+    "errors": "5xx errors",
+    "chart": "API requests per day",
+    "platforms": {
+      "web": "Website",
+      "android": "Android",
+      "ios": "iPhone",
+      "other": "Other",
+      "bot": "Bots and tools"
+    },
+    "note": "The platform comes from the client type: Android (okhttp), iPhone (CFNetwork) and the website (a browser coming from an XXL site). Only requests are counted, not users or devices: the app sends no identifier, and that stays so."
+  },
+  "play": {
+    "title": "Google Play",
+    "installs": "Installs",
+    "uninstalls": "Uninstalls",
+    "active_devices": "Active devices (latest)",
+    "chart": "Installs per day",
+    "note": "Google publishes these a few days late."
+  },
+  "appstore": {
+    "title": "App Store",
+    "downloads": "First downloads",
+    "redownloads": "Re-downloads",
+    "updates": "Updates",
+    "impressions": "Store impressions",
+    "page_views": "Product page views",
+    "chart": "Downloads per day",
+    "note": "Apple publishes the reports one to two days late."
+  },
+  "chart_table": "Show the data as a table",
+  "day": "Day",
+  "no_data": "No data in this range.",
+  "chart_max": "max {{n}}"
+}

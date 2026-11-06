@@ -4,4 +4,6 @@ Repo copies of the nginx configuration added for the SU11A-48 review findings F-
 
 `api-noindex.conf` is a record of `/etc/nginx/snippets/api-noindex.conf`, applied by Dude on 22 Oct 2026 (backup `sites-available/api-super.xxl.co.il.bak-2026-10-22`). The live file wins if they ever differ.
 
+`xxl-log-format.conf` (SU11A-69) adds the site name (`$host`) to the shared `access.log` for the admin statistics; installed by `docs/admin/su11a69_runbook.md` step 5, together with commenting out the plain `access_log` line in `/etc/nginx/nginx.conf`.
+
 When a live file is changed by hand, copy the change back here in the same session.

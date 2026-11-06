@@ -74,6 +74,11 @@ export interface Status {
   moderation: { pending: number; hidden_7d: number; banned_users: number } | null;
   category_suggestions?: { pending: number; pending_items: number } | null;
   promo_curation?: { active_pins: number; active_hides: number; expired: number } | null;
+  /** SU11A-69: the latest collected day (null until su11a69_stats.sql is applied). */
+  stats?: {
+    web: { day: string; page_views: number; visitors: number } | null;
+    api: { day: string; calls: number } | null;
+  } | null;
   db_size_bytes: number | null;
   disk: { path: string; total_bytes: number; free_bytes: number } | null;
   memory: { process_rss_bytes: number | null; system_total_bytes: number | null; system_available_bytes: number | null };
@@ -223,3 +228,25 @@ export const getCitiesA = () =>
 /** Public endpoint (chains with promos in force), for the chain picker. */
 export const getPromoChainsA = () =>
   http.get<{ chain_id: string; name: string }[]>('/promos/chains').then(r => r.data);
+
+// --- Statistics (SU11A-69) ---------------------------------------------------
+
+export type StatsSource = 'web' | 'api' | 'ga4' | 'play' | 'appstore';
+export interface StatsRun {
+  status: 'ok' | 'error' | 'not_configured' | 'never_run';
+  last_run_at: string | null; last_success_at: string | null; last_error_at: string | null;
+  error: string | null; as_of: string | null; note: string | null;
+}
+export interface StatsSeries { source: StatsSource; metric: string; dimension: string; points: [string, number][] }
+export interface StatsBody {
+  from: string; to: string; days: number;
+  sources: Record<StatsSource, StatsRun>;
+  series: StatsSeries[];
+  top_paths: { dimension: string; value: number }[];
+  top_referrers: { dimension: string; value: number }[];
+  /** true before the su11a69 migration is applied */
+  unavailable?: boolean;
+}
+/** Aggregates only: counts per day per host / platform / route / referrer domain. */
+export const getStats = (days: number) =>
+  http.get<StatsBody>('/admin/stats', { params: { days } }).then(r => r.data);

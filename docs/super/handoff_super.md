@@ -960,6 +960,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-66 (Nov 5) — Part A: read-only category coverage script `scripts/su11a66_category_coverage.py` (not yet run on the server) and the browse / search design proposal `docs/catalog/su11a66_categories_browse_design.md`; nothing built. Part B: customer-compensation coupons ("פיצוי") left out of `/promos/list|grouped|promoted`, flagged in admin search. Runbook `docs/admin/su11a66b_runbook.md`. Not deployed.
 - SU11A-67 (Nov 5) — category browse pages: `/categories/browse-tree` + `/categories/{id}/items` (visibility rule: manual / gs1 + rule high-medium / ai high; linked at 5; tobacco 404), web `/categories` pages with the search card grid, header link, nginx heavy location. Runbook `docs/catalog/su11a67_runbook.md`. Not deployed.
 - SU11A-68 (Nov 6) — categories phase 1b: `q` inside a category (search v2's matcher, restricted), city "cheapest" by the city's own price, `category` on /search and /compare (+ /categories/dominant, "הצג רק ב..."), category SEO (indexable, canonical, noindex on filters, BreadcrumbList, sitemap from the live tree at deploy), home categories section. Runbook `docs/catalog/su11a68_runbook.md`. Not deployed.
+- SU11A-69 (Nov 6) — admin statistics dashboard: nginx-log website traffic + app activity per platform (works now), GA4 / Play installs / App Store downloads + impressions (built, connect later); daily aggregates only (scrp-stats.timer 03:30), never IPs / user agents / query strings. Runbook `docs/admin/su11a69_runbook.md`. Not deployed.
 - SU11A-56 (Oct 25) — catalog taxonomy v1.2 (`taxonomy_v1_2.csv`, `gs1_group_map_v1_2.csv`: D09.C11, D16.C08, D07.C08.S01 storage split), Sonnet 5.5 pilot on the graded AI audit (53% vs Haiku 64%: gate failed, no full re-check). Not applied.
 - SU11A-55 (Oct 25) — catalog: Dude's review as `docs/catalog/review_graded_v1.csv` (150 manual rows), taxonomy/rules v1.1 (`taxonomy_v1_1.csv`, `brand_category_hints_v1_1.csv`; head anchor, %, hard negatives, brand pin), AI audit sample `ai_audit_sample_v1.xlsx`. Not applied.
 - SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
@@ -2749,7 +2750,85 @@ Runbook: `docs/catalog/su11a68_runbook.md`. No migration, no nginx change.
 
 ---
 
-## 📋 Open items / next steps (as of 5 Nov 2026)
+### SU11A-69 (6 Nov 2026) - admin statistics dashboard: website traffic, app activity, store installs / downloads; built, not deployed
+
+Runbook: `docs/admin/su11a69_runbook.md`.
+- **Order:** quiet time → pull → read-only log checks → migration → nginx `$host` log format → unit + timer → first run → API restart → web deploy → browser check.
+- **Connect later:** C1 GA4, C2 Google Play, C3 App Store, each ending with a test.
+
+**What it is:**
+- An admin tab **"סטטיסטיקות"** (`web/src/admin/screens/StatsScreen.tsx`, its own lazy chunk with `admin/i18n/stats.*.json` and a small SVG chart, no chart library).
+- A dashboard card "תנועה ושימוש" (`StatusScreen.tsx`, fed by `/admin/status` `stats`).
+- `GET /admin/stats?days=1..400` (`api/routers/admin_stats.py`), behind admin + aal2. Without the migration it answers every source `never_run` and `unavailable: true` (no 500).
+- A daily job, `scripts/stats_collect.py`, run by `scrp-stats.timer` at 03:30 Asia/Jerusalem (inline OnCalendar). It runs as dude with `SupplementaryGroups=adm` (the least privilege that reads /var/log/nginx), `MemoryMax=400M`, Nice 10, idle I/O.
+- The job stores into `stats_daily` (source, metric, dimension, day, value; unique per the first four, so re-runs upsert) and `stats_runs` (per source: status, last run / success / error, as_of, note). Migration `db/migrations/su11a69_stats.sql` + rollback.
+
+**Sources:**
+
+| Source | State | Metrics |
+|---|---|---|
+| A1 website (nginx `access.log*`, plain + `.gz`) | **works now** | per Israel-time day and host (super / xxl / www / fly; admin and unknown hosts left out): page_views (GET HTML, 2xx / 304, not assets / probes), bot_page_views, visitors (estimate), top 20 paths, top 10 referrer domains |
+| A2 app activity (`api-super.access.log*`) | **works now** | calls and errors_5xx per platform: web / android / ios / bot / other. Admin-console calls, OPTIONS and /health are not counted |
+| B1 GA4 Data API | built, **not connected** | users, sessions, page_views per day and hostname; last 7 days re-read on every run |
+| B2 Play statistics export (Cloud Storage) | built, **not connected** | installs, uninstalls, active_devices, user_installs (monthly `installs_<pkg>_<YYYYMM>_overview.csv`, UTF-16) |
+| B3 App Store Connect (separate key) | built, **not connected** | downloads / redownloads / updates (Sales Reports, a 404 counts 0 only when the day is 3+ days old); impressions / page_views (Analytics Reports "App Store Discovery and Engagement Standard", newest instance wins per day) |
+
+- B1–B3 use REST with `requests` + `python-jose`, which were already dependencies; nothing new to install.
+- Until their settings exist they record `not_configured` and the card shows "לא מחובר" with a one-line hint.
+- **App Store keys:** the daily key needs **Sales and Reports**. Apple lets only an **Admin** key create the one-time ongoing Analytics request, so the runbook uses a temporary Admin key for `--asc-request-analytics` and revokes it after. The EAS key B3NWA8C97L is refused in code.
+
+**How the platforms are told apart:** the apps send no custom header today (`xxl-super-mobile src/api/client.ts`: Accept / Content-Type / Authorization only), so the split comes from the user agent the HTTP stacks add.
+- **Android:** RN fetch and expo-image use OkHttp, `okhttp/4.x` (`Dalvik/` too).
+- **iOS:** NSURLSession, `SUPER%20XXL/<build> CFNetwork/… Darwin/…`; expo-image adds `SUPER XXL/<ver> (iPhone; iOS …)`.
+- **Web:** a `Mozilla/` browser with a Referer from an xxl.co.il site. Mobile Safari is the web, not the app.
+
+That is reliable for today's builds.
+- **Calls only, no app-session estimate.** The app has no identifier, and IP + "okhttp/4.12.0" would be one carrier NAT address, not a device.
+- **Optional (Open items):** an `X-XXL-Client: ios|android/<version>` header in a later app version would add per-version counts. It has no identifier and needs no privacy-label change.
+
+**Privacy guarantees:**
+- **Nothing personal is stored.** Only daily counts reach the DB. dimension is a host, a platform, a known route, a referrer domain or ''.
+- **Top paths are the site's own routes only.** That is `stats_logs.ROUTES` plus `/categories/<id>`; anything else is `/(other)`. A path segment can hold free text: a test found `/search/<text>` and the allowlist was added.
+- **Query strings are cut before counting.**
+- **Long digit runs are masked.**
+- **`db.stats.check_dimension` refuses** IPs, `?`, `://`, `=`, `@` and over-long values before the database.
+- **Visitors** = distinct sha256(salt + IP + UA) per (host, day), held in memory. The salt is random per day per run and never written, so only the count leaves the module, and the count does not depend on the salt.
+- **Bots** are counted separately and are not in visitors.
+- **Errors** in `stats_runs` are reduced to class / HTTP status / the API's error code, with URLs and token-like strings removed (`stats_sources.safe_error`).
+- **Run output** is counts per day only.
+- **Store labels:** no Apple App Privacy / Play Data safety change; one line in `docs/store_privacy_inventory.md` §H.
+- **Web privacy policy coverage** (`web/src/pages/PrivacyPolicyPage.tsx`): line 50 covers the server logs; lines 48 / 70 / 79 cover GA4. An optional clearer wording for aggregate statistics is proposed in §H; Dude decides.
+
+**Log format (step 5):** nginx's default `combined` has no host, and super, xxl.co.il, fly and admin share `access.log`.
+- `deploy/nginx/xxl-log-format.conf` = `combined` + ` "$host"`, with the plain `access_log` line in nginx.conf commented out (conf.d is included after it, and a second `access_log` would double every line).
+- Lines from before the change count under the host "(unknown)", never guessed. Admin navigation in them is skipped by Referer when it can be.
+- A day the logs do not reach back to the start of is partial and not stored.
+- The first run backfills 7 days; later runs take the days after `as_of`, up to yesterday.
+
+**Tests:**
+- **`tests/test_stats_su11a69.py`** (22):
+  - page / asset / probe / API classification, bots, hosts, admin excluded, no-host lines, the route allowlist;
+  - platform split;
+  - referrer domains;
+  - visitor key determinism within a run and an equal count across runs;
+  - partial days, old `.gz` skipped by mtime, rotated + gz files read;
+  - **privacy:** every SQL parameter sent, the stored rows and the printed output contain none of the IPs, user agents, search text, `?` or `fbclid`;
+  - idempotent re-runs, stale top entries replaced, first-run / next-day / up-to-date windows, a failure keeping as_of;
+  - GA4 / Play / App Store with fake HTTP: rows, 404 rules, the pre-signed segment URL fetched without auth, the newest analytics instance, the missing-request note, the forbidden EAS key, real RS256 / ES256 token signing;
+  - not_configured paths and safe errors;
+  - `/admin/stats` gate (no token, non-admin, aal1 → 403), body, 422 ranges, and before the migration.
+- **`tests/test_stats_su11a69_pg.py`** (4): the migration twice, owner scrp_app, no IP / UA / URL column, CHECK constraints, replace / upsert / record_run, `/admin/stats` + the `/admin/status` card, rollback + re-apply.
+- **Web:**
+  - `scripts/admin-stats.test.mjs` (5): helpers, card states, SVG segments, the rendered screen (tables, hints, explanation, legend pattern, data table, no IP-like text), the before-migration view;
+  - `admin-nav.test.mjs` now expects the 4th dashboard link;
+  - `npm run test:unit` 67 pass, including the deploy guard;
+  - `tsc -b`, eslint, i18n parity (295 + 287 lazy), the vite build and check:admin-chunk (`/admin/stats` added to its needles) are clean.
+- **Sizes:** main chunk 175.13 → 175.76 kB (+0.63 kB: the tab / card labels in the main admin strings, like the other tabs); StatsScreen chunk 21.1 kB (admin only).
+- **Full Python suite on PG18:** `tests/` 994 passed; `api/tests` 1 passed plus the 14 known `test_smoke` failures.
+
+---
+
+## 📋 Open items / next steps (as of 6 Nov 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (verified, SU11A-53). Lawyer review of the terms is Dude's call.
 - **SU11A-36 Search v2:** SEARCH_V2=on since 21 Oct 2026; timer daily 14:30.
@@ -2769,11 +2848,11 @@ Runbook: `docs/catalog/su11a68_runbook.md`. No migration, no nginx change.
 - **SU11A-60 promos page:** deployed 1 Nov 2026 (API restarted on 5a1c2fb, web da83ca4, guard MATCH). `docs/admin/su11a60_runbook.md`. Follow-up (not started): precompute `/promos/today` in the 14:30 build (cold call still ~11 s; cached after).
 - **SU11A-59 /chains + admin CORS + dashboard links:** deployed 1 Nov 2026. `docs/admin/su11a59_runbook.md`. Follow-up candidate (not started): `/stats` (scans all prices).
 - **SU11A-58 promo pins / hides:** in use on production by 1 Nov. `docs/admin/su11a58_runbook.md` (migration, restart, ONE web deploy for SU11A-57 + SU11A-58 from a PC with `web/.env.production`, checks). Open decision: whether a hide should also exclude a promotion from prices (options A / B / C in the SU11A-58 entry).
-- **SU11A-69 (planned): admin statistics dashboard** in the admin console, all aggregate, no IPs stored:
-  - web visits from GA4 plus nginx access-log counts;
-  - Play installs from the Google Cloud Storage statistics export;
-  - App Store downloads / impressions through an App Store Connect API key with the Sales / Analytics role;
-  - app usage as API calls per platform.
+- **SU11A-69 admin statistics:** built, not deployed. Run `docs/admin/su11a69_runbook.md` steps 1-10 (migration, nginx `$host` log format, timer, first run, restart, web deploy).
+  - **Connect B1-B3** when convenient: runbook C1 GA4 (service account + Viewer + property id), C2 Google Play (same service account + Play Console read-only reports + bucket id), C3 App Store (separate Sales and Reports key + a one-time Admin-key Analytics request, revoked after). Each card shows "לא מחובר" until then.
+  - Optional: send `X-XXL-Client: ios|android/<version>` (no identifier, no privacy-label change) from a later app version, for per-version counts; the platform split already works from the user agents.
+  - Optional: reword the privacy policy's log purpose to name aggregate statistics (`docs/store_privacy_inventory.md` §H).
+- **Category warm-up after the 14:30 build (optional):** the first city request per category after a build takes ~1.5-2.5 s, then it is cached; a small warm-up of the popular departments after `scrp-search-items` would hide that.
 - **SU11A-70 (planned): view modes for search / category / promos results**, remembered per user:
   - grid (today);
   - list: a compact row with the name, the cheapest price and chain, the chains count, the savings and the add button; per-chain prices on expand;
@@ -2807,4 +2886,4 @@ Runbook: `docs/catalog/su11a68_runbook.md`. No migration, no nginx change.
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-69 (planned: admin statistics dashboard); then SU11A-70 (planned: result view modes). SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
+Next free session ID: SU11A-70 (planned: result view modes). SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).

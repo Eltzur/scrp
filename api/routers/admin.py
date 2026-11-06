@@ -14,7 +14,7 @@ GET /admin/me                       {is_admin, mfa} for the console
 GET /admin/ratings/history          recent moderator decisions
 GET /admin/ratings/{id}             one rating with all its reports
 GET /admin/status                   platform status (cached 30 s); SU11A-57: + open category suggestions;
-                                    SU11A-58: + promo pins / hides
+                                    SU11A-58: + promo pins / hides; SU11A-69: + stats (latest day)
 GET /admin/audit                    the audit log
 
 The api-super host's nginx rate limit and X-Robots-Tag cover /admin/* like
@@ -209,6 +209,13 @@ def _curation_counts(conn) -> dict:
             "expired": int(row["expired"] or 0)}
 
 
+def _stats_summary(conn) -> dict:
+    """SU11A-69: the latest web / API day for the dashboard card (null until
+    su11a69_stats.sql is applied)."""
+    from db import stats as S
+    return S.latest_summary(conn)
+
+
 def _proc_kb(path: str, keys: tuple[str, ...]) -> dict:
     out: dict = {}
     with open(path, encoding="ascii") as f:
@@ -249,6 +256,7 @@ def build_status(conn) -> dict:
         "moderation": _safe(conn, lambda: _moderation_counts(conn)),
         "category_suggestions": _safe(conn, lambda: _suggestion_counts(conn)),
         "promo_curation": _safe(conn, lambda: _curation_counts(conn)),
+        "stats": _safe(conn, lambda: _stats_summary(conn)),
         "db_size_bytes": _safe(conn, lambda: conn.execute(
             text("SELECT pg_database_size(current_database())")).scalar()),
         "disk": _disk(),

@@ -8,7 +8,7 @@ import { hashParts } from './nav';
 import { Loading } from './ui';
 
 /**
- * The admin console (SU11A-54), phase 1; SU11A-57 adds the קטגוריות tab, SU11A-58 the מבצעים tab. App.tsx renders ONLY this on
+ * The admin console (SU11A-54), phase 1; SU11A-57 adds the קטגוריות tab, SU11A-58 the מבצעים tab, SU11A-69 the סטטיסטיקות tab. App.tsx renders ONLY this on
  * admin.xxl.co.il (or localhost?admin=1), loaded lazily: the shop's visitors
  * never download it. Hebrew RTL, mobile first.
  *
@@ -27,11 +27,13 @@ const AuditScreen = lazy(() => import('./screens/AuditScreen'));
 const CategoriesScreen = lazy(() => import('./screens/CategoriesScreen'));
 // SU11A-58: promo pins / hides, its own chunk with its strings.
 const PromosScreen = lazy(() => import('./screens/PromosScreen'));
+// SU11A-69: statistics, its own chunk with its strings and the SVG chart.
+const StatsScreen = lazy(() => import('./screens/StatsScreen'));
 
-const TABS = ['status', 'queue', 'categories', 'promos', 'history', 'audit'] as const;
+const TABS = ['status', 'stats', 'queue', 'categories', 'promos', 'history', 'audit'] as const;
 type Tab = typeof TABS[number];
 const SCREENS: Record<Tab, LazyExoticComponent<ComponentType>> = {
-  status: StatusScreen, queue: QueueScreen, categories: CategoriesScreen, promos: PromosScreen,
+  status: StatusScreen, stats: StatsScreen, queue: QueueScreen, categories: CategoriesScreen, promos: PromosScreen,
   history: HistoryScreen, audit: AuditScreen,
 };
 
