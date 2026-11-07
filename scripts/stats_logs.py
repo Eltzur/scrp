@@ -7,11 +7,14 @@ keeps ONLY counters in memory:
   and unknown hosts are left out), per Israel-time day and host:
     page_views       SU11A-70: GET / HEAD of an HTML document, status 200 or 304,
                      by a browser (user agent "Mozilla/..." and not a known bot /
-                     tool), not flagged internal
+                     tool), not flagged internal, and (SU11A-71) the path is one
+                     of the site's own routes (route_path): the SPA answers 200
+                     for any path, so /wp-admin or /xmlrpc.php look like pages
     bot_page_views   the same by a known crawler / tool (not in visitors)
     rejected_requests  every other request to the host that is not a static
                      asset served OK: 3xx other than 304, 4xx (scanner probes
-                     like /wp-admin, /.env), 5xx, POST, non-browser clients
+                     like /wp-admin, /.env), 5xx, POST, non-browser clients,
+                     and 200s for paths that are not routes (SU11A-71)
     internal_page_views  page views from a browser that set the "don't count
                      this browser" switch (cookie xxl_internal=1, logged by nginx
                      as the flag field "1"); not in page_views / visitors / top
@@ -21,8 +24,8 @@ keeps ONLY counters in memory:
                      never written, so the digests cannot be recomputed or joined
                      later; only the COUNT leaves this module.
     top_path         the 20 most viewed paths per host: the site's own routes
-                     only (route_path; anything else is "/(other)"), never a
-                     query string
+                     only, never a query string (since SU11A-71 a non-route is
+                     never a page view, so "/(other)" appears only in older rows)
     referrer         the 10 most common external referrer DOMAINS per host
   api (api-super.xxl.co.il), per day and platform:
     calls / errors_5xx   web | android | ios | admin | bot | other (CORS
@@ -192,6 +195,11 @@ def route_path(path: str) -> str:
     return OTHER_ROUTE
 
 
+def is_route(path: str) -> bool:
+    """One of the site's own routes (SU11A-71: required for a page view)."""
+    return route_path(path) != OTHER_ROUTE
+
+
 def is_static(path: str) -> bool:
     return path.startswith("/assets/") or bool(_STATIC_EXT.search(path))
 
@@ -339,7 +347,10 @@ class Aggregator:
         if host == UNKNOWN_HOST and _ref_host(line.referrer) in EXCLUDED_HOSTS:
             return  # best effort before the $host format: admin navigation
         w = self.web[(host, d)]
-        if not is_page(line.method, path, line.status):
+        if not is_page(line.method, path, line.status) or not is_route(path):
+            # SU11A-71: the site is an SPA, so nginx answers 200 with index.html
+            # for ANY path (/wp-admin, /xmlrpc.php...). Only the site's own
+            # routes are pages; any other 200 is a probe or a typo.
             w.rejected += 1
             return
         if is_bot(line.ua):

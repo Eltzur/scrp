@@ -90,6 +90,7 @@ def web_lines():
         # day 2
         line(IPS[1], ts(D2, 8), f"GET /search/{SECRET_Q}?q={SECRET_Q} HTTP/2.0"),
         line(IPS[1], ts(D2, 8), "GET /product/7290004131074 HTTP/2.0"),
+        line(IPS[1], ts(D2, 8, 1), "GET /promos HTTP/2.0"),
         "garbage line that is not nginx\n",
         # today: never counted
         line(IPS[0], ts(TODAY, 1), "GET / HTTP/2.0"),
@@ -226,7 +227,9 @@ def test_aggregator_counts(logs):
     assert val(r, "bot_page_views", "super.xxl.co.il", D1) == 1
     assert val(r, "page_views", "xxl.co.il", D1) == 1
     assert val(r, "page_views", "fly.xxl.co.il", D1) == 1
-    assert val(r, "page_views", "super.xxl.co.il", D2) == 2
+    # SU11A-71: /search/<text> and /product/<code> are not routes: rejected, not pages.
+    assert val(r, "page_views", "super.xxl.co.il", D2) == 1
+    assert val(r, "rejected_requests", "super.xxl.co.il", D2) == 2
     assert not [x for x in r if "admin" in x[2] or "185.229" in x[2]]
     assert val(r, "top_path", "super.xxl.co.il/categories/D02", D1) == 2
     assert val(r, "top_path", "super.xxl.co.il/", D1) == 1
@@ -570,12 +573,13 @@ def test_admin_stats_body(client, engine, logs, monkeypatch, capsys):
     assert b["sources"]["web"]["status"] == "ok" and b["sources"]["web"]["as_of"] == "2026-11-05"
     assert b["sources"]["ga4"]["status"] == "not_configured"
     s = {(x["source"], x["metric"], x["dimension"]): x["points"] for x in b["series"]}
-    assert s[("web", "page_views", "super.xxl.co.il")] == [["2026-11-04", 5], ["2026-11-05", 2]]
+    assert s[("web", "page_views", "super.xxl.co.il")] == [["2026-11-04", 5], ["2026-11-05", 1]]
     assert s[("api", "calls", "android")] == [["2026-11-04", 2], ["2026-11-05", 1]]
     assert not [k for k in s if k[1] in ("top_path", "referrer")]
     assert {"dimension": "super.xxl.co.il/categories/D02", "value": 2} in b["top_paths"]
-    # /search/<text> and /product/<code> are not routes of the site: one "(other)" bucket.
-    assert {"dimension": "super.xxl.co.il/(other)", "value": 2} in b["top_paths"]
+    # /search/<text> and /product/<code> are not routes of the site: since SU11A-71
+    # they are rejected requests, so no "(other)" top path at all.
+    assert not [x for x in b["top_paths"] if "(other)" in x["dimension"]]
     assert {"dimension": "super.xxl.co.il|google.com", "value": 1} in b["top_referrers"]
     blob = r.text
     assert not [ip for ip in IPS if ip in blob] and SECRET_Q not in blob and "Mozilla" not in blob

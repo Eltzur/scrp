@@ -79,15 +79,17 @@ def test_page_rule(line_kw, kind):
     assert got == want, (line_kw, r)
 
 
-def test_rejected_has_no_paths_and_other_bucket_is_real_pages():
+def test_rejected_has_no_paths_and_non_routes_are_rejected():
     lines = [ln(IPS[1], ts(D1), f"GET /wp-admin/{SECRET_Q} HTTP/1.1", status=404),
              ln(IPS[1], ts(D1), "GET /.env HTTP/1.1"),
              ln(IPS[0], ts(D1), "GET /some-unlisted-page HTTP/2.0"),
              ln(IPS[0], ts(D1), "GET /categories/D02.C02.S01 HTTP/2.0"),
              ln(IPS[0], ts(D1), "GET /categories/X99 HTTP/2.0")]
     _, r = agg(lines)
-    assert r[("rejected_requests", H, D1)] == 2
-    assert r[("top_path", f"{H}/(other)", D1)] == 2      # an unlisted page and a bad category id
+    # SU11A-71: an unlisted page and a bad category id are not pages either.
+    assert r[("rejected_requests", H, D1)] == 4
+    assert r[("page_views", H, D1)] == 1
+    assert ("top_path", f"{H}/(other)", D1) not in r
     assert r[("top_path", f"{H}/categories/D02.C02.S01", D1)] == 1
     assert not [k for k in r if "wp-admin" in k[1] or ".env" in k[1] or SECRET_Q in k[1]]
 

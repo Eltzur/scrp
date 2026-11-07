@@ -962,6 +962,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-68 (Nov 6) — categories phase 1b: `q` inside a category (search v2's matcher, restricted), city "cheapest" by the city's own price, `category` on /search and /compare (+ /categories/dominant, "הצג רק ב..."), category SEO (indexable, canonical, noindex on filters, BreadcrumbList, sitemap from the live tree at deploy), home categories section. Runbook `docs/catalog/su11a68_runbook.md`. Not deployed.
 - SU11A-69 (Nov 6) — admin statistics dashboard: nginx-log website traffic + app activity per platform (works now), GA4 / Play installs / App Store downloads + impressions (built, connect later); daily aggregates only (scrp-stats.timer 03:30), never IPs / user agents / query strings. Runbook `docs/admin/su11a69_runbook.md`. Not deployed.
 - SU11A-70 (Nov 7) — honest visitor counts (browser GET/HEAD 200/304 only; rejected_requests; admin API platform; "don't count this browser" cookie flag in the nginx log), App Store badge live (Apple's official artwork, he / en), Super logo → Super home + footer "כל שירותי XXL". Runbook `docs/admin/su11a70_runbook.md`. Not deployed.
+- SU11A-71 (Nov 7) — GA4 never sent data (gtag shim pushed Arrays; fixed to Google's Arguments form; data starts on the deploy date), path-only page_view once per route, server stats count only the site's own routes (SPA 200s for /wp-admin etc. are rejected). Runbook `docs/admin/su11a71_runbook.md`. Not deployed.
 - SU11A-56 (Oct 25) — catalog taxonomy v1.2 (`taxonomy_v1_2.csv`, `gs1_group_map_v1_2.csv`: D09.C11, D16.C08, D07.C08.S01 storage split), Sonnet 5.5 pilot on the graded AI audit (53% vs Haiku 64%: gate failed, no full re-check). Not applied.
 - SU11A-55 (Oct 25) — catalog: Dude's review as `docs/catalog/review_graded_v1.csv` (150 manual rows), taxonomy/rules v1.1 (`taxonomy_v1_1.csv`, `brand_category_hints_v1_1.csv`; head anchor, %, hard negatives, brand pin), AI audit sample `ai_audit_sample_v1.xlsx`. Not applied.
 - SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
@@ -2900,6 +2901,57 @@ Runbook: `docs/admin/su11a70_runbook.md`: quiet time → pull → nginx flag fie
 - **Main chunk:** 175.76 → 176.01 kB (+0.25 kB). StatsScreen chunk 25.6 kB (admin only).
 - **Full Python suite on PG18:** `tests/` 1026 passed; `api/tests` 1 passed plus the 14 known `test_smoke` failures.
 
+### SU11A-71 (7 Nov 2026) - GA4 gtag fix (data starts on the deploy date), path-only page views, stats count real routes only; built, not deployed
+
+Runbook: `docs/admin/su11a71_runbook.md`: quiet time → pull → one-time `--days 7` recompute (before / after sums) → web deploy → two GA4 settings → browser check. No migration, no API restart, no nginx change. (The planned "view modes" session moves to SU11A-72.)
+
+**A. GA4 never received data** (found 7 Nov in a live browser test; `web/src/utils/analytics.ts`):
+- **The cause:** the shim was `window.gtag = function (...args) { window.dataLayer.push(args); }`. gtag.js processes only Arguments objects from `dataLayer`, so every Array it pushed was ignored: `js`, `config` and `page_view` alike. After consent the script loaded, but no `/g/collect` hit was sent and no `_ga` cookie was set. Property 537761103 has had zero data since launch. **GA4 data starts on the SU11A-71 web deploy date: there is no history before it.**
+- **CLAUDE.md was wrong:** it said the tag was "VERIFIED working". The Measurement Protocol hit proved the property, not the browser tag. The Analytics section is corrected.
+- **The fix:** Google's canonical `window.gtag = function gtag() { window.dataLayer.push(arguments); }`, with `// eslint-disable-next-line prefer-rest-params`.
+- **The consent gate is unchanged:** nothing loads before "אישור", and `trackPageview` re-checks consent at send time.
+  - **New:** decline, withdraw ("עוגיות") and accept set Google's opt-out flag `window['ga-disable-G-YB4X4E5ZKM']`. Now that gtag.js really runs, this also stops its own automatic events after a withdrawal.
+- **Path only** (the same rule as the server stats):
+  - `page_path` is the path without the query string or hash.
+  - `page_location` is the origin plus the path, set in `config`, with `gtag('set')` and on every `page_view`.
+  - `page_referrer` is the external referrer's origin only on the first view (`https://www.google.com/`), then the site's previous path.
+  - gtag's defaults (the full `document.location` / `document.referrer`) are overridden for every event.
+  - Runbook step 5 turns off GA4's own history-change page views and "Site search" (it reads `?q=`).
+- **One page view per route:** `App.tsx` tracks `location.pathname` only, and the dedupe compares paths. `/promos` → `/promos?city=…` (the page's `history.replace`) is no longer a new page view; before, /promos fired three in one visit. A → B → A still counts three. A new search on the same page (`/?q=…`) is no new page view.
+- **One fix for both hosts:** the portal (xxl.co.il / www) and Super render the same `SiteApp`, which has one `initGA` and one `trackPageview` call site.
+- **What GA4 now receives:** `page_view` with `page_path` (`ep.page_path`), `page_location` (`dl`, `https://<host><path>`), `page_referrer` (`dr`, an origin or `https://<host><previous path>`) and the page title (`dt`, route-based, `seoMeta.ts`), plus gtag's own client id / session cookies after consent. Never a query string, a hash or a full external URL.
+
+**B. Server stats count only real pages** (`scripts/stats_logs.py`):
+- **The gap:** the site is an SPA, so nginx answers 200 (index.html) for any path; the SU11A-70 200 / 304 rule let `/wp-admin` or `/xmlrpc.php` count as pages.
+- **The rule:** a page view (and a bot page view, and an internal one) now also needs `is_route(path)`, the same allowlist as the top pages (`ROUTES` + the category family, checked against `App.tsx` by `test_routes_allowlist_matches_the_web_routes`). Any other 200 is `rejected_requests`.
+- **"(דפים אחרים)":** the allowlist has no legit gap (search lives on `/?q=`, there is no `/search` or `/product` route), so no new row can carry `/(other)`. The screen label stays only for rows stored before the recompute.
+- **Unmatched paths in the fixtures:** scanner probes (`/wp-admin`, `/wp-login`, `/xmlrpc.php`, `/phpmyadmin`, `/cgi-bin/…`, `/admin`), then `/search/<text>` and `/product/<code>`, then malformed category ids and `/promos/today`. Production shares come from runbook step 3 (BEFORE's `other_top_path`).
+
+**Before / after (fixtures only; production numbers come from runbook step 3):**
+
+| Fixture | Before (SU11A-70 parser) | After |
+|---|---|---|
+| SU11A-69 fixture, super.xxl.co.il, 4 Nov | page_views 5, visitors 3 | the same |
+| SU11A-69 fixture, super.xxl.co.il, 5 Nov (`/search/<text>`, `/product/<code>`, `/promos`) | page_views 3, `/(other)` 2 | page_views 1, rejected_requests 2, no `/(other)` |
+| 47-line mix (SU11A-70 page-rule cases + SU11A-71 probes and routes) | page_views 25, visitors 3, rejected 14, `/(other)` 11 | page_views 14, visitors 2, rejected 25 |
+
+**Tests:**
+- **`tests/test_stats_su11a71.py`** (27):
+  - 13 non-routes served 200 are rejected and are not pages: `/wp-admin`, `/.env`, `/xmlrpc.php`, `/search/<text>`, a bad category id and more;
+  - 11 real routes are page views, including `/categories/D02.C01.S03` and a `?city=` query;
+  - a bot probe is rejected; the internal flag counts only on routes; `is_route`.
+- **Updated:** `test_stats_su11a69.py` (5 Nov: one real page added; `/search` and `/product` are rejected; no `(other)` top path) and `test_stats_su11a70.py` (unlisted pages are rejected).
+- **`web/scripts/analytics.test.mjs`** (7), which bundles the real module:
+  - every `dataLayer` entry is `[object Arguments]`, never an Array;
+  - nothing loads or is pushed before consent, and nothing after a decline;
+  - the whole payload has no `?` or `#`, and the referrer is an origin;
+  - one page_view for /promos across the mount effect and two `?city=` replaces, with A → B → A still counted;
+  - withdrawing stops it and sets `ga-disable`;
+  - `App.tsx` tracks the pathname only, from one call site.
+- **Web:** `npm run test:unit` 81 pass, including the deploy guard. tsc, eslint, i18n parity (295 + 297 lazy), the build, check:admin-chunk and `check-deploy hosts` are clean.
+- **Main chunk:** 176.01 → 176.51 kB (+0.50 kB).
+- **Full Python suite on PG18:** `tests/` 1053 passed; `api/tests` 1 passed plus the 14 known `test_smoke` failures.
+
 ---
 
 ## 📋 Open items / next steps (as of 7 Nov 2026)
@@ -2924,11 +2976,12 @@ Runbook: `docs/admin/su11a70_runbook.md`: quiet time → pull → nginx flag fie
 - **SU11A-58 promo pins / hides:** in use on production by 1 Nov. `docs/admin/su11a58_runbook.md` (migration, restart, ONE web deploy for SU11A-57 + SU11A-58 from a PC with `web/.env.production`, checks). Open decision: whether a hide should also exclude a promotion from prices (options A / B / C in the SU11A-58 entry).
 - **SU11A-69 admin statistics:** built, not deployed. Run `docs/admin/su11a69_runbook.md` steps 1-10 (migration, nginx `$host` log format, timer, first run, restart, web deploy).
 - **SU11A-70 honest counts / App Store badge / logo link:** built, not deployed. Run `docs/admin/su11a70_runbook.md` after the SU11A-69 runbook (nginx flag field, API restart, `--days 7` recompute, web deploy), then paste the step 5 BEFORE / AFTER sums into the SU11A-70 entry. Turn "לא לספור את הדפדפן הזה" on in every browser and phone the team uses.
+- **SU11A-71 GA4 fix / real-route page views:** built, not deployed. Run `docs/admin/su11a71_runbook.md` after the SU11A-70 runbook (`--days 7` recompute, web deploy, two GA4 Enhanced-measurement settings, browser check with DevTools + Realtime), then paste the step 3 BEFORE / AFTER sums and the deploy date into the SU11A-71 entry. **GA4 has no data before that deploy date.**
   - **Connect B1-B3** when convenient: runbook C1 GA4 (service account + Viewer + property id), C2 Google Play (same service account + Play Console read-only reports + bucket id), C3 App Store (separate Sales and Reports key + a one-time Admin-key Analytics request, revoked after). Each card shows "לא מחובר" until then.
   - Optional: send `X-XXL-Client: ios|android/<version>` (no identifier, no privacy-label change) from a later app version, for per-version counts; the platform split already works from the user agents.
   - Optional: reword the privacy policy's log purpose to name aggregate statistics (`docs/store_privacy_inventory.md` §H).
 - **Category warm-up after the 14:30 build (optional):** the first city request per category after a build takes ~1.5-2.5 s, then it is cached; a small warm-up of the popular departments after `scrp-search-items` would hide that.
-- **SU11A-71 (planned; was SU11A-70): view modes for search / category / promos results**, remembered per user:
+- **SU11A-72 (planned; was SU11A-70, then SU11A-71): view modes for search / category / promos results**, remembered per user:
   - grid (today);
   - list: a compact row with the name, the cheapest price and chain, the chains count, the savings and the add button; per-chain prices on expand;
   - comparison table: products × chains, for short lists.
@@ -2961,4 +3014,4 @@ Runbook: `docs/admin/su11a70_runbook.md`: quiet time → pull → nginx flag fie
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-71 (planned: result view modes). SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
+Next free session ID: SU11A-72 (planned: result view modes). SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).

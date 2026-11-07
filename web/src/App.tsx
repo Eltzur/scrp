@@ -103,13 +103,13 @@ function SiteApp() {
     applyRouteMeta(location.pathname);
   }, [location.pathname]);
 
-  // Track SPA route changes (GA4 pageview per navigation).
-  // Depends on `search` as well as `pathname`: the search page keeps its query
-  // in the query string, so /search?q=X -> /search?q=Y is a real navigation the
-  // user made, and pathname alone would report it as no movement at all.
+  // Track SPA route changes: one GA4 page_view per real route change.
+  // SU11A-71: the path only - never the query string or hash (they carry what
+  // users typed, e.g. ?q= or ?city=), and a query-only update (a page's own
+  // history.replace) is not a new page view.
   useEffect(() => {
-    trackPageview(location.pathname + location.search);
-  }, [location.pathname, location.search]);
+    trackPageview(location.pathname);
+  }, [location.pathname]);
 
   return (
     <>
