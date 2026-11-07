@@ -46,7 +46,10 @@
     "direct": "(direct)",
     "ip_ref": "(IP address)",
     "views": "Views",
-    "page": "Page"
+    "page": "Page",
+    "rejected": "Rejected",
+    "internal": "Team",
+    "counting_note": "A page view = a browser that loaded a page of the site successfully (200 or 304). Rejected = every other request to the site that is not one of a page's own files: redirects, errors (such as /wp-admin or /.env scans), non-browser clients. Team = views from browsers with \"Don't count this browser\" on; they are not in page views or visitors."
   },
   "api": {
     "title": "App and website usage (API requests)",
@@ -60,7 +63,8 @@
       "android": "Android",
       "ios": "iPhone",
       "other": "Other",
-      "bot": "Bots and tools"
+      "bot": "Bots and tools",
+      "admin": "Admin console"
     },
     "note": "The platform comes from the client type: Android (okhttp), iPhone (CFNetwork) and the website (a browser coming from an XXL site). Only requests are counted, not users or devices: the app sends no identifier, and that stays so."
   },
@@ -85,5 +89,13 @@
   "chart_table": "Show the data as a table",
   "day": "Day",
   "no_data": "No data in this range.",
-  "chart_max": "max {{n}}"
+  "chart_max": "max {{n}}",
+  "internal": {
+    "title": "Don't count this browser",
+    "on": "On: page views from this browser are not counted.",
+    "off": "Off: page views from this browser are counted as usual.",
+    "explain": "The setting is a cookie in this browser only (on every xxl.co.il site, for a year). Turn it on in each browser and on each phone you use. It affects website page views only.",
+    "api_note": "API requests from this browser (search, prices) are still counted as \"website\"; only the admin console's own requests have their own row.",
+    "refused": "The browser did not keep the cookie (for example in development, or with cookies blocked)."
+  }
 }

@@ -141,6 +141,7 @@ export default function StatusScreen() {
               </dl>
               <p className="text-xs text-gray-500 mt-2">
                 {t('admin.status.stats_day', { day: s.stats.web?.day ?? s.stats.api?.day })}
+                {' '}{t('admin.status.stats_api_note')}
               </p>
             </>
           ) : <p className="text-sm text-gray-600">{t('admin.status.stats_none')}</p>}

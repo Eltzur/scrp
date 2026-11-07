@@ -961,6 +961,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-67 (Nov 5) — category browse pages: `/categories/browse-tree` + `/categories/{id}/items` (visibility rule: manual / gs1 + rule high-medium / ai high; linked at 5; tobacco 404), web `/categories` pages with the search card grid, header link, nginx heavy location. Runbook `docs/catalog/su11a67_runbook.md`. Not deployed.
 - SU11A-68 (Nov 6) — categories phase 1b: `q` inside a category (search v2's matcher, restricted), city "cheapest" by the city's own price, `category` on /search and /compare (+ /categories/dominant, "הצג רק ב..."), category SEO (indexable, canonical, noindex on filters, BreadcrumbList, sitemap from the live tree at deploy), home categories section. Runbook `docs/catalog/su11a68_runbook.md`. Not deployed.
 - SU11A-69 (Nov 6) — admin statistics dashboard: nginx-log website traffic + app activity per platform (works now), GA4 / Play installs / App Store downloads + impressions (built, connect later); daily aggregates only (scrp-stats.timer 03:30), never IPs / user agents / query strings. Runbook `docs/admin/su11a69_runbook.md`. Not deployed.
+- SU11A-70 (Nov 7) — honest visitor counts (browser GET/HEAD 200/304 only; rejected_requests; admin API platform; "don't count this browser" cookie flag in the nginx log), App Store badge live (Apple's official artwork, he / en), Super logo → Super home + footer "כל שירותי XXL". Runbook `docs/admin/su11a70_runbook.md`. Not deployed.
 - SU11A-56 (Oct 25) — catalog taxonomy v1.2 (`taxonomy_v1_2.csv`, `gs1_group_map_v1_2.csv`: D09.C11, D16.C08, D07.C08.S01 storage split), Sonnet 5.5 pilot on the graded AI audit (53% vs Haiku 64%: gate failed, no full re-check). Not applied.
 - SU11A-55 (Oct 25) — catalog: Dude's review as `docs/catalog/review_graded_v1.csv` (150 manual rows), taxonomy/rules v1.1 (`taxonomy_v1_1.csv`, `brand_category_hints_v1_1.csv`; head anchor, %, hard negatives, brand pin), AI audit sample `ai_audit_sample_v1.xlsx`. Not applied.
 - SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
@@ -2828,7 +2829,80 @@ That is reliable for today's builds.
 
 ---
 
-## 📋 Open items / next steps (as of 6 Nov 2026)
+### SU11A-70 (7 Nov 2026) - honest visitor counts, App Store badge, Super logo link; built, not deployed
+
+Runbook: `docs/admin/su11a70_runbook.md`: quiet time → pull → nginx flag field → API restart → one-time `--days 7` recompute (before / after sums) → web deploy → browser checks. No migration. (The planned "view modes" session moves to SU11A-71.)
+
+**A. Statistics count people, not probes** (`scripts/stats_logs.py`, `db/stats.py`, StatsScreen):
+
+1. **Page views:**
+   - **The rule:** a page view is GET / HEAD of an HTML document, status **200 or 304** only, by a **browser** (`Mozilla/…` and not a known bot / tool), not flagged internal.
+   - **Bots** keep `bot_page_views`.
+   - **Rejected:** everything else on a web host that is not a static file served OK is counted per host per day as **`rejected_requests`**, with no paths. That covers 3xx other than 304, 4xx probes (`/wp-admin`, `/.env`, `*.php`), 5xx, other 2xx, POST, and non-browser clients such as `Dart/` or `okhttp` on the website.
+   - **Probes** are separated from static files: `_PROBE_EXT` vs `_STATIC_EXT`.
+   - **Allowlist:** checked against the current web routes by a test that reads `App.tsx`. The category family is now exactly the web's `CATEGORY_PATH` (`D..`, `D...C..`, `D...C...S..`).
+2. **API platform `admin`:**
+   - an api-super request whose Referer host is admin.xxl.co.il, checked before the web rule;
+   - before, these calls and every `/admin/*` call were dropped;
+   - label "קונסולת ניהול";
+   - its own row on the screen, left out of the dashboard card total (`db/stats.latest_summary`), with "ללא בקשות קונסולת הניהול." in the card's small print.
+3. **"לא לספור את הדפדפן הזה"** (`stats/internalCookie.ts`):
+   - **The switch:** an accessible `role="switch"` in the statistics tab, default off. It sets `xxl_internal=1; Domain=.xxl.co.il; Path=/; Secure; SameSite=Lax; Max-Age=1 year`; off deletes the cookie.
+   - **nginx:** `deploy/nginx/xxl-log-format.conf` gains `map $cookie_xxl_internal $xxl_internal { "1" "1"; default "-"; }`, logged as one more quoted field after `"$host"`. The cookie value itself is never logged.
+   - **The parser** reads all three shapes (no host / host / host + flag); only exactly `"1"` is the flag.
+   - **Counting:** flagged page views go to **`internal_page_views`** per host. They are not in page views, visitors, top pages or referrers.
+   - **The UI** says that it is per browser / phone, covers website page views only, and that API calls from that browser still count as "אתר".
+4. **Replace per day:** the log sources already used `replace_days` (delete + insert per day, one transaction). A new test shows that metrics which disappear are removed on a re-run. `--days N` (1–14) is the one-time recompute, run through `systemd-run` with the unit's limits (runbook step 5).
+
+**Before / after (fixtures only; production numbers come from runbook step 5):**
+
+| Fixture | Before (SU11A-69 parser) | After |
+|---|---|---|
+| SU11A-69 fixture (`tests/test_stats_su11a69.py`), 4 / 5 Nov | page_views 5 / 2, visitors 3 / 1 | the same; rejected_requests 3 on 4 Nov |
+| 18-line probe mix (`test_page_rule` cases) | page_views 5, visitors 4 | page_views 3, visitors 3, rejected_requests 11 |
+
+**B. App Store badge:**
+- **The link:** `IOS_APP_URL` = `https://apps.apple.com/il/app/super-xxl/id6829450422` (`web/src/config/apps.ts`). AppBadges is used on the Super home, in the footer and in the portal card; AppBanner (iPhone / iPad) links there too.
+- **Removed strings:** "בקרוב גם ל-iPhone" (`apps.ios_soon`), `apps.banner_ios` and `apps.banner_ios_sub`.
+- **Alt text:** "הורידו מה-App Store" / "Download on the App Store".
+- **The artwork:** Apple's official badges, downloaded unmodified from Apple's App Store Marketing Tools (linked from developer.apple.com's marketing guidelines). The domain the prompt named, tools.applemarketingtools.com, no longer resolves; its successor is toolbox.marketingtools.apple.com.
+  - `public/badges/app-store-he.svg` (he-il, 121.664 × 42) and `app-store-en.svg` (en-us, 119.664 × 40);
+  - the source URLs, SHA-256 hashes and trademark line are in `public/badges/SOURCE.txt`;
+  - `.gitattributes` marks the badges `-text`, so autocrlf can never change a byte.
+- **Apple's rules followed** (from the guidelines page):
+  - the App Store badge **first** in the lineup;
+  - the black badge next to another store's;
+  - at least 40 px tall on screen;
+  - clear space of ¼ of the height (`p-[10px]` around the 40 px badge, inside the link, so the focus ring sits outside);
+  - the localisation matching the page language.
+- **Same visual height as Play:** the Play PNG carries its own clear space (its black badge is 168 / 250 px), so at 60 px it shows ~40 px.
+  - Because of Apple's minimum the old 32 px "sm" size is gone: one size everywhere.
+  - Both badges are links with a visible focus ring.
+
+**C. Super logo:**
+- `components/HeaderLogo.tsx`: on any non-portal host the logo is a router link to "/" named "SUPER XXL — דף הבית"; on xxl.co.il / www (and localhost?portal=1) it stays https://xxl.co.il.
+- Super's footer gains "כל שירותי XXL" / "All XXL services" → https://xxl.co.il. It is not on the portal.
+
+**Tests:**
+- **`tests/test_stats_su11a70.py`** (32):
+  - **the page rule:** 23 cases, including 200 / HEAD / 304 pages, 301 / 302 / 404 / 403 / 500 / 206, probes, POST, curl / python / empty-UA bots, Dart and okhttp rejected, assets;
+  - rejected rows carry no paths; the `/(other)` bucket and the route allowlist against App.tsx and `CATEGORY_PATH`;
+  - the admin platform and the dashboard total without admin;
+  - the three line shapes, and flagged views skipped and counted;
+  - re-run replace semantics, and the `--days` bounds;
+  - **the privacy guard with the new field:** IPs, user agents, search text, `?q=` and a cookie-looking flag value never reach the SQL parameters, the rows or the output.
+- **`test_stats_su11a69.py`:** its admin-console expectation now reads `admin` (was: not counted).
+- **Web:**
+  - `scripts/site-su11a70.test.mjs` (6): logo per host, footer link per host and language, badge order / artwork per language / alt / focus / clear space, the badge files' hashes vs SOURCE.txt, the iPhone / Android / desktop banner, and no "coming soon for iPhone" left;
+  - `admin-stats.test.mjs` +1 (switch, cookie string, new columns, admin row);
+  - `npm run test:unit` 74 pass, including the deploy guard;
+  - tsc, eslint, i18n parity (295 + 297 lazy), the build and check:admin-chunk are clean.
+- **Main chunk:** 175.76 → 176.01 kB (+0.25 kB). StatsScreen chunk 25.6 kB (admin only).
+- **Full Python suite on PG18:** `tests/` 1026 passed; `api/tests` 1 passed plus the 14 known `test_smoke` failures.
+
+---
+
+## 📋 Open items / next steps (as of 7 Nov 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (verified, SU11A-53). Lawyer review of the terms is Dude's call.
 - **SU11A-36 Search v2:** SEARCH_V2=on since 21 Oct 2026; timer daily 14:30.
@@ -2849,11 +2923,12 @@ That is reliable for today's builds.
 - **SU11A-59 /chains + admin CORS + dashboard links:** deployed 1 Nov 2026. `docs/admin/su11a59_runbook.md`. Follow-up candidate (not started): `/stats` (scans all prices).
 - **SU11A-58 promo pins / hides:** in use on production by 1 Nov. `docs/admin/su11a58_runbook.md` (migration, restart, ONE web deploy for SU11A-57 + SU11A-58 from a PC with `web/.env.production`, checks). Open decision: whether a hide should also exclude a promotion from prices (options A / B / C in the SU11A-58 entry).
 - **SU11A-69 admin statistics:** built, not deployed. Run `docs/admin/su11a69_runbook.md` steps 1-10 (migration, nginx `$host` log format, timer, first run, restart, web deploy).
+- **SU11A-70 honest counts / App Store badge / logo link:** built, not deployed. Run `docs/admin/su11a70_runbook.md` after the SU11A-69 runbook (nginx flag field, API restart, `--days 7` recompute, web deploy), then paste the step 5 BEFORE / AFTER sums into the SU11A-70 entry. Turn "לא לספור את הדפדפן הזה" on in every browser and phone the team uses.
   - **Connect B1-B3** when convenient: runbook C1 GA4 (service account + Viewer + property id), C2 Google Play (same service account + Play Console read-only reports + bucket id), C3 App Store (separate Sales and Reports key + a one-time Admin-key Analytics request, revoked after). Each card shows "לא מחובר" until then.
   - Optional: send `X-XXL-Client: ios|android/<version>` (no identifier, no privacy-label change) from a later app version, for per-version counts; the platform split already works from the user agents.
   - Optional: reword the privacy policy's log purpose to name aggregate statistics (`docs/store_privacy_inventory.md` §H).
 - **Category warm-up after the 14:30 build (optional):** the first city request per category after a build takes ~1.5-2.5 s, then it is cached; a small warm-up of the popular departments after `scrp-search-items` would hide that.
-- **SU11A-70 (planned): view modes for search / category / promos results**, remembered per user:
+- **SU11A-71 (planned; was SU11A-70): view modes for search / category / promos results**, remembered per user:
   - grid (today);
   - list: a compact row with the name, the cheapest price and chain, the chains count, the savings and the add button; per-chain prices on expand;
   - comparison table: products × chains, for short lists.
@@ -2872,7 +2947,7 @@ That is reliable for today's builds.
 - **Apple (SU11B series, `docs/handoff_mobile.md` SU11B-1 … SU11B-5):**
   - Individual account (Team V46QVK4YSA), App Store Connect app SUPER XXL (ascAppId 6829450422), bundle `il.co.xxl.supermarket`, Israel only.
   - **iOS 1.2.2 (2)** (EAS 4eaab3fc, mobile 65882ea) submitted to App Review 4 Nov 20:58 (submission 871055cd-5aab-48e7-8f41-b3a4af70e0d0), manual release; **Waiting for Review** as of 5 Nov. 1.2.2 (1) failed processing (ITMS-90683, fixed SU11B-3).
-  - **RELEASE GATE (Dude, 4 Nov):** after approval do not press Release This Version until Dude decides about the seller name ("Lead Tour" → "Elad Tzur"); Apple Support case 103015749110 open (opened 1 Nov, nudged 3 Nov). After release: website badge switch (kit §9).
+  - **RELEASE GATE (Dude, 4 Nov):** after approval do not press Release This Version until Dude decides about the seller name ("Lead Tour" → "Elad Tzur"); Apple Support case 103015749110 open (opened 1 Nov, nudged 3 Nov). After release: website badge switch (kit §9) - **done in SU11A-70** (the app is live on the Israel App Store; badge built, ships with the SU11A-70 web deploy).
   - ASC set: age 13+, App Privacy published, Privacy Choices URL https://super.xxl.co.il/account/delete, Mac / Vision Pro off. DSA: non-trader / not in the EU; align to trader before any EU distribution.
   - **Next: 1.2.3** (SU11B-5 + SU11B-6, mobile a3988d1: add-to-basket on product page and search rows, SU11A-63 L1/L2, deletion recovery fix): build iOS + Android from that commit only after 1.2.2 is approved (runbook K). Review account appreview@xxl.co.il: re-create if a reviewer deletes it.
   - Sign in with Apple is not required (email/password only). Guideline 1.2 items (terms, report, block, blocked list, contact) are live.
@@ -2886,4 +2961,4 @@ That is reliable for today's builds.
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-70 (planned: result view modes). SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
+Next free session ID: SU11A-71 (planned: result view modes). SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).

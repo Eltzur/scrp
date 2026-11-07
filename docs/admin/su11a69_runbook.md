@@ -105,17 +105,17 @@ sudo cp ~/scrp/deploy/nginx/xxl-log-format.conf /etc/nginx/conf.d/xxl-log-format
 sudo sed -i 's|^\(\s*\)access_log /var/log/nginx/access.log;|\1# SU11A-69: in conf.d/xxl-log-format.conf (format xxl_vhost)\n\1# access_log /var/log/nginx/access.log;|' /etc/nginx/nginx.conf
 grep -n "access_log" /etc/nginx/nginx.conf; sudo nginx -t && sudo systemctl reload nginx
 curl -s -o /dev/null https://super.xxl.co.il/ ; curl -s -o /dev/null https://xxl.co.il/ ; sleep 1
-sudo tail -n 2 /var/log/nginx/access.log | awk -F'"' '{print $(NF-1)}'
+sudo tail -n 2 /var/log/nginx/access.log | awk -F'"' '{print $(NF-3), "|", $(NF-1)}'
 ```
 
 **Expect:**
 - the `grep` shows only the two commented lines in nginx.conf;
 - `nginx -t` says `syntax is ok` / `test is successful`;
-- the last command prints **only host names**, `super.xxl.co.il` and `xxl.co.il`.
+- the last command prints **only host names and the flag**: `super.xxl.co.il | -` and `xxl.co.il | -`. Since SU11A-70 the file also logs the "don't count this browser" flag (`1` or `-`) after the host.
 
 **STOP if:**
 - `nginx -t` fails. Undo it: `sudo cp /etc/nginx/nginx.conf.bak-su11a69 /etc/nginx/nginx.conf && sudo rm /etc/nginx/conf.d/xxl-log-format.conf && sudo nginx -t && sudo systemctl reload nginx`. Then paste the output.
-- the last command prints anything other than host names.
+- the last command prints anything other than host names and `-` / `1`.
 
 **Note:** lines written before this step have no host. The first run's 7-day backfill counts those days under "לא ידוע" (unknown). From tomorrow every day is per site. The card says so in a note until the old days age out of the 7-day window.
 

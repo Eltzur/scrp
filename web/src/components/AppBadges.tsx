@@ -1,46 +1,36 @@
 import { useTranslation } from 'react-i18next';
-import { APP_STORE_BADGE_SRC, IOS_APP_URL, PLAY_BADGE_SRC, PLAY_STORE_URL } from '../config/apps';
+import { appStoreBadgeSrc, IOS_APP_URL, PLAY_BADGE_SRC, PLAY_STORE_URL } from '../config/apps';
 
 /**
- * Google Play badge + the iPhone label (SU11A-53).
+ * App Store + Google Play badges (SU11A-53; App Store since SU11A-70), both
+ * official artwork, unaltered (public/badges/SOURCE.txt).
  *
- * The Play image is Google's official Hebrew badge (public/badges/SOURCE.txt),
- * shown unaltered: its PNG already carries Google's clear space, so it is only
- * scaled by height (never below 40 px). The iPhone element is plain text, not
- * a link or a button, sized like the visible badge body (the black rectangle
- * is about 2/3 of the PNG's height). It becomes Apple's App Store badge only
- * when IOS_APP_URL is set (config/apps.ts).
+ * Apple's rules (App Store Marketing Guidelines): the App Store badge FIRST in
+ * the lineup (first in DOM and reading order: the right-hand one in RTL), the
+ * black badge next to other store badges, at least 40 px tall on screen, and
+ * clear space of one quarter of its height on every side: p-[10px] around a
+ * 40 px badge, inside the link, so the focus ring sits outside it.
+ * Same visual height: the Play PNG carries its own clear space (the black badge
+ * is 168 / 250 of the image), so at 60 px its visible badge is ~40 px, as tall
+ * as the App Store badge; both links are 60 px boxes. Apple's 40 px minimum is
+ * why there is a single size (the old 32 px "sm" would be below it).
+ * Both are real links, keyboard-focusable with a visible focus ring.
  */
-const SIZES = {
-  md: { img: 'h-[60px]', pill: 'h-10 px-4 text-sm' },
-  sm: { img: 'h-12', pill: 'h-8 px-3 text-xs' },
-} as const;
+const LINK = 'inline-block rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+  'focus-visible:outline-emerald-700';
 
-export default function AppBadges({ size = 'md', className = '' }: { size?: keyof typeof SIZES; className?: string }) {
-  const { t } = useTranslation();
-  const s = SIZES[size];
+export default function AppBadges({ className = '' }: { className?: string }) {
+  const { t, i18n } = useTranslation();
   return (
-    <div className={`flex items-center justify-center gap-3 flex-wrap ${className}`} dir="rtl">
-      <a
-        href={PLAY_STORE_URL}
-        target="_blank"
-        rel="noopener"
-        className="inline-block rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
-      >
-        {/* width / height attributes reserve the box before the image loads (no layout shift) */}
-        <img src={PLAY_BADGE_SRC} alt={t('apps.play_alt')} width={646} height={250} className={`${s.img} w-auto`} />
+    <div className={`flex items-center justify-center gap-2 flex-wrap ${className}`} dir="rtl">
+      <a href={IOS_APP_URL} target="_blank" rel="noopener" className={`${LINK} p-[10px]`}>
+        <img src={appStoreBadgeSrc(i18n.language || 'he')} alt={t('apps.ios_store_alt')}
+          height={40} className="h-10 w-auto" />
       </a>
-      {IOS_APP_URL ? (
-        <a href={IOS_APP_URL} target="_blank" rel="noopener" className="inline-block">
-          <img src={APP_STORE_BADGE_SRC} alt={t('apps.ios_store_alt')} className={`${s.img} w-auto`} />
-        </a>
-      ) : (
-        <span
-          className={`inline-flex items-center rounded-lg border border-gray-300 bg-gray-100 text-gray-700 font-medium whitespace-nowrap ${s.pill}`}
-        >
-          {t('apps.ios_soon')}
-        </span>
-      )}
+      <a href={PLAY_STORE_URL} target="_blank" rel="noopener" className={LINK}>
+        {/* width / height attributes reserve the box before the image loads (no layout shift) */}
+        <img src={PLAY_BADGE_SRC} alt={t('apps.play_alt')} width={646} height={250} className="h-[60px] w-auto" />
+      </a>
     </div>
   );
 }

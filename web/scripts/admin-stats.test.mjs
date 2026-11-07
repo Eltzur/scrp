@@ -22,9 +22,11 @@ async function load() {
         import { createElement as h } from 'react';
         import { renderToStaticMarkup } from 'react-dom/server';
         import './src/i18n/config.ts';
-        import { StatsView } from './src/admin/screens/StatsScreen.tsx';
+        import { InternalSwitch, StatsView } from './src/admin/screens/StatsScreen.tsx';
+        export * as cookie from './src/admin/screens/stats/internalCookie.ts';
         export * from './src/admin/screens/stats/statsView.ts';
-        export const view = (b) => renderToStaticMarkup(h(StatsView, { b }));`,
+        export const view = (b) => renderToStaticMarkup(h(StatsView, { b }));
+        export const switchHtml = () => renderToStaticMarkup(h(InternalSwitch));`,
       resolveDir: web, loader: 'tsx',
     },
     bundle: true, platform: 'node', format: 'esm', write: false, jsx: 'automatic', logLevel: 'silent',
@@ -59,11 +61,14 @@ const BODY = {
     { source: 'web', metric: 'page_views', dimension: 'super.xxl.co.il', points: [['2026-11-04', 90], ['2026-11-05', 110]] },
     { source: 'web', metric: 'page_views', dimension: 'xxl.co.il', points: [['2026-11-05', 10]] },
     { source: 'web', metric: 'bot_page_views', dimension: 'super.xxl.co.il', points: [['2026-11-05', 50]] },
+    { source: 'web', metric: 'rejected_requests', dimension: 'super.xxl.co.il', points: [['2026-11-05', 333]] },
+    { source: 'web', metric: 'internal_page_views', dimension: 'super.xxl.co.il', points: [['2026-11-05', 12]] },
     { source: 'web', metric: 'visitors', dimension: 'super.xxl.co.il', points: [['2026-11-04', 30], ['2026-11-05', 40]] },
     { source: 'api', metric: 'calls', dimension: 'android', points: [['2026-11-04', 300], ['2026-11-05', 100]] },
     { source: 'api', metric: 'calls', dimension: 'ios', points: [['2026-11-05', 100]] },
     { source: 'api', metric: 'calls', dimension: 'web', points: [['2026-11-05', 500]] },
     { source: 'api', metric: 'errors_5xx', dimension: 'android', points: [['2026-11-05', 2]] },
+    { source: 'api', metric: 'calls', dimension: 'admin', points: [['2026-11-05', 1000]] },
   ],
   top_paths: [{ dimension: 'super.xxl.co.il/promos', value: 70 }, { dimension: 'super.xxl.co.il/(other)', value: 5 }],
   top_referrers: [{ dimension: 'super.xxl.co.il|google.com', value: 12 }, { dimension: 'super.xxl.co.il|(direct)', value: 40 }],
@@ -74,7 +79,7 @@ const m = await load();
 test('days, totals, daily series with gaps, shares', () => {
   assert.deepEqual(m.dayList('2026-10-30', '2026-11-02'), ['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']);
   assert.deepEqual(m.totals(BODY.series, 'web', 'page_views'), { 'super.xxl.co.il': 200, 'xxl.co.il': 10 });
-  assert.equal(m.total(BODY.series, 'api', 'calls'), 1000);
+  assert.equal(m.total(BODY.series, 'api', 'calls'), 2000);
   assert.equal(m.total(BODY.series, 'api', 'calls', ['ios', 'web']), 600);
   const d3 = m.dayList(BODY.from, BODY.to);
   assert.deepEqual(m.daily(BODY.series, 'web', 'page_views', d3), [null, 90, 120]);
@@ -107,7 +112,11 @@ test('a null day breaks the line; the points stay in the box', () => {
 test('the screen: sources, states, explanation, charts, no personal data', () => {
   const html = m.view(BODY);
   // Website table: host rows + total, bots as a share, no GA4 columns while GA4 is not connected.
-  assert.match(html, /super\.xxl\.co\.il<\/th><td[^>]*>200<\/td><td[^>]*>70<\/td><td[^>]*>20%<\/td><\/tr>/);
+  // SU11A-70: + rejected and team (internal) columns.
+  assert.match(html, /super\.xxl\.co\.il<\/th><td[^>]*>200<\/td><td[^>]*>70<\/td><td[^>]*>20%<\/td><td[^>]*>333<\/td><td[^>]*>12<\/td><\/tr>/);
+  assert.match(html, />נדחו<\/th>/);
+  assert.match(html, />מהצוות<\/th>/);
+  assert.match(html, /צפייה בדף = דפדפן שטען דף באתר בהצלחה \(200 או 304\)/);
   assert.match(html, /סה״כ<\/th><td[^>]*>210<\/td>/);
   assert.doesNotMatch(html, /משתמשים ב־GA4/);
   // States and hints.
@@ -120,8 +129,10 @@ test('the screen: sources, states, explanation, charts, no personal data', () =>
   assert.match(html, /למה המספרים שונים\?/);
   assert.match(html, /GA4 סופר רק מבקרים שאישרו עוגיות/);
   // App activity per platform.
-  assert.match(html, /אנדרואיד<\/th><td[^>]*>400<\/td><td[^>]*>40%<\/td><td[^>]*>2<\/td>/);
-  assert.match(html, /iPhone<\/th><td[^>]*>100<\/td><td[^>]*>10%<\/td>/);
+  assert.match(html, /אנדרואיד<\/th><td[^>]*>400<\/td><td[^>]*>20%<\/td><td[^>]*>2<\/td>/);
+  // SU11A-70: the admin console is its own row.
+  assert.match(html, /קונסולת ניהול<\/th><td[^>]*>1,000<\/td><td[^>]*>50%<\/td>/);
+  assert.match(html, /iPhone<\/th><td[^>]*>100<\/td><td[^>]*>5%<\/td>/);
   // Top lists with readable labels.
   assert.match(html, /\(דפים אחרים\)/);
   assert.match(html, /\(כניסה ישירה\)/);
@@ -138,4 +149,35 @@ test('before the migration: every card says so, nothing breaks', () => {
     sources: Object.fromEntries(Object.keys(BODY.sources).map(k => [k, run('never_run')])) });
   assert.match(html, /טבלאות הסטטיסטיקה עדיין לא קיימות/);
   assert.match(html, /אין נתונים בטווח הזה\./);
+});
+
+test('SU11A-70: "don\'t count this browser" switch and its cookie', () => {
+  assert.equal(m.cookie.internalCookie(true),
+    'xxl_internal=1; Domain=.xxl.co.il; Path=/; Secure; SameSite=Lax; Max-Age=31536000');
+  assert.equal(m.cookie.internalCookie(false),
+    'xxl_internal=; Domain=.xxl.co.il; Path=/; Secure; SameSite=Lax; Max-Age=0');
+  assert.equal(m.cookie.isInternal('a=b; xxl_internal=1; c=d'), true);
+  assert.equal(m.cookie.isInternal('xxl_internal=10'), false);
+  assert.equal(m.cookie.isInternal(''), false);
+  // Default off; a real switch with its label and explanation, focus ring visible.
+  globalThis.document = { cookie: '' };
+  let html = m.switchHtml();
+  assert.match(html, /<button type="button" role="switch" aria-checked="false"[^>]*aria-labelledby="[^"]+"[^>]*aria-describedby="[^"]+"/);
+  assert.match(html, /focus-visible:outline-2/);
+  assert.match(html, /לא לספור את הדפדפן הזה/);
+  assert.match(html, /כבוי: הצפיות מהדפדפן הזה נספרות כרגיל\./);
+  assert.match(html, /יש להפעיל אותה בכל דפדפן ובכל טלפון/);
+  assert.match(html, /רק על צפיות בדפים באתר/);
+  assert.match(html, /בקשות API מהדפדפן הזה .* עדיין נספרות/);
+  globalThis.document = { cookie: 'xxl_internal=1' };
+  html = m.switchHtml();
+  assert.match(html, /aria-checked="true"/);
+  assert.match(html, /פעיל: הצפיות מהדפדפן הזה לא נספרות\./);
+  // Turning it on writes exactly the cookie above (a fake document.cookie records it).
+  const writes = [];
+  globalThis.document = { get cookie() { return writes.at(-1)?.startsWith('xxl_internal=1') ? 'xxl_internal=1' : ''; },
+    set cookie(v) { writes.push(v); } };
+  assert.equal(m.cookie.writeInternal(true), true);
+  assert.equal(m.cookie.writeInternal(false), false);
+  assert.deepEqual(writes, [m.cookie.internalCookie(true), m.cookie.internalCookie(false)]);
 });

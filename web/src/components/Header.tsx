@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { applyDir } from '../i18n/config';
 import { useBasket } from './BasketContext';
 import { useAuth } from './AuthContext';
-import XxlLogo from './XxlLogo';
+import HeaderLogo from './HeaderLogo';
 
 export default function Header() {
   const { t, i18n }         = useTranslation();
@@ -47,10 +47,8 @@ export default function Header() {
           DOM order (and so focus order) is unchanged. */}
       <div className="max-w-6xl mx-auto px-3 sm:px-4 py-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
 
-        {/* Brand logo */}
-        <a href="https://xxl.co.il">
-          <XxlLogo variant="header" lang={isHe ? 'he' : 'en'} className="h-10 sm:h-12" />
-        </a>
+        {/* Brand logo: Super's home on super.xxl.co.il, xxl.co.il on the portal (SU11A-70) */}
+        <HeaderLogo />
 
         <div className="flex flex-wrap items-center justify-end gap-x-1 gap-y-1 sm:gap-3">
           {/* Hot deals link */}

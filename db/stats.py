@@ -166,7 +166,8 @@ def top(conn: Connection, metric: str, day_from: date, day_to: date, limit: int 
 
 
 def latest_summary(conn: Connection) -> dict:
-    """The dashboard card: the latest web day and the latest API day."""
+    """The dashboard card: the latest web day and the latest API day. The API
+    total leaves the admin console out (SU11A-70: platform "admin")."""
     out: dict = {}
     for src, metrics in (("web", ("page_views", "visitors")), ("api", ("calls",))):
         day = conn.execute(text("SELECT max(day) FROM stats_daily WHERE source = :s"), {"s": src}).scalar()
@@ -175,7 +176,9 @@ def latest_summary(conn: Connection) -> dict:
             continue
         vals = dict(conn.execute(text("""
             SELECT metric, sum(value) FROM stats_daily
-            WHERE source = :s AND day = :d AND metric IN :ms GROUP BY metric
+            WHERE source = :s AND day = :d AND metric IN :ms
+              AND NOT (source = 'api' AND dimension = 'admin')
+            GROUP BY metric
         """).bindparams(_expanding("ms")), {"s": src, "d": day, "ms": list(metrics)}).all())
         out[src] = {"day": _iso(day), **{m: int(vals.get(m) or 0) for m in metrics}}
     return out

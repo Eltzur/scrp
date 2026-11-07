@@ -3,3 +3,8 @@
 # systemd unit files must be LF — CRLF in a unit file is not reliably parsed,
 # and these are authored on Windows and consumed on Linux.
 deploy/systemd/* text eol=lf
+
+# SU11A-70: official store badge artwork ships byte-for-byte as downloaded
+# (no line-ending conversion; web/public/badges/SOURCE.txt).
+web/public/badges/*.svg -text
+web/public/badges/*.png -text

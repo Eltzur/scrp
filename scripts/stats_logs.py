@@ -5,8 +5,17 @@ keeps ONLY counters in memory:
 
   web (super.xxl.co.il, xxl.co.il, www.xxl.co.il, fly.xxl.co.il; admin.xxl.co.il
   and unknown hosts are left out), per Israel-time day and host:
-    page_views       GET HTML document requests, 2xx / 304, by a person
+    page_views       SU11A-70: GET / HEAD of an HTML document, status 200 or 304,
+                     by a browser (user agent "Mozilla/..." and not a known bot /
+                     tool), not flagged internal
     bot_page_views   the same by a known crawler / tool (not in visitors)
+    rejected_requests  every other request to the host that is not a static
+                     asset served OK: 3xx other than 304, 4xx (scanner probes
+                     like /wp-admin, /.env), 5xx, POST, non-browser clients
+    internal_page_views  page views from a browser that set the "don't count
+                     this browser" switch (cookie xxl_internal=1, logged by nginx
+                     as the flag field "1"); not in page_views / visitors / top
+                     paths / referrers
     visitors         distinct sha256(salt + ip + user agent) of the people above.
                      The salt is random per day and per run, kept in memory only,
                      never written, so the digests cannot be recomputed or joined
@@ -16,8 +25,9 @@ keeps ONLY counters in memory:
                      query string
     referrer         the 10 most common external referrer DOMAINS per host
   api (api-super.xxl.co.il), per day and platform:
-    calls / errors_5xx   web | android | ios | bot | other (admin calls and CORS
-                         pre-flights are not counted)
+    calls / errors_5xx   web | android | ios | admin | bot | other (CORS
+                         pre-flights and /health are not counted; admin = the
+                         admin console, by its Referer, SU11A-70)
 
 What is NEVER kept or returned: an IP address, a user agent, a full URL, a
 query string. The tests feed lines full of those and check the rows that would
@@ -26,7 +36,9 @@ reach the database (tests/test_stats_su11a69.py).
 Log format. nginx's default `combined` has no host, so lines from the shared
 access.log cannot be told apart by site. SU11A-69 adds `$host` at the end
 (deploy/nginx/xxl-log-format.conf). Lines without it count under the host
-"(unknown)" and are reported, never guessed.
+"(unknown)" and are reported, never guessed. SU11A-70 adds one more field, the
+internal flag ("1" or "-": nginx maps the cookie to one of the two, the cookie
+value itself is never logged). All three shapes parse: no host / host / host + flag.
 """
 from __future__ import annotations
 
@@ -57,14 +69,19 @@ TOP_REFERRERS = 10
 VISITOR_CAP = 100_000
 
 # combined: $remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent
-#           "$http_referer" "$http_user_agent"   (+ SU11A-69: "$host")
+#           "$http_referer" "$http_user_agent"   (+ SU11A-69: "$host")  (+ SU11A-70: "$xxl_internal")
 _LINE = re.compile(
     r'^(?P<ip>\S+) \S+ \S+ \[(?P<ts>[^\]]+)\] "(?P<req>[^"]*)" (?P<status>\d{3}) \S+ '
-    r'"(?P<ref>[^"]*)" "(?P<ua>[^"]*)"(?: "(?P<host>[^"]*)")?')
+    r'"(?P<ref>[^"]*)" "(?P<ua>[^"]*)"(?: "(?P<host>[^"]*)"(?: "(?P<flag>[^"]*)")?)?')
 
-_ASSET_EXT = re.compile(
+# Static files the site serves: requests for them are neither page views nor
+# rejected (when served OK).
+_STATIC_EXT = re.compile(
     r"\.(?:js|mjs|css|map|png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|eot|json|txt|xml|"
-    r"webmanifest|mp4|webm|pdf|zip|gz|php|asp|aspx|env|ini|bak|sql|cgi|pl|yml|yaml|lock)$", re.I)
+    r"webmanifest|mp4|webm|pdf)$", re.I)
+# Scanner probes: never a page.
+_PROBE_EXT = re.compile(r"\.(?:php\d?|asp|aspx|jsp|env|ini|bak|old|sql|cgi|pl|yml|yaml|lock|zip|gz|tar|rar|7z|"
+                        r"git|cfg|conf|log|sh|bat|exe|dll)$", re.I)
 
 BOT_UA = re.compile(
     r"bot\b|bot/|crawl|spider|slurp|facebookexternalhit|bingpreview|headless|lighthouse|"
@@ -80,9 +97,13 @@ def is_bot(ua: str) -> bool:
     return ua in ("", "-") or bool(BOT_UA.search(ua))
 
 
-def platform(ua: str, referrer: str) -> str | None:
-    """web | android | ios | bot | other for an api-super request; None = the
-    admin console (not counted).
+def is_browser(ua: str) -> bool:
+    """SU11A-70: a person's browser: "Mozilla/..." and not a known bot / tool."""
+    return ua.startswith("Mozilla/") and not is_bot(ua)
+
+
+def platform(ua: str, referrer: str) -> str:
+    """web | android | ios | admin | bot | other for an api-super request.
 
     The apps send no custom header today (xxl-super-mobile src/api/client.ts
     sets only Accept / Content-Type / Authorization), so the platform comes from
@@ -91,6 +112,8 @@ def platform(ua: str, referrer: str) -> str | None:
                (Dalvik/ is Android's own HttpURLConnection)
       ios      NSURLSession:   "SUPER%20XXL/<build> CFNetwork/<v> Darwin/<v>";
                expo-image (SDWebImage):   "SUPER XXL/<version> (iPhone; iOS 18.1; Scale/3.00)"
+      admin    the admin console: Referer host admin.xxl.co.il (SU11A-70), checked
+               before the web rule
       web      a browser ("Mozilla/") whose Referer is one of the shop sites
     """
     if is_bot(ua):
@@ -101,7 +124,7 @@ def platform(ua: str, referrer: str) -> str | None:
         return "ios"
     host = _ref_host(referrer)
     if host in EXCLUDED_HOSTS:
-        return None
+        return "admin"
     if ua.startswith("Mozilla/") and host is not None and _own(host):
         return "web"
     return "other"
@@ -157,7 +180,8 @@ ROUTES = frozenset((
     "/favorites", "/login", "/my-ratings", "/partnerships", "/portal-preview", "/privacy", "/promos",
     "/reset-password", "/signup",
 ))
-_CATEGORY_ROUTE = re.compile(r"/categories/[A-Z]\d{2}(?:\.[A-Z]\d{2}){0,2}")
+# The same id family as the web's CATEGORY_PATH (web/src/utils/seoMeta.ts).
+_CATEGORY_ROUTE = re.compile(r"/categories/D\d{2}(?:\.C\d{2}(?:\.S\d{2})?)?")
 
 
 def route_path(path: str) -> str:
@@ -168,13 +192,18 @@ def route_path(path: str) -> str:
     return OTHER_ROUTE
 
 
+def is_static(path: str) -> bool:
+    return path.startswith("/assets/") or bool(_STATIC_EXT.search(path))
+
+
 def is_page(method: str, path: str, status: int) -> bool:
-    """An HTML document request: GET, 2xx or 304, not an asset, not a probe."""
-    if method != "GET" or not (200 <= status < 300 or status == 304):
+    """An HTML document request served OK: GET / HEAD, status 200 or 304 (SU11A-70:
+    no other 2xx, no 3xx, 4xx, 5xx), not a static file, not a probe."""
+    if method not in ("GET", "HEAD") or status not in (200, 304):
         return False
-    if path.startswith(("/assets/", "/.", "/api/")) or path == "(other)":
+    if path.startswith(("/.", "/api/")) or path == "(other)" or is_static(path):
         return False
-    return not _ASSET_EXT.search(path)
+    return not _PROBE_EXT.search(path)
 
 
 def parse_ts(ts: str) -> datetime | None:
@@ -194,6 +223,7 @@ class Line:
     referrer: str
     ua: str
     host: str | None
+    internal: bool = False
 
 
 def parse_line(raw: str) -> Line | None:
@@ -208,7 +238,8 @@ def parse_line(raw: str) -> Line | None:
         return None
     host = m["host"]
     return Line(ip=m["ip"], when=when, method=parts[0], target=parts[1], status=int(m["status"]),
-                referrer=m["ref"], ua=m["ua"], host=host.lower().split(":", 1)[0] if host else None)
+                referrer=m["ref"], ua=m["ua"], host=host.lower().split(":", 1)[0] if host else None,
+                internal=m["flag"] == "1")
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +282,8 @@ def day_start(d: date) -> datetime:
 class _WebDay:
     page_views: int = 0
     bot_page_views: int = 0
+    rejected: int = 0
+    internal: int = 0
     visitors: set = field(default_factory=set)
     visitors_capped: bool = False
     paths: Counter = field(default_factory=Counter)
@@ -301,13 +334,22 @@ class Aggregator:
             self.counts["other_host"] += 1
             return
         path = clean_path(line.target)
-        if not is_page(line.method, path, line.status):
-            return
+        if is_static(path) and (200 <= line.status < 300 or line.status == 304):
+            return  # a page's own files
         if host == UNKNOWN_HOST and _ref_host(line.referrer) in EXCLUDED_HOSTS:
             return  # best effort before the $host format: admin navigation
         w = self.web[(host, d)]
+        if not is_page(line.method, path, line.status):
+            w.rejected += 1
+            return
         if is_bot(line.ua):
             w.bot_page_views += 1
+            return
+        if not is_browser(line.ua):
+            w.rejected += 1
+            return
+        if line.internal:
+            w.internal += 1
             return
         w.page_views += 1
         if len(w.visitors) < VISITOR_CAP:
@@ -329,11 +371,9 @@ class Aggregator:
         if d is None:
             return
         path = clean_path(line.target)
-        if line.method == "OPTIONS" or path.startswith("/admin/") or path in ("/health", "/robots.txt"):
+        if line.method == "OPTIONS" or path in ("/health", "/robots.txt"):
             return
         p = platform(line.ua, line.referrer)
-        if p is None:
-            return
         self.api_calls[(p, d)] += 1
         if line.status >= 500:
             self.api_5xx[(p, d)] += 1
@@ -350,6 +390,10 @@ class Aggregator:
         for (host, d), w in sorted(self.web.items(), key=lambda kv: (kv[0][1], kv[0][0])):
             rows += [("page_views", host, d, w.page_views), ("bot_page_views", host, d, w.bot_page_views),
                      ("visitors", host, d, len(w.visitors))]
+            if w.rejected:
+                rows.append(("rejected_requests", host, d, w.rejected))
+            if w.internal:
+                rows.append(("internal_page_views", host, d, w.internal))
             for path, n in sorted(w.paths.items(), key=lambda kv: (-kv[1], kv[0]))[:TOP_PATHS]:
                 rows.append(("top_path", f"{host}{path}", d, n))
             for ref, n in sorted(w.referrers.items(), key=lambda kv: (-kv[1], kv[0]))[:TOP_REFERRERS]:

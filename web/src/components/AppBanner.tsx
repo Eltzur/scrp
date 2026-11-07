@@ -8,7 +8,7 @@ import { detectPlatform, type AppPlatform } from '../utils/platform';
  * Slim, dismissible app banner at the top of the super pages (SU11A-53).
  *
  *   Android        "available on Android" + a link to Google Play
- *   iPhone / iPad  "coming soon for iPhone" (no link while IOS_APP_URL is null)
+ *   iPhone / iPad  "available for iPhone" + a link to the App Store (SU11A-70)
  *   desktop        nothing (the home section and the footer carry the badge)
  *
  * Never an interstitial: it sits in the page flow above the header. The
@@ -31,8 +31,7 @@ export default function AppBanner() {
   const [open, setOpen] = useState<boolean>(() => !isDismissed());
 
   if (platform === 'desktop' || !open) return null;
-  // Once the iOS app is live the iPhone banner becomes a store link too.
-  const iosLive = platform === 'ios' && !!IOS_APP_URL;
+  const android = platform === 'android';
 
   const dismiss = () => {
     setOpen(false);
@@ -48,24 +47,15 @@ export default function AppBanner() {
     >
       <div className="max-w-6xl mx-auto px-4 min-h-[44px] py-2 flex items-center gap-3 text-sm">
         <p className="flex-1 min-w-0">
-          {platform === 'android' || iosLive ? (
-            <>
-              {t(platform === 'android' ? 'apps.banner_android' : 'apps.banner_ios_live')}{' '}
-              <a
-                href={platform === 'android' ? PLAY_STORE_URL : (IOS_APP_URL as string)}
-                target="_blank"
-                rel="noopener"
-                className="font-semibold text-emerald-800 underline underline-offset-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-700"
-              >
-                {t(platform === 'android' ? 'apps.banner_android_link' : 'apps.banner_ios_link')}
-              </a>
-            </>
-          ) : (
-            <>
-              <span className="font-medium">{t('apps.banner_ios')}</span>{' '}
-              <span className="text-emerald-900">{t('apps.banner_ios_sub')}</span>
-            </>
-          )}
+          {t(android ? 'apps.banner_android' : 'apps.banner_ios_live')}{' '}
+          <a
+            href={android ? PLAY_STORE_URL : IOS_APP_URL}
+            target="_blank"
+            rel="noopener"
+            className="font-semibold text-emerald-800 underline underline-offset-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-700"
+          >
+            {t(android ? 'apps.banner_android_link' : 'apps.banner_ios_link')}
+          </a>
         </p>
         <button
           type="button"

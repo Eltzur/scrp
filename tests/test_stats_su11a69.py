@@ -188,7 +188,7 @@ def test_bots_and_platforms():
     assert L.platform(UA_IOS_IMG, "-") == "ios"
     assert L.platform(UA_CHROME, "https://super.xxl.co.il/promos") == "web"
     assert L.platform(UA_IPHONE_SAFARI, "https://xxl.co.il/") == "web"  # mobile Safari is the web, not the app
-    assert L.platform(UA_CHROME, "https://admin.xxl.co.il/") is None
+    assert L.platform(UA_CHROME, "https://admin.xxl.co.il/") == "admin"  # SU11A-70 (was: not counted)
     assert L.platform(UA_CHROME, "-") == "other"
     assert L.platform("Mozilla/5.0", "https://evil.example/") == "other"
     assert L.platform(UA_GOOGLEBOT, "-") == "bot"
@@ -237,7 +237,8 @@ def test_aggregator_counts(logs):
 
     rows, _, _ = C.collect_logs("api", [D1, D2], [str(logs / "api-super.access.log*")])
     r = [("api", *x) for x in rows]
-    assert val(r, "calls", "web", D1) == 1          # OPTIONS, /admin and admin-console calls left out
+    assert val(r, "calls", "web", D1) == 1          # OPTIONS left out
+    assert val(r, "calls", "admin", D1) == 2        # SU11A-70: the admin console has its own row
     assert val(r, "calls", "android", D1) == 2
     assert val(r, "errors_5xx", "android", D1) == 1
     assert val(r, "calls", "ios", D1) == 2

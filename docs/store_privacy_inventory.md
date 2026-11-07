@@ -327,3 +327,14 @@ The in-app summary must only restate the web policy, so deploy D1 first.
   - line 50 ("לוגים טכניים") covers the server logs: IP, time, the requested address with search text, browser or app type, purpose security and operation, retention 14 / 30 days;
   - lines 48, 70 and 79 cover GA4, consent-gated.
   - Aggregate statistics from those logs fall under "תפעול". An optional, clearer wording for Dude to decide on: add "ולהפקת סטטיסטיקות שימוש מצטברות" after "למטרות אבטחה ותפעול".
+
+## I. Updates (7 Nov 2026, SU11A-70)
+
+- **The iOS app is live on the App Store** (https://apps.apple.com/il/app/super-xxl/id6829450422). The website now links to it with Apple's badge. **No privacy-label change:** the link and the locally served badge image send nothing to Apple until a visitor taps it.
+- **The admin statistics** count only browser page loads (200 / 304), and every other request only as a daily per-site count (`rejected_requests`). Still aggregates only, as in §H.
+- **Cookie `xxl_internal`** (value `1`, `.xxl.co.il`, 1 year, Secure, Lax):
+  - set only by the admin console's "don't count this browser" switch, for the team's own browsers;
+  - not set for visitors, holds no identifier, and is not used for analytics or ads;
+  - nginx writes only a flag (`1` / `-`) for it in the access log, never its value.
+
+  It is a functional cookie for the team, so the public privacy policy and the cookie banner need no change.

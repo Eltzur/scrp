@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { getI18n, useTranslation } from 'react-i18next';
@@ -8,6 +8,7 @@ import { Button, Card, ErrorBox, Loading } from '../ui';
 import he from '../i18n/stats.he.json';
 import en from '../i18n/stats.en.json';
 import LineChart from './stats/LineChart';
+import { readInternal, writeInternal } from './stats/internalCookie';
 import {
   cardState, daily, dayList, latest, PLATFORMS, RANGES, share, splitDim, total, totals, WEB_HOSTS,
   type CardState, type Range,
@@ -109,6 +110,8 @@ function WebCard({ b, days }: { b: StatsBody; days: string[] }) {
   const pv = totals(s, 'web', 'page_views');
   const vis = totals(s, 'web', 'visitors');
   const bots = totals(s, 'web', 'bot_page_views');
+  const rejected = totals(s, 'web', 'rejected_requests');
+  const internal = totals(s, 'web', 'internal_page_views');
   const gaUsers = totals(s, 'ga4', 'users');
   const gaPv = totals(s, 'ga4', 'page_views');
   const ga = cardState(b, 'ga4') === 'ok' || Object.keys(gaPv).length > 0;
@@ -122,6 +125,8 @@ function WebCard({ b, days }: { b: StatsBody; days: string[] }) {
       n(p),
       n(h == null ? total(s, 'web', 'visitors') : (vis[h] ?? 0)),
       pct(share(bt, p + bt)),
+      n(h == null ? total(s, 'web', 'rejected_requests') : (rejected[h] ?? 0)),
+      n(h == null ? total(s, 'web', 'internal_page_views') : (internal[h] ?? 0)),
       ...(ga ? [n(h == null ? total(s, 'ga4', 'users') : gaUsers[h] ?? 0),
         n(h == null ? total(s, 'ga4', 'page_views') : gaPv[h] ?? 0)] : []),
     ];
@@ -135,9 +140,11 @@ function WebCard({ b, days }: { b: StatsBody; days: string[] }) {
       <SourceStatus body={b} source="ga4" />
       <Table
         head={[t(`${K}.web.host`), t(`${K}.web.page_views`), t(`${K}.web.visitors`), t(`${K}.web.bots`),
+          t(`${K}.web.rejected`), t(`${K}.web.internal`),
           ...(ga ? [t(`${K}.web.ga4_users`), t(`${K}.web.ga4_page_views`)] : [])]}
         rows={[...hosts.map(h => row(h)), row(null)]}
       />
+      <p className="text-xs text-gray-600 mt-1">{t(`${K}.web.counting_note`)}</p>
       <LineChart title={t(`${K}.web.chart`)} days={days} lines={[
         { label: t(`${K}.web.series_nginx`), values: daily(s, 'web', 'page_views', days) },
         ...(ga ? [{ label: t(`${K}.web.series_ga4`), values: daily(s, 'ga4', 'page_views', days) }] : []),
@@ -232,6 +239,41 @@ function AppStoreCard({ b, days }: { b: StatsBody; days: string[] }) {
   );
 }
 
+/** SU11A-70: "don't count this browser" (cookie xxl_internal, per browser / phone). */
+export function InternalSwitch() {
+  const { t } = useTranslation();
+  const id = useId();
+  const [on, setOn] = useState<boolean>(readInternal);
+  const [refused, setRefused] = useState(false);
+  const toggle = () => {
+    const want = !on;
+    const got = writeInternal(want);
+    setOn(got);
+    setRefused(got !== want);
+  };
+  return (
+    <section aria-labelledby={`${id}-l`} className="bg-white rounded-2xl border border-gray-200 p-4 sm:p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 id={`${id}-l`} className="text-base font-bold text-gray-900">{t(`${K}.internal.title`)}</h2>
+        <button type="button" role="switch" aria-checked={on} aria-labelledby={`${id}-l`} aria-describedby={`${id}-d`}
+          onClick={toggle}
+          className={`relative inline-flex items-center h-8 w-14 shrink-0 rounded-full border-2 transition-colors
+            focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700
+            ${on ? 'bg-emerald-700 border-emerald-700' : 'bg-gray-200 border-gray-400'}`}>
+          <span aria-hidden="true"
+            className={`inline-block h-6 w-6 rounded-full bg-white shadow transition-transform ${on ? '-translate-x-6' : 'translate-x-0'}`} />
+        </button>
+      </div>
+      <p className="text-sm font-semibold mt-1 text-gray-900">{t(on ? `${K}.internal.on` : `${K}.internal.off`)}</p>
+      <div id={`${id}-d`} className="text-xs text-gray-700 mt-1 space-y-1">
+        <p>{t(`${K}.internal.explain`)}</p>
+        <p>{t(`${K}.internal.api_note`)}</p>
+      </div>
+      {refused && <p role="status" className="text-xs text-rose-800 mt-1">{t(`${K}.internal.refused`)}</p>}
+    </section>
+  );
+}
+
 export function StatsView({ b }: { b: StatsBody }) {
   const days = dayList(b.from, b.to);
   return (
@@ -255,6 +297,7 @@ export default function StatsScreen() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-700">{t(`${K}.intro`)}</p>
+      <InternalSwitch />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div role="group" aria-label={t(`${K}.range`)} className="flex gap-1">
           {RANGES.map(r => (

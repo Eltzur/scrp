@@ -4,7 +4,8 @@
     "tagline": "Compare grocery prices across Israeli supermarket chains"
   },
   "header": {
-    "aria_lang_toggle": "Switch language"
+    "aria_lang_toggle": "Switch language",
+    "home_label": "SUPER XXL — home page"
   },
   "search": {
     "placeholder": "Search in Hebrew or English… e.g. במבה, milk, cottage",
@@ -88,7 +89,8 @@
     "retry": "Retry"
   },
   "footer": {
-    "attribution": "Data from Israeli government price transparency (gov.il), updated daily"
+    "attribution": "Data from Israeli government price transparency (gov.il), updated daily",
+    "all_services": "All XXL services"
   },
   "language": {
     "switch_to_he": "עברית",
@@ -155,14 +157,11 @@
     "section_title": "SUPER XXL app",
     "section_sub": "Compare prices on your phone, with barcode scanning in the store",
     "play_alt": "Get SUPER XXL on Google Play",
-    "ios_soon": "Coming soon for iPhone",
-    "ios_store_alt": "Download SUPER XXL on the App Store",
+    "ios_store_alt": "Download on the App Store",
     "footer_title": "The app",
     "banner_label": "SUPER XXL app",
     "banner_android": "SUPER XXL is available for Android —",
     "banner_android_link": "get it on Google Play",
-    "banner_ios": "The SUPER XXL iPhone app is coming soon.",
-    "banner_ios_sub": "Meanwhile, you can use the website.",
     "banner_ios_live": "SUPER XXL is available for iPhone —",
     "banner_ios_link": "download on the App Store",
     "banner_close": "Close"
@@ -276,7 +275,8 @@
       "stats_visitors": "Visitors (estimate)",
       "stats_api": "API requests (web and apps)",
       "stats_day": "As of {{day}}",
-      "stats_none": "No data yet: the daily collection has not run."
+      "stats_none": "No data yet: the daily collection has not run.",
+      "stats_api_note": "Admin console requests not included."
     },
     "rating": {
       "score": "Rated {{n}} of 3",

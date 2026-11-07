@@ -12,7 +12,7 @@ export default function Footer() {
       {!isPortalHostname() && (
         <div className="mb-4">
           <p className="text-xs text-gray-600 mb-2">{t('apps.footer_title')}</p>
-          <AppBadges size="sm" />
+          <AppBadges />
         </div>
       )}
       <p>© XXL {new Date().getFullYear()} · כל הזכויות שמורות</p>
@@ -41,6 +41,14 @@ export default function Footer() {
           עוגיות
         </button>
       </p>
+      {/* SU11A-70: on Super, the way to the portal (the header logo now goes to Super's home). */}
+      {!isPortalHostname() && (
+        <p className="mt-2">
+          <a href="https://xxl.co.il" className="hover:text-emerald-700 transition-colors underline underline-offset-2">
+            {t('footer.all_services')}
+          </a>
+        </p>
+      )}
     </footer>
   );
 }

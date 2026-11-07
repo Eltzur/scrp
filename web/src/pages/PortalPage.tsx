@@ -117,7 +117,7 @@ export default function PortalPage() {
               <p className="text-lg font-semibold text-[#022C22] mt-3">מצרכים</p>
               <p className="text-sm text-gray-600 mt-1">השוואת מחירי סופר</p>
             </button>
-            <AppBadges size="sm" className="px-4 pb-5" />
+            <AppBadges className="px-4 pb-5" />
           </div>
 
           {/* חופשות — LIVE */}

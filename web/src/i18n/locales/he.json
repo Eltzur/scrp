@@ -4,7 +4,8 @@
     "tagline": "השוו מחירי מזון ברשתות השיווק הישראליות"
   },
   "header": {
-    "aria_lang_toggle": "החלפת שפה"
+    "aria_lang_toggle": "החלפת שפה",
+    "home_label": "SUPER XXL — דף הבית"
   },
   "search": {
     "placeholder": "חפשו מוצר בעברית או באנגלית… למשל במבה, חלב, קוטג'",
@@ -88,7 +89,8 @@
     "retry": "נסה שוב"
   },
   "footer": {
-    "attribution": "נתונים ממאגר שקיפות המחירים הממשלתי (gov.il), מתעדכן יומיומית"
+    "attribution": "נתונים ממאגר שקיפות המחירים הממשלתי (gov.il), מתעדכן יומיומית",
+    "all_services": "כל שירותי XXL"
   },
   "language": {
     "switch_to_he": "עברית",
@@ -155,14 +157,11 @@
     "section_title": "SUPER XXL באפליקציה",
     "section_sub": "השוואת מחירים מהטלפון, עם סריקת ברקוד בסופר",
     "play_alt": "הורידו את SUPER XXL מ-Google Play",
-    "ios_soon": "בקרוב גם ל-iPhone",
-    "ios_store_alt": "הורידו את SUPER XXL מ-App Store",
+    "ios_store_alt": "הורידו מה-App Store",
     "footer_title": "האפליקציה",
     "banner_label": "אפליקציית SUPER XXL",
     "banner_android": "SUPER XXL זמינה לאנדרואיד —",
     "banner_android_link": "הורידו מ-Google Play",
-    "banner_ios": "אפליקציית SUPER XXL ל-iPhone תגיע בקרוב.",
-    "banner_ios_sub": "בינתיים אפשר להשתמש באתר.",
     "banner_ios_live": "SUPER XXL זמינה ל-iPhone —",
     "banner_ios_link": "הורידו מ-App Store",
     "banner_close": "סגירה"
@@ -276,7 +275,8 @@
       "stats_visitors": "מבקרים (הערכה)",
       "stats_api": "בקשות API (אתר ואפליקציות)",
       "stats_day": "נכון ליום {{day}}",
-      "stats_none": "אין עדיין נתונים: האיסוף היומי טרם רץ."
+      "stats_none": "אין עדיין נתונים: האיסוף היומי טרם רץ.",
+      "stats_api_note": "ללא בקשות קונסולת הניהול."
     },
     "rating": {
       "score": "דירוג {{n}} מתוך 3",

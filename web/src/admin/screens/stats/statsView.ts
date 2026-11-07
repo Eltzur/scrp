@@ -10,7 +10,8 @@ export const RANGES = [7, 30, 90] as const;
 export type Range = typeof RANGES[number];
 
 export const WEB_HOSTS = ['super.xxl.co.il', 'xxl.co.il', 'www.xxl.co.il', 'fly.xxl.co.il'] as const;
-export const PLATFORMS = ['web', 'android', 'ios', 'other', 'bot'] as const;
+/** SU11A-70: 'admin' = the admin console (its Referer), its own row, never in the dashboard total. */
+export const PLATFORMS = ['web', 'android', 'ios', 'admin', 'other', 'bot'] as const;
 
 /** Every day from..to (YYYY-MM-DD, inclusive). */
 export function dayList(from: string, to: string): string[] {

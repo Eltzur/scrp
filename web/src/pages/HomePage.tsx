@@ -196,7 +196,7 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
           <section aria-labelledby="app-section-title" className="text-center py-3">
             <h2 id="app-section-title" className="text-lg font-bold text-[#022C22]">{t('apps.section_title')}</h2>
             <p className="text-sm text-gray-600 mt-1">{t('apps.section_sub')}</p>
-            <AppBadges size="md" className="mt-3" />
+            <AppBadges className="mt-3" />
           </section>
         )}
 
