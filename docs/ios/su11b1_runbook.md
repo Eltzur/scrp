@@ -2,14 +2,14 @@
 
 Dude runs every step. CC prepared the config (mobile repo: SU11B-1 `85eb6a6`, SU11B-2 `c56e27f`, **SU11B-3 `65882ea`**) and the kit `docs/ios/su11b1_app_store_kit.md`. **Version 1.2.2** (SU11B-2); **iOS build 1.2.2 (2)**, Android versionCode 9 — both from the SU11B-3 commit `65882ea`.
 
-**Release state (SU11B-5, 5 Nov 2026):**
-- **iOS 1.2.2 (2)** (EAS `4eaab3fc`, mobile `65882ea`): submitted to App Review **4 Nov 20:58** (submission `871055cd-5aab-48e7-8f41-b3a4af70e0d0`), release option "Manually release this version"; **Waiting for Review** as of 5 Nov. **H is done for 1.2.2.**
+**Release state (SU11B-7, 7 Nov 2026):**
+- **iOS 1.2.2 (2)** (EAS `4eaab3fc`, mobile `65882ea`): **LIVE on the Israel App Store** (https://apps.apple.com/il/app/super-xxl/id6829450422). Dude released it with the seller still reading "Lead Tour" (Apple Support case 103015749110 open; the listing updates itself when Apple fixes it). The listing shows the languages "EN + 1 More"; 1.2.3 declares Hebrew only (SU11B-7). Submitted 4 Nov 20:58 (submission `871055cd-5aab-48e7-8f41-b3a4af70e0d0`).
 - **iOS 1.2.2 (1)** (EAS `80074645`, `c56e27f`): failed processing with ITMS-90683 (below; fixed in SU11B-3).
 - **Android 9 (1.2.2)** (EAS `0992b1c3`, `65882ea`): **published to Play Production 4 Nov** (submission 3), full rollout, Israel, managed publishing off. Closed testing – Alpha: draft 8 (1.2.1) discarded, track inactive. Play release notes use the language tag **`iw-IL`** (`he-IL` is rejected).
 - **Play trader status:** account declared **TRADER** (XXL Enterprises, D-U-N-S, address, phone and email shown publicly under "App support"); app-level declaration published 5 Nov (submission 4), ToS URL https://xxl.co.il/disclaimer. **Apple DSA stays "non-trader / not distributing in the EU"** (iOS is Israel only); align Apple to trader before any EU distribution.
 - **Lesson:** a Play App content / policy change submitted while a release is in review restarts that review. Submit such changes only when nothing is in review.
-- **Seller-name decision (Dude, 4 Nov):** the gate moved from Submit to **RELEASE** (G1). Apple Support case **103015749110** (opened 1 Nov, nudged 3 Nov) is still open.
-- **Next: 1.2.3** (SU11B-5, mobile `130b610`): section K, only after Apple has approved 1.2.2.
+- **Seller-name gate (G1): decided.** History: on 4 Nov the gate moved from Submit to RELEASE; Dude then released 1.2.2 with the name still "Lead Tour". Apple Support case **103015749110** (opened 1 Nov, nudged 3 Nov) is still open.
+- **Next: 1.2.3** from the SU11B-7 mobile commit `f1c6ce6`: section K.
 
 **Build 1.2.2 (1) rejected (SU11B-3 record):** EAS build `80074645` (commit `c56e27f`) was uploaded and Apple rejected it in processing with **ITMS-90683** "Missing purpose string in Info.plist — NSMotionUsageDescription" (expo-location references `CMMotionActivityManager`; SU11B-1 had set `motionUsagePermission` false). SU11B-3 adds NSMotionUsageDescription plus NSMicrophoneUsageDescription, NSFaceIDUsageDescription and NSPhotoLibraryUsageDescription (each an honest Hebrew "the app never uses / never requests it" text). Build 1 stays in App Store Connect as invalid and is never used; B runs again and produces build 2.
 
@@ -243,16 +243,53 @@ Expected: `git log` shows the same commit as the iOS build 2 in B (SU11B-3 `6588
 
 ---
 
-## K. 1.2.3 update (SU11B-5, mobile `130b610`; SU11B-6 `a3988d1`)
+## K. 1.2.3 update (SU11B-5 `130b610`, SU11B-6 `a3988d1`, SU11B-7 `f1c6ce6`)
 
-**Only AFTER Apple has approved 1.2.2.** One version in review at a time; a new upload or App content change while 1.2.2 is in review would mix the two (and on Play restarts the review). Build iOS and Android **from the same commit** (`a3988d1` = SU11B-5 + the SU11B-6 deletion fix, or a later docs-only `main`), iOS first, Android right after, no pull in between. Each run burns a build number: run each once. Expected numbers: iOS **1.2.3 (3)**, Android versionCode **10**.
+**1.2.2 is live (7 Nov), so K can start.** One version in review at a time. Build iOS and Android **from the same commit: the SU11B-7 commit `f1c6ce6`** (not `a3988d1`, which lacks the Hebrew-only localization and the field borders), iOS first, Android right after, no pull in between. Each run burns a build number: run each once. Expected numbers: iOS **1.2.3 (3)**, Android versionCode **10**.
 
-What changed in 1.2.3: add-to-basket on the product page (shared header, every tab) and on every search row (compact icon button); a filled, more visible basket button; account-deletion timeout recovery (SU11A-63 L1); reserved-basket recovery (L2); Android `USE_BIOMETRIC` / `USE_FINGERPRINT` removed from the manifest.
+What changed in 1.2.3:
+- add-to-basket on the product page (shared header, every tab) and on every search row (compact icon button), and a filled, more visible basket button;
+- account-deletion timeout recovery (SU11A-63 L1, SU11B-6) and reserved-basket recovery (L2);
+- Android `USE_BIOMETRIC` / `USE_FINGERPRINT` removed from the manifest;
+- **SU11B-7:** iOS declares **Hebrew only** (`CFBundleLocalizations` [he]); every text field has a visible border (≥ 3:1) and a 2 px emerald border while focused.
 
-1. **Pre-flight:** A, with the top commit = SU11B-6 `a3988d1` and tsc (Dude). A3: the same four purpose strings as 1.2.2.
+1. **Pre-flight:** A, with the top commit = SU11B-7 `f1c6ce6` and tsc (Dude). A3: the same four purpose strings as 1.2.2. Also:
+
+   [PC — PowerShell]
+   ```powershell
+   cd C:\scrp\xxl-super-mobile
+   $env:NODE_ENV='production'; $env:EAS_BUILD_PROFILE='production'
+   npx expo config --type introspect --json | Select-String -Pattern 'CFBundleLocalizations[^\]]*\]|CFBundleDevelopmentRegion":"[a-z]*"' -AllMatches | ForEach-Object { $_.Matches.Value } | Sort-Object -Unique
+   ```
+   Expected: `CFBundleDevelopmentRegion":"he"` and `CFBundleLocalizations":["he"]`. STOP if `"en"` appears.
 2. **Builds:** `npx eas-cli@latest build -p ios --profile production` → log shows `Version 1.2.3`; then at once `npx eas-cli@latest build -p android --profile production` → `versionName 1.2.3`, versionCode 10. STOP on any other number.
-3. **iOS upload:** C (`eas submit -p ios --profile production --latest`). STOP on any ITMS mail.
-4. **D retest for 1.2.3** on the iPhone 12 (TestFlight) and an Android phone (internal testing):
+3. **IPA check on Windows (no Mac), before the upload:**
+
+   [Browser] EAS build page of the iOS build → **Download** (the `.ipa`). Save it as `%USERPROFILE%\Downloads\superxxl-1.2.3-3.ipa`.
+
+   [PC — PowerShell]
+   ```powershell
+   cd $env:USERPROFILE\Downloads
+   Copy-Item .\superxxl-1.2.3-3.ipa .\superxxl-1.2.3-3.zip -Force
+   Expand-Archive .\superxxl-1.2.3-3.zip -DestinationPath .\superxxl-1.2.3-3 -Force
+   $app = (Get-ChildItem .\superxxl-1.2.3-3\Payload -Directory -Filter *.app).FullName
+   "lproj in the main bundle:"; Get-ChildItem $app -Directory -Filter *.lproj | ForEach-Object Name
+   python -c "import plistlib,sys; p=plistlib.load(open(sys.argv[1],'rb')); [print(k, '=', p.get(k)) for k in ('CFBundleShortVersionString','CFBundleVersion','CFBundleDevelopmentRegion','CFBundleLocalizations')]; print('local network keys:', [k for k in ('NSLocalNetworkUsageDescription','NSBonjourServices') if k in p])" "$app\Info.plist"
+   ```
+   (Info.plist in an IPA is a **binary** plist; Python's `plistlib` reads both forms. If `python` is not found, use `py` instead.)
+
+   Expected:
+   - `lproj in the main bundle:` followed by **nothing**, or only `he.lproj` and/or `Base.lproj`. The listing is the top level of the `.app` only; the many `*.lproj` folders inside `*.bundle` folders (e.g. React Native's `RCTI18nStrings.bundle`) belong to libraries and are expected;
+   - `CFBundleShortVersionString = 1.2.3`, `CFBundleVersion = 3`;
+   - `CFBundleDevelopmentRegion = he`;
+   - `CFBundleLocalizations = ['he']`;
+   - `local network keys: []` (D14: expo-dev-launcher strips them from Release builds).
+
+   **STOP if** `en.lproj` (or any other language's `.lproj`) is listed at the top level, if `CFBundleLocalizations` contains `en`, or if a local network key is listed. Do not upload; paste the output to the chat.
+
+   Then delete the `.zip` and the folder (the `.ipa` may stay).
+4. **iOS upload:** C (`eas submit -p ios --profile production --latest`). STOP on any ITMS mail.
+5. **D retest for 1.2.3** on the iPhone 12 (TestFlight) and an Android phone (internal testing):
    1. Scan result: add to basket, button turns to "בסל" (outlined + check), tap again removes.
    2. Product page: the button sits under the category line on **each** tab (מחירים / מידע / ביקורות); state matches the basket.
    3. Search rows: tapping the icon button toggles the basket and does **not** open the product; tapping the name area opens the product (prices tab).
@@ -267,15 +304,30 @@ What changed in 1.2.3: add-to-basket on the product page (shared header, every t
    8. VoiceOver / TalkBack: the button reads "הוסף לסל: <product>" / "הסר מהסל: <product>" and "selected" when in the basket; the search row reads its name separately from its button.
    9. Dark mode on scan, product, search: the filled button and the outlined "בסל" state are clearly visible.
    10. RTL: on the button the icon is on the right of the text; on search rows the button is at the left end of the row, after the chevron.
-5. **App Store Connect:** version page "+" → new version **1.2.3** → "What's New" (Hebrew):
+   11. **Text-field borders (SU11B-7), light AND dark mode:** the search box on the Search tab, "הזנת ברקוד ידנית" (Scan tab), the city picker's search (Settings → עיר), the category sheet's search and comment ("הצעת עדכון קטגוריה"), the rating comment, and the sign-in / sign-up fields each show a clearly visible grey border against the page. Tapping into a field turns its border **emerald and thicker**; leaving it turns it back. The text and the caret do not jump noticeably. The Settings version row still reads "1.2.3 (3)" exactly as before.
+   12. **RTL with the new borders:** Hebrew fields stay right-aligned, the barcode and the email / password fields stay left-to-right, and the search icon stays on the right of the search box.
+   13. **English-device check (iPhone):** Settings → General → Language & Region → iPhone Language → **English** (the phone restarts its UI). Open SUPER XXL:
+       - every app text is Hebrew and the layout is right-to-left, as on a Hebrew phone;
+       - **system texts are Hebrew too**: the buttons of the location / camera dialogs (in Hebrew, not "Allow While Using App" / "Don't Allow"), the text-field menu (העתק / הדבק, not Copy / Paste) and the share sheet;
+       - Settings → SUPER XXL shows **no** "Language" choice (only one language is declared).
+
+       Switch the phone back to Hebrew afterwards. STOP if English system buttons appear inside the app, or if the layout turns left-to-right.
+6. **App Store Connect:** version page "+" → new version **1.2.3** → "What's New" (Hebrew):
    ```
    גרסה 1.2.3: הוספה לסל ישירות מעמוד המוצר ומתוצאות החיפוש, כפתור סל בולט יותר, ושיפורי אמינות במחיקת חשבון ובסנכרון הסל.
    ```
-   → select build 1.2.3 (3) → **screenshots retaken on 1.2.3** showing the new button (product page and search rows; same five screens as kit §7, slot "iPhone with Dynamic Island (medium display)"), raw files in `C:\xxl-archive\ios_screens\1.2.3\raw` (not in the repo) → App Privacy and age rating **unchanged** (no new data; no ads / no ממומן) → Add for Review → Submit. Release option: "Manually release this version" (G1 still applies until Dude decides).
-6. **Play:** Production → Create new release → the 1.2.3 AAB → release notes:
+   → select build 1.2.3 (3) → **screenshots retaken on 1.2.3** showing the new button (product page and search rows; same five screens as kit §7, slot "iPhone with Dynamic Island (medium display)"), raw files in `C:\xxl-archive\ios_screens\1.2.3\raw` (not in the repo) → App Privacy and age rating **unchanged** (1.2.3 collects no new data and shows no ממומן content: checked in SU11B-7 against the diff since `65882ea`; Advertising stays No) → Add for Review → Submit.
+
+   **Release option: Dude's decision for 1.2.3** (not decided here). On the version page, under "App Store Version Release":
+   - "Manually release this version": nothing goes live until Dude presses "Release This Version", for example to time it with the Android rollout;
+   - "Automatically release this version": it goes live as soon as Apple approves it.
+
+   Choose before pressing Submit. The seller name no longer blocks a release (G1 decided).
+7. **After the iOS release:** the public page https://apps.apple.com/il/app/super-xxl/id6829450422 should show the language **Hebrew** only (no "EN + 1 More"). This can take a few hours after the release. If it still shows English the next day, tell the chat (with a screenshot of the "Languages" line); do not change anything in App Store Connect.
+8. **Play:** Production → Create new release → the 1.2.3 AAB → release notes:
    ```
    <iw-IL>
    גרסה 1.2.3: הוספה לסל ישירות מעמוד המוצר ומתוצאות החיפוש, כפתור סל בולט יותר, ושיפורי אמינות במחיקת חשבון ובסנכרון הסל.
    </iw-IL>
    ```
-   → App bundle explorer → Permissions: **no `USE_BIOMETRIC` / `USE_FINGERPRINT`** (STOP if either is listed), and as in J step 4 otherwise → rollout. Do not submit App content changes while this is in review.
+   (the language tag is `iw-IL`; `he-IL` is rejected) → App bundle explorer → Permissions: **no `USE_BIOMETRIC` / `USE_FINGERPRINT`** (STOP if either is listed), and as in J step 4 otherwise → rollout. Do not submit App content changes while this is in review.

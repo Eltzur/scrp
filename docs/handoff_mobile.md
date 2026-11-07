@@ -796,3 +796,64 @@ Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; 
   - **Unchanged:** version 1.2.3; no new strings.
   - **Checks:** `ts.transpileModule` of `delete-account.tsx`: 0 diagnostics. eslint with a temporary `eslint-config-expo/flat` config (deleted after): 28 errors / 1 warning, output identical to HEAD, none in `delete-account.tsx`. Full tsc not run (Dude).
   - **Not tested on a device:** retest list in runbook K (item 6).
+- **2026-11-07 (SU11B-7, mobile `f1c6ce6`) 1.2.3 pre-build: Hebrew as the only iOS language, text-field border contrast, docs sync (ships in 1.2.3, not built):**
+  - **Release state:** iOS **1.2.2 (2)** (EAS `4eaab3fc`, `65882ea`) is **LIVE on the Israel App Store** (https://apps.apple.com/il/app/super-xxl/id6829450422). Dude released it with the seller still reading "Lead Tour" (Apple Support case 103015749110 open; the listing updates itself when Apple fixes it), so the SU11B-5 release gate is decided. Android 1.2.2 (versionCode 9) is live on Play. 1.2.3 stays 1.2.3; EAS remote build numbers: iOS next 3, Android next 10.
+  - **"EN + 1 More" on the App Store:** App Store Connect's primary language was already Hebrew. The English came from the binary's `CFBundleLocalizations` [he, en].
+  - **Sources of the "en" localization found:**
+    - `app.json:124-128`: the expo-localization plugin `supportedLocales.ios` ["he", "en"]. `node_modules/expo-localization/plugin/build/withExpoLocalization.js:46-47` copies it into `CFBundleLocalizations`. This was the only source.
+    - `app.json` has no `expo.locales` (the only thing that makes Expo write `<lang>.lproj/InfoPlist.strings` into the main bundle, `@expo/config-plugins/build/ios/Locales.js:54-74`), and `ios.infoPlist` has no `CFBundleLocalizations` of its own.
+    - The prebuild template (`node_modules/expo/template.tgz`, `ios/HelloWorld.xcodeproj/project.pbxproj:134-139`) has `developmentRegion = en` and `knownRegions (en, Base)` but **no `.lproj` folder**. `CFBundleDevelopmentRegion` is overridden to `he` by `app.json:17`. No config plugin of any dependency creates an `.lproj`.
+    - React Native's `RCTI18nStrings.bundle` (`React-Core.podspec:54`) carries about 30 `*.lproj` folders (including en), but inside its own resource bundle, not the main bundle. The store counted only he + en, which shows it reads the main bundle.
+  - **Change:** `supportedLocales.ios` → ["he"], so `CFBundleLocalizations` is [he]. Unchanged: `CFBundleDevelopmentRegion` he, `ExpoLocalization_forcesRTL` true (`forcesRTL`), `I18nManager.allowRTL/forceRTL` (`_layout.tsx:38-39`), and the four Hebrew permission strings (SU11B-3, plugin options untouched). The plugin option stays an `{ios: [...]}` object, so Android gets no locale config, as before.
+  - **An English-language iPhone afterwards:**
+    - the app runs in its only localization, Hebrew. App texts are Hebrew as before (the app has only `src/i18n/he.ts`), and the layout is RTL natively, no longer only by forcing;
+    - **system texts inside the app turn Hebrew**: permission-dialog buttons, the text-field menu, the share sheet, VoiceOver's control names. Before, an English phone showed English system buttons around Hebrew texts;
+    - Settings → SUPER XXL shows no per-app "Language" choice;
+    - nothing in `src/` relies on an "en" locale: dates use an explicit `'he-IL'` (`scan-history.tsx:31`, `api-date.ts:54`, `location-diagnostics.tsx:55`), and there is no `expo-localization` / `getLocales` import and no `en.ts`.
+
+    Device check: runbook K item 5.13.
+  - **Text fields (WCAG 1.4.11):**
+    - **The inputs:**
+      - the search tab box: `(tabs)/search.tsx:317`, border on its container `:309-311`;
+      - manual barcode: `(tabs)/index.tsx:310`;
+      - city picker search: `(tabs)/settings.tsx:376`;
+      - category sheet search and comment: `category-suggest.tsx:196, 259`;
+      - the rating comment: `product-detail.tsx:546`;
+      - the sign-in / sign-up / reset fields: `auth-form.tsx:50`.
+
+      All but the search box used the same hard-coded `#D1D5DB`, or `theme.backgroundSelected`; the search box had no border.
+    - **The fix:**
+      - new theme colours `inputBorder` / `inputBorderFocused` (`src/constants/theme.ts`), Tailwind v4 values only: gray-500 / emerald-700 light, neutral-500 / emerald-400 dark;
+      - `src/hooks/use-field-border.ts`: `fieldBorder(theme, focused)` and `useFieldBorder()`, giving 1 px neutral, or 2 px emerald while focused;
+      - the search box reuses its existing `focused` state.
+
+      Placeholders keep `theme.textSecondary`, which already passed. The Settings version row is untouched.
+
+| Element | Mode | Colour pair | Before | After |
+|---|---|---|---|---|
+| Search box border | light | border vs page white / vs box fill gray-100 | none (fill gray-100 vs white **1.10**) | gray-500 `#6A7282`: **4.84** / **4.39** |
+| Search box border | dark | border vs page black / vs box fill neutral-800 | none (fill neutral-800 vs black **1.39**) | neutral-500 `#737373`: **4.43** / **3.19** |
+| Other fields (barcode, city, rating comment, auth) | light | border vs white | `#D1D5DB` **1.47** | gray-500 **4.84** |
+| Other fields | dark | border vs black / neutral-900 sheet | `#D1D5DB` 14.25 / 12.17 (passed, but the same light grey in both modes) | neutral-500 **4.43** / **3.78** |
+| Category sheet search + comment | light / dark | border vs white / black | `backgroundSelected` `#E0E1E6` **1.31** / `#2E3135` **1.61** | **4.84** / **4.43** |
+| Focused border (all) | light | emerald-700 `#007A55` vs white / gray-100 | no focus state | **5.36** / **4.87**, 2 px |
+| Focused border (all) | dark | emerald-400 `#00D492` vs black / neutral-900 / neutral-800 | no focus state | **10.83** / **9.25** / **7.81**, 2 px |
+| Placeholder | light | `#60646C` vs white / gray-100 | 5.94 / 5.40 | unchanged (≥ 4.5) |
+| Placeholder | dark | `#B0B4BA` vs black / neutral-900 / neutral-800 | 10.08 / 8.61 / 7.27 | unchanged |
+
+  - **1.2.3 privacy and ads, checked in the diff since `65882ea`** (15 files, SU11B-5 + SU11B-6 + SU11B-7):
+    - **No new user data.** No new endpoint: only the existing saved-basket calls (now with a typed `SavedBasketHttpError`) and the existing `DELETE /account`. No new AsyncStorage / SecureStore key, no new permission, location or camera use, no analytics. The SU11B-5 `unconfirmedDelete` keeps the user id + token in memory only, never stored.
+    - **So the five privacy documents are unchanged:** the inventory, Apple App Privacy, Play Data safety, the privacy policy, and the app manifest's `NSPrivacyCollectedDataTypes`.
+    - **No ממומן content:** no sponsored / pinned / promos code in `src/`, apart from the generated types in `src/types/api.ts`. The new strings are two VoiceOver labels and the deletion note. Apple Advertising stays **No**.
+  - **Checks:**
+    - `ts.transpileModule` of the 8 touched files: 0 diagnostics.
+    - eslint with a temporary `eslint-config-expo/flat` config (deleted after): 5 findings before and the same 5 after, all in untouched code (`index.tsx` react-hooks/refs ×1, `search.tsx` set-state-in-effect ×1, `product-detail.tsx` set-state-in-effect ×3); the new hook is clean.
+    - app.json JSON parse.
+    - `npx expo config --type introspect --json` (NODE_ENV / EAS_BUILD_PROFILE production), before vs after: only `ios.infoPlist.CFBundleLocalizations` ["he","en"] → ["he"] (and the same value in `_internal.modResults`) plus the plugin option itself. The **android section is identical**, and the purpose strings and `CFBundleDevelopmentRegion` are unchanged.
+    - Full tsc not run (Dude).
+  - **Docs:**
+    - **The runbook:** release state; K rebuilt: build from `f1c6ce6`, a pre-flight localization check, a Windows IPA check (`.lproj` list + binary Info.plist via Python `plistlib`, STOP on en), retest items 11-13 (borders light / dark + focus, RTL, English device), the release option as Dude's decision, the store-language check after release, Android permissions, `iw-IL`.
+    - **The rest:** handoff_super open items (Apple / Play, SU11A-69 / 70 / 71 deployed, GA4 connected) and CLAUDE.md (1.2.2 live, gate decided, Hebrew only, next Apple ID SU11B-8).
+  - **Open decisions (Dude):**
+    1. manual or automatic release of iOS 1.2.3 (runbook K step 6);
+    2. the SU11A-71 deploy date (handoff_super: "date: Dude to fill").

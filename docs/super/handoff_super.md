@@ -2903,6 +2903,8 @@ Runbook: `docs/admin/su11a70_runbook.md`: quiet time → pull → nginx flag fie
 
 ### SU11A-71 (7 Nov 2026) - GA4 gtag fix (data starts on the deploy date), path-only page views, stats count real routes only; built, not deployed
 
+**Deployed: date: Dude to fill** (GA4 data starts on it).
+
 Runbook: `docs/admin/su11a71_runbook.md`: quiet time → pull → one-time `--days 7` recompute (before / after sums) → web deploy → two GA4 settings → browser check. No migration, no API restart, no nginx change. (The planned "view modes" session moves to SU11A-72.)
 
 **A. GA4 never received data** (found 7 Nov in a live browser test; `web/src/utils/analytics.ts`):
@@ -2974,10 +2976,10 @@ Runbook: `docs/admin/su11a71_runbook.md`: quiet time → pull → one-time `--da
 - **SU11A-60 promos page:** deployed 1 Nov 2026 (API restarted on 5a1c2fb, web da83ca4, guard MATCH). `docs/admin/su11a60_runbook.md`. Follow-up (not started): precompute `/promos/today` in the 14:30 build (cold call still ~11 s; cached after).
 - **SU11A-59 /chains + admin CORS + dashboard links:** deployed 1 Nov 2026. `docs/admin/su11a59_runbook.md`. Follow-up candidate (not started): `/stats` (scans all prices).
 - **SU11A-58 promo pins / hides:** in use on production by 1 Nov. `docs/admin/su11a58_runbook.md` (migration, restart, ONE web deploy for SU11A-57 + SU11A-58 from a PC with `web/.env.production`, checks). Open decision: whether a hide should also exclude a promotion from prices (options A / B / C in the SU11A-58 entry).
-- **SU11A-69 admin statistics:** built, not deployed. Run `docs/admin/su11a69_runbook.md` steps 1-10 (migration, nginx `$host` log format, timer, first run, restart, web deploy).
-- **SU11A-70 honest counts / App Store badge / logo link:** built, not deployed. Run `docs/admin/su11a70_runbook.md` after the SU11A-69 runbook (nginx flag field, API restart, `--days 7` recompute, web deploy), then paste the step 5 BEFORE / AFTER sums into the SU11A-70 entry. Turn "לא לספור את הדפדפן הזה" on in every browser and phone the team uses.
-- **SU11A-71 GA4 fix / real-route page views:** built, not deployed. Run `docs/admin/su11a71_runbook.md` after the SU11A-70 runbook (`--days 7` recompute, web deploy, two GA4 Enhanced-measurement settings, browser check with DevTools + Realtime), then paste the step 3 BEFORE / AFTER sums and the deploy date into the SU11A-71 entry. **GA4 has no data before that deploy date.**
-  - **Connect B1-B3** when convenient: runbook C1 GA4 (service account + Viewer + property id), C2 Google Play (same service account + Play Console read-only reports + bucket id), C3 App Store (separate Sales and Reports key + a one-time Admin-key Analytics request, revoked after). Each card shows "לא מחובר" until then.
+- **SU11A-69 admin statistics: deployed** (runbook `docs/admin/su11a69_runbook.md`). **B1 GA4 is connected:** service account xxl-stats@scrp-510706.iam.gserviceaccount.com, property 537761103. **C2 Google Play and C3 App Store are not connected yet** (their cards read "לא מחובר").
+- **SU11A-70 honest counts / App Store badge / logo link: deployed** (runbook `docs/admin/su11a70_runbook.md`). If not yet done: paste the step 5 BEFORE / AFTER sums into the SU11A-70 entry, and turn "לא לספור את הדפדפן הזה" on in every browser and phone the team uses.
+- **SU11A-71 GA4 fix / real-route page views: deployed (date: Dude to fill)** (runbook `docs/admin/su11a71_runbook.md`). **GA4 has no data before that deploy date.** If not yet done: paste the step 3 BEFORE / AFTER sums into the SU11A-71 entry.
+  - **Connect C2 / C3** when convenient (C1 GA4 is done): runbook C2 Google Play (same service account + Play Console read-only reports + bucket id), C3 App Store (separate Sales and Reports key + a one-time Admin-key Analytics request, revoked after). Each card shows "לא מחובר" until then.
   - Optional: send `X-XXL-Client: ios|android/<version>` (no identifier, no privacy-label change) from a later app version, for per-version counts; the platform split already works from the user agents.
   - Optional: reword the privacy policy's log purpose to name aggregate statistics (`docs/store_privacy_inventory.md` §H).
 - **Category warm-up after the 14:30 build (optional):** the first city request per category after a build takes ~1.5-2.5 s, then it is cached; a small warm-up of the popular departments after `scrp-search-items` would hide that.
@@ -2997,18 +2999,18 @@ Runbook: `docs/admin/su11a71_runbook.md`: quiet time → pull → one-time `--da
   - category / attribute faceted filters;
   - a switch to hide tobacco and alcohol;
   - optionally, move the location prompt to a contextual moment.
-- **Apple (SU11B series, `docs/handoff_mobile.md` SU11B-1 … SU11B-5):**
+- **Apple (SU11B series, `docs/handoff_mobile.md` SU11B-1 … SU11B-7):**
   - Individual account (Team V46QVK4YSA), App Store Connect app SUPER XXL (ascAppId 6829450422), bundle `il.co.xxl.supermarket`, Israel only.
-  - **iOS 1.2.2 (2)** (EAS 4eaab3fc, mobile 65882ea) submitted to App Review 4 Nov 20:58 (submission 871055cd-5aab-48e7-8f41-b3a4af70e0d0), manual release; **Waiting for Review** as of 5 Nov. 1.2.2 (1) failed processing (ITMS-90683, fixed SU11B-3).
-  - **RELEASE GATE (Dude, 4 Nov):** after approval do not press Release This Version until Dude decides about the seller name ("Lead Tour" → "Elad Tzur"); Apple Support case 103015749110 open (opened 1 Nov, nudged 3 Nov). After release: website badge switch (kit §9) - **done in SU11A-70** (the app is live on the Israel App Store; badge built, ships with the SU11A-70 web deploy).
+  - **iOS 1.2.2 (2) is LIVE on the Israel App Store** (https://apps.apple.com/il/app/super-xxl/id6829450422; EAS 4eaab3fc, mobile 65882ea). Dude released it with the seller still reading "Lead Tour"; Apple Support case 103015749110 is open, and the listing updates itself when Apple fixes the name. 1.2.2 (1) failed processing (ITMS-90683, fixed SU11B-3).
+  - History: the RELEASE GATE (Dude, 4 Nov: no release until the seller-name decision) is decided; Dude released 1.2.2 with the name still "Lead Tour". The website badge switch (kit §9) was done in SU11A-70.
   - ASC set: age 13+, App Privacy published, Privacy Choices URL https://super.xxl.co.il/account/delete, Mac / Vision Pro off. DSA: non-trader / not in the EU; align to trader before any EU distribution.
-  - **Next: 1.2.3** (SU11B-5 + SU11B-6, mobile a3988d1: add-to-basket on product page and search rows, SU11A-63 L1/L2, deletion recovery fix): build iOS + Android from that commit only after 1.2.2 is approved (runbook K). Review account appreview@xxl.co.il: re-create if a reviewer deletes it.
+  - **Next: 1.2.3** (SU11B-5 + SU11B-6 + SU11B-7, mobile `f1c6ce6`: add-to-basket on product page and search rows, SU11A-63 L1/L2, deletion recovery fix, Hebrew-only iOS localization, text-field borders): build iOS (build 3) then Android (versionCode 10) from that commit via runbook K. Open decision for Dude: manual or automatic release of 1.2.3. After release the store's language line should read Hebrew only (was "EN + 1 More"). Review account appreview@xxl.co.il: re-create if a reviewer deletes it.
   - Sign in with Apple is not required (email/password only). Guideline 1.2 items (terms, report, block, blocked list, contact) are live.
 - **Play:**
   - **Production: 9 (1.2.2)** (EAS 0992b1c3, 65882ea) published 4 Nov (submission 3), full rollout, Israel, managed publishing off. Closed testing Alpha: draft 8 (1.2.1) discarded, track inactive.
   - Account declared **TRADER** (XXL Enterprises, D-U-N-S, address, phone, email public under "App support"); app-level declaration published 5 Nov (submission 4), ToS URL https://xxl.co.il/disclaimer.
   - Release notes use the language tag `iw-IL` (`he-IL` is rejected). Never submit App content / policy changes while a release is in review (it restarts the review).
-  - Next: versionCode 10 = 1.2.3, from the same commit as iOS 1.2.3; check the permissions no longer list USE_BIOMETRIC / USE_FINGERPRINT.
+  - Next: versionCode 10 = 1.2.3, from the same commit as iOS 1.2.3 (SU11B-7 `f1c6ce6`); check the permissions no longer list USE_BIOMETRIC / USE_FINGERPRINT.
   - plan Play Billing.
 - **SEO:** built in SU11A-46. After the web deploy: submit the sitemaps in Search Console (see the SU11A-46 entry) and request indexing of the key pages. Optional nginx www -> apex redirect on 443.
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
