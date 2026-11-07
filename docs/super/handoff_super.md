@@ -2903,7 +2903,7 @@ Runbook: `docs/admin/su11a70_runbook.md`: quiet time → pull → nginx flag fie
 
 ### SU11A-71 (7 Nov 2026) - GA4 gtag fix (data starts on the deploy date), path-only page views, stats count real routes only; built, not deployed
 
-**Deployed: date: Dude to fill** (GA4 data starts on it).
+**Deployed: deploy date: Dude to fill** (GA4 data starts on it).
 
 Runbook: `docs/admin/su11a71_runbook.md`: quiet time → pull → one-time `--days 7` recompute (before / after sums) → web deploy → two GA4 settings → browser check. No migration, no API restart, no nginx change. (The planned "view modes" session moves to SU11A-72.)
 
@@ -2978,7 +2978,7 @@ Runbook: `docs/admin/su11a71_runbook.md`: quiet time → pull → one-time `--da
 - **SU11A-58 promo pins / hides:** in use on production by 1 Nov. `docs/admin/su11a58_runbook.md` (migration, restart, ONE web deploy for SU11A-57 + SU11A-58 from a PC with `web/.env.production`, checks). Open decision: whether a hide should also exclude a promotion from prices (options A / B / C in the SU11A-58 entry).
 - **SU11A-69 admin statistics: deployed** (runbook `docs/admin/su11a69_runbook.md`). **B1 GA4 is connected:** service account xxl-stats@scrp-510706.iam.gserviceaccount.com, property 537761103. **C2 Google Play and C3 App Store are not connected yet** (their cards read "לא מחובר").
 - **SU11A-70 honest counts / App Store badge / logo link: deployed** (runbook `docs/admin/su11a70_runbook.md`). If not yet done: paste the step 5 BEFORE / AFTER sums into the SU11A-70 entry, and turn "לא לספור את הדפדפן הזה" on in every browser and phone the team uses.
-- **SU11A-71 GA4 fix / real-route page views: deployed (date: Dude to fill)** (runbook `docs/admin/su11a71_runbook.md`). **GA4 has no data before that deploy date.** If not yet done: paste the step 3 BEFORE / AFTER sums into the SU11A-71 entry.
+- **SU11A-71 GA4 fix / real-route page views: deployed (deploy date: Dude to fill)** (runbook `docs/admin/su11a71_runbook.md`). **GA4 has no data before that deploy date.** If not yet done: paste the step 3 BEFORE / AFTER sums into the SU11A-71 entry.
   - **Connect C2 / C3** when convenient (C1 GA4 is done): runbook C2 Google Play (same service account + Play Console read-only reports + bucket id), C3 App Store (separate Sales and Reports key + a one-time Admin-key Analytics request, revoked after). Each card shows "לא מחובר" until then.
   - Optional: send `X-XXL-Client: ios|android/<version>` (no identifier, no privacy-label change) from a later app version, for per-version counts; the platform split already works from the user agents.
   - Optional: reword the privacy policy's log purpose to name aggregate statistics (`docs/store_privacy_inventory.md` §H).
@@ -3002,9 +3002,10 @@ Runbook: `docs/admin/su11a71_runbook.md`: quiet time → pull → one-time `--da
 - **Apple (SU11B series, `docs/handoff_mobile.md` SU11B-1 … SU11B-7):**
   - Individual account (Team V46QVK4YSA), App Store Connect app SUPER XXL (ascAppId 6829450422), bundle `il.co.xxl.supermarket`, Israel only.
   - **iOS 1.2.2 (2) is LIVE on the Israel App Store** (https://apps.apple.com/il/app/super-xxl/id6829450422; EAS 4eaab3fc, mobile 65882ea). Dude released it with the seller still reading "Lead Tour"; Apple Support case 103015749110 is open, and the listing updates itself when Apple fixes the name. 1.2.2 (1) failed processing (ITMS-90683, fixed SU11B-3).
-  - History: the RELEASE GATE (Dude, 4 Nov: no release until the seller-name decision) is decided; Dude released 1.2.2 with the name still "Lead Tour". The website badge switch (kit §9) was done in SU11A-70.
+  - **Release gate CLOSED** (history: 4 Nov, no release until the seller-name decision; Dude then released 1.2.2 with "Lead Tour" still showing).
+  - **Automatic release from 1.2.3 on** (Dude, 7 Nov 2026): approval publishes at once, so the TestFlight retest (runbook K4) is the last gate; submit only after it passed. The website badge switch (kit §9) was done in SU11A-70.
   - ASC set: age 13+, App Privacy published, Privacy Choices URL https://super.xxl.co.il/account/delete, Mac / Vision Pro off. DSA: non-trader / not in the EU; align to trader before any EU distribution.
-  - **Next: 1.2.3** (SU11B-5 + SU11B-6 + SU11B-7, mobile `f1c6ce6`: add-to-basket on product page and search rows, SU11A-63 L1/L2, deletion recovery fix, Hebrew-only iOS localization, text-field borders): build iOS (build 3) then Android (versionCode 10) from that commit via runbook K. Open decision for Dude: manual or automatic release of 1.2.3. After release the store's language line should read Hebrew only (was "EN + 1 More"). Review account appreview@xxl.co.il: re-create if a reviewer deletes it.
+  - **Next: 1.2.3** (SU11B-5 + SU11B-6 + SU11B-7, mobile `f1c6ce6`: add-to-basket on product page and search rows, SU11A-63 L1/L2, deletion recovery fix, Hebrew-only iOS localization, text-field borders): build iOS (build 3) then Android (versionCode 10) from that commit via runbook K (K1 pre-flight → K2 builds → K3 upload → K3a IPA check → K4 retest → K5 submit, automatic release → K6 Play). After release the store's language line should read Hebrew only (was "EN + 1 More"). Review account appreview@xxl.co.il: re-create if a reviewer deletes it.
   - Sign in with Apple is not required (email/password only). Guideline 1.2 items (terms, report, block, blocked list, contact) are live.
 - **Play:**
   - **Production: 9 (1.2.2)** (EAS 0992b1c3, 65882ea) published 4 Nov (submission 3), full rollout, Israel, managed publishing off. Closed testing Alpha: draft 8 (1.2.1) discarded, track inactive.

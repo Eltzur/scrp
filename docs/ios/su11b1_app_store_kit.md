@@ -9,8 +9,8 @@ Prepared 1 Nov 2026. Source facts: `docs/store_privacy_inventory.md` (SU11A-38),
 | App Store Connect app | SUPER XXL, Apple ID (ascAppId) **6829450422** |
 | Bundle ID | `il.co.xxl.supermarket` |
 | SKU | `superxxl-ios-001` |
-| Team | Individual, Team ID **V46QVK4YSA**; seller name currently "Lead Tour" (should read **Elad Tzur**). **Gate (Dude, 4 Nov): do not RELEASE until Dude decides about the name**; Apple Support case 103015749110 open |
-| Version | **1.2.2** (SU11B-2; same as Android build 9); build number from EAS (remote, auto-increment). **1.2.2 (2) submitted to App Review 4 Nov 2026 20:58** (EAS `4eaab3fc`, mobile `65882ea`, manual release; Waiting for Review 5 Nov); build 1.2.2 (1) was rejected in processing (ITMS-90683, missing NSMotionUsageDescription). Next: 1.2.3 (SU11B-5), after 1.2.2 is approved |
+| Team | Individual, Team ID **V46QVK4YSA**; seller name currently "Lead Tour" (should read **Elad Tzur**); Apple Support case 103015749110 open, the listing updates itself when Apple fixes it. The release gate on the name is **closed** (Dude released 1.2.2 with "Lead Tour" showing). |
+| Version | **1.2.2** (SU11B-2; same as Android build 9); build number from EAS (remote, auto-increment). **1.2.2 (2) LIVE on the Israel App Store** (EAS `4eaab3fc`, mobile `65882ea`; submitted 4 Nov 2026 20:58, manual release by Dude); build 1.2.2 (1) was rejected in processing (ITMS-90683, missing NSMotionUsageDescription). Next: 1.2.3 (3) from mobile `f1c6ce6` (SU11B-7), runbook K. **Release option from 1.2.3: "Automatically release this version"** (Dude, 7 Nov 2026). |
 | Devices | iPhone only (`supportsTablet: false`) |
 | Primary language | Hebrew |
 | Categories | Primary: Shopping; secondary: Food & Drink |

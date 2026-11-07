@@ -796,8 +796,9 @@ Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; 
   - **Unchanged:** version 1.2.3; no new strings.
   - **Checks:** `ts.transpileModule` of `delete-account.tsx`: 0 diagnostics. eslint with a temporary `eslint-config-expo/flat` config (deleted after): 28 errors / 1 warning, output identical to HEAD, none in `delete-account.tsx`. Full tsc not run (Dude).
   - **Not tested on a device:** retest list in runbook K (item 6).
-- **2026-11-07 (SU11B-7, mobile `f1c6ce6`) 1.2.3 pre-build: Hebrew as the only iOS language, text-field border contrast, docs sync (ships in 1.2.3, not built):**
-  - **Release state:** iOS **1.2.2 (2)** (EAS `4eaab3fc`, `65882ea`) is **LIVE on the Israel App Store** (https://apps.apple.com/il/app/super-xxl/id6829450422). Dude released it with the seller still reading "Lead Tour" (Apple Support case 103015749110 open; the listing updates itself when Apple fixes it), so the SU11B-5 release gate is decided. Android 1.2.2 (versionCode 9) is live on Play. 1.2.3 stays 1.2.3; EAS remote build numbers: iOS next 3, Android next 10.
+- **2026-11-07 (SU11B-7, mobile `f1c6ce6`) 1.2.3 pre-build: Hebrew as the only iOS language, text-field border contrast, automatic release, docs sync (ships in 1.2.3, not built):**
+  - **Release state:** iOS **1.2.2 (2)** (EAS `4eaab3fc`, `65882ea`) is **LIVE on the Israel App Store** (https://apps.apple.com/il/app/super-xxl/id6829450422). Dude released it with the seller still reading "Lead Tour" (Apple Support case 103015749110 open; the listing updates itself when Apple fixes it), so the seller-name RELEASE gate (runbook G1 / I step 0) is **closed**. Android 1.2.2 (versionCode 9) is live on Play.
+  - **Decision (Dude, 7 Nov 2026): from 1.2.3 on, App Store versions use "Automatically release this version".** Approval publishes at once, so the TestFlight retest (runbook K4) is the last gate; submit for review only after it passes in full. 1.2.3 stays 1.2.3; EAS remote build numbers: iOS next 3, Android next 10.
   - **"EN + 1 More" on the App Store:** App Store Connect's primary language was already Hebrew. The English came from the binary's `CFBundleLocalizations` [he, en].
   - **Sources of the "en" localization found:**
     - `app.json:124-128`: the expo-localization plugin `supportedLocales.ios` ["he", "en"]. `node_modules/expo-localization/plugin/build/withExpoLocalization.js:46-47` copies it into `CFBundleLocalizations`. This was the only source.
@@ -811,7 +812,7 @@ Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; 
     - Settings → SUPER XXL shows no per-app "Language" choice;
     - nothing in `src/` relies on an "en" locale: dates use an explicit `'he-IL'` (`scan-history.tsx:31`, `api-date.ts:54`, `location-diagnostics.tsx:55`), and there is no `expo-localization` / `getLocales` import and no `en.ts`.
 
-    Device check: runbook K item 5.13.
+    Device check: runbook K4 item 12.
   - **Text fields (WCAG 1.4.11):**
     - **The inputs:**
       - the search tab box: `(tabs)/search.tsx:317`, border on its container `:309-311`;
@@ -828,6 +829,7 @@ Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; 
       - the search box reuses its existing `focused` state.
 
       Placeholders keep `theme.textSecondary`, which already passed. The Settings version row is untouched.
+    - **Why a hook, not the shared wrapper:** `src/tw/index.tsx:93-105` (`DefaultColorTextInput`, behind every `@/tw` `TextInput`) sets only the placeholder and text colours. One shared default border there would also hit the search box's inner input, whose border belongs on its container `View` (the icon sits inside it); it cannot track focus without wrapping every caller's `onFocus` / `onBlur`; and the file carries the 5 known tsc errors. So the colours are shared in `theme.ts` and the style in one hook, and each of the 7 fields opts in. The wrapper is unchanged.
 
 | Element | Mode | Colour pair | Before | After |
 |---|---|---|---|---|
@@ -852,8 +854,10 @@ Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; 
     - `npx expo config --type introspect --json` (NODE_ENV / EAS_BUILD_PROFILE production), before vs after: only `ios.infoPlist.CFBundleLocalizations` ["he","en"] → ["he"] (and the same value in `_internal.modResults`) plus the plugin option itself. The **android section is identical**, and the purpose strings and `CFBundleDevelopmentRegion` are unchanged.
     - Full tsc not run (Dude).
   - **Docs:**
-    - **The runbook:** release state; K rebuilt: build from `f1c6ce6`, a pre-flight localization check, a Windows IPA check (`.lproj` list + binary Info.plist via Python `plistlib`, STOP on en), retest items 11-13 (borders light / dark + focus, RTL, English device), the release option as Dude's decision, the store-language check after release, Android permissions, `iw-IL`.
-    - **The rest:** handoff_super open items (Apple / Play, SU11A-69 / 70 / 71 deployed, GA4 connected) and CLAUDE.md (1.2.2 live, gate decided, Hebrew only, next Apple ID SU11B-8).
-  - **Open decisions (Dude):**
-    1. manual or automatic release of iOS 1.2.3 (runbook K step 6);
-    2. the SU11A-71 deploy date (handoff_super: "date: Dude to fill").
+    - **The runbook:**
+      - release state; G rewritten as history (G1 closed, G2 closed); I without step 0 (automatic from 1.2.3, badge done in SU11A-70);
+      - K rebuilt into labelled steps K1–K6: build from `f1c6ce6`; a pre-flight localization check; a Windows IPA check after the upload (K3a: `.lproj` list plus the binary Info.plist via Python `plistlib`, STOP on en, tested with a fake binary plist in PowerShell 5.1); retest items 11 (borders light / dark + focus), 12 (English iPhone) and 13 (RTL);
+      - K5: "Automatically release this version", submit only after K4 passed in full, and the store-language check after release; K6: Android permissions, `iw-IL`.
+    - **The rest:** handoff_super open items (Apple / Play, SU11A-69 / 70 / 71 deployed, GA4 connected), the kit (Team and Version rows) and CLAUDE.md (1.2.2 live, gate closed, automatic release, Hebrew only, next Apple ID SU11B-8).
+  - **Untracked in xxl-super-mobile, never committed:** `.claude/settings.local.json` (ignored by git), `assets/images/icon.jpg`, `splash-icon gplay.png`, `splash-icon2.png`, and `crpxxl-super-mobile`. That last one is a 4.9 KB saved terminal copy (with ANSI colour codes) of a `git diff` from 18 Oct over app.json, eas.json and `src/i18n/he.ts`; it holds no secrets and was left as is.
+  - **Open for Dude:** the SU11A-71 deploy date (handoff_super: "deploy date: Dude to fill"). The release option is decided: automatic.
