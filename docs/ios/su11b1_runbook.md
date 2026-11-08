@@ -10,7 +10,7 @@ Dude runs every step. CC prepared the config (mobile repo: SU11B-1 `85eb6a6`, SU
 - **Lesson:** a Play App content / policy change submitted while a release is in review restarts that review. Submit such changes only when nothing is in review.
 - **Seller-name RELEASE gate (G1): CLOSED.** Dude released 1.2.2 with the name still "Lead Tour". Apple Support case **103015749110** (opened 1 Nov, nudged 3 Nov) is still open; no action is needed when Apple fixes the name.
 - **Release option (Dude, 7 Nov 2026): from 1.2.3 on, every App Store version uses "Automatically release this version".** Approval publishes at once, so the TestFlight retest (K step 4) is the last gate: submit for review only after it has passed in full.
-- **Next: 1.2.3** from the SU11B-7 mobile commit `f1c6ce6`: section K.
+- **Next: 1.2.3** from the SU11B-7b mobile commit `0ecd08b`: section K.
 
 **Build 1.2.2 (1) rejected (SU11B-3 record):** EAS build `80074645` (commit `c56e27f`) was uploaded and Apple rejected it in processing with **ITMS-90683** "Missing purpose string in Info.plist — NSMotionUsageDescription" (expo-location references `CMMotionActivityManager`; SU11B-1 had set `motionUsagePermission` false). SU11B-3 adds NSMotionUsageDescription plus NSMicrophoneUsageDescription, NSFaceIDUsageDescription and NSPhotoLibraryUsageDescription (each an honest Hebrew "the app never uses / never requests it" text). Build 1 stays in App Store Connect as invalid and is never used; B runs again and produces build 2.
 
@@ -227,9 +227,9 @@ Expected: `git log` shows the same commit as the iOS build 2 in B (SU11B-3 `6588
 
 ---
 
-## K. 1.2.3 update (SU11B-5 `130b610`, SU11B-6 `a3988d1`, SU11B-7 `f1c6ce6`)
+## K. 1.2.3 update (SU11B-5 `130b610`, SU11B-6 `a3988d1`, SU11B-7 `f1c6ce6` + SU11B-7b `0ecd08b`)
 
-**Build both stores from the SU11B-7 mobile commit `f1c6ce6`** (not `a3988d1`: that commit lacks the Hebrew-only localization and the text-field borders). iOS first, Android right after, no pull in between. One version in review at a time. Each run burns a build number: run each once. Expected numbers: iOS **1.2.3 (3)**, Android versionCode **10**. **Release: automatic** (Dude, 7 Nov 2026), so step 4 is the last gate before the public release.
+**Build both stores from the SU11B-7b mobile commit `0ecd08b`** (not `a3988d1`: it lacks the Hebrew-only localization and the text-field borders; not `f1c6ce6` alone: its full tsc has 6 TS2322 errors, fixed in SU11B-7b). iOS first, Android right after, no pull in between. One version in review at a time. Each run burns a build number: run each once. Expected numbers: iOS **1.2.3 (3)**, Android versionCode **10**. **Release: automatic** (Dude, 7 Nov 2026), so step 4 is the last gate before the public release.
 
 What changed in 1.2.3:
 - add-to-basket on the product page (shared header, every tab) and on every search row (compact icon button), and a filled, more visible basket button;
@@ -239,7 +239,7 @@ What changed in 1.2.3:
 
 ### K1. Pre-flight
 
-Run A first, expecting the top commit `f1c6ce6` (fix(ios): SU11B-7 …), tsc and A3's four purpose strings. Then the localization check:
+Run A first, expecting the top commit `0ecd08b` (fix(types): SU11B-7b …), tsc (exit 2 with only the 5 known `src/tw` errors; no TS2322) and A3's four purpose strings. Then the localization check:
 
 [PC — PowerShell]
 ```powershell
@@ -262,7 +262,7 @@ cd C:\scrp\xxl-super-mobile
 git log --oneline -1
 npx eas-cli@latest build -p ios --profile production
 ```
-Expected: `git log` shows `f1c6ce6`; the build log shows `Version 1.2.3` and build number **3**; the build finishes with an `.ipa`. STOP on any other version or build number.
+Expected: `git log` shows `0ecd08b`; the build log shows `Version 1.2.3` and build number **3**; the build finishes with an `.ipa`. STOP on any other version or build number.
 
 [PC — PowerShell]
 ```powershell
