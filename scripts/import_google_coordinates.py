@@ -9,6 +9,9 @@ coordinate sources.
         --reviewed ~/google_compare/156_store_update.xlsx                 # DRY RUN (default)
     ... --apply --expect N --session SU11A-23                              # write
     python3 -m scripts.import_google_coordinates --rollback SU11A-23       # restore from the backup table
+    python3 -m scripts.import_google_coordinates --retire-only --retire-closed FK,FK --session SU11A-74
+                                                    # retire listed stores only, no coordinate file (SU11A-74):
+                                                    # dry run; then --trial; then --apply --expect N
 
 Inputs (they live only in ~/google_compare/, never in the repo):
   --exact     CSV, rows with Exact == TRUE: Lat, Lon, Precision, formatted_address -> google_exact
@@ -338,14 +341,29 @@ def check_counts(n: int, expect: int, r: int, want_r: int, o: int, want_o: int) 
 
 
 def apply(args, conn, accepted: list[dict]) -> None:
-    from sqlalchemy import text  # noqa: PLC0415
-
     from scripts.geo_guard import has_coord_source  # noqa: PLC0415
 
     check_expect(len(accepted), args.expect)
     if not has_coord_source(conn):
         conn.rollback()
         raise SystemExit("ABORT: apply db/migrations/su11a23_stores_coord_source.sql first; nothing written")
+    bak = _dump_and_backup(args, conn)
+    n, r, o = _write(conn, args, accepted)
+    try:
+        check_counts(n, args.expect, r, len(_ids(getattr(args, "retire_closed", None))),
+                     o, len(_ids(getattr(args, "mark_online", None))))
+    except SystemExit:
+        conn.rollback()
+        raise
+    conn.commit()
+    print(f"COMMITTED: {n} coordinates, {r} closed stores retired, {o} marked online; backup table {bak}")
+
+
+def _dump_and_backup(args, conn) -> str:
+    """pg_dump of `stores` to ~/backups, then the backup table stores_bak_<session> inside the open
+    transaction. Aborts (nothing written) if the dump fails or the backup table already exists."""
+    from sqlalchemy import text  # noqa: PLC0415
+
     ts = datetime.now().strftime("%Y%m%dT%H%M%S")
     dump = Path.home() / "backups" / f"pre-{args.session}-stores-{ts}.dump"
     dump.parent.mkdir(parents=True, exist_ok=True)
@@ -360,15 +378,117 @@ def apply(args, conn, accepted: list[dict]) -> None:
         conn.rollback()
         raise SystemExit(f"ABORT: {bak} already exists; nothing written")
     conn.execute(text(f"CREATE TABLE {bak} AS SELECT * FROM stores"))
-    n, r, o = _write(conn, args, accepted)
+    return bak
+
+
+# ---------------------------------------------------------------------------
+# --retire-only (SU11A-74): retire listed stores, no coordinate file
+# ---------------------------------------------------------------------------
+def fetch_retire_targets(conn, fks: list[int]) -> list[dict]:
+    from sqlalchemy import text  # noqa: PLC0415
+
+    return [dict(r) for r in conn.execute(text("""
+        SELECT s.id, c.name AS chain, s.chain_id, s.store_id, s.sub_chain_id, s.store_name,
+               s.city_canonical, s.is_physical, s.last_loaded_at
+        FROM stores s LEFT JOIN chains c ON c.chain_id = s.chain_id
+        WHERE s.id = ANY(:fks) ORDER BY s.id"""), {"fks": fks}).mappings()]
+
+
+def plan_retire(fks: list[int], rows: list[dict]) -> tuple[list[dict], list[tuple[int, str]]]:
+    """(accepted rows, rejected [(fk, why)]). Only rows that are physical now are retired, so
+    --rollback (which restores rows whose is_physical changed) undoes exactly this session."""
+    by = {r["id"]: r for r in rows}
+    seen: set[int] = set()
+    ok, bad = [], []
+    for fk in fks:
+        if fk in seen:
+            bad.append((fk, "listed twice"))
+            continue
+        seen.add(fk)
+        r = by.get(fk)
+        if r is None:
+            bad.append((fk, "unknown store_fk"))
+        elif not r.get("is_physical"):
+            bad.append((fk, "is_physical is already false: leave it out"))
+        else:
+            ok.append(r)
+    return ok, bad
+
+
+def stores_checks(conn) -> tuple[list, list]:
+    """The CHECK constraints and user triggers on `stores` as the database has them (SU11A-23b: a
+    constraint the code did not know about blocked a write)."""
+    from sqlalchemy import text  # noqa: PLC0415
+
+    checks = conn.execute(text("""
+        SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+        WHERE conrelid = 'public.stores'::regclass AND contype = 'c' ORDER BY conname""")).all()
+    trig = conn.execute(text("""
+        SELECT tgname FROM pg_trigger
+        WHERE tgrelid = 'public.stores'::regclass AND NOT tgisinternal ORDER BY tgname""")).all()
+    return [tuple(r) for r in checks], [r[0] for r in trig]
+
+
+def yaml_pairs() -> set[tuple[str, str]]:
+    """(chain_id, padded store_id) of every store in scraper/active_stores.yaml."""
+    import yaml  # noqa: PLC0415
+
+    from db.db import _pad_store_id  # noqa: PLC0415
+
+    path = Path(__file__).resolve().parent.parent / "scraper" / "active_stores.yaml"
+    cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return {(e["chain_id"], _pad_store_id(str(x))) for e in cfg.get("chains", []) for x in e.get("store_ids", [])}
+
+
+def run_retire_only(args, conn, rows: list[dict], fks: list[int], checks=None, in_yaml=None) -> list[dict]:
+    """Dry run by default; --trial retires ONE store and rolls back; --apply needs --expect N."""
+    from sqlalchemy import text  # noqa: PLC0415
+
+    ok, bad = plan_retire(fks, rows)
+    print(f"retire-only {args.session}: listed {len(fks)} | to retire {len(ok)} | rejected {len(bad)}")
+    for r in ok:
+        last = r["last_loaded_at"].strftime("%Y-%m-%d %H:%M") if r.get("last_loaded_at") else "never"
+        warn = ("  WARNING: still in active_stores.yaml"
+                if in_yaml is not None and (r["chain_id"], r["store_id"]) in in_yaml else "")
+        print(f"   {r['id']} | {r['chain']} | {r['store_id']} | {r['store_name']} | {r['city_canonical']} | "
+              f"last loaded {last}{warn}")
+    for fk, why in bad:
+        print(f"   REJECT store_fk {fk}: {why}")
+    if checks is not None:
+        cons, trig = checks
+        print(f"CHECK constraints on stores: {len(cons)}; user triggers: {len(trig)} {trig}")
+        for name, d in cons:
+            print(f"   {name}: {d}")
+    writes = args.apply or getattr(args, "trial", False)
+    if bad and writes:
+        conn.rollback()
+        raise SystemExit("ABORT: fix the list (every listed store must be retirable); nothing written")
+    if getattr(args, "trial", False):
+        if not ok:
+            raise SystemExit("trial: nothing to retire")
+        try:
+            n = conn.execute(text(RETIRE_CLOSED_SQL), {"fk": ok[0]["id"]}).rowcount
+            print(f"TRIAL: retire UPDATE rowcount {n} (store_fk {ok[0]['id']}) - accepted by the database")
+        finally:
+            conn.rollback()
+            print("TRIAL: rolled back, nothing written")
+        return ok
+    if not args.apply:
+        conn.rollback()
+        print(f"\nDRY RUN - nothing written. To write: --retire-only --retire-closed {args.retire_closed} "
+              f"--apply --expect {len(ok)} --session {args.session}")
+        return ok
+    check_expect(len(ok), args.expect)
+    bak = _dump_and_backup(args, conn)
+    r = sum(conn.execute(text(RETIRE_CLOSED_SQL), {"fk": x["id"]}).rowcount for x in ok)
     try:
-        check_counts(n, args.expect, r, len(_ids(getattr(args, "retire_closed", None))),
-                     o, len(_ids(getattr(args, "mark_online", None))))
+        check_counts(0, 0, r, args.expect, 0, 0)
     except SystemExit:
         conn.rollback()
         raise
     conn.commit()
-    print(f"COMMITTED: {n} coordinates, {r} closed stores retired, {o} marked online; backup table {bak}")
+    print(f"COMMITTED: {r} stores retired (is_physical=false, last_loaded_at=NULL); backup table {bak}")
+    return ok
 
 
 def rollback(session: str, conn) -> None:
@@ -407,9 +527,16 @@ def main() -> None:
     ap.add_argument("--retire-closed", metavar="FK,FK", help="closed stores: is_physical=false, last_loaded_at=NULL")
     ap.add_argument("--mark-online", metavar="FK,FK", help="online-only stores: is_physical=false")
     ap.add_argument("--rollback", metavar="SESSION", help="restore the stores changed by SESSION from its backup table")
+    ap.add_argument("--retire-only", action="store_true",
+                    help="only retire the --retire-closed stores; no coordinate file (SU11A-74)")
     args = ap.parse_args()
     if not SESSION_RE.match(args.rollback or args.session):
         raise SystemExit("session must look like SU11A-23")
+    if args.retire_only:
+        if args.exact or args.reviewed or args.extra or args.mark_online or args.override_manual:
+            raise SystemExit("--retire-only takes only --retire-closed, --session, --trial / --apply --expect")
+        if not _ids(args.retire_closed):
+            raise SystemExit("--retire-only needs --retire-closed FK,FK")
 
     from db.db import connect  # noqa: PLC0415
     from scripts.geo_centroids import load_cbs_centroids  # noqa: PLC0415
@@ -418,6 +545,11 @@ def main() -> None:
     try:
         if args.rollback:
             rollback(args.rollback, conn)
+            return
+        if args.retire_only:
+            fks = _ids(args.retire_closed)
+            run_retire_only(args, conn, fetch_retire_targets(conn, fks), fks,
+                            checks=stores_checks(conn), in_yaml=yaml_pairs())
             return
         if args.extra:
             cands = rows_from_extra(read_exact_csv(args.extra))

@@ -964,6 +964,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-70 (Nov 7) — honest visitor counts (browser GET/HEAD 200/304 only; rejected_requests; admin API platform; "don't count this browser" cookie flag in the nginx log), App Store badge live (Apple's official artwork, he / en), Super logo → Super home + footer "כל שירותי XXL". Runbook `docs/admin/su11a70_runbook.md`. Not deployed.
 - SU11A-71 (Nov 7) — GA4 never sent data (gtag shim pushed Arrays; fixed to Google's Arguments form; data starts on the deploy date), path-only page_view once per route, server stats count only the site's own routes (SPA 200s for /wp-admin etc. are rejected). Runbook `docs/admin/su11a71_runbook.md`. Not deployed.
 - SU11A-73 (Nov 9) — read-only: stores missing from the admin card's 72 h price-load count. Shufersal's gap is a duplicate "413" in active_stores.yaml; Yochananof 3, King Store 2, Shefa 8 (plus Shuk Hair 1) never had a price file; Carrefour 445 stopped after 6 Nov. Report only.
+- SU11A-74 (Nov 9) — 15 non-existent / irrelevant stores removed from active_stores.yaml (+ the duplicate Shufersal "413"; 936 → 920 ids) and a `--retire-only` mode in the coordinates importer to retire them in the DB (is_physical=false, last_loaded_at=NULL; backup + rollback). DB step: Dude, runbook in the entry.
 - SU11A-56 (Oct 25) — catalog taxonomy v1.2 (`taxonomy_v1_2.csv`, `gs1_group_map_v1_2.csv`: D09.C11, D16.C08, D07.C08.S01 storage split), Sonnet 5.5 pilot on the graded AI audit (53% vs Haiku 64%: gate failed, no full re-check). Not applied.
 - SU11A-55 (Oct 25) — catalog: Dude's review as `docs/catalog/review_graded_v1.csv` (150 manual rows), taxonomy/rules v1.1 (`taxonomy_v1_1.csv`, `brand_category_hints_v1_1.csv`; head anchor, %, hard negatives, brand pin), AI audit sample `ai_audit_sample_v1.xlsx`. Not applied.
 - SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
@@ -3000,6 +3001,109 @@ Read-only (two short scripts on the server, `SET TRANSACTION READ ONLY`, 15 s st
 - **Not a closure:** Shufersal 413 is a duplicate yaml line, one of the two can go. Carrefour 445 published until 6 Nov: watch it before deciding.
 - No fix prompts written; active_stores.yaml unchanged.
 
+### SU11A-74 (9 Nov 2026) - 15 non-existent / irrelevant stores out of the active list and retired; built, DB step not run
+
+**Decision (Dude, 9 Nov 2026, after SU11A-73):** these stores don't exist or aren't relevant and should never have been listed; remove them all. Plus the duplicate Shufersal "413" line. CC wrote code and docs only; Dude runs the DB step below.
+
+**The stores** (store_fk / store_id): Yochananof 23280 / 002, 985 / 146, 5172 / 152; King Store 18791 / 335, 18793 / 337; Shefa Birkat Hashem 18807 / 021, 18810 / 025, 18816 / 033, 18818 / 035, 18823 / 041, 18825 / 043, 18826 / 051, 18827 / 088; Carrefour 61517 / 445; Shuk Hair 18832 / 007.
+
+**1. `scraper/active_stores.yaml`** (16 lines removed):
+- **Matching:** ids are quoted strings with leading zeros (`"002"`), and the scraper pads them to 3 digits (`db/db.py` `_pad_store_id`), the same as `stores.store_id`. Lines were removed only inside the right chain's block: `"413"` also appears in Carrefour's list, and `"002"` / `"021"` … in most chains.
+- **Shufersal:** only the second `"413"` line (the trailing duplicate) was removed. The real 413 (fk 6116, sub 002) stays listed once.
+- **New totals:** Shufersal 322 → **321**, Yochananof 50 → **47**, King Store 30 → **28**, Shefa Birkat Hashem 28 → **20**, Carrefour 146 → **145**, Shuk Hair 20 → **19**. Other chains unchanged; 936 → **920** ids in all.
+- **No duplicate left in any chain**, and no other duplicate was found. The admin card's totals now match the distinct stores.
+
+**2. DB retirement: `--retire-only` in `scripts/import_google_coordinates.py`** (the SU11A-23 importer needed a coordinates file, so a minimal mode was added; nothing else changed):
+- **It writes** the same `RETIRE_CLOSED_SQL` as SU11A-23 phase 2: `is_physical = false, last_loaded_at = NULL`, by id, only for the fks given on the command line. Rows are never deleted (prices and fetch_store_runs reference them).
+- **Dry run by default.** It lists each store (fk, chain, store_id, name, city, last load) and rejects an unknown fk, an fk listed twice, or a store whose `is_physical` is already false. Rejecting already-non-physical stores is what keeps `--rollback` exact: it restores rows whose `is_physical` changed.
+- **It also prints the database's own CHECK constraints and user triggers on `stores`** (the SU11A-23b lesson) and warns if a store is still in active_stores.yaml.
+- **`--trial`:** retires ONE store, then ROLLBACK.
+- **`--apply --expect N`:** pg_dump of `stores` to `~/backups/pre-SU11A-74-stores-<ts>.dump`, then one transaction with the backup table `stores_bak_su11a_74` and the N UPDATEs, rolled back unless exactly N rows changed. Any rejection aborts a write.
+- **`--rollback SU11A-74`:** unchanged; restores `is_physical` / `last_loaded_at` from the backup table.
+- `apply()` now shares the pg_dump + backup-table code (`_dump_and_backup`); its behaviour is unchanged.
+- **CHECKs in the repo:** `stores_geo_source_chk`, `stores_geo_precision_chk` and `stores_coord_source_check` don't touch `is_physical` (`NOT NULL` boolean) or `last_loaded_at` (nullable); there are no triggers in the migrations. The dry run shows what production has, and `--trial` runs the real UPDATE.
+- **Store 4574** (413 - שופרסל ONLINE, sub 1234): `is_physical` was set false in SU10S-10 (`db/migrations/su10s10_store_coordinates.sql:72`, as was 6116). So it is **not** in the list; step b checks its production value.
+
+**Carrefour 445 (fk 61517, 8,297 price rows, last loaded 6 Nov 10:05):**
+- The rows stay in `prices`; nothing deletes them.
+- **After the retirement**, `last_loaded_at = NULL` makes the store not live, so price, compare, basket, promo and /product reads (the liveness post-filter, `db/query.py` "Liveness filter (SU10S-20)") drop it within the API's 10-minute live-set cache. It also leaves `/stores/coordinates` at once (`is_physical`).
+- **`/search`** (the precomputed search table) drops it at the next 14:30 `scrp-search-items` build.
+- **Without the retirement** it would have dropped out on its own once Carrefour's newest load passed 9 Nov 10:05 (3-day window), i.e. after the 9 Nov cron.
+- It is no longer in the yaml, so it never loads again.
+
+**Tests:**
+- `tests/test_retire_only_su11a74.py` (20): the plan's rejections; a dry run writes nothing; the trial makes one UPDATE and rolls back; any rejection aborts a write; `--expect` must be exact; apply does pg_dump → backup table → N UPDATEs → commit; a short count rolls back; an existing backup table aborts; the rollback SQL; CLI guards; the yaml totals, the removed ids, one Shufersal 413, no duplicates in any chain, 920 ids.
+- `tests/test_import_google_coordinates.py` unchanged and passing.
+- **Full Python suite on PG18:** `tests/` 1073 passed; `api/tests` 1 passed plus the 14 known `test_smoke` failures.
+
+**Runbook (Dude).** Outside quiet times (not 03:30–03:45, 04:00–04:30, 14:25–15:00, nor from 10:00 until the cron finishes), and **before the next 10:00 cron**.
+
+**a) Pull**
+
+[Server — bash]
+```
+date '+%H:%M'; systemctl show -p ActiveState --value scrp-cron; cd ~/scrp && git pull origin main && git log --oneline -3 && grep -cE '^\s+- "' scraper/active_stores.yaml
+```
+Expected: a time outside the quiet windows; `inactive`; the log shows `feat: SU11A-74 retire 15 non-existent stores (active list + --retire-only)`; the last line is **920**.
+STOP if `scrp-cron` reads `activating`, the pull fails, or the count is not 920.
+
+**b) Dry run, plus store 4574**
+
+[Server — bash]
+```
+cd ~/scrp && ( ulimit -v 1500000; set -a; source .env; set +a; venv/bin/python3 -m scripts.import_google_coordinates --retire-only --retire-closed 23280,985,5172,18791,18793,18807,18810,18816,18818,18823,18825,18826,18827,61517,18832 --session SU11A-74 )
+sudo -u postgres psql xxl_super -Atc "SELECT id, sub_chain_id, is_physical, last_loaded_at FROM stores WHERE id IN (4574, 6116) ORDER BY id"
+```
+Expected:
+- `retire-only SU11A-74: listed 15 | to retire 15 | rejected 0`, then **15 lines** (fk | chain | store_id | name | city | last loaded), all `last loaded never` except `61517 | קרפור | 445 | … | last loaded 2026-11-06 10:05`, and no `WARNING` line;
+- `CHECK constraints on stores: N; user triggers: 0 []`, with only the geo_source / geo_precision / coord_source checks listed;
+- `DRY RUN - nothing written. To write: … --apply --expect 15 --session SU11A-74`;
+- then `4574|1234|f|` and `6116|002|f|<a date>`. 4574 stays out: it is already not physical.
+
+STOP if:
+- a line says `REJECT` (for example a store already not physical) or `WARNING`;
+- the count is not 15;
+- a trigger is listed, or a CHECK mentions `is_physical` / `last_loaded_at`;
+- 4574 shows `t` (then it would be the 16th store: paste the output to the chat first).
+
+**c) Trial (one UPDATE, then ROLLBACK)**
+
+[Server — bash]
+```
+cd ~/scrp && ( ulimit -v 1500000; set -a; source .env; set +a; venv/bin/python3 -m scripts.import_google_coordinates --retire-only --retire-closed 23280,985,5172,18791,18793,18807,18810,18816,18818,18823,18825,18826,18827,61517,18832 --session SU11A-74 --trial )
+```
+Expected: `TRIAL: retire UPDATE rowcount 1 (store_fk 23280) - accepted by the database`, then `TRIAL: rolled back, nothing written`. STOP on any error (a constraint or trigger name in it).
+
+**d) Before counts, then apply**
+
+[Server — bash]
+```
+sudo -u postgres psql xxl_super -Atc "SELECT count(*) FILTER (WHERE is_physical) AS physical, count(*) FILTER (WHERE id IN (23280,985,5172,18791,18793,18807,18810,18816,18818,18823,18825,18826,18827,61517,18832) AND NOT is_physical) AS retired FROM stores"
+curl -s http://127.0.0.1:8000/stores/coordinates | python3 -c 'import json,sys; print("coordinates", len(json.load(sys.stdin)))'
+cd ~/scrp && ( ulimit -v 1500000; set -a; source .env; set +a; venv/bin/python3 -m scripts.import_google_coordinates --retire-only --retire-closed 23280,985,5172,18791,18793,18807,18810,18816,18818,18823,18825,18826,18827,61517,18832 --session SU11A-74 --apply --expect 15 )
+```
+Expected:
+- `<P>|0`, where P is the number of physical stores now;
+- `coordinates <C>`;
+- `pg_dump -> /home/dude/backups/pre-SU11A-74-stores-<ts>.dump (<bytes> bytes)`, then `COMMITTED: 15 stores retired (is_physical=false, last_loaded_at=NULL); backup table stores_bak_su11a_74`.
+
+STOP on `ABORT` (nothing was written), or any error.
+
+**e) Verify (counts only)**
+
+[Server — bash]
+```
+sudo -u postgres psql xxl_super -Atc "SELECT count(*) FILTER (WHERE is_physical) AS physical, count(*) FILTER (WHERE id IN (23280,985,5172,18791,18793,18807,18810,18816,18818,18823,18825,18826,18827,61517,18832) AND NOT is_physical AND last_loaded_at IS NULL) AS retired FROM stores"
+curl -s http://127.0.0.1:8000/stores/coordinates | python3 -c 'import json,sys; print("coordinates", len(json.load(sys.stdin)))'
+```
+Expected:
+- `<P - 15>|15`;
+- `coordinates <C>` or `<C - 1>`. Only Carrefour 445 can leave the endpoint (if it had coordinates and was still live); the other 14 never loaded, so they were never on it.
+
+STOP if `retired` is not 15, or the coordinates count drops by more than 1.
+
+**If needed:** to undo the DB step, run the same command with `--rollback SU11A-74` instead of `--retire-only …`. It restores `is_physical` / `last_loaded_at` from `stores_bak_su11a_74`, and the pg_dump in `~/backups` is the second copy. The yaml change is undone by restoring the 16 lines (`git revert` of the SU11A-74 commit).
+
 ---
 
 ## 📋 Open items / next steps (as of 7 Nov 2026)
@@ -3024,6 +3128,7 @@ Read-only (two short scripts on the server, `SET TRANSACTION READ ONLY`, 15 s st
 - **SU11A-58 promo pins / hides:** in use on production by 1 Nov. `docs/admin/su11a58_runbook.md` (migration, restart, ONE web deploy for SU11A-57 + SU11A-58 from a PC with `web/.env.production`, checks). Open decision: whether a hide should also exclude a promotion from prices (options A / B / C in the SU11A-58 entry).
 - **SU11A-69 admin statistics: deployed** (runbook `docs/admin/su11a69_runbook.md`). **B1 GA4 is connected:** service account xxl-stats@scrp-510706.iam.gserviceaccount.com, property 537761103. **C2 Google Play and C3 App Store are not connected yet** (their cards read "לא מחובר").
 - **SU11A-70 honest counts / App Store badge / logo link: deployed** (runbook `docs/admin/su11a70_runbook.md`). If not yet done: paste the step 5 BEFORE / AFTER sums into the SU11A-70 entry, and turn "לא לספור את הדפדפן הזה" on in every browser and phone the team uses.
+- **SU11A-74 store retirement:** yaml change ships with the next server pull; the DB step (runbook a–e in the SU11A-74 entry) is Dude's, before a 10:00 cron.
 - **SU11A-71 GA4 fix / real-route page views: deployed (deploy date: Dude to fill)** (runbook `docs/admin/su11a71_runbook.md`). **GA4 has no data before that deploy date.** If not yet done: paste the step 3 BEFORE / AFTER sums into the SU11A-71 entry.
   - **Connect C2 / C3** when convenient (C1 GA4 is done): runbook C2 Google Play (same service account + Play Console read-only reports + bucket id), C3 App Store (separate Sales and Reports key + a one-time Admin-key Analytics request, revoked after). Each card shows "לא מחובר" until then.
   - Optional: send `X-XXL-Client: ios|android/<version>` (no identifier, no privacy-label change) from a later app version, for per-version counts; the platform split already works from the user agents.
@@ -3063,4 +3168,4 @@ Read-only (two short scripts on the server, `SET TRANSACTION READ ONLY`, 15 s st
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-72 (planned: result view modes); SU11A-73 is used (read-only stale stores), so the one after SU11A-72 is SU11A-74. SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
+Next free session ID: SU11A-72 (planned: result view modes); SU11A-73 and SU11A-74 are used, so the one after SU11A-72 is SU11A-75. SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
