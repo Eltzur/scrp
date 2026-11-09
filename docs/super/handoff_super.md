@@ -963,6 +963,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-69 (Nov 6) — admin statistics dashboard: nginx-log website traffic + app activity per platform (works now), GA4 / Play installs / App Store downloads + impressions (built, connect later); daily aggregates only (scrp-stats.timer 03:30), never IPs / user agents / query strings. Runbook `docs/admin/su11a69_runbook.md`. Not deployed.
 - SU11A-70 (Nov 7) — honest visitor counts (browser GET/HEAD 200/304 only; rejected_requests; admin API platform; "don't count this browser" cookie flag in the nginx log), App Store badge live (Apple's official artwork, he / en), Super logo → Super home + footer "כל שירותי XXL". Runbook `docs/admin/su11a70_runbook.md`. Not deployed.
 - SU11A-71 (Nov 7) — GA4 never sent data (gtag shim pushed Arrays; fixed to Google's Arguments form; data starts on the deploy date), path-only page_view once per route, server stats count only the site's own routes (SPA 200s for /wp-admin etc. are rejected). Runbook `docs/admin/su11a71_runbook.md`. Not deployed.
+- SU11A-73 (Nov 9) — read-only: stores missing from the admin card's 72 h price-load count. Shufersal's gap is a duplicate "413" in active_stores.yaml; Yochananof 3, King Store 2, Shefa 8 (plus Shuk Hair 1) never had a price file; Carrefour 445 stopped after 6 Nov. Report only.
 - SU11A-56 (Oct 25) — catalog taxonomy v1.2 (`taxonomy_v1_2.csv`, `gs1_group_map_v1_2.csv`: D09.C11, D16.C08, D07.C08.S01 storage split), Sonnet 5.5 pilot on the graded AI audit (53% vs Haiku 64%: gate failed, no full re-check). Not applied.
 - SU11A-55 (Oct 25) — catalog: Dude's review as `docs/catalog/review_graded_v1.csv` (150 manual rows), taxonomy/rules v1.1 (`taxonomy_v1_1.csv`, `brand_category_hints_v1_1.csv`; head anchor, %, hard negatives, brand pin), AI audit sample `ai_audit_sample_v1.xlsx`. Not applied.
 - SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
@@ -2954,6 +2955,51 @@ Runbook: `docs/admin/su11a71_runbook.md`: quiet time → pull → one-time `--da
 - **Main chunk:** 176.01 → 176.51 kB (+0.50 kB).
 - **Full Python suite on PG18:** `tests/` 1053 passed; `api/tests` 1 passed plus the 14 known `test_smoke` failures.
 
+### SU11A-73 (9 Nov 2026) - read-only: active stores without a price load in 72 h (admin "עדכון מחירים לפי רשת" card)
+
+Read-only (two short scripts on the server, `SET TRANSACTION READ ONLY`, 15 s statement timeout, `ulimit -v 1500000`; nothing written, no API calls). Queried 9 Nov 09:14, before that day's 10:00 cron.
+
+**The card's definition** (`api/routers/admin.py:153` `_chains` (status section `:253`) → `db/query.py:1263` `fetch_coverage`; label `web/src/i18n/locales/he.json:240`, rendered `web/src/admin/screens/StatusScreen.tsx:90`):
+- **active** = `v_store_coverage_72h.stores_loaded_72h` (`db/migrations/9d2_fetch_store_runs.sql:19`): distinct `store_fk` in `fetch_store_runs` with `status = 'loaded'` and `run_at >= to_char(now() - 72 h)`;
+- **total** = the number of `store_ids` listed for the chain in `scraper/active_stores.yaml`, duplicates included.
+- The card's "last update" is `fetch_freshness` (`db/query.py:1314`): the newest `fetch_runs.run_at` with `files_loaded > 0`.
+
+**Card at the query:** Shufersal 321/322, Yochananof 47/50, King Store 28/30, Shefa Birkat Hashem 20/28. Not in Dude's list but also short: Carrefour 145/146, Shuk Hair 19/20. All other chains are full.
+
+| store_fk | chain | store_id | name | city | last load | price rows | cause |
+|---|---|---|---|---|---|---|---|
+| 4574 | Shufersal | 413 (sub 1234) | 413 - שופרסל ONLINE | אונליין | never | 0 | **not a missing store**: "413" is listed twice in active_stores.yaml (lines 303 and 347); the real 413 row (fk 6116, sub 002) loaded 8 Nov 10:18, 16,086 prices. The total is 321 distinct stores, all loaded; the card cannot show 322/322 |
+| 23280 | Yochananof | 002 | יוחננוף ישן | (none) | never | 0 | no file published (`no_file` 7 + 8 Nov; "No Price found for store 002" 8 Nov 10:03) |
+| 985 | Yochananof | 146 | מישור אדומים פיק אפ | ירושלים | never | 0 | no file published (pickup point; `no_file` 7 + 8 Nov) |
+| 5172 | Yochananof | 152 | גדרה פיק אפ | גדרה | never | 0 | no file published (pickup point; `no_file` 7 + 8 Nov) |
+| 18791 | King Store | 335 | 335 דוכאן כפר ברא | כפר ברא | never | 0 | no file published (`no_file` 7 + 8 Nov) |
+| 18793 | King Store | 337 | 337 דוכאן אעבלין | אעבלין | never | 0 | no file published (`no_file` 7 + 8 Nov) |
+| 18807 | Shefa Birkat Hashem | 021 | 21 בני ברק | בני ברק | never | 0 | no file published |
+| 18810 | Shefa Birkat Hashem | 025 | 25 תלפיות | ירושלים | never | 0 | no file published |
+| 18816 | Shefa Birkat Hashem | 033 | 33 סורוצקין | ירושלים | never | 0 | no file published |
+| 18818 | Shefa Birkat Hashem | 035 | 35 זית רענן | ירושלים | never | 0 | no file published |
+| 18823 | Shefa Birkat Hashem | 041 | 41 נתיבות | נתיבות | never | 0 | no file published |
+| 18825 | Shefa Birkat Hashem | 043 | 43 אשדוד | אשדוד | never | 0 | no file published |
+| 18826 | Shefa Birkat Hashem | 051 | 51 עפולה | עפולה | never | 0 | no file published |
+| 18827 | Shefa Birkat Hashem | 088 | 88 צפניה | ירושלים | never | 0 | no file published |
+| 61517 | Carrefour | 445 | קרפור סיטי לב אשקלון (3210) | אשקלון | 6 Nov 10:05 | 8,297 | stopped publishing after 6 Nov (`no_file` 7 + 8 Nov) |
+| 18832 | Shuk Hair | 007 | 7 לב אשדוד | אשדוד | never | 0 | no file published |
+
+- **Evidence:** every store above (except Shufersal 413) has `no_file` rows for the 7 and 8 Nov runs, and the 8 Nov journal has "No Price found for store … — skipping" for each, inside that chain's run window. None failed to parse. All of them except Carrefour 445 have **never** loaded (no `last_loaded_at`, 0 price rows).
+- **Shufersal last update "7.11 10:12":**
+  - the 8 Nov Shufersal run started 10:18 but ended only at 12:03 (7,394 s) as `partial` 312/314, after repeated read timeouts from prices.shufersal.co.il;
+  - its `fetch_runs` row carries `files_loaded = 0` until the end, so during the run the card still showed 7 Nov;
+  - after 12:03 the card's value is 8 Nov 10:18.
+- **Likely closures / never-published (Dude's manual review; store-count rule: 1–10 per chain = manual only):**
+  - Yochananof 002 ("ישן", no city), and the pickup points 146 and 152;
+  - King Store 335 and 337;
+  - all 8 Shefa Birkat Hashem stores;
+  - Shuk Hair 007.
+
+  Each has never had a price file.
+- **Not a closure:** Shufersal 413 is a duplicate yaml line, one of the two can go. Carrefour 445 published until 6 Nov: watch it before deciding.
+- No fix prompts written; active_stores.yaml unchanged.
+
 ---
 
 ## 📋 Open items / next steps (as of 7 Nov 2026)
@@ -3017,4 +3063,4 @@ Runbook: `docs/admin/su11a71_runbook.md`: quiet time → pull → one-time `--da
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-72 (planned: result view modes). SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
+Next free session ID: SU11A-72 (planned: result view modes); SU11A-73 is used (read-only stale stores), so the one after SU11A-72 is SU11A-74. SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
