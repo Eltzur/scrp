@@ -21,10 +21,10 @@ import { ChevronLeft, Loader2, Search } from 'lucide-react';
 import { getBrowseTree, getCategoryItems, type BrowseNode, type CategoryItemsResult } from '../../api/categoryBrowse';
 import type { SearchResult } from '../../api/client';
 import { useChains, useCities } from '../../api/hooks';
-import ResultsList from '../../components/ResultsList';
+import ResultViews from '../../components/ResultViews';
 import { rememberCity, rememberedCity } from '../../utils/city';
 import {
-  CATEGORY_Q_MAX, CATEGORY_SORTS, categoryParams, categorySearchText, findNode, hasViewFilters, isNodeId, itemsRequest,
+  CATEGORY_LIMIT_MAX, CATEGORY_Q_MAX, CATEGORY_SORTS, categoryParams, categorySearchText, findNode, hasViewFilters, isNodeId, itemsRequest,
   nextOffset, nodeName, readCategoryView, searchPageUrl, type CategorySort,
 } from '../../utils/categoryView';
 import { applyCategoryHead, categoryHead, removeCategoryHead } from '../../utils/categorySeo';
@@ -180,6 +180,12 @@ function CategoryPage({ id }: { id: string }) {
     retry: (n, err) => !(isAxiosError(err) && err.response?.status && err.response.status < 500) && n < 1,
   });
 
+  // SU11A-72: one page for the list / table views (the same request, limit / offset of the page).
+  const fetchPage = (limit: number, offset: number, signal?: AbortSignal): Promise<SearchResult> =>
+    getCategoryItems(id, { ...itemsRequest({ ...view, city }, '', offset), limit }, signal)
+      .then(r => ({ query: id, total_matches: r.total, comparable_count: 0, has_more: r.has_more, items: r.items }));
+  const pagedKey = ['category-items', id, city, view.chain, view.sort, view.promo, qText];
+
   const first = list.data?.pages[0];
   const notFound = isAxiosError(list.error) && list.error.response?.status === 404;
   const node = findNode(tree.data, id);
@@ -312,7 +318,12 @@ function CategoryPage({ id }: { id: string }) {
           )}
         </div>
       ) : (
-        <ResultsList
+        <ResultViews
+          active
+          pagedKey={pagedKey}
+          fetchPage={fetchPage}
+          maxLimit={CATEGORY_LIMIT_MAX}
+          city={city || null}
           result={result}
           isLoading={list.isLoading}
           isFetching={list.isFetching}

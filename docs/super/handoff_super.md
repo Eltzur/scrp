@@ -965,6 +965,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-71 (Nov 7) — GA4 never sent data (gtag shim pushed Arrays; fixed to Google's Arguments form; data starts on the deploy date), path-only page_view once per route, server stats count only the site's own routes (SPA 200s for /wp-admin etc. are rejected). Runbook `docs/admin/su11a71_runbook.md`. Not deployed.
 - SU11A-73 (Nov 9) — read-only: stores missing from the admin card's 72 h price-load count. Shufersal's gap is a duplicate "413" in active_stores.yaml; Yochananof 3, King Store 2, Shefa 8 (plus Shuk Hair 1) never had a price file; Carrefour 445 stopped after 6 Nov. Report only.
 - SU11A-74 (Nov 9) — 15 non-existent / irrelevant stores removed from active_stores.yaml (+ the duplicate Shufersal "413"; 936 → 920 ids) and a `--retire-only` mode in the coordinates importer to retire them in the DB (is_physical=false, last_loaded_at=NULL; backup + rollback). DB step: Dude, runbook in the entry.
+- SU11A-72 (Nov 9) — web: result view modes on search and category pages (grid unchanged; list = accordion with per-chain prices, 10/25/50/100/הכל; comparison table = products × up to 8 chains, totals marked only among complete chains), remembered per browser; no API change (the payload already has per-chain quotes). Runbook `docs/super/su11a72_runbook.md`. Not deployed.
 - SU11A-56 (Oct 25) — catalog taxonomy v1.2 (`taxonomy_v1_2.csv`, `gs1_group_map_v1_2.csv`: D09.C11, D16.C08, D07.C08.S01 storage split), Sonnet 5.5 pilot on the graded AI audit (53% vs Haiku 64%: gate failed, no full re-check). Not applied.
 - SU11A-55 (Oct 25) — catalog: Dude's review as `docs/catalog/review_graded_v1.csv` (150 manual rows), taxonomy/rules v1.1 (`taxonomy_v1_1.csv`, `brand_category_hints_v1_1.csv`; head anchor, %, hard negatives, brand pin), AI audit sample `ai_audit_sample_v1.xlsx`. Not applied.
 - SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
@@ -3104,6 +3105,51 @@ STOP if `retired` is not 15, or the coordinates count drops by more than 1.
 
 **If needed:** to undo the DB step, run the same command with `--rollback SU11A-74` instead of `--retire-only …`. It restores `is_physical` / `last_loaded_at` from `stores_bak_su11a_74`, and the pg_dump in `~/backups` is the second copy. The yaml change is undone by restoring the 16 lines (`git revert` of the SU11A-74 commit).
 
+### SU11A-72 (9 Nov 2026) - web: result view modes (grid / list / comparison table) for search and category pages; built, not deployed
+
+Runbook: `docs/super/su11a72_runbook.md` (web deploy with the MATCH guard, then browser checks on desktop and phone). **Web only: no API, nginx, DB or app change.**
+
+**Read-only check first (the gate):**
+- **Per request:** `/search` and `/compare` return at most **100** products (`limit le=100`, `api/routers/search.py`); `/categories/{id}/items` at most **60** (`db/category_browse.py` `LIMIT_MAX`).
+- **Per-chain prices are already in the payload:** every item carries `quotes[]` with **one quote per chain, its cheapest branch**, inside the city / chain filter of the request (`db/query.py` `group_by_product`; search v2 reads the same per-chain rows from `search_item_prices`; category items use the same `ProductWithPrices`). The list's open rows and the table are built from that one response.
+- **No new or changed endpoint is needed**, and there is no request per row: one request per page (limit = page size, capped by the endpoint). The gate passed. `/compare` and category items stay in the `xxl_heavy` nginx group as before. A page change is one request, the same as a "טעינת עוד" click today.
+- **"הכל"** = one request at the endpoint's cap (100 / 60), with a note when the search has more.
+- **Thumbnails:** the search payload has no `has_image`, so each visible list row asks `/product/{code}/image` lazily (`loading="lazy"`, the nginx `xxl_img` zone, 30 r/s burst 200, "a results page asks for 20-30 at once"). A 404 (most barcodes) falls back to an icon.
+  - **Option (not built, an API change):** add `has_image` to the search / category payload, so rows without an image ask for nothing.
+
+**Built (web):**
+- **`components/ResultViews.tsx`** (main chunk): wraps `ResultsList`. The grid is today's cards, unchanged, with "load more". The switcher and the list / table are lazy chunks (`components/results/ViewSwitcher.tsx`, `PagedResults.tsx` with `ResultsListView.tsx` and `CompareTable.tsx`), with strings in a lazy bundle (`components/results/strings.{he,en}.json`, added to `check-i18n.js`).
+- **Wired in** `pages/HomePage.tsx` (search and compare; `fetchPage` is the same request with the page's limit / offset) and `pages/categories/CategoriesPage.tsx` (`CATEGORY_LIMIT_MAX = 60` in `utils/categoryView.ts`).
+- **group_by=store** rows (one per branch) are not products × chains: there only the grid is enabled, with a note.
+- **Persistence:** `utils/resultViewPrefs.ts`, localStorage `xxl_result_view`, `xxl_result_page_size`, `xxl_table_chains`, every access in try/catch, junk values ignored. Nothing in the URL or the account, no GA4 event.
+- **The logic** (`utils/resultViews.ts`, lazy chunks only):
+  - `effectivePageSize`: the table clamps 100 / הכל to 50, with a note;
+  - `pageRequest`;
+  - `rowCheapest`: among the shown chains, ties all win, nothing marked when fewer than 2 of them sell it;
+  - `tableColumns`: the remembered chains, else the top 5 by products carried on the page;
+  - `toggleColumn`: 1–8 columns;
+  - `chainTotals`: the winner only among complete chains; the others "חסר N"; a chain selling none of the page shows "—", never ₪0.00.
+- **Reuse:** `utils/priceDisplay.ts` now holds `cheapestPerChain`, `bundleCondition`, `formatIls`, `productDisplayName` and `productSavings`, moved out of `ProductCard` (which imports them; its output is unchanged). The list and table show a multi-buy promo as "מבצע" plus "N יח' ב-₪X", never as a bare unit price. They also reuse `BasketButton`, `ProductDetailModal` ("כל N הרשתות" opens the prices tab), `EmptyState`, `ErrorState` and `useChains` (chip names).
+- **Category visibility:** unchanged; the views show what the category endpoint returns.
+- **Accessibility:**
+  - real buttons; the segmented control and the chips use `aria-pressed`; accordion headers use `aria-expanded` / `aria-controls`, with the panel a labelled region;
+  - the table has a caption plus `th scope="col"` / `scope="row"`, and the product column is sticky (`start-0`, RTL-aware);
+  - "—" carries "לא נמכר" for screen readers, and the cheapest is marked green **plus** the words "הכי זול";
+  - visible `focus-visible` rings; borders gray-500 (4.84:1 on white); text pairs ≥ 4.5:1.
+- **Dark mode:** the website has **no dark mode** (no `dark:` variant, no `prefers-color-scheme` anywhere in `web/src`), so the views follow the light theme like every other page. A site dark mode is its own decision.
+- **Main chunk:** 176.51 → 179.51 kB (+3.0 kB: the wrapper, the preferences and the page wiring). Lazy: `ViewSwitcher` 1.8 kB, `PagedResults` 13.2 kB, and two string chunks.
+
+**Tests:**
+- **`web/scripts/result-views.test.mjs`** (11):
+  - persistence, including storage that throws and junk values;
+  - the page-size clamp and page requests;
+  - row cheapest, including ties and a single seller;
+  - default columns and the 1–8 limit;
+  - totals: the complete-only winner, "חסר N", ties, no ₪0.00;
+  - server renders: the list closed by default with accordion aria; the table's caption / scope / sticky column / "—" + "לא נמכר" / "הכי זול" / city and nationwide notes / the bundle condition; the switcher's `aria-pressed` and page sizes per view;
+  - no URL or analytics call in the views.
+- **The rest:** `npm run test:unit` 92 pass, including the deploy guard. tsc, eslint, i18n parity (295 + 333 lazy), the build, check:admin-chunk and `check-deploy hosts` are clean. No Python change.
+
 ---
 
 ## 📋 Open items / next steps (as of 7 Nov 2026)
@@ -3134,10 +3180,7 @@ STOP if `retired` is not 15, or the coordinates count drops by more than 1.
   - Optional: send `X-XXL-Client: ios|android/<version>` (no identifier, no privacy-label change) from a later app version, for per-version counts; the platform split already works from the user agents.
   - Optional: reword the privacy policy's log purpose to name aggregate statistics (`docs/store_privacy_inventory.md` §H).
 - **Category warm-up after the 14:30 build (optional):** the first city request per category after a build takes ~1.5-2.5 s, then it is cached; a small warm-up of the popular departments after `scrp-search-items` would hide that.
-- **SU11A-72 (planned; was SU11A-70, then SU11A-71): view modes for search / category / promos results**, remembered per user:
-  - grid (today);
-  - list: a compact row with the name, the cheapest price and chain, the chains count, the savings and the add button; per-chain prices on expand;
-  - comparison table: products × chains, for short lists.
+- **SU11A-72 result view modes (web):** built, not deployed. Run `docs/super/su11a72_runbook.md` (web deploy with MATCH, then the browser checks). Later options: the promos page; `has_image` in the search / category payload (an API change) so list thumbnails ask only for real images; a site-wide dark mode.
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
 - **Catalog:**
   - **SU11A-52 catalog (rules v1.1 since SU11A-55): built, NOT applied.** Run `docs/catalog/su11a52_runbook.md` (migration, pull, one build, import dry run then apply), then `--manual docs/catalog/review_graded_v1.csv` (Dude's 150 graded rows) and `--manual docs/catalog/ai_audit_graded_v1.csv` (100, SU11A-57). Taxonomy is v1.2 (SU11A-56). Next to grade: `disagreements_v1.csv` (regenerated for v1.2). Open: frozen chocolate-coated fruit (D06.C02 or D08.C01?); the 265 D04.C05 pickles without storage evidence; whether a better AI pass is worth it (Sonnet lost the pilot). Service rows and nameless names are handled by the same build;
@@ -3168,4 +3211,4 @@ STOP if `retired` is not 15, or the coordinates count drops by more than 1.
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-72 (planned: result view modes); SU11A-73 and SU11A-74 are used, so the one after SU11A-72 is SU11A-75. SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
+Next free session ID: SU11A-75. SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).

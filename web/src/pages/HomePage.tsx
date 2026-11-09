@@ -7,7 +7,7 @@ import SearchBar from '../components/SearchBar';
 import Filters, { type FilterState } from '../components/Filters';
 import StatsBar from '../components/StatsBar';
 import FreshnessStrip from '../components/FreshnessStrip';
-import ResultsList from '../components/ResultsList';
+import ResultViews from '../components/ResultViews';
 import ProductDetailModal from '../components/ProductDetailModal';
 import AppBadges from '../components/AppBadges';
 import { useSearch, useCompare } from '../api/hooks';
@@ -171,6 +171,17 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
     }
   };
 
+  // SU11A-72: one page for the list / table views - the same request as the
+  // grid's, with the page's limit / offset. group_by=store rows (one per
+  // branch) are not products x chains, so those views are off there.
+  const city = filters.city?.length ? filters.city : undefined;
+  const chain = filters.chain?.length ? filters.chain : undefined;
+  const storeRows = !filters.compareMode && filters.groupBy === 'store';
+  const pagedKey = [filters.compareMode ? 'compare' : 'search', query, city ?? null, filters.compareMode ? null : chain ?? null, filters.category ?? null];
+  const fetchPage = storeRows ? undefined : (limit: number, offset: number, signal?: AbortSignal) => filters.compareMode
+    ? compareProducts(query, { city, limit, offset, ...catOpt(filters) }, signal)
+    : searchProducts(query, { city, chain, group_by: 'chain', limit, offset, ...catOpt(filters) }, signal);
+
   const mergedResult = data
     ? { ...data, items: [...data.items, ...extraItems], has_more: loadedMore ? lastHasMore : (data.has_more ?? false) }
     : undefined;
@@ -217,7 +228,12 @@ export default function HomePage({ cities }: { cities: CityInfo[] }) {
 
         <FreshnessStrip />
 
-        <ResultsList
+        <ResultViews
+          active={query.trim().length >= 2}
+          pagedKey={pagedKey}
+          fetchPage={fetchPage}
+          maxLimit={100}
+          city={city?.join(', ') ?? null}
           result={mergedResult}
           isLoading={isLoading}
           isFetching={isFetching && !loadingMore}

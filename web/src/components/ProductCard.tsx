@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import type { ProductWithPrices, PriceQuote, PromoItem } from '../api/client';
+import { bundleCondition, cheapestPerChain, formatIls, productDisplayName, productSavings } from '../utils/priceDisplay';
 import type { PromoMap } from './ResultsList';
 import BasketButton from './BasketButton';
 import ProductDetailModal from './ProductDetailModal';
@@ -16,15 +17,6 @@ import { useFavorites } from './FavoritesContext';
 interface Props {
   item: ProductWithPrices;
   promosByStore?: PromoMap;
-}
-
-function cheapestPerChain(quotes: PriceQuote[]): PriceQuote[] {
-  const byChain = new Map<string, PriceQuote>();
-  for (const q of quotes) {
-    const existing = byChain.get(q.chain_id);
-    if (!existing || q.price < existing.price) byChain.set(q.chain_id, q);
-  }
-  return Array.from(byChain.values()).sort((a, b) => a.price - b.price);
 }
 
 function getPromoBadges(
@@ -79,26 +71,6 @@ function fmtBundlePrice(price: number): string {
   return price % 1 === 0 ? price.toFixed(0) : price.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
 }
 
-/** Condition text for a promo quote.
- *
- *  A bundle must NEVER show a bare per-unit number: "₪3.75" alone reads as the
- *  shelf price of one unit, when in fact it only applies if you buy 8. The
- *  bundle total is COMPUTED (promo_price × promo_min_qty) rather than parsed out
- *  of promo_description, which is freeform chain text and not reliable.
- *  Returns null for single-unit promos, where no quantity condition exists.
- */
-function bundleCondition(q: PriceQuote): { total: string; perUnit: string; qty: number } | null {
-  const qty = q.promo_min_qty ?? 1;
-  if (!(qty > 1) || q.promo_price == null) return null;
-  // 2dp on both: these are money, and fmtBundlePrice strips trailing zeros
-  // ("14.9"), which reads wrong next to the ₪14.90 shown elsewhere on the card.
-  return {
-    qty: Math.round(qty),
-    total: (q.promo_price * qty).toFixed(2),
-    perUnit: q.promo_price.toFixed(2),
-  };
-}
-
 export default function ProductCard({ item, promosByStore }: Props) {
   const { t, i18n }   = useTranslation();
   const navigate      = useNavigate();
@@ -118,21 +90,11 @@ export default function ProductCard({ item, promosByStore }: Props) {
   const barcode      = product.item_code;
   const favorited    = isFavorited(barcode);
 
-  const fmtPrice = (n: number) =>
-    new Intl.NumberFormat(i18n.language, { style: 'currency', currency: 'ILS', minimumFractionDigits: 2 })
-      .format(n);
+  const fmtPrice = (n: number) => formatIls(n, i18n.language);
 
-  const savings =
-    cheapest_price != null && most_expensive_price != null && isComparable
-      ? most_expensive_price - cheapest_price
-      : 0;
-  const savingsPct =
-    savings > 0 && most_expensive_price ? (savings / most_expensive_price) * 100 : 0;
+  const { amount: savings, pct: savingsPct } = productSavings({ cheapest_price, most_expensive_price, chains_count });
 
-  const displayName =
-    product.canonical_name ||
-    Object.values(product.names_per_chain ?? {})[0] ||
-    product.item_code;
+  const displayName = productDisplayName(product);
 
   const handleFavClick = (e: React.MouseEvent) => {
     e.stopPropagation();

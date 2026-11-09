@@ -12,6 +12,8 @@ export type CategorySort = (typeof CATEGORY_SORTS)[number];
 export const CATEGORY_PAGE_SIZE = 30;
 /** The API's offset cap (db/category_browse.py OFFSET_MAX): no "load more" past it. */
 export const CATEGORY_OFFSET_MAX = 2000;
+/** The API's per-request cap (db/category_browse.py LIMIT_MAX): the list / table's "הכל" (SU11A-72). */
+export const CATEGORY_LIMIT_MAX = 60;
 
 const NODE_ID = /^D\d{2}(\.C\d{2}(\.S\d{2})?)?$/;
 
