@@ -113,11 +113,11 @@ test('the screen: sources, states, explanation, charts, no personal data', () =>
   const html = m.view(BODY);
   // Website table: host rows + total, bots as a share, no GA4 columns while GA4 is not connected.
   // SU11A-70: + rejected and team (internal) columns.
-  assert.match(html, /super\.xxl\.co\.il<\/th><td[^>]*>200<\/td><td[^>]*>70<\/td><td[^>]*>20%<\/td><td[^>]*>333<\/td><td[^>]*>12<\/td><\/tr>/);
+  assert.match(html, /super\.xxl\.co\.il<\/th><td[^>]*><span dir="ltr">200<\/span><\/td><td[^>]*><span dir="ltr">70<\/span><\/td><td[^>]*><span dir="ltr">20%<\/span><\/td><td[^>]*><span dir="ltr">333<\/span><\/td><td[^>]*><span dir="ltr">12<\/span><\/td><\/tr>/);
   assert.match(html, />נדחו<\/th>/);
   assert.match(html, />מהצוות<\/th>/);
   assert.match(html, /צפייה בדף = דפדפן שטען דף באתר בהצלחה \(200 או 304\)/);
-  assert.match(html, /סה״כ<\/th><td[^>]*>210<\/td>/);
+  assert.match(html, /סה״כ<\/th><td[^>]*><span dir="ltr">210<\/span><\/td>/);
   assert.doesNotMatch(html, /משתמשים ב־GA4/);
   // States and hints.
   assert.match(html, /לא מחובר/);
@@ -129,10 +129,10 @@ test('the screen: sources, states, explanation, charts, no personal data', () =>
   assert.match(html, /למה המספרים שונים\?/);
   assert.match(html, /GA4 סופר רק מבקרים שאישרו עוגיות/);
   // App activity per platform.
-  assert.match(html, /אנדרואיד<\/th><td[^>]*>400<\/td><td[^>]*>20%<\/td><td[^>]*>2<\/td>/);
+  assert.match(html, /אנדרואיד<\/th><td[^>]*><span dir="ltr">400<\/span><\/td><td[^>]*><span dir="ltr">20%<\/span><\/td><td[^>]*><span dir="ltr">2<\/span><\/td>/);
   // SU11A-70: the admin console is its own row.
-  assert.match(html, /קונסולת ניהול<\/th><td[^>]*>1,000<\/td><td[^>]*>50%<\/td>/);
-  assert.match(html, /iPhone<\/th><td[^>]*>100<\/td><td[^>]*>5%<\/td>/);
+  assert.match(html, /קונסולת ניהול<\/th><td[^>]*><span dir="ltr">1,000<\/span><\/td><td[^>]*><span dir="ltr">50%<\/span><\/td>/);
+  assert.match(html, /iPhone<\/th><td[^>]*><span dir="ltr">100<\/span><\/td><td[^>]*><span dir="ltr">5%<\/span><\/td>/);
   // Top lists with readable labels.
   assert.match(html, /\(דפים אחרים\)/);
   assert.match(html, /\(כניסה ישירה\)/);

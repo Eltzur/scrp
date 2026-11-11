@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getStatus, type BuildStamp } from '../api';
-import { Button, Card, ErrorBox, Loading } from '../ui';
+import { Button, COL_NUM, COL_TEXT, Card, ErrorBox, Loading } from '../ui';
 import { fmtBytes, fmtDate, freshness } from '../format';
 import { tabHref } from '../nav';
 
@@ -65,10 +65,10 @@ export default function StatusScreen() {
           <div className="overflow-x-auto -mx-1">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-right text-gray-600 border-b border-gray-200">
-                  <th scope="col" className="py-2 px-1 font-medium">{t('admin.status.chain')}</th>
-                  <th scope="col" className="py-2 px-1 font-medium">{t('admin.status.last_update')}</th>
-                  <th scope="col" className="py-2 px-1 font-medium">{t('admin.status.stores')}</th>
+                <tr className="text-gray-600 border-b border-gray-200">
+                  <th scope="col" className={`py-2 px-1 font-medium ${COL_TEXT}`}>{t('admin.status.chain')}</th>
+                  <th scope="col" className={`py-2 px-1 font-medium ${COL_TEXT}`}>{t('admin.status.last_update')}</th>
+                  <th scope="col" className={`py-2 px-1 font-medium ${COL_NUM}`}>{t('admin.status.stores')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -76,8 +76,8 @@ export default function StatusScreen() {
                   const f = freshness(c.last_loaded_at, now);
                   return (
                     <tr key={c.chain_name} className="border-b border-gray-100 last:border-0">
-                      <th scope="row" className="py-2 px-1 text-right font-medium text-gray-900">{c.chain_name}</th>
-                      <td className="py-2 px-1">
+                      <th scope="row" className={`py-2 px-1 font-medium text-gray-900 ${COL_TEXT}`}>{c.chain_name}</th>
+                      <td className={`py-2 px-1 ${COL_TEXT}`}>
                         <span className="inline-flex items-center gap-2">
                           <span className={`inline-block w-2.5 h-2.5 rounded-full ${DOT[f]}`} aria-hidden="true" />
                           <span>{t(`admin.status.fresh_${f === 'never' ? 'older' : f}`)}</span>
@@ -86,8 +86,8 @@ export default function StatusScreen() {
                           </span>
                         </span>
                       </td>
-                      <td className="py-2 px-1 tabular-nums" dir="ltr">
-                        {c.stores_loaded_72h == null ? '—' : `${c.stores_loaded_72h} / ${c.stores_configured ?? '—'}`}
+                      <td className={`py-2 px-1 ${COL_NUM}`}>
+                        <span dir="ltr">{c.stores_loaded_72h == null ? '—' : `${c.stores_loaded_72h} / ${c.stores_configured ?? '—'}`}</span>
                       </td>
                     </tr>
                   );

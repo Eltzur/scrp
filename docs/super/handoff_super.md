@@ -966,6 +966,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-73 (Nov 9) — read-only: stores missing from the admin card's 72 h price-load count. Shufersal's gap is a duplicate "413" in active_stores.yaml; Yochananof 3, King Store 2, Shefa 8 (plus Shuk Hair 1) never had a price file; Carrefour 445 stopped after 6 Nov. Report only.
 - SU11A-74 (Nov 9) — 15 non-existent / irrelevant stores removed from active_stores.yaml (+ the duplicate Shufersal "413"; 936 → 920 ids) and a `--retire-only` mode in the coordinates importer to retire them in the DB (is_physical=false, last_loaded_at=NULL; backup + rollback). DB step: Dude, runbook in the entry.
 - SU11A-72 (Nov 9) — web: result view modes on search and category pages (grid unchanged; list = accordion with per-chain prices, 10/25/50/100/הכל; comparison table = products × up to 8 chains, totals marked only among complete chains), remembered per browser; no API change (the payload already has per-chain quotes). Runbook `docs/super/su11a72_runbook.md`. Not deployed.
+- SU11A-75 (Nov 11) — web: "בהרצה" notice (once per browser, after the cookie choice, not on legal pages / admin / fly) + a label next to the logo that reopens it; admin statistics / status table column alignment. Runbook `docs/super/su11a72_runbook.md` §3. Not deployed.
 - SU11A-56 (Oct 25) — catalog taxonomy v1.2 (`taxonomy_v1_2.csv`, `gs1_group_map_v1_2.csv`: D09.C11, D16.C08, D07.C08.S01 storage split), Sonnet 5.5 pilot on the graded AI audit (53% vs Haiku 64%: gate failed, no full re-check). Not applied.
 - SU11A-55 (Oct 25) — catalog: Dude's review as `docs/catalog/review_graded_v1.csv` (150 manual rows), taxonomy/rules v1.1 (`taxonomy_v1_1.csv`, `brand_category_hints_v1_1.csv`; head anchor, %, hard negatives, brand pin), AI audit sample `ai_audit_sample_v1.xlsx`. Not applied.
 - SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
@@ -3002,7 +3003,7 @@ Read-only (two short scripts on the server, `SET TRANSACTION READ ONLY`, 15 s st
 - **Not a closure:** Shufersal 413 is a duplicate yaml line, one of the two can go. Carrefour 445 published until 6 Nov: watch it before deciding.
 - No fix prompts written; active_stores.yaml unchanged.
 
-### SU11A-74 (9 Nov 2026) - 15 non-existent / irrelevant stores out of the active list and retired; built, DB step not run
+### SU11A-74 (9 Nov 2026) - 15 non-existent / irrelevant stores out of the active list and retired; applied 9 Nov 12:17
 
 **Decision (Dude, 9 Nov 2026, after SU11A-73):** these stores don't exist or aren't relevant and should never have been listed; remove them all. Plus the duplicate Shufersal "413" line. CC wrote code and docs only; Dude runs the DB step below.
 
@@ -3036,6 +3037,13 @@ Read-only (two short scripts on the server, `SET TRANSACTION READ ONLY`, 15 s st
 - `tests/test_retire_only_su11a74.py` (20): the plan's rejections; a dry run writes nothing; the trial makes one UPDATE and rolls back; any rejection aborts a write; `--expect` must be exact; apply does pg_dump → backup table → N UPDATEs → commit; a short count rolls back; an existing backup table aborts; the rollback SQL; CLI guards; the yaml totals, the removed ids, one Shufersal 413, no duplicates in any chain, 920 ids.
 - `tests/test_import_google_coordinates.py` unchanged and passing.
 - **Full Python suite on PG18:** `tests/` 1073 passed; `api/tests` 1 passed plus the 14 known `test_smoke` failures.
+
+**Applied by Dude, 9 Nov 2026 12:17** (recorded in SU11A-75):
+- **The run:** the dry run read 15 / 15 / 0 (listed / to retire / rejected); the trial was accepted and rolled back; then `COMMITTED: 15`.
+- **Backups:** `~/backups/pre-SU11A-74-stores-20261109T121745.dump` and the table `stores_bak_su11a_74`.
+- **Counts:** physical stores 1196 → **1181**; **15 retired**, all with `last_loaded_at` NULL; `/stores/coordinates` 917 → **916** (Carrefour 445, the only one of the 15 that was on it).
+- **Store 4574** stayed `is_physical = false` and was not touched.
+- The admin card shows full counts from the 10 Nov cron.
 
 **Runbook (Dude).** Outside quiet times (not 03:30–03:45, 04:00–04:30, 14:25–15:00, nor from 10:00 until the cron finishes), and **before the next 10:00 cron**.
 
@@ -3150,6 +3158,46 @@ Runbook: `docs/super/su11a72_runbook.md` (web deploy with the MATCH guard, then 
   - no URL or analytics call in the views.
 - **The rest:** `npm run test:unit` 92 pass, including the deploy guard. tsc, eslint, i18n parity (295 + 333 lazy), the build, check:admin-chunk and `check-deploy hosts` are clean. No Python change.
 
+### SU11A-75 (11 Nov 2026) - web: "בהרצה" notice + header label (xxl.co.il, super.xxl.co.il); admin table alignment; built, not deployed
+
+Runbook: `docs/super/su11a72_runbook.md` section 3 (the same web deploy as SU11A-72; no server step). Also recorded the SU11A-74 apply in its entry.
+
+**The notice** (`components/BetaNotice.tsx`, logic `utils/betaNotice.ts`):
+- **The text:** Dude-approved, verbatim, in `i18n/locales/he.json` `beta_notice.*` (title "ברוכים הבאים ל-XXL", three paragraphs, "הבנתי", label "בהרצה"), with English in `en.json`. A test compares every Hebrew string to the approved text.
+- **Where:** mounted once in `SiteApp` (App.tsx), right after `CookieBanner`, so it covers the portal (xxl.co.il / www) and Super. Never in the admin app, and `isNoticeHost` also refuses admin.xxl.co.il and fly.xxl.co.il (another app).
+- **Once per browser:** `localStorage xxl_notice_beta_v1 = "seen"` after "הבנתי", Esc, the X or a backdrop click. The key is versioned so a new text can show again under `_v2`. If storage throws, an in-memory flag limits it to once per page load.
+- **Never on top of the cookie banner:** it opens only when `xxl_cookie_consent` is "true" or "false". `setCookieConsent` now fires `xxl:cookie-choice` (`utils/analytics.ts`), so it opens right after the banner is answered, on the same page. When storage is unreadable the banner cannot show either, so the notice may.
+- **Not on the legal pages** (`/privacy`, `/disclaimer`, `/accessibility`, `/account/delete`); it opens on the next non-legal route.
+- **The label "בהרצה":** next to the logo in `Header.tsx` (Super) and `PortalPage.tsx` (portal), always visible. It is a real button (accessible name "האתר בהרצה – מידע נוסף") that reopens the notice through `xxl:beta-notice-open`, with no storage change.
+- **Accessibility:** `role="dialog"`, `aria-modal`, `aria-labelledby` the title; focus moves to "הבנתי" and returns on close; Tab is trapped; Esc closes; the body does not scroll; the X has a name; visible focus rings; emerald-700 / white 5.36:1; it fits 360 px (`max-w-md`, `p-3`, scrolls inside when short).
+- **Not changed:** no GA4 event, no URL change, no page view; terms / TERMS_VERSION / the privacy policy unchanged.
+- **Dark mode:** the website has none (as noted in SU11A-72), so the notice is light like every page.
+- **Main chunk:** 179.51 → 185.46 kB (+5.95 kB), most of it the notice text in he / en in the main locale files, as asked.
+
+**Admin table alignment** (Dude's screenshot: the "אתר" table's titles were not above their columns):
+- **Cause:** the header row inherited `text-right`, while the numeric `<td>`s carried `dir="ltr"` and no alignment, so they sat at the opposite edge.
+- **Fix, in one place:** `admin/ui.tsx` exports `COL_TEXT = 'text-start'` and `COL_NUM = 'text-end tabular-nums'`. Each column's `<th>` and `<td>`s use the same one; the value sits in `<span dir="ltr">` (never `dir` on the cell, which flips its alignment). The total row follows the same rule.
+- **Applied to every admin table:**
+  - the statistics screen's shared `Table` (the "אתר" table, API platforms, top pages, referrers);
+  - the charts' "הצגת הנתונים כטבלה" table (`stats/LineChart.tsx`);
+  - the dashboard's chain table (`StatusScreen.tsx`: chain and last update as text, the stores count as a number).
+
+  No other admin screen has a `<table>`. Values, sorting, order, labels, RTL and `scope="col"` are unchanged.
+
+**Tests:**
+- **`web/scripts/beta-notice.test.mjs`** (9):
+  - shown on portal / www / Super once the cookie choice exists, once per browser;
+  - not while the banner waits;
+  - storage that throws gives once per page load;
+  - never on legal routes, admin or fly;
+  - the cookie choice fires the event;
+  - the dialog's aria and the exact approved text;
+  - the label's accessible name contains its visible text;
+  - mounted only in the site, after the banner, with both headers carrying the label;
+  - the admin tables use one alignment per column and no `dir` on a cell.
+- **Updated:** `admin-stats.test.mjs` (values unchanged, now inside the `<span dir="ltr">`).
+- **The rest:** `npm run test:unit` 101 pass, including the deploy guard. tsc, eslint, i18n parity (303 + 333 lazy), the build, check:admin-chunk and `check-deploy hosts` are clean. No Python change.
+
 ---
 
 ## 📋 Open items / next steps (as of 7 Nov 2026)
@@ -3174,12 +3222,13 @@ Runbook: `docs/super/su11a72_runbook.md` (web deploy with the MATCH guard, then 
 - **SU11A-58 promo pins / hides:** in use on production by 1 Nov. `docs/admin/su11a58_runbook.md` (migration, restart, ONE web deploy for SU11A-57 + SU11A-58 from a PC with `web/.env.production`, checks). Open decision: whether a hide should also exclude a promotion from prices (options A / B / C in the SU11A-58 entry).
 - **SU11A-69 admin statistics: deployed** (runbook `docs/admin/su11a69_runbook.md`). **B1 GA4 is connected:** service account xxl-stats@scrp-510706.iam.gserviceaccount.com, property 537761103. **C2 Google Play and C3 App Store are not connected yet** (their cards read "לא מחובר").
 - **SU11A-70 honest counts / App Store badge / logo link: deployed** (runbook `docs/admin/su11a70_runbook.md`). If not yet done: paste the step 5 BEFORE / AFTER sums into the SU11A-70 entry, and turn "לא לספור את הדפדפן הזה" on in every browser and phone the team uses.
-- **SU11A-74 store retirement:** yaml change ships with the next server pull; the DB step (runbook a–e in the SU11A-74 entry) is Dude's, before a 10:00 cron.
+- **SU11A-74 store retirement: done** (applied by Dude 9 Nov 2026 12:17: 15 retired, physical 1196 → 1181, /stores/coordinates 917 → 916; backup `stores_bak_su11a_74`). The admin card shows full counts from the 10 Nov cron.
 - **SU11A-71 GA4 fix / real-route page views: deployed (deploy date: Dude to fill)** (runbook `docs/admin/su11a71_runbook.md`). **GA4 has no data before that deploy date.** If not yet done: paste the step 3 BEFORE / AFTER sums into the SU11A-71 entry.
   - **Connect C2 / C3** when convenient (C1 GA4 is done): runbook C2 Google Play (same service account + Play Console read-only reports + bucket id), C3 App Store (separate Sales and Reports key + a one-time Admin-key Analytics request, revoked after). Each card shows "לא מחובר" until then.
   - Optional: send `X-XXL-Client: ios|android/<version>` (no identifier, no privacy-label change) from a later app version, for per-version counts; the platform split already works from the user agents.
   - Optional: reword the privacy policy's log purpose to name aggregate statistics (`docs/store_privacy_inventory.md` §H).
 - **Category warm-up after the 14:30 build (optional):** the first city request per category after a build takes ~1.5-2.5 s, then it is cached; a small warm-up of the popular departments after `scrp-search-items` would hide that.
+- **SU11A-75 "בהרצה" notice + admin table alignment (web):** built, not deployed; ships in the same web deploy as SU11A-72 (`docs/super/su11a72_runbook.md` steps 1 and 3).
 - **SU11A-72 result view modes (web):** built, not deployed. Run `docs/super/su11a72_runbook.md` (web deploy with MATCH, then the browser checks). Later options: the promos page; `has_image` in the search / category payload (an API change) so list thumbnails ask only for real images; a site-wide dark mode.
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
 - **Catalog:**
@@ -3211,4 +3260,4 @@ Runbook: `docs/super/su11a72_runbook.md` (web deploy with the MATCH guard, then 
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-75. SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
+Next free session ID: SU11A-76. SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).

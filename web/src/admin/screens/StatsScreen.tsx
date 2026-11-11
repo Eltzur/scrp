@@ -4,7 +4,7 @@ import { RefreshCw } from 'lucide-react';
 import { getI18n, useTranslation } from 'react-i18next';
 import { getStats, type StatsBody, type StatsSource } from '../api';
 import { fmtDate } from '../format';
-import { Button, Card, ErrorBox, Loading } from '../ui';
+import { Button, COL_NUM, COL_TEXT, Card, ErrorBox, Loading } from '../ui';
 import he from '../i18n/stats.he.json';
 import en from '../i18n/stats.en.json';
 import LineChart from './stats/LineChart';
@@ -77,16 +77,16 @@ function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
     <div className="overflow-x-auto -mx-1">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-right text-gray-600 border-b border-gray-200">
-            {head.map(h => <th key={h} scope="col" className="py-2 px-1 font-medium">{h}</th>)}
+          <tr className="text-gray-600 border-b border-gray-200">
+            {head.map((h, j) => <th key={h} scope="col" className={`py-2 px-1 font-medium ${j === 0 ? COL_TEXT : COL_NUM}`}>{h}</th>)}
           </tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (
             <tr key={i} className="border-b border-gray-100 last:border-0">
               {r.map((c, j) => j === 0
-                ? <th key={j} scope="row" className="py-2 px-1 text-right font-medium text-gray-900">{c}</th>
-                : <td key={j} className="py-2 px-1 tabular-nums" dir="ltr">{c}</td>)}
+                ? <th key={j} scope="row" className={`py-2 px-1 font-medium text-gray-900 ${COL_TEXT}`}>{c}</th>
+                : <td key={j} className={`py-2 px-1 ${COL_NUM}`}><span dir="ltr">{c}</span></td>)}
             </tr>
           ))}
         </tbody>

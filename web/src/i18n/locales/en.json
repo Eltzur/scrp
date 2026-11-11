@@ -357,5 +357,15 @@
     "stats": {
       "title": "Statistics"
     }
+  },
+  "beta_notice": {
+    "title": "Welcome to XXL",
+    "p1": "The site is currently in its launch phase. During this period all the information, comparisons and deals are fully available to you, free of charge and without limits.",
+    "p2": "In the future, some services will be offered as part of a paid monthly subscription. The reason is simple: as the saying goes, if you are not paying for the product, you are probably the product.",
+    "p3": "Subscription fees will let us avoid relying only on income from supermarket chains and manufacturers, and so keep the public's interest first and keep showing you objective information, not biased by marketing or commercial considerations.",
+    "ok": "Got it",
+    "label": "Beta",
+    "label_aria": "The site is in beta – more information",
+    "close": "Close"
   }
 }

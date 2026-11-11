@@ -6,6 +6,7 @@ import { applyDir } from '../i18n/config';
 import { useBasket } from './BasketContext';
 import { useAuth } from './AuthContext';
 import HeaderLogo from './HeaderLogo';
+import { BetaLabel } from './BetaNotice';
 
 export default function Header() {
   const { t, i18n }         = useTranslation();
@@ -48,7 +49,11 @@ export default function Header() {
       <div className="max-w-6xl mx-auto px-3 sm:px-4 py-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
 
         {/* Brand logo: Super's home on super.xxl.co.il, xxl.co.il on the portal (SU11A-70) */}
-        <HeaderLogo />
+        <div className="flex items-center gap-2">
+          <HeaderLogo />
+          {/* SU11A-75: reopens the beta notice */}
+          <BetaLabel />
+        </div>
 
         <div className="flex flex-wrap items-center justify-end gap-x-1 gap-y-1 sm:gap-3">
           {/* Hot deals link */}

@@ -120,3 +120,13 @@ export function RatingStatus({ status }: { status: string }) {
     </span>
   );
 }
+
+/**
+ * SU11A-75: ONE alignment per table column, shared by its <th> and its cells,
+ * so a title sits above its values in RTL and LTR alike. Text columns (names,
+ * paths, domains, dates as labels) start-aligned; numbers and percentages
+ * end-aligned with tabular numerals. Put the value of a numeric cell in
+ * <span dir="ltr"> (never dir on the cell itself: that flips its alignment).
+ */
+export const COL_TEXT = 'text-start';
+export const COL_NUM = 'text-end tabular-nums';

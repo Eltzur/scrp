@@ -46,7 +46,12 @@ export function setCookieConsent(value: boolean): void {
   catch { /* localStorage blocked in private mode on some browsers */ }
   setGaDisabled(!value);
   if (value) initGA();
+  // SU11A-75: the beta notice waits for the cookie choice and opens right after it.
+  try { window.dispatchEvent(new Event(COOKIE_CHOICE_EVENT)); } catch { /* no window */ }
 }
+
+/** Fired after a cookie choice is stored (accept or decline). */
+export const COOKIE_CHOICE_EVENT = 'xxl:cookie-choice';
 
 /** Fired to ask a mounted CookieBanner to show itself again. */
 export const COOKIE_PREFS_EVENT = 'xxl:cookie-preferences';

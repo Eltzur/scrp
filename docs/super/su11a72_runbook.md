@@ -98,3 +98,51 @@ git pull origin main; .\scripts\deploy_frontend.ps1
 - a view change creates a `page_view` or changes the URL.
 
 **Note:** the website has no dark mode (no page uses one), so the views follow the light theme; there is nothing to check in dark mode.
+
+---
+
+## 3. SU11A-75: the "בהרצה" notice and the admin table alignment (same web deploy)
+
+SU11A-75 ships in the **same** web deploy as step 1; run step 1 after both are committed. There is no server step.
+
+**What changes**
+- **The notice:** a "ברוכים הבאים ל-XXL" window on xxl.co.il / www and super.xxl.co.il.
+  - **When:** once per browser, only after the cookie choice, and never on the legal pages (`/privacy`, `/disclaimer`, `/accessibility`, `/account/delete`), on admin.xxl.co.il or on fly.xxl.co.il.
+  - **What closes it:** "הבנתי", Esc, the X or a click outside. Each stores `xxl_notice_beta_v1 = seen` in this browser.
+- **The label:** a small "בהרצה" button next to the logo, in both headers. It reopens the notice at any time.
+- **Admin tables:** in the statistics tables (and the status screen's chain table and the charts' "הצגת הנתונים כטבלה" tables), each column title now sits above its column. Text columns align to the start and numbers to the end, with digits lined up.
+
+**[Browser]**
+
+1. **Super, fresh visitor:**
+   - open a **new private window** at https://super.xxl.co.il;
+   - the cookie banner shows first, and **no** notice is on top of it;
+   - answer the banner ("אישור" or "דחייה"): the notice opens right away, without a reload;
+   - focus is on "הבנתי", Tab and Shift+Tab stay inside the window, and the page behind does not scroll.
+2. **Closing it:**
+   - "הבנתי" closes it, and focus returns to where it was;
+   - reload (F5): no notice;
+   - in another private window, check that Esc, the X and a click on the dark background each close it as well.
+3. **Label:** click "בהרצה" next to the logo. The notice opens; close it. Reload: it does not come back by itself.
+4. **Portal:** the same in a new private window at https://xxl.co.il: cookie banner first, then the notice. The label is next to the logo.
+5. **Legal pages:** in a new private window, open https://super.xxl.co.il/privacy and answer the banner. **No** notice. Click the logo to go home: the notice opens there.
+6. **Admin:** https://admin.xxl.co.il shows no notice and no label.
+7. **Phone width** (360 px): the window fits with no sideways scrolling; the text and the button are readable; the label does not push the header out of the screen.
+8. **Keyboard only:**
+   - Tab reaches the label; Enter opens the notice;
+   - Tab cycles between X and "הבנתי"; Esc closes;
+   - the focus ring is visible at every step.
+9. **Screen reader** (spot check): the window is announced as a dialog with its title; the label reads "האתר בהרצה – מידע נוסף".
+10. **Admin tables:** https://admin.xxl.co.il → סטטיסטיקות.
+    - In the "אתר" table, each title (צפיות בדפים, מבקרים (הערכה), בוטים, נדחו, מהצוות, …) sits directly above its numbers, at desktop width and in a narrow window;
+    - numbers line up by digit, and the סה״כ row is aligned the same way;
+    - the same holds in the platforms, top pages and referrers tables, in "הצגת הנתונים כטבלה" under a chart, and in the dashboard's chain table.
+
+**Note:** the website has no dark mode, so there is nothing to check in dark mode.
+
+**STOP if:**
+- the notice covers the cookie banner;
+- it opens on a legal page or on admin;
+- it comes back after "הבנתי" and a reload;
+- the focus escapes the window while it is open;
+- a column title is not above its column.

@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { linePaths, shortDay } from './statsView';
+import { COL_NUM, COL_TEXT } from '../../ui';
 
 /**
  * A small SVG line chart (SU11A-69), no chart library: it ships only in the
@@ -65,16 +66,16 @@ export default function LineChart({ title, days, lines }: { title: string; days:
         <div className="overflow-x-auto max-h-64 overflow-y-auto mt-1">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-right text-gray-600 border-b border-gray-200">
-                <th scope="col" className="py-1 px-1 font-medium">{t('admin.stats.day')}</th>
-                {lines.map(l => <th key={l.label} scope="col" className="py-1 px-1 font-medium">{l.label}</th>)}
+              <tr className="text-gray-600 border-b border-gray-200">
+                <th scope="col" className={`py-1 px-1 font-medium ${COL_TEXT}`}>{t('admin.stats.day')}</th>
+                {lines.map(l => <th key={l.label} scope="col" className={`py-1 px-1 font-medium ${COL_NUM}`}>{l.label}</th>)}
               </tr>
             </thead>
             <tbody>
               {days.map((d, i) => (
                 <tr key={d} className="border-b border-gray-100 last:border-0">
-                  <th scope="row" className="py-1 px-1 text-right font-normal tabular-nums" dir="ltr">{d}</th>
-                  {lines.map(l => <td key={l.label} className="py-1 px-1 tabular-nums" dir="ltr">{fmt(l.values[i])}</td>)}
+                  <th scope="row" className={`py-1 px-1 font-normal tabular-nums ${COL_TEXT}`}><span dir="ltr">{d}</span></th>
+                  {lines.map(l => <td key={l.label} className={`py-1 px-1 ${COL_NUM}`}><span dir="ltr">{fmt(l.values[i])}</span></td>)}
                 </tr>
               ))}
             </tbody>

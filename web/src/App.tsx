@@ -34,6 +34,7 @@ import type { CityInfo } from './api/client';
 import { isAdminHostname, isPortalHostname } from './utils/hostname';
 import { applyRouteMeta } from './utils/seoMeta';
 import { initGA, trackPageview } from './utils/analytics';
+import BetaNotice from './components/BetaNotice';
 import CookieBanner from './components/CookieBanner';
 import ExpiredLinkNotice from './components/ExpiredLinkNotice';
 
@@ -114,6 +115,8 @@ function SiteApp() {
   return (
     <>
       <CookieBanner />
+      {/* SU11A-75: the "בהרצה" notice, after the cookie choice; not on legal pages */}
+      <BetaNotice />
       <ExpiredLinkNotice />
       <Suspense fallback={<div className="min-h-screen" />}>
       <Routes>
