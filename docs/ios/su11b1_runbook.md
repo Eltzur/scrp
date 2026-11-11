@@ -2,7 +2,9 @@
 
 Dude runs every step. CC prepared the config (mobile repo: SU11B-1 `85eb6a6`, SU11B-2 `c56e27f`, **SU11B-3 `65882ea`**) and the kit `docs/ios/su11b1_app_store_kit.md`. **Version 1.2.2** (SU11B-2); **iOS build 1.2.2 (2)**, Android versionCode 9 — both from the SU11B-3 commit `65882ea`.
 
-**Release state (SU11B-7, 7 Nov 2026):**
+**Release state (SU11A-76, 11 Nov 2026): 1.2.3 is LIVE on both stores.** iOS 1.2.3 (3) from mobile `0ecd08b` was approved and auto-released 9 Nov (store language: Hebrew only); Android versionCode 10 (1.2.3) is in Production at 100%, Israel. Next: iOS build 4, Android versionCode 11.
+
+**Release state before 1.2.3 (SU11B-7, 7 Nov 2026):**
 - **iOS 1.2.2 (2)** (EAS `4eaab3fc`, mobile `65882ea`): **LIVE on the Israel App Store** (https://apps.apple.com/il/app/super-xxl/id6829450422). Dude released it with the seller still reading "Lead Tour" (Apple Support case 103015749110 open; the listing updates itself when Apple fixes it). The listing shows the languages "EN + 1 More"; 1.2.3 declares Hebrew only (SU11B-7). Submitted 4 Nov 20:58 (submission `871055cd-5aab-48e7-8f41-b3a4af70e0d0`).
 - **iOS 1.2.2 (1)** (EAS `80074645`, `c56e27f`): failed processing with ITMS-90683 (below; fixed in SU11B-3).
 - **Android 9 (1.2.2)** (EAS `0992b1c3`, `65882ea`): **published to Play Production 4 Nov** (submission 3), full rollout, Israel, managed publishing off. Closed testing – Alpha: draft 8 (1.2.1) discarded, track inactive. Play release notes use the language tag **`iw-IL`** (`he-IL` is rejected).
@@ -223,7 +225,7 @@ Expected: `git log` shows the same commit as the iOS build 2 in B (SU11B-3 `6588
 1. Download the `.aab` from the EAS build page.
 2. Play Console → SUPER XXL → (optional first) Testing → Internal testing → Create release → upload → roll out to testers; check on a phone (terms bidi, search suggestions, category suggestion button). Promote to Production, or:
 3. Production → Create new release → add from library / upload the AAB → release notes in `<iw-IL>` (Hebrew; `he-IL` is rejected), e.g. "גרסה 1.2.2: הצעות חיפוש תוך כדי הקלדה, הצעת קטגוריה למוצר ותיקוני תצוגה") → Next → countries unchanged (Israel) → Start rollout to Production (100%).
-4. App bundle explorer → Permissions: INTERNET, CAMERA, ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION, VIBRATE, ACCESS_NETWORK_STATE (+ the signature-level DYNAMIC_RECEIVER permission). STOP if READ/WRITE_EXTERNAL_STORAGE or SYSTEM_ALERT_WINDOW appear.
+4. App bundle explorer → Permissions: INTERNET, CAMERA, ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION, VIBRATE, ACCESS_NETWORK_STATE (+ the signature-level DYNAMIC_RECEIVER permission), plus, from bundle 10 on, `com.android.vending.CHECK_LICENSE` (added by Play's automatic protection, the "installer check") and `com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE` (the install-referrer library via expo-application; not called by the app). Both are expected; Data safety is unchanged. STOP if READ/WRITE_EXTERNAL_STORAGE or SYSTEM_ALERT_WINDOW appear.
 
 ---
 
@@ -400,6 +402,6 @@ Play Console → SUPER XXL → Production → Create new release → upload the 
 ```
 Then App bundle explorer → Permissions.
 
-Expected: as in J step 4, and **no `USE_BIOMETRIC` / `USE_FINGERPRINT`**. Then Start rollout to Production.
+Expected: as in J step 4 (including `CHECK_LICENSE` and `BIND_GET_INSTALL_REFERRER_SERVICE`), and **no `USE_BIOMETRIC` / `USE_FINGERPRINT`**. Then Start rollout to Production.
 
 **STOP if** either biometric permission is listed, or READ / WRITE_EXTERNAL_STORAGE or SYSTEM_ALERT_WINDOW appears. Do not submit App content changes while this is in review.

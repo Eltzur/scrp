@@ -864,3 +864,9 @@ Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; 
   - SU11B-7b: fieldBorder typed TextStyle (full tsc on f1c6ce6 had 6 TS2322 errors); build commit 0ecd08b.
     - **Detail:** a plain `TextStyle` return type was tried first. It cleared the 6 TextInput errors, but the search box's container `View` (`search.tsx:311`) then failed with TS2322 (TextStyle not assignable to `StyleProp<ViewStyle>`). So `fieldBorder()` returns `Pick<TextStyle, 'borderWidth' | 'borderColor'>`, which is assignable to both; no call site changed.
     - **Checks:** a type check limited to the hook, the 7 call-site files and `theme.ts` (temporary tsconfig, deleted after, about 6 min) left only 4 of the known `src/tw` errors; `ts.transpileModule` 0 diagnostics; eslint (temporary `eslint-config-expo/flat`, deleted after): clean, as at HEAD. Full tsc: Dude.
+  - **Released (recorded in SU11A-76, 11 Nov 2026):**
+    - **iOS 1.2.3 (3)** from mobile `0ecd08b`: approved and auto-released 9 Nov 2026. The App Store page shows the language **Hebrew** only (was "EN + 1 More").
+    - **Android versionCode 10 (1.2.3):** Production, 100%, Israel.
+    - **Next builds:** iOS build 4, Android versionCode 11. Automatic App Store release from 1.2.3 on.
+    - **Bundle 10 permissions** also list `com.android.vending.CHECK_LICENSE` (Play's automatic protection "installer check") and `com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE` (install-referrer library via expo-application, never called by the app). Data safety is unchanged.
+    - **Open (Play, by Feb 2027):** R8 minify / obfuscation for release builds (DEX obfuscation 1%), with keep rules and a device test; the edge-to-edge deprecated-API recommendation. Its own session.

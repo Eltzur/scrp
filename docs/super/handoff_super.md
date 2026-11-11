@@ -967,6 +967,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-74 (Nov 9) — 15 non-existent / irrelevant stores removed from active_stores.yaml (+ the duplicate Shufersal "413"; 936 → 920 ids) and a `--retire-only` mode in the coordinates importer to retire them in the DB (is_physical=false, last_loaded_at=NULL; backup + rollback). DB step: Dude, runbook in the entry.
 - SU11A-72 (Nov 9) — web: result view modes on search and category pages (grid unchanged; list = accordion with per-chain prices, 10/25/50/100/הכל; comparison table = products × up to 8 chains, totals marked only among complete chains), remembered per browser; no API change (the payload already has per-chain quotes). Runbook `docs/super/su11a72_runbook.md`. Not deployed.
 - SU11A-75 (Nov 11) — web: "בהרצה" notice (once per browser, after the cookie choice, not on legal pages / admin / fly) + a label next to the logo that reopens it; admin statistics / status table column alignment. Runbook `docs/super/su11a72_runbook.md` §3. Not deployed.
+- SU11A-76 (Nov 11) — docs close-out (1.2.3 live on both stores; SU11A-72/72b/72c/75 deployed 11 Nov; SU11A-71 deployed 7 Nov; SU11A-74 card counts) + read-only GA4 check: the import is fine, but GA4 had no hits on 8–10 Nov.
 - SU11A-56 (Oct 25) — catalog taxonomy v1.2 (`taxonomy_v1_2.csv`, `gs1_group_map_v1_2.csv`: D09.C11, D16.C08, D07.C08.S01 storage split), Sonnet 5.5 pilot on the graded AI audit (53% vs Haiku 64%: gate failed, no full re-check). Not applied.
 - SU11A-55 (Oct 25) — catalog: Dude's review as `docs/catalog/review_graded_v1.csv` (150 manual rows), taxonomy/rules v1.1 (`taxonomy_v1_1.csv`, `brand_category_hints_v1_1.csv`; head anchor, %, hard negatives, brand pin), AI audit sample `ai_audit_sample_v1.xlsx`. Not applied.
 - SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
@@ -2907,7 +2908,7 @@ Runbook: `docs/admin/su11a70_runbook.md`: quiet time → pull → nginx flag fie
 
 ### SU11A-71 (7 Nov 2026) - GA4 gtag fix (data starts on the deploy date), path-only page views, stats count real routes only; built, not deployed
 
-**Deployed: deploy date: Dude to fill** (GA4 data starts on it).
+**Deployed: 7 Nov 2026 18:11** (SU11A-76: the build `index-CB_5YDZu.js` in the web root; first GA4 data 7 Nov 2026. Dude recalled 9 Nov; the data shows earlier).
 
 Runbook: `docs/admin/su11a71_runbook.md`: quiet time → pull → one-time `--days 7` recompute (before / after sums) → web deploy → two GA4 settings → browser check. No migration, no API restart, no nginx change. (The planned "view modes" session moves to SU11A-72.)
 
@@ -3211,9 +3212,34 @@ Runbook: `docs/super/su11a72_runbook.md` section 3 (the same web deploy as SU11A
 - **Updated:** `admin-stats.test.mjs` (values unchanged, now inside the `<span dir="ltr">`).
 - **The rest:** `npm run test:unit` 101 pass, including the deploy guard. tsc, eslint, i18n parity (303 + 333 lazy), the build, check:admin-chunk and `check-deploy hosts` are clean. No Python change.
 
+### SU11A-76 (11 Nov 2026) - docs close-out (1.2.3 live, SU11A-72/72b/72c/75 deployed, store counts) + read-only GA4 import check
+
+**Part A: why the GA4 card says "מעודכן עד 2026-11-07" while the site card says 2026-11-10** (read-only on the server, 11 Nov ~18:00; DB queries in a READ ONLY transaction with a 15 s timeout; aggregates only):
+- **The job is healthy:** `scrp-stats.timer` is active and fires daily at 03:30 (next 12 Nov 03:30). Every run from 7 to 11 Nov ended `result: web=ok api=ok ga4=ok play=not_configured appstore=not_configured`. `stats_runs` (one row per source, the latest run): ga4 `ok`, last success 11 Nov 03:30, no error, `as_of` 2026-11-07. Play and App Store are `not_configured` (`missing setting: stats_play_bucket`; the `stats_asc_*` settings), as expected.
+- **What GA4 returns:** each run asks the GA4 Data API for the last 7 completed days (`scripts/stats_collect.py:115`, `API_DAYS = 7` at `:45`; the request in `scripts/stats_sources.py:159`, no filter), and every run since 8 Nov got the **same 3 rows: 7 Nov only** (super.xxl.co.il: 5 page views, 3 sessions, 2 users). `as_of` is the latest day GA4 returned (`stats_sources.py:174`, stored by `stats_collect.py:167`), so it stays at 7 Nov.
+- **Not a code bug, not credentials:** the token and the `runReport` call succeed every night. **GA4 simply received no hits on 8, 9 and 10 Nov**, while the nginx logs counted 41, 93 and 63 browser page views on those days.
+- **The fixed tag is live:** the live `index.html` loads `assets/index-D96zGhDh.js` (11 Nov 17:38), which contains `dataLayer.push(arguments)` and G-YB4X4E5ZKM. The SU11A-71 build `index-CB_5YDZu.js` (the same hash as its local build) was deployed on **7 Nov 18:11** and contains it too.
+- **Likely reasons for zero hits:** GA4 loads only after "אישור" on the cookie banner, so visitors who decline or ignore it send nothing. The team's own browsers are known to block GA (CLAUDE.md, Analytics: an extension on the dev desktop, Mi Browser / Private DNS on phones). With ~40–90 page views a day, many of them the team's, zero consenting unblocked visitors is plausible.
+- **What Dude should check** (no secrets involved):
+  1. In a clean Chrome profile without extensions, open https://super.xxl.co.il, click "אישור", then DevTools → Network: `collect?v=2&tid=G-YB4X4E5ZKM … en=page_view` with status 204. Then GA4 → Reports → Realtime (SU11A-71 runbook step 6).
+  2. GA4 Admin → Data collection → **Data filters**: no active "Internal traffic" or "Developer traffic" filter excluding the visits (an internal-traffic rule on the office IP 149.106.243.120 would hide the team's visits by design).
+  3. GA4 Admin → Data streams → the web stream shows "Receiving traffic in past 48 hours".
+
+  If 1 shows the hit and Realtime shows it, the setup is fine and the card is simply honest: GA4 counts only consenting, unblocked visitors.
+- **A2, the first GA4 day:** `stats_daily` has GA4 rows for **7 Nov 2026 only**, so GA4 data starts on 7 Nov. That matches the SU11A-71 build going live at 7 Nov 18:11. (Dude recalled 9 Nov; the data and the web root show 7 Nov.) The 5 page views of 7 Nov may include Dude's own test from that day.
+
+**Part B: docs.**
+- **SU11A-71:** deploy date recorded.
+- **Releases:** 1.2.3 live on both stores. The Play bundle 10 permissions are added to the runbook's expected list.
+- **Open items:**
+  - SU11A-72 / 72b / 72c / 75 deployed 11 Nov;
+  - SU11A-74 card counts recorded;
+  - new: Play R8 / edge-to-edge, SU11A-77 and SU11B-8.
+- **CLAUDE.md:** the mobile section and the IDs.
+
 ---
 
-## 📋 Open items / next steps (as of 7 Nov 2026)
+## 📋 Open items / next steps (as of 11 Nov 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (verified, SU11A-53). Lawyer review of the terms is Dude's call.
 - **SU11A-36 Search v2:** SEARCH_V2=on since 21 Oct 2026; timer daily 14:30.
@@ -3235,14 +3261,15 @@ Runbook: `docs/super/su11a72_runbook.md` section 3 (the same web deploy as SU11A
 - **SU11A-58 promo pins / hides:** in use on production by 1 Nov. `docs/admin/su11a58_runbook.md` (migration, restart, ONE web deploy for SU11A-57 + SU11A-58 from a PC with `web/.env.production`, checks). Open decision: whether a hide should also exclude a promotion from prices (options A / B / C in the SU11A-58 entry).
 - **SU11A-69 admin statistics: deployed** (runbook `docs/admin/su11a69_runbook.md`). **B1 GA4 is connected:** service account xxl-stats@scrp-510706.iam.gserviceaccount.com, property 537761103. **C2 Google Play and C3 App Store are not connected yet** (their cards read "לא מחובר").
 - **SU11A-70 honest counts / App Store badge / logo link: deployed** (runbook `docs/admin/su11a70_runbook.md`). If not yet done: paste the step 5 BEFORE / AFTER sums into the SU11A-70 entry, and turn "לא לספור את הדפדפן הזה" on in every browser and phone the team uses.
-- **SU11A-74 store retirement: done** (applied by Dude 9 Nov 2026 12:17: 15 retired, physical 1196 → 1181, /stores/coordinates 917 → 916; backup `stores_bak_su11a_74`). The admin card shows full counts from the 10 Nov cron.
-- **SU11A-71 GA4 fix / real-route page views: deployed (deploy date: Dude to fill)** (runbook `docs/admin/su11a71_runbook.md`). **GA4 has no data before that deploy date.** If not yet done: paste the step 3 BEFORE / AFTER sums into the SU11A-71 entry.
+- **SU11A-74 store retirement: done** (applied by Dude 9 Nov 2026 12:17: 15 retired, physical 1196 → 1181, /stores/coordinates 917 → 916; backup `stores_bak_su11a_74`). The admin card shows full counts from the 11 Nov cron (Dude's screenshot): Shufersal 321/321, Shefa 20/20, Yochananof 47/47, King Store 28/28, Carrefour 145/145, Shuk Hair 19/19.
+- **SU11A-71 GA4 fix / real-route page views: deployed 7 Nov 2026** (first GA4 data 7 Nov; SU11A-76) (runbook `docs/admin/su11a71_runbook.md`). **GA4 has no data before that deploy date.** If not yet done: paste the step 3 BEFORE / AFTER sums into the SU11A-71 entry.
   - **Connect C2 / C3** when convenient (C1 GA4 is done): runbook C2 Google Play (same service account + Play Console read-only reports + bucket id), C3 App Store (separate Sales and Reports key + a one-time Admin-key Analytics request, revoked after). Each card shows "לא מחובר" until then.
   - Optional: send `X-XXL-Client: ios|android/<version>` (no identifier, no privacy-label change) from a later app version, for per-version counts; the platform split already works from the user agents.
   - Optional: reword the privacy policy's log purpose to name aggregate statistics (`docs/store_privacy_inventory.md` §H).
 - **Category warm-up after the 14:30 build (optional):** the first city request per category after a build takes ~1.5-2.5 s, then it is cached; a small warm-up of the popular departments after `scrp-search-items` would hide that.
-- **SU11A-75 "בהרצה" notice + admin table alignment (web):** built, not deployed; ships in the same web deploy as SU11A-72 (`docs/super/su11a72_runbook.md` steps 1 and 3).
-- **SU11A-72 result view modes (web):** built, not deployed. Run `docs/super/su11a72_runbook.md` (web deploy with MATCH, then the browser checks). Later options: the promos page; `has_image` in the search / category payload (an API change) so list thumbnails ask only for real images; a site-wide dark mode.
+- **SU11A-72 (+72b, 72c) result view modes and SU11A-75 "בהרצה" notice + admin table alignment: deployed 11 Nov 2026** (deploy guard MATCH). Live-tested by the chat architect in the browser: the notice after the cookie choice on Super and the portal, focus / Esc / trap, once per browser, the label reopens it, none on /privacy; list / table / cards, page sizes, persistence, 375 px; admin tables aligned (Dude's screenshot). Done.
+- **SU11A-77 (planned): app-notice API + admin**, to carry the notice to the app from the server. In the same session, add a `has_image` flag to the search / category results, so list thumbnails stop asking `/product/{code}/image` for every row (SU11A-72).
+- **GA4 card (SU11A-76):** the import works, but GA4 had no hits on 8–10 Nov. Dude's checks are in the SU11A-76 entry: a clean-browser hit plus Realtime, Data filters, and the stream status.
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
 - **Catalog:**
   - **SU11A-52 catalog (rules v1.1 since SU11A-55): built, NOT applied.** Run `docs/catalog/su11a52_runbook.md` (migration, pull, one build, import dry run then apply), then `--manual docs/catalog/review_graded_v1.csv` (Dude's 150 graded rows) and `--manual docs/catalog/ai_audit_graded_v1.csv` (100, SU11A-57). Taxonomy is v1.2 (SU11A-56). Next to grade: `disagreements_v1.csv` (regenerated for v1.2). Open: frozen chocolate-coated fruit (D06.C02 or D08.C01?); the 265 D04.C05 pickles without storage evidence; whether a better AI pass is worth it (Sonnet lost the pilot). Service rows and nameless names are handled by the same build;
@@ -3261,16 +3288,19 @@ Runbook: `docs/super/su11a72_runbook.md` section 3 (the same web deploy as SU11A
   - **Release gate CLOSED** (history: 4 Nov, no release until the seller-name decision; Dude then released 1.2.2 with "Lead Tour" still showing).
   - **Automatic release from 1.2.3 on** (Dude, 7 Nov 2026): approval publishes at once, so the TestFlight retest (runbook K4) is the last gate; submit only after it passed. The website badge switch (kit §9) was done in SU11A-70.
   - ASC set: age 13+, App Privacy published, Privacy Choices URL https://super.xxl.co.il/account/delete, Mac / Vision Pro off. DSA: non-trader / not in the EU; align to trader before any EU distribution.
-  - **Next: 1.2.3** (SU11B-5 + SU11B-6 + SU11B-7 + SU11B-7b, mobile `0ecd08b`: add-to-basket on product page and search rows, SU11A-63 L1/L2, deletion recovery fix, Hebrew-only iOS localization, text-field borders): build iOS (build 3) then Android (versionCode 10) from that commit via runbook K (K1 pre-flight → K2 builds → K3 upload → K3a IPA check → K4 retest → K5 submit, automatic release → K6 Play). After release the store's language line should read Hebrew only (was "EN + 1 More"). Review account appreview@xxl.co.il: re-create if a reviewer deletes it.
+  - **iOS 1.2.3 (3) LIVE** (from mobile `0ecd08b`; approved and auto-released 9 Nov 2026; the store page shows the language Hebrew only). Next iOS build number: 4.
+  - **SU11B-8 (planned): app 1.2.4** shows the server notice (SU11A-77). On iOS: no "בהרצה" / beta wording (App Review 2.2) and no payment or subscription links (3.1.1).
+  - History, 1.2.3 (SU11B-5 + SU11B-6 + SU11B-7 + SU11B-7b, mobile `0ecd08b`: add-to-basket on product page and search rows, SU11A-63 L1/L2, deletion recovery fix, Hebrew-only iOS localization, text-field borders): build iOS (build 3) then Android (versionCode 10) from that commit via runbook K (K1 pre-flight → K2 builds → K3 upload → K3a IPA check → K4 retest → K5 submit, automatic release → K6 Play). After release the store's language line should read Hebrew only (was "EN + 1 More"). Review account appreview@xxl.co.il: re-create if a reviewer deletes it.
   - Sign in with Apple is not required (email/password only). Guideline 1.2 items (terms, report, block, blocked list, contact) are live.
 - **Play:**
-  - **Production: 9 (1.2.2)** (EAS 0992b1c3, 65882ea) published 4 Nov (submission 3), full rollout, Israel, managed publishing off. Closed testing Alpha: draft 8 (1.2.1) discarded, track inactive.
+  - **Production: versionCode 10 (1.2.3)**, from mobile `0ecd08b`, 100% rollout, Israel. Next: versionCode 11. Previous: 9 (1.2.2, EAS 0992b1c3, 65882ea, published 4 Nov). Closed testing Alpha: draft 8 (1.2.1) discarded, track inactive.
+  - **Bundle 10 permissions** (App bundle explorer) also list `com.android.vending.CHECK_LICENSE` (added by Play's automatic protection, the "installer check") and `com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE` (the install-referrer library pulled in by expo-application; the app never calls it). Both are now in the runbook's expected list; Data safety is unchanged.
+  - **By Feb 2027 (Play recommendation):** DEX optimisation is below the threshold (obfuscation 1%). Enable R8 minify / obfuscation for Android release builds with keep rules, tested on a device. Also handle the edge-to-edge deprecated-API recommendation. This is its own session.
   - Account declared **TRADER** (XXL Enterprises, D-U-N-S, address, phone, email public under "App support"); app-level declaration published 5 Nov (submission 4), ToS URL https://xxl.co.il/disclaimer.
   - Release notes use the language tag `iw-IL` (`he-IL` is rejected). Never submit App content / policy changes while a release is in review (it restarts the review).
-  - Next: versionCode 10 = 1.2.3, from the same commit as iOS 1.2.3 (SU11B-7b `0ecd08b`); check the permissions no longer list USE_BIOMETRIC / USE_FINGERPRINT.
   - plan Play Billing.
 - **SEO:** built in SU11A-46. After the web deploy: submit the sitemaps in Search Console (see the SU11A-46 entry) and request indexing of the key pages. Optional nginx www -> apex redirect on 443.
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-76. SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
+Next free session ID: SU11A-78 (SU11A-77 reserved: app-notice API + admin). SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
