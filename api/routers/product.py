@@ -1,4 +1,3 @@
-import os
 import re
 from pathlib import Path as FsPath
 
@@ -10,6 +9,7 @@ from sqlalchemy.engine import Connection
 from api.models import ProductWithPrices, Product, PriceQuote, ProductDetails
 from api.dependencies import get_db
 from db.query import fetch_product, group_by_product, fetch_gs1_details
+from api import product_images
 from api.routers.search import _to_model
 
 router = APIRouter(tags=["Product"])
@@ -20,7 +20,7 @@ _BARCODE_RE = re.compile(r"^\d{8,14}$")
 # dude's home directory, which www-data cannot read, and relocating ~11.5K files
 # to a web root is a bigger change than proxying them. Override with the
 # `gs1_images_dir` env var (lowercase per the project convention).
-_IMAGE_DIR = FsPath(os.environ.get("gs1_images_dir") or (FsPath.home() / "gs1_images"))
+_IMAGE_DIR = product_images.IMAGE_DIR          # one definition, shared with the has_image index (SU11A-77)
 
 
 def _image_path(item_code: str) -> FsPath | None:

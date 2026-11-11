@@ -35,9 +35,9 @@ export function QuotePrice({ q, cheapest, lang }: { q: PriceQuote; cheapest: boo
 
 function Thumb({ item }: { item: ProductWithPrices }) {
   const [failed, setFailed] = useState(false);
-  // The search payload has no has_image, so the image is asked for lazily (visible rows
-  // only, the nginx image zone) and a 404 falls back to the icon.
-  if (failed) {
+  // SU11A-77: has_image === false -> no request at all; true / unknown (an older API)
+  // -> asked lazily (visible rows only, the nginx image zone), a 404 falls back to the icon.
+  if (failed || item.product.has_image === false) {
     return (
       <span className="shrink-0 w-10 h-10 rounded-md bg-gray-100 flex items-center justify-center" aria-hidden="true">
         <ImageOff size={16} className="text-gray-500" />

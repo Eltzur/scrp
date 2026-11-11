@@ -338,3 +338,12 @@ The in-app summary must only restate the web policy, so deploy D1 first.
   - nginx writes only a flag (`1` / `-`) for it in the access log, never its value.
 
   It is a functional cookie for the team, so the public privacy policy and the cookie banner need no change.
+
+## J. Updates (11 Nov 2026, SU11A-77: app notices, has_image)
+
+- **The notice request (app 1.2.4 on, SU11B-8):** `GET /announcements/active?platform=ios|android`.
+  - **It carries no identifier:** no account, token, device id or user data, only the platform. The answer is the same for everyone and cacheable.
+  - **Like every API request,** it is logged by nginx and journald with the IP and the request line (§6). That data type is already declared, so this is no new data.
+  - **The app** stores the dismissed notice `version` on the device only.
+- **`has_image`** on search / category results is product metadata (does an image file exist), not user data.
+- **No change to the five privacy documents:** this inventory, Apple App Privacy, Play Data safety, the privacy policy and the app privacy manifest.

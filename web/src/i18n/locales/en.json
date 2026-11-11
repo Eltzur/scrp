@@ -229,6 +229,7 @@
       "categories": "Categories",
       "promos": "Promos",
       "stats": "Statistics",
+      "notices": "App notices",
       "soon": "Coming soon: settings, branches"
     },
     "status": {
@@ -356,6 +357,9 @@
     },
     "stats": {
       "title": "Statistics"
+    },
+    "notices": {
+      "title": "App notices"
     }
   },
   "beta_notice": {

@@ -61,6 +61,11 @@ class Product(BaseModel):
         default_factory=dict,
         description="chain_id → product name as that chain calls it",
     )
+    has_image: bool | None = Field(
+        None,
+        description="SU11A-77: True if GET /product/{item_code}/image returns a JPEG; null = unknown "
+                    "(clients then behave as before and may ask)",
+    )
 
 
 class ProductWithPrices(BaseModel):

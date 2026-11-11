@@ -968,6 +968,7 @@ Docs only (CLAUDE.md, roadmap, both handoffs); no code, no DB writes, no Google 
 - SU11A-72 (Nov 9) — web: result view modes on search and category pages (grid unchanged; list = accordion with per-chain prices, 10/25/50/100/הכל; comparison table = products × up to 8 chains, totals marked only among complete chains), remembered per browser; no API change (the payload already has per-chain quotes). Runbook `docs/super/su11a72_runbook.md`. Not deployed.
 - SU11A-75 (Nov 11) — web: "בהרצה" notice (once per browser, after the cookie choice, not on legal pages / admin / fly) + a label next to the logo that reopens it; admin statistics / status table column alignment. Runbook `docs/super/su11a72_runbook.md` §3. Not deployed.
 - SU11A-76 (Nov 11) — docs close-out (1.2.3 live on both stores; SU11A-72/72b/72c/75 deployed 11 Nov; SU11A-71 deployed 7 Nov; SU11A-74 card counts) + read-only GA4 check: the import is fine, but GA4 had no hits on 8–10 Nov.
+- SU11A-77 (Nov 11) — app notice API (`/announcements/active`, cached, no identifiers) + admin tab "הודעות לאפליקציה" (server-side rules: no links, no beta wording on iOS), `has_image` on search / compare / category results from a cached image-folder listing. Runbook `docs/admin/su11a77_runbook.md`. Not deployed; the notice stays off until 1.2.4.
 - SU11A-56 (Oct 25) — catalog taxonomy v1.2 (`taxonomy_v1_2.csv`, `gs1_group_map_v1_2.csv`: D09.C11, D16.C08, D07.C08.S01 storage split), Sonnet 5.5 pilot on the graded AI audit (53% vs Haiku 64%: gate failed, no full re-check). Not applied.
 - SU11A-55 (Oct 25) — catalog: Dude's review as `docs/catalog/review_graded_v1.csv` (150 manual rows), taxonomy/rules v1.1 (`taxonomy_v1_1.csv`, `brand_category_hints_v1_1.csv`; head anchor, %, hard negatives, brand pin), AI audit sample `ai_audit_sample_v1.xlsx`. Not applied.
 - SU11A-54 (Oct 25) — admin console phase 1: admin.xxl.co.il (lazy admin app in the same build), all /admin/* need allowlist + aal2 (TOTP), audit log table `admin_audit` (migration not applied), status / history / detail / audit endpoints, nginx site + runbook `docs/admin/su11a54_runbook.md`. Not deployed.
@@ -3237,6 +3238,58 @@ Runbook: `docs/super/su11a72_runbook.md` section 3 (the same web deploy as SU11A
   - new: Play R8 / edge-to-edge, SU11A-77 and SU11B-8.
 - **CLAUDE.md:** the mobile section and the IDs.
 
+### SU11A-77 (11 Nov 2026) - app notice API + admin screen; has_image on results; built, not deployed
+
+Runbook: `docs/admin/su11a77_runbook.md`: quiet time → pull + the new tests → schema backup + migration (twice) → restart + curl checks → (no nginx change) → web deploy → browser checks. **The notice stays OFF until app 1.2.4 is live (SU11B-8).**
+
+**Announcements (backend):**
+- **Migration** `db/migrations/su11a77_announcements.sql` (not applied): table `app_announcements`.
+  - **Columns:** one row per scope `ios` / `android` / `both` (UNIQUE), `title` ≤ 60, `body` ≤ 600, `active` (default false), `version` ≥ 0, `updated_at`, `updated_by_hash` (64 hex).
+  - **CHECKs:** an active row must have text.
+  - **Rest:** three inactive rows seeded; OWNER scrp_app (the only role that needs it; not a Supabase table); idempotent; a prerequisite check for `admin_audit`; a manual rollback in comments.
+- **Public `GET /announcements/active?platform=ios|android`** (`api/routers/announcements.py`):
+  - **Answer:** 200 `{id, version, title, body}` or 204; an unknown platform is 400 `unknown_platform`. No auth, no identifiers, `Cache-Control: public, max-age=300`.
+  - **Pick:** the platform's own active row first, else the active `both` row.
+  - **Database:** cached in-process for 5 minutes (`db/announcements.py`). A connection is opened **only on a cache miss** (not `get_db`, which would check one out per request). A missing table or a DB error reads as "no notice", cached the same way.
+  - **Rate limit:** the general nginx zone (`location /`), not `xxl_heavy`.
+- **Validation, on the server, for every save** (`db/announcements.py` `validate`):
+  - trimmed lengths;
+  - plain text: no `<` / `>`, no links (http(s), www, mailto, tel, e-mail, bare domains) — no payment links (Apple 3.1.1, Play Billing);
+  - for `ios` and `both`: no בהרצה / בטא / ניסיון (also inside a word) / beta / trial / test version (whole words, case-insensitive) — Apple 2.2;
+  - errors 422 `{code, field[, word]}`;
+  - switching on re-validates the stored text;
+  - **`version` grows only when the title or body changes** (after trimming), not on on / off.
+- **Admin** `api/routers/admin_announcements.py`, every route behind `require_admin_mfa` (allowlist + aal2): `GET /admin/announcements`, `PUT /admin/announcements/{platform}`, `POST /admin/announcements/{platform}/active`. Every write records `admin_audit` (target `announcement`, target_id the platform, before / after; actor hashed) on the same connection before the commit. A write drops this process's public cache.
+
+**Admin UI:**
+- **The tab** "הודעות לאפליקציה" (`web/src/admin/screens/NoticesScreen.tsx`, its own lazy chunk, 9 kB; strings `admin/i18n/notices.{he,en}.json`; tab label / title in the main locale files).
+- **Per scope:** title and text with counters; save; an on / off `role="switch"` (disabled while unsaved edits exist); a live preview; the rules as help text (the Apple 2.2 rule on iPhone / both only); version and last update; the server's error shown in words.
+- **Baseline:** labelled fields, gray-500 borders (≥ 3:1), visible focus.
+
+**has_image on results — the gate passed:**
+- **Where the truth is:** images are files `{gtin}.jpg` in one folder (`scraper/gs1_fetch_images.py`, weekly). Nothing in the database records them, and `/product/{b}/image` checks `is_file()`.
+- **The source:** **one cached directory listing per API process**, refreshed at most every 10 minutes (`api/product_images.py`). A result item is a set lookup: no per-request or per-item filesystem call, no query.
+- **Rejected:** a column in the 14:30 search build, which needs a migration and does not cover the old / filtered / category paths; a per-item `is_file()`, which the gate forbids.
+- **If the folder cannot be read,** `has_image` is null (unknown) and the clients behave as before.
+- **Where it is set:** in `_to_model` (`api/routers/search.py`), the one place every `/search` (v1, v2, filtered), `/compare`, `/categories/{id}/items` and `/product/{b}` item is built. `Product.has_image: bool | None` (`api/models.py`); `product.py` now uses the same folder constant.
+- **Caveats:** a cached search v2 body can carry a value up to its cache lifetime old. The apps ignore the new field.
+- **Web:** the list view skips the `<img>` when `has_image === false` (placeholder icon); true, null or missing (an older API) behave as before. The grid cards show no images, so nothing changed there.
+
+**Privacy:** the notice request carries only the platform, no identifier. Like every API request it appears in the nginx / journald logs with the IP (inventory §6). `docs/store_privacy_inventory.md` §J records this; the five privacy documents are unchanged.
+
+**Tests:**
+- **`tests/test_announcements_su11a77.py`** (60, SQLite):
+  - every forbidden word × ios / both × title / body; Hebrew inside a word; Latin whole words only; Android allowed;
+  - 10 link forms × every platform; markup; lengths and trimming;
+  - 400 / 422 on the public endpoint; 204 while off; the platform pick and the `both` fallback; nothing but `{id, version, title, body}`;
+  - the cache: one connection for 5 calls, refreshed after the TTL; a missing table reads as 204, cached;
+  - the aal2 matrix on all three admin routes (no audit row); the version bump only on text change; every write audited without identities;
+  - rejections are 422 and write nothing; a save drops the cache;
+  - the image index: one listing per refresh, `.jpg` files only, unknown when the folder is missing; `_to_model` carries `has_image`.
+- **`tests/test_announcements_su11a77_pg.py`** (3, Postgres 18): the migration twice, the refusal without `admin_audit`, the CHECKs, owner scrp_app, the functions with `FOR UPDATE`.
+- **Web:** `web/scripts/notices-su11a77.test.mjs` (3): the screen server-rendered with seeded data (three scopes, switch semantics, labelled fields, preview, the rules per scope); the tab registered and lazy; the list view asking for no image when `has_image` is false.
+- **Totals:** Python `tests/` 1136 passed; `api/tests` 1 passed plus the 14 known `test_smoke` failures. Web `npm run test:unit` 108 pass. tsc, eslint, i18n parity (305 + 364 lazy), the build, check:admin-chunk and the deploy guard are clean. Main chunk 185.46 → 185.60 kB (the tab label).
+
 ---
 
 ## 📋 Open items / next steps (as of 11 Nov 2026)
@@ -3268,7 +3321,7 @@ Runbook: `docs/super/su11a72_runbook.md` section 3 (the same web deploy as SU11A
   - Optional: reword the privacy policy's log purpose to name aggregate statistics (`docs/store_privacy_inventory.md` §H).
 - **Category warm-up after the 14:30 build (optional):** the first city request per category after a build takes ~1.5-2.5 s, then it is cached; a small warm-up of the popular departments after `scrp-search-items` would hide that.
 - **SU11A-72 (+72b, 72c) result view modes and SU11A-75 "בהרצה" notice + admin table alignment: deployed 11 Nov 2026** (deploy guard MATCH). Live-tested by the chat architect in the browser: the notice after the cookie choice on Super and the portal, focus / Esc / trap, once per browser, the label reopens it, none on /privacy; list / table / cards, page sizes, persistence, 375 px; admin tables aligned (Dude's screenshot). Done.
-- **SU11A-77 (planned): app-notice API + admin**, to carry the notice to the app from the server. In the same session, add a `has_image` flag to the search / category results, so list thumbnails stop asking `/product/{code}/image` for every row (SU11A-72).
+- **SU11A-77 app notice API + admin + has_image: built, not deployed.** Run `docs/admin/su11a77_runbook.md` (migration, restart, curl, web deploy, browser checks). Keep every notice OFF until app 1.2.4 (SU11B-8) is live; SU11B-8 reads `/announcements/active?platform=ios|android` and stores the dismissed `version` per device.
 - **GA4 card (SU11A-76):** the import works, but GA4 had no hits on 8–10 Nov. Dude's checks are in the SU11A-76 entry: a clean-browser hit plus Realtime, Data filters, and the stream status.
 - **SU11A-37 popularity counters:** ID reserved. Counters must stay aggregate (no IP or user ID).
 - **Catalog:**
@@ -3303,4 +3356,4 @@ Runbook: `docs/super/su11a72_runbook.md` section 3 (the same web deploy as SU11A
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-78 (SU11A-77 reserved: app-notice API + admin). SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
+Next free session ID: SU11A-78. SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).

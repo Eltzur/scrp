@@ -11,7 +11,7 @@ from sqlalchemy.exc import DBAPIError
 
 from api import metrics
 from api.auth import ApiCodeError
-from api.routers import account, admin, admin_categories, admin_promos, admin_stats, blocks, categories, health, catalog, search, product, basket, saved_baskets, favorites, freshness, coverage, promos, ratings, stores, terms
+from api.routers import account, admin, admin_announcements, admin_categories, admin_promos, admin_stats, announcements, blocks, categories, health, catalog, search, product, basket, saved_baskets, favorites, freshness, coverage, promos, ratings, stores, terms
 from db import db as _db
 
 log = logging.getLogger(__name__)
@@ -151,6 +151,8 @@ app.include_router(categories.router)        # SU11A-57
 app.include_router(admin_categories.router)  # SU11A-57
 app.include_router(admin_promos.router)      # SU11A-58
 app.include_router(admin_stats.router)       # SU11A-69
+app.include_router(announcements.router)       # SU11A-77
+app.include_router(admin_announcements.router)  # SU11A-77
 
 
 @app.exception_handler(ApiCodeError)

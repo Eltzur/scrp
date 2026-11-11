@@ -250,3 +250,19 @@ export interface StatsBody {
 /** Aggregates only: counts per day per host / platform / route / referrer domain. */
 export const getStats = (days: number) =>
   http.get<StatsBody>('/admin/stats', { params: { days } }).then(r => r.data);
+
+// ---------------------------------------------------------------------------
+// SU11A-77: app notices (api/routers/admin_announcements.py). The server checks
+// every save: plain text, no links, and no beta wording for ios / both.
+// ---------------------------------------------------------------------------
+export type NoticeScope = 'ios' | 'android' | 'both';
+export interface Announcement {
+  platform: NoticeScope; title: string; body: string; active: boolean; version: number; updated_at: string;
+}
+export interface AnnouncementsBody { items: Announcement[]; rules: { title_max: number; body_max: number } }
+export const getAnnouncements = () =>
+  http.get<AnnouncementsBody>('/admin/announcements').then(r => r.data);
+export const saveAnnouncement = (platform: NoticeScope, body: { title: string; body: string }) =>
+  http.put<Announcement>(`/admin/announcements/${platform}`, body).then(r => r.data);
+export const setAnnouncementActive = (platform: NoticeScope, active: boolean) =>
+  http.post<Announcement>(`/admin/announcements/${platform}/active`, { active }).then(r => r.data);

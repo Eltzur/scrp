@@ -29,12 +29,14 @@ const CategoriesScreen = lazy(() => import('./screens/CategoriesScreen'));
 const PromosScreen = lazy(() => import('./screens/PromosScreen'));
 // SU11A-69: statistics, its own chunk with its strings and the SVG chart.
 const StatsScreen = lazy(() => import('./screens/StatsScreen'));
+// SU11A-77: app notices, its own chunk with its strings.
+const NoticesScreen = lazy(() => import('./screens/NoticesScreen'));
 
-const TABS = ['status', 'stats', 'queue', 'categories', 'promos', 'history', 'audit'] as const;
+const TABS = ['status', 'stats', 'queue', 'categories', 'promos', 'notices', 'history', 'audit'] as const;
 type Tab = typeof TABS[number];
 const SCREENS: Record<Tab, LazyExoticComponent<ComponentType>> = {
   status: StatusScreen, stats: StatsScreen, queue: QueueScreen, categories: CategoriesScreen, promos: PromosScreen,
-  history: HistoryScreen, audit: AuditScreen,
+  notices: NoticesScreen, history: HistoryScreen, audit: AuditScreen,
 };
 
 function tabFromHash(): Tab {

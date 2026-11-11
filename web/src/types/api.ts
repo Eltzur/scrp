@@ -1046,6 +1046,11 @@ export interface components {
              */
             is_weighted: boolean;
             /**
+             * Has Image
+             * @description SU11A-77: True if GET /product/{item_code}/image returns a JPEG; null / absent = unknown (ask as before)
+             */
+            has_image?: boolean | null;
+            /**
              * Names Per Chain
              * @description chain_id → product name as that chain calls it
              */

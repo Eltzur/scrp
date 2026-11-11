@@ -12,6 +12,7 @@ from sqlalchemy.engine import Connection
 from api.models import (SearchResult, SearchResultV2, ProductWithPrices, Product, PriceQuote,
                         SuggestResponse, SuggestItem)
 from api.auth import ApiCodeError
+from api import product_images
 from api.dependencies import get_db
 from api.response_cache import ResponseCache
 from db import search_filtered, search_v2
@@ -172,6 +173,7 @@ def _to_model(p: dict) -> ProductWithPrices:
         unit_of_measure=p["unit_of_measure"],
         is_weighted=p["is_weighted"],
         names_per_chain=p["names_per_chain"],
+        has_image=product_images.has_image(p["item_code"]),    # SU11A-77
     )
     quotes = [
         PriceQuote(
