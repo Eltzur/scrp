@@ -12,14 +12,15 @@ Dude runs every step. CC prepared the config (mobile repo: SU11B-1 `85eb6a6`, SU
 - **Lesson:** a Play App content / policy change submitted while a release is in review restarts that review. Submit such changes only when nothing is in review.
 - **Seller-name RELEASE gate (G1): CLOSED.** Dude released 1.2.2 with the name still "Lead Tour". Apple Support case **103015749110** (opened 1 Nov, nudged 3 Nov) is still open; no action is needed when Apple fixes the name.
 - **Release option (Dude, 7 Nov 2026): from 1.2.3 on, every App Store version uses "Automatically release this version".** Approval publishes at once, so the TestFlight retest (K step 4) is the last gate: submit for review only after it has passed in full.
-- **Next: 1.2.3** from the SU11B-7b mobile commit `0ecd08b`: section K.
+- 1.2.3 was built from the SU11B-7b mobile commit `0ecd08b`: section K.
+- **Next: 1.2.4** (the server notice, has_image) from the SU11B-8 mobile commit `fb0a86a`: **section L**.
 
 **Build 1.2.2 (1) rejected (SU11B-3 record):** EAS build `80074645` (commit `c56e27f`) was uploaded and Apple rejected it in processing with **ITMS-90683** "Missing purpose string in Info.plist — NSMotionUsageDescription" (expo-location references `CMMotionActivityManager`; SU11B-1 had set `motionUsagePermission` false). SU11B-3 adds NSMotionUsageDescription plus NSMicrophoneUsageDescription, NSFaceIDUsageDescription and NSPhotoLibraryUsageDescription (each an honest Hebrew "the app never uses / never requests it" text). Build 1 stays in App Store Connect as invalid and is never used; B runs again and produces build 2.
 
 **Decisions recorded (Dude, SU11B-2):** placeholder drawer rows hidden on all platforms; version 1.2.2; age rating: alcohol/tobacco "Infrequent" → **13+**; review account created at step D. **GS1 (SU11B-3): CLOSED** — Dude confirmed on 2 Nov 2026 that the GS1 service terms cover public price comparison; Content Rights: third-party content Yes, necessary rights Yes.
 Rules: passwords and 2FA codes are typed only into the EAS prompt or the Apple / Google page, never into chat or files. Throwaway users only for deletion tests; never delete `x@xxl.co.il` or `gplay@xxl.co.il`. Each `eas build` run burns a build number / versionCode: run each build once.
 
-Order: A (checks) → B (iOS build) → **J step 1 (Android build, right after B, same commit)** → C (submit to App Store Connect) → D (TestFlight test) → E (listing) → F (screenshots) → G (history: both gates closed) → H (submit for review: **done for 1.2.2, 4 Nov**) → I (after approval: 1.2.2 released by Dude; automatic from 1.2.3; website badge done) → K (1.2.3 update). The Android upload to Play (J step 2 on) can follow D's checks.
+Order: A (checks) → B (iOS build) → **J step 1 (Android build, right after B, same commit)** → C (submit to App Store Connect) → D (TestFlight test) → E (listing) → F (screenshots) → G (history: both gates closed) → H (submit for review: **done for 1.2.2, 4 Nov**) → I (after approval: 1.2.2 released by Dude; automatic from 1.2.3; website badge done) → K (1.2.3 update) → L (1.2.4 update). The Android upload to Play (J step 2 on) can follow D's checks.
 
 **B and J must be built from the same commit (the SU11B-3 commit `65882ea` or a later docs-only state of `main`): iOS build 2 first, Android build 9 right after. Do not pull or change anything between the two builds.**
 
@@ -405,3 +406,178 @@ Then App bundle explorer → Permissions.
 Expected: as in J step 4 (including `CHECK_LICENSE` and `BIND_GET_INSTALL_REFERRER_SERVICE`), and **no `USE_BIOMETRIC` / `USE_FINGERPRINT`**. Then Start rollout to Production.
 
 **STOP if** either biometric permission is listed, or READ / WRITE_EXTERNAL_STORAGE or SYSTEM_ALERT_WINDOW appears. Do not submit App content changes while this is in review.
+
+## L. 1.2.4 update (SU11B-8 `fb0a86a`): the server notice, has_image
+
+**Build both stores from the SU11B-8 mobile commit `fb0a86a`.** iOS first, Android right after, no pull in between. One version in review at a time. Each run burns a build number: run each once. Expected numbers: iOS **1.2.4 (4)**, Android versionCode **11**. **Release: automatic**, so L4 is the last gate before the public release.
+
+**What changed in 1.2.4:**
+- **The server notice (SU11A-77):** once per cold start, after the first screen, the app asks `GET /announcements/active?platform=ios|android`:
+  - no login, no identifier, a 5 s timeout;
+  - an active notice shows once per device as a modal with the title, the text and one "הבנתי" button. Android back and the iOS swipe-down close it the same way;
+  - the device stores only the dismissed `id:version`. A new text (the server bumps the version) shows again once;
+  - it never opens over the first-launch location primer, an OS permission dialog or another of the app's modals. It waits for them, or is left for the next cold start;
+  - offline, 204 or an error: nothing happens.
+  - The app carries no notice text of its own.
+- **has_image:** the scan-result picture is not requested when the API says the product has none (the "אין תמונה" placeholder at once); otherwise as before.
+- No new permission, no new native module, no new user data (the five privacy documents are unchanged, SU11B-8 entry in `docs/handoff_mobile.md`).
+
+**Before L4 (b):** the SU11A-77 admin tab "הודעות לאפליקציה" must be live (it is, since SU11A-77's deploy) with **every card OFF**.
+
+### L1. Pre-flight
+
+Run A first, expecting the top commit `fb0a86a` (feat: SU11B-8 …), tsc (exit 2 with only the 5 known `src/tw` errors) and A3's four purpose strings. Then the localization check, which must still be Hebrew only:
+
+[PC — PowerShell]
+```powershell
+cd C:\scrp\xxl-super-mobile
+$env:NODE_ENV='production'; $env:EAS_BUILD_PROFILE='production'
+npx expo config --type introspect --json | Select-String -Pattern 'CFBundleLocalizations[^\]]*\]|CFBundleDevelopmentRegion":"[a-z]*"|CFBundleShortVersionString":"[0-9.]*"' -AllMatches | ForEach-Object { $_.Matches.Value } | Sort-Object -Unique
+```
+Expected, exactly three lines:
+```
+CFBundleDevelopmentRegion":"he"
+CFBundleLocalizations":["he"]
+CFBundleShortVersionString":"1.2.4"
+```
+STOP if `"en"` appears, a line is missing, or the version is not 1.2.4.
+
+### L2. Builds (iOS, then Android at once)
+
+[PC — PowerShell]
+```powershell
+cd C:\scrp\xxl-super-mobile
+git log --oneline -1
+npx eas-cli@latest build -p ios --profile production
+```
+Expected: `git log` shows `fb0a86a`; the build log shows `Version 1.2.4` and build number **4**; the build finishes with an `.ipa`. STOP on any other version or build number.
+
+[PC — PowerShell]
+```powershell
+cd C:\scrp\xxl-super-mobile
+git log --oneline -1
+npx eas-cli@latest build -p android --profile production
+```
+Expected: the same commit; `versionName 1.2.4`, **versionCode 11**; an `.aab`. STOP on any other number.
+
+### L3. iOS upload and the IPA check
+
+[PC — PowerShell]
+```powershell
+cd C:\scrp\xxl-super-mobile
+npx eas-cli@latest submit -p ios --profile production --latest
+```
+Expected: the upload succeeds and App Store Connect → TestFlight lists 1.2.4 (4) "Processing", then ready. STOP on any ITMS mail from Apple.
+
+Then run **K3a** with the 1.2.4 (4) `.ipa`, saved as `%USERPROFILE%\Downloads\superxxl-1.2.4-4.ipa`. In K3a's PowerShell block, read `1.2.4-4` wherever it says `1.2.3-3`.
+
+Expected: as in K3a, except for these two lines:
+```
+CFBundleShortVersionString = 1.2.4
+CFBundleVersion = 4
+```
+STOP on any K3a STOP condition (another language's `.lproj`, `en` in `CFBundleLocalizations`, a local network key, a wrong version or build).
+
+### L3a. Android to internal testing (for the L4 Android items)
+
+[Browser]
+Play Console → SUPER XXL → Testing → **Internal testing** → Create new release → upload the 1.2.4 AAB (versionCode 11) → release notes as in L6 → Save → Review release → Start rollout to Internal testing.
+
+Expected: the internal-testing track lists versionCode 11. The testers' phone gets 1.2.4 from the Play internal-testing link.
+
+STOP if Play reports a permission or policy error. Do not promote to Production yet.
+
+### L4. TestFlight / device retest — the last gate before the public release
+
+[iPhone] the iPhone 12, TestFlight build 1.2.4 (4). [Android] a phone with the internal-testing build, versionCode 11.
+
+**(a) No notice while all are off.** Every card in admin → הודעות לאפליקציה reads כבויה. Close the app fully (swipe it away), open it, and wait 10 seconds on the first screen.
+- Expected: no notice; the app works as in 1.2.3.
+
+**(b) One notice, once per text** (iPhone with the **iPhone** card, then Android with the **Android** card):
+1. [Browser] https://admin.xxl.co.il → הודעות לאפליקציה → the iPhone card. Title `עדכון קטן`, text `המחירים מתעדכנים כל יום. תודה שאתם משתמשים באפליקציה.` → Save → "נשמר (גרסה N)" → switch it **ON** ("פעילה").
+   - The app caches nothing, but the API holds the notice for up to **5 minutes**. Wait 5 minutes after switching it on.
+2. [iPhone] Close the app fully, then open it.
+   - Expected: about 2 seconds after the first screen, the notice: the title, the text, and one "הבנתי" button, right-to-left.
+   - It is readable in **light and dark** mode; check both.
+   - With VoiceOver on, the focus starts on the title and stays inside the notice.
+   - Tap **הבנתי** → it closes.
+3. Close the app fully and open it again.
+   - Expected: **no** notice.
+4. [Browser] Change the text (for example add `!` at the end) → Save → the version goes up by 1. Wait 5 minutes.
+5. [iPhone] Close the app fully and open it.
+   - Expected: the notice again, with the new text.
+   - This time close it with a **swipe down**. Then reopen the app: no notice.
+6. [Browser] Switch the iPhone card **OFF** ("כבויה").
+7. Android, with the **Android** card: steps 1–6 again. Close the notice once with **הבנתי** and once with the **back button**; TalkBack starts on the title. Switch the Android card **OFF** at the end.
+
+**(c) Offline.** Switch one card ON again (5-minute wait), turn **airplane mode on**, close the app fully and open it.
+- Expected: no notice, no error message, scan and search from the cache work as in 1.2.3.
+- Then turn airplane mode **off**, close and reopen: the notice appears (if it was not dismissed yet). Dismiss it, and switch the card **OFF** again.
+
+**(d) First launch** (a test phone only: clearing storage signs the app out and empties the local basket and scan history). On the Android phone: Settings → Apps → SUPER XXL → Storage → **Clear storage**. Have the Android card ON (5-minute wait). Open the app.
+- Expected: the location primer ("גישה למיקום") comes first, and the notice does **not** appear under or over it.
+- Answer the primer and the system dialog. The notice comes after that.
+- Switch the card OFF at the end.
+
+**(e) Pictures.**
+- Scan (or type) a product that has a picture on super.xxl.co.il: the picture shows.
+- Scan a product without one: the grey "אין תמונה" box shows at once, with no image flash.
+
+**(f) The 1.2.3 spot-check:** K4 items 11 (text-field borders, light and dark, focus), 12 (English iPhone: all app texts Hebrew, Hebrew system buttons) and 13 (RTL).
+
+**STOP if:**
+- a notice appears while every card is off;
+- a dismissed notice shows again without a text change;
+- a changed text does not show again;
+- the notice opens over the location primer or a system dialog;
+- the app shows an error or hangs offline;
+- any 1.2.3 item fails.
+
+**Do not go on to L5**: with automatic release, an approved version goes public at once.
+
+**Leave every card OFF** after the retest. Switching one on for real users is Dude's decision, after 1.2.4 is live on both stores.
+
+### L5. App Store Connect: version 1.2.4, automatic release, submit
+
+[Browser]
+App Store Connect → SUPER XXL → version page "+" → new version **1.2.4** → "What's New" (Hebrew), paste:
+```
+גרסה 1.2.4: שיפורים קטנים - מסך המוצר נטען מהר יותר כשאין לו תמונה, והכנה להודעות קצרות מהצוות.
+```
+Then:
+1. **Build:** select **1.2.4 (4)**.
+2. **Screenshots:** keep those of 1.2.3. The notice is off and the screens look the same.
+3. **App Privacy and age rating: unchanged.** 1.2.4 collects no new data, and the notice shows no ממומן content, so Advertising stays No.
+4. **"App Store Version Release":** **"Automatically release this version"**.
+5. **Submit only after L4 has passed in full.** Then Add for Review → Submit to App Review.
+
+Expected: "Waiting for Review", then "In Review", then "Ready for Distribution" (published automatically).
+
+**STOP if:**
+- the build picker does not offer 1.2.4 (4);
+- the release option is not automatic;
+- any L4 item is still open.
+
+If it is rejected, follow H (paste the Resolution Center text to the chat).
+
+### L6. Play: 1.2.4 (versionCode 11) to Production
+
+[Browser]
+Play Console → SUPER XXL → Internal testing → the 1.2.4 release → **Promote release → Production**. Release notes, paste (the language tag is `iw-IL`; `he-IL` is rejected):
+```
+<iw-IL>
+גרסה 1.2.4: שיפורים קטנים - מסך המוצר נטען מהר יותר כשאין לו תמונה, והכנה להודעות קצרות מהצוות.
+</iw-IL>
+```
+Then App bundle explorer → versionCode 11 → Permissions.
+
+Expected: the same list as bundle 10 (K6 / J step 4, including `CHECK_LICENSE` and `BIND_GET_INSTALL_REFERRER_SERVICE`). Then Start rollout to Production (100%, Israel).
+
+**STOP if:**
+- a permission is listed that bundle 10 did not have;
+- `USE_BIOMETRIC`, `USE_FINGERPRINT`, READ / WRITE_EXTERNAL_STORAGE or SYSTEM_ALERT_WINDOW appears.
+
+Do not submit App content changes while this is in review.
+
+**After both are live,** tell the chat the dates. The SU11A-77 notice can then be switched on for real; only Dude does that, through the admin tab.

@@ -870,3 +870,49 @@ Typecheck: only the 5 pre-existing `src/tw` errors. Metro Android export clean; 
     - **Next builds:** iOS build 4, Android versionCode 11. Automatic App Store release from 1.2.3 on.
     - **Bundle 10 permissions** also list `com.android.vending.CHECK_LICENSE` (Play's automatic protection "installer check") and `com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE` (install-referrer library via expo-application, never called by the app). Data safety is unchanged.
     - **Open (Play, by Feb 2027):** R8 minify / obfuscation for release builds (DEX obfuscation 1%), with keep rules and a device test; the edge-to-edge deprecated-API recommendation. Its own session.
+
+## Session SU11B-8 (November 11, 2026) — app 1.2.4: the server notice, has_image
+
+Mobile commit `fb0a86a`. Code and docs only: no EAS build or submit, nothing on the server. Runbook: `docs/ios/su11b1_runbook.md` **section L** (L1 pre-flight → L2 builds → L3 upload + IPA check → L3a Android internal testing → L4 retest → L5 App Store, automatic release → L6 Play). Expected builds: iOS **1.2.4 (4)**, Android versionCode **11**.
+
+- **The notice (API and admin tab SU11A-77):**
+  - **Request:** `fetchActiveNotice(platform)` (`src/api/client.ts`): `GET /announcements/active?platform=ios|android`, `Accept` only, **no auth header, no identifier**, 5 s timeout. Anything but a 200 with a valid body is null: 204, other statuses, offline, timeout, bad JSON.
+  - **Validation:** `src/lib/app-notice-parse.ts` (pure, no RN imports):
+    - integer `id` / `version` ≥ 0, non-empty trimmed `title` ≤ 60 / `body` ≤ 600;
+    - the server's own rules repeated, so a misconfigured server can never show them: no `<` `>`, no link (the server's `_LINK` regex character for character); on iOS no בהרצה / בטא / ניסיון (also inside a word) / beta / trial / test version (Apple 2.2).
+  - **Once per cold start:** `src/components/app-notice.tsx` `AppNoticeHost`, mounted in `src/app/_layout.tsx` after `LocationOnboarding`. It fetches 1.5 s after mount (after the 600 ms splash overlay and the first screen), once per process (module flag), never retried.
+  - **Once per text:** after "הבנתי" / Android back / the iOS swipe-down, AsyncStorage `xxl_notice_dismissed` = `"id:version"` (not SecureStore; nothing else stored). It is shown when the stored value differs, so a version bump shows again once. If storage cannot be read, nothing is shown (never a notice on every launch).
+  - **UI:**
+    - iOS: a `pageSheet` modal, so the system swipe-down calls `onRequestClose`. Android: a centred card over a 50% backdrop; back calls `onRequestClose`. Both run the same dismiss.
+    - The title is a header, and VoiceOver / TalkBack focus moves to it on show (`AccessibilityInfo.sendAccessibilityEvent(…, 'focus')`). `accessibilityViewIsModal`, `importantForAccessibility`, and `onAccessibilityEscape` (the VoiceOver Z gesture) dismisses.
+    - The body is plain `Text` in a ScrollView. RN `Text` has no link detection; `dataDetectorType="none"`.
+    - One "הבנתי" button, 44 pt / 48 dp, emerald-700 with white text (5.36:1). Colours from `useTheme()`: text on background 21:1, body `textSecondary` 5.9:1 light / 10.1:1 dark. RTL (`writingDirection: 'rtl'`, centred title).
+    - **Static text in the app:** only `he.notice.ok` "הבנתי" and its hint. No notice text.
+- **First-launch ordering (how "never on top" is done):** the host waits until all of these hold, checked every 500 ms:
+  1. the first-launch location flow is over: `useLocationPromptState().resolved` (primer answered, nothing to ask, asked on an earlier launch, or the 5 s watchdog). On a fresh install the notice therefore comes only after the primer and the OS dialog;
+  2. no OS permission dialog is open or queued: `isPermissionRequestPending()` (camera and location both go through `requestSerially`);
+  3. none of the app's own modals is open: new `src/lib/modal-presence.ts`. `useModalPresence(visible)` is a one-line registration in the location primer (`permission-primer.tsx`, so the first-launch and Settings primers both count), the drawer, the manual barcode entry (`(tabs)/index.tsx`), the city picker (`(tabs)/settings.tsx`), the ratings consent (`product-detail.tsx`) and the category suggestion sheet (`category-suggest.tsx`);
+  4. the app is in the foreground.
+
+  If that does not happen within 120 s of the flow being over, it gives up for this launch. Nothing is stored, so it shows on a later cold start. There is no terms gate at launch in the app: terms are accepted at sign-up and before the first rating, both behind the modals above. `Alert.alert` dialogs cannot be detected, but none opens on its own at launch.
+- **has_image:** the only product picture in the app is the scan-result card header (`ProductImage` in `src/components/product-card.tsx`); search rows have none.
+  - `ProductImage` takes `hasImage`. `false` renders the "אין תמונה" placeholder without a request; `true`, `null` or missing (an older cached lookup) keeps the old request plus `onError` fallback.
+  - The value comes from `/product/{barcode}` (SU11A-77 `_to_model`).
+  - `src/types/api.ts` `Product.has_image?: boolean | null`, the same hand-sync as the web's `types/api.ts`.
+- **Version:** app.json `expo.version` 1.2.3 → 1.2.4. No new permission, plugin or native module: the notice uses React Native's `Modal`, `AccessibilityInfo` and the existing AsyncStorage.
+- **Privacy (checked against `docs/store_privacy_inventory.md`, §J written in SU11A-77):**
+  - the request carries only the platform; like every API call, nginx / journald log it with the IP (inventory §6, already declared);
+  - the device keeps `id:version`, which never leaves it;
+  - no new data type, no tracking, no third party.
+  - **So none of the five documents changes:** the inventory, Apple App Privacy, Play Data safety, the privacy policy and `NSPrivacyCollectedDataTypes`.
+  - Advertising stays No: the notice is plain text, no links, no ממומן.
+- **Checks:**
+  - `ts.transpileModule` of the 14 touched / new files: 0 diagnostics.
+  - eslint with a temporary `eslint-config-expo/flat` config (deleted after), on the same files: 14 findings before (HEAD) and the same 14 after. All are in untouched code (react-hooks/refs ×8: app-drawer ×7, index ×1; set-state-in-effect ×6: product-card ×3, product-detail ×3). The three new files are clean.
+  - `npx expo config --type introspect --json` (NODE_ENV / EAS_BUILD_PROFILE production), before vs after: only `version` and `ios.infoPlist.CFBundleShortVersionString` 1.2.3 → 1.2.4 (and the same value in `_internal.modResults`). `CFBundleLocalizations` is still ["he"], and the Android permissions are unchanged.
+  - `app-notice-parse` exercised in node (scratch test, not committed): valid, 11 malformed shapes, 8 link / markup forms × both platforms, 7 beta words iOS-only, dismissed-key logic: 5/5 pass.
+  - Full tsc: exit 2 with 6 errors on the first run: the 5 known `src/tw` ones plus one in the new file (`StyleSheet.absoluteFillObject`, removed from the RN 0.86 types), fixed before the commit; a re-check limited to the new / changed component files (temporary tsconfig, deleted after) then showed only the known `src/tw` errors. Dude's full tsc remains the gate (L1).
+- **Untracked in xxl-super-mobile, never committed:** `assets/images/icon.jpg`, `splash-icon gplay.png`, `splash-icon2.png`, `crpxxl-super-mobile` (`.claude/settings.local.json` is ignored by git).
+- **Open for Dude:** run runbook L.
+  - Keep every notice card OFF until 1.2.4 is live on both stores.
+  - **Old apps (1.2.3 and before) never ask for the notice**, so a notice reaches only 1.2.4+ users.
