@@ -3124,6 +3124,12 @@ Runbook: `docs/super/su11a72_runbook.md` (web deploy with the MATCH guard, then 
 - **Chips:** a functional state update (`columnsUpdater`), so two clicks in the same tick both count (live, one was lost). The choice is saved after it changes.
 - **Tests:** `result-views.test.mjs` +3: a milk-like fixture where the name order alone would drop the two cheapest chains; the hint shown and hidden; two queued chip updates both kept (and the old handler shown to lose one); the switcher label. `npm run test:unit` 104 pass. tsc, eslint, i18n parity (303 + 334 lazy), the build and the deploy guard are clean. Main chunk unchanged (185.46 kB); the change is in the lazy `PagedResults` chunk.
 
+**SU11A-72c (11 Nov 2026, web only):**
+- **Default table columns rank by cheapest rows first.** The live check after 72b (`חלב`, Tel Aviv, 25 rows) still defaulted to קרפור / סופר יודה / יוחננוף / ויקטורי / פרש מרקט. The cheapest-row counts were רמי לוי 22 (2 products missing), אושר עד 18 (3 missing), יוחננוף 6, ויקטורי 2, the rest 1, so "products carried" first kept the two cheapest chains out.
+- **New `pageChains` order:** (a) cheapest rows, most first; (b) products carried; (c) the sum over the rows carried, lowest first; (d) name. The top 5 are the default.
+- **Unchanged:** a remembered chip choice still wins; the hidden-cheaper hint is unchanged; the total row still marks "הסכום הזול ביותר" only among complete chains, the others "חסר N".
+- **Tests:** `result-views.test.mjs` +1 (a chain cheapest on 4 of 6 rows but missing 2 is in the default and first; the total winner is a complete chain; it shows "חסר 2"; the hint and a remembered choice). The 72b assertion that ranked products carried first is replaced. `npm run test:unit` 105 pass. tsc, eslint, i18n parity, the build and the deploy guard are clean; main chunk unchanged (185.46 kB).
+
 **Read-only check first (the gate):**
 - **Per request:** `/search` and `/compare` return at most **100** products (`limit le=100`, `api/routers/search.py`); `/categories/{id}/items` at most **60** (`db/category_browse.py` `LIMIT_MAX`).
 - **Per-chain prices are already in the payload:** every item carries `quotes[]` with **one quote per chain, its cheapest branch**, inside the city / chain filter of the request (`db/query.py` `group_by_product`; search v2 reads the same per-chain rows from `search_item_prices`; category items use the same `ProductWithPrices`). The list's open rows and the table are built from that one response.

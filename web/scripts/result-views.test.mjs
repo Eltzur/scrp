@@ -258,9 +258,6 @@ test('72b default columns: the cheapest chains come first when everyone carries 
   assert.deepEqual([...V.rowCheapest(MILK[0], cols)].sort(), [CH[6], CH[7]].sort());
   const pc = V.pageChains(MILK);
   assert.deepEqual(pc.map(c => c.cheapestRows).slice(0, 2), [3, 1]);
-  // (a) products carried still ranks first
-  const fewer = [...MILK, item('m4', [named(0, 9), named(1, 9.5)])];
-  assert.deepEqual(V.tableColumns(fewer, []).slice(0, 2).sort(), [CH[0], CH[1]].sort());
   assert.deepEqual(V.tableColumns(MILK, [CH[0]]), [CH[0]]);                  // a remembered choice wins
 });
 
@@ -291,4 +288,32 @@ test('72b chips: two clicks in the same tick both count (functional update)', ()
   const src = readFileSync(join(web, 'src/components/results/CompareTable.tsx'), 'utf8');
   assert.match(src, /setRemembered\(columnsUpdater\(defaults, id\)\)/);
   assert.doesNotMatch(src, /setRemembered\(next\)/);
+});
+
+test('72c default columns: cheapest rows rank first, even for a chain missing products', () => {
+  // 6 rows. רמי לוי (CH[6]) is cheapest on 4 of them but does not sell r5 / r6; every
+  // other chain sells all 6 (the live "חלב" case: רמי לוי 22 of 25 rows, 2 missing).
+  const all = (code, prices) => item(code, prices.map((p, i) => named(i, p)).filter(q => q.price != null));
+  const rows = [
+    all('r1', [7.0, 7.1, 7.2, 7.3, 7.4, 7.5, 6.8, 7.6]),
+    all('r2', [5.0, 5.1, 5.2, 5.3, 5.4, 5.5, 4.9, 5.6]),
+    all('r3', [9.0, 9.1, 9.2, 9.3, 9.4, 9.5, 8.8, 9.6]),
+    all('r4', [3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 2.9, 3.6]),
+    all('r5', [4.0, 4.1, 4.2, 4.3, 4.4, 4.5, null, 4.6]),
+    all('r6', [6.0, 6.1, 6.2, 6.3, 6.4, 6.5, null, 6.6]),
+  ];
+  const pc = V.pageChains(rows);
+  assert.equal(pc[0].chain_id, CH[6]);
+  assert.deepEqual([pc[0].cheapestRows, pc[0].carried], [4, 4]);
+  const cols = V.tableColumns(rows, []);
+  assert.equal(cols.length, 5);
+  assert.ok(cols.includes(CH[6]), 'the chain cheapest on most rows is in the default');
+  assert.equal(cols[1], CH[0]);                                              // cheapest on r5 / r6
+  // the total row is unchanged: the winner only among complete chains; the cheapest chain shows "חסר 2"
+  const t = Object.fromEntries(V.chainTotals(rows, cols).map(x => [x.chain_id, x]));
+  assert.deepEqual([t[CH[6]].missing, t[CH[6]].winner], [2, false]);
+  assert.equal(t[CH[0]].winner, true);
+  assert.equal(V.hiddenCheaper(rows, cols), false);
+  assert.deepEqual(V.tableColumns(rows, [CH[1]]), [CH[1]]);                  // a remembered choice still wins
+  assert.equal(V.hiddenCheaper(rows, [CH[1]]), true);
 });

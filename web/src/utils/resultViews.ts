@@ -60,11 +60,13 @@ export interface ChainInfo {
 }
 
 /**
- * Every chain on the page, ranked for the default columns (SU11A-72b): (a) products
- * carried, most first; (b) rows where it holds the cheapest price, most first;
- * (c) its sum over the rows it carries, lowest first; then by name. Before
- * SU11A-72b only (a) and the name counted, so on "חלב" the two cheapest chains
- * (₪6.80) were left out and ₪6.85 was marked cheapest.
+ * Every chain on the page, ranked for the default columns (SU11A-72c): (a) rows
+ * where it holds the page-wide cheapest price, most first; (b) products carried,
+ * most first; (c) its sum over the rows it carries, lowest first; then by name.
+ * History: SU11A-72 ranked by products carried and name only, so on "חלב" the
+ * two cheapest chains (₪6.80) were left out and ₪6.85 was marked cheapest;
+ * SU11A-72b put products carried first, and the live check still hid them
+ * (רמי לוי cheapest on 22 of 25 rows but missing 2 products, אושר עד 18 / 3).
  */
 export function pageChains(items: ProductWithPrices[]): ChainInfo[] {
   const m = new Map<string, ChainInfo>();
@@ -81,8 +83,8 @@ export function pageChains(items: ProductWithPrices[]): ChainInfo[] {
     }
   }
   return [...m.values()].sort((a, b) =>
-    b.carried - a.carried
-    || b.cheapestRows - a.cheapestRows
+    b.cheapestRows - a.cheapestRows
+    || b.carried - a.carried
     || a.sum - b.sum
     || a.name.localeCompare(b.name, 'he'));
 }

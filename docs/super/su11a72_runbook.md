@@ -63,7 +63,7 @@ git pull origin main; .\scripts\deploy_frontend.ps1
    - הכל: up to 100 rows in one go. If the search has more, a note says how many are shown out of the total;
    - after a reload (F5) the list and the size are still selected.
 4. **Table:**
-   - "טבלת השוואה" with up to 5 chain columns. **SU11A-72b:** in a browser with no saved choice (a new private window), search `חלב` in תל אביב-יפו: the default columns include the chains with the lowest row-1 price (רמי לוי and אושר עד at the time of the live test), and row 1's green cell is the true cheapest;
+   - "טבלת השוואה" with up to 5 chain columns. **SU11A-72b:** in a browser with no saved choice (a new private window), search `חלב` in תל אביב-יפו: the default columns rank by the rows where each chain is cheapest (SU11A-72c), so **`חלב` / תל אביב: רמי לוי and אושר עד are in the default columns** (even though they miss a few products, shown as "חסר N" in the total row), and row 1's green cell is the true cheapest;
    - if a chain outside the columns is cheaper on some row, a line above the table reads "יש רשתות זולות יותר שאינן מוצגות – הוסיפו אותן מהרשימה". After adding that chain, the line goes away;
    - click chips to add and remove chains. A 9th chain is refused with "אפשר לבחור עד 8 רשתות.";
    - click two chips quickly, one right after the other: **both** change (SU11A-72b);
