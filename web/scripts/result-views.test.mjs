@@ -214,7 +214,8 @@ test('table: caption, th scope, sticky product column, — for not sold, words f
 test('switcher: aria-pressed segmented control; page size only for list / table; table sizes 10/25/50', () => {
   const grid = m.switcher({ view: 'grid', size: 25, onView() {}, onSize() {}, pagedAvailable: true });
   assert.equal((grid.match(/aria-pressed="true"/g) ?? []).length, 1);
-  assert.match(grid, /רשת/); assert.match(grid, /רשימה/); assert.match(grid, /טבלת השוואה/);
+  assert.match(grid, />כרטיסים<\/button>/); assert.match(grid, />רשימה<\/button>/); assert.match(grid, />טבלת השוואה<\/button>/);
+  assert.doesNotMatch(grid, />רשת<\/button>/);                       // SU11A-72b: not "רשת" next to "קיבוץ לפי: רשת"
   assert.doesNotMatch(grid, /<select/);
   const tbl = m.switcher({ view: 'table', size: 100, onView() {}, onSize() {}, pagedAvailable: true });
   assert.deepEqual([...tbl.matchAll(/<option value="(\d+)"/g)].map(x => x[1]), ['10', '25', '50']);
@@ -234,4 +235,60 @@ test('nothing in the views touches the URL or sends analytics', () => {
     const src = readFileSync(f, 'utf8');
     assert.doesNotMatch(src, /useSearchParams|setParams|navigate\(|history\.|gtag|trackPageview/, f);
   }
+});
+
+// ------------------------------------------------------------------ SU11A-72b
+const NAMES = ['אושר עד', 'ויקטורי', 'יוחננוף', 'סופר יודה', 'פרש מרקט', 'קרפור', 'רמי לוי', 'שוק העיר'];
+const CH = NAMES.map((n, i) => `72900000001${String(i).padStart(2, '0')}`);
+const named = (i, price) => ({ ...quote(CH[i], price), chain_name: NAMES[i] });
+// Every chain carries all three rows; רמי לוי (6) and שוק העיר (7) are the cheapest.
+// By name alone (the SU11A-72 tie-break) they sorted last and were left out.
+const MILK = [
+  item('m1', [named(0, 7.1), named(1, 6.85), named(2, 6.9), named(3, 6.95), named(4, 7.0), named(5, 6.99), named(6, 6.8), named(7, 6.8)]),
+  item('m2', [named(0, 12.9), named(1, 12.5), named(2, 12.4), named(3, 12.9), named(4, 13.0), named(5, 12.6), named(6, 11.9), named(7, 12.0)]),
+  item('m3', [named(0, 5.5), named(1, 5.4), named(2, 5.6), named(3, 5.7), named(4, 5.9), named(5, 5.5), named(6, 5.2), named(7, 5.3)]),
+];
+
+test('72b default columns: the cheapest chains come first when everyone carries the same products', () => {
+  const byNameOnly = [...CH].sort((x, y) => NAMES[CH.indexOf(x)].localeCompare(NAMES[CH.indexOf(y)], 'he')).slice(0, 5);
+  assert.ok(!byNameOnly.includes(CH[6]) && !byNameOnly.includes(CH[7]));    // the bug this fixes
+  const cols = V.tableColumns(MILK, []);
+  assert.equal(cols.length, 5);
+  assert.deepEqual(cols.slice(0, 2), [CH[6], CH[7]]);                         // most cheapest rows, then lowest sum
+  assert.deepEqual([...V.rowCheapest(MILK[0], cols)].sort(), [CH[6], CH[7]].sort());
+  const pc = V.pageChains(MILK);
+  assert.deepEqual(pc.map(c => c.cheapestRows).slice(0, 2), [3, 1]);
+  // (a) products carried still ranks first
+  const fewer = [...MILK, item('m4', [named(0, 9), named(1, 9.5)])];
+  assert.deepEqual(V.tableColumns(fewer, []).slice(0, 2).sort(), [CH[0], CH[1]].sort());
+  assert.deepEqual(V.tableColumns(MILK, [CH[0]]), [CH[0]]);                  // a remembered choice wins
+});
+
+test('72b hint: shown only when a hidden chain is cheaper on a visible row', () => {
+  assert.equal(V.hiddenCheaper(MILK, V.tableColumns(MILK, [])), false);
+  assert.equal(V.hiddenCheaper(MILK, [CH[0], CH[1], CH[2], CH[3], CH[4]]), true);
+  assert.equal(V.hiddenCheaper([item('x', [named(0, 3)])], [CH[1]]), true);  // sold only by a hidden chain
+  assert.equal(V.hiddenCheaper([item('y', [named(0, 3), named(1, 3)])], [CH[0]]), false);   // a tie is not cheaper
+  globalThis.localStorage = memStore();
+  localStorage.setItem('xxl_table_chains', JSON.stringify([CH[0], CH[1]]));
+  assert.match(m.table(MILK, 'תל אביב-יפו'), /יש רשתות זולות יותר שאינן מוצגות – הוסיפו אותן מהרשימה/);
+  localStorage.setItem('xxl_table_chains', JSON.stringify([CH[6], CH[7], CH[1]]));
+  assert.doesNotMatch(m.table(MILK, 'תל אביב-יפו'), /יש רשתות זולות יותר/);
+  delete globalThis.localStorage;
+});
+
+test('72b chips: two clicks in the same tick both count (functional update)', () => {
+  const defaults = V.tableColumns(MILK, []);
+  // React applies queued updaters in order to the latest state:
+  assert.ok(!defaults.includes(CH[0]) && !defaults.includes(CH[4]));
+  const after = [V.columnsUpdater(defaults, CH[0]), V.columnsUpdater(defaults, CH[4])].reduce((st, u) => u(st), []);
+  assert.ok(after.includes(CH[0]) && after.includes(CH[4]) && after.length === 7);
+  // the old handler toggled against the same rendered columns twice and lost the first click
+  const lost = [V.toggleColumn(defaults, CH[0]), V.toggleColumn(defaults, CH[4])].at(-1);
+  assert.ok(!lost.includes(CH[0]));
+  const back = [V.columnsUpdater(defaults, CH[0]), V.columnsUpdater(defaults, CH[0])].reduce((st, u) => u(st), []);
+  assert.deepEqual(back, defaults);                                          // on, then off again
+  const src = readFileSync(join(web, 'src/components/results/CompareTable.tsx'), 'utf8');
+  assert.match(src, /setRemembered\(columnsUpdater\(defaults, id\)\)/);
+  assert.doesNotMatch(src, /setRemembered\(next\)/);
 });

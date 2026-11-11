@@ -48,19 +48,61 @@ export function rowCheapest(item: ProductWithPrices, chains: string[]): Set<stri
   return out;
 }
 
-export interface ChainInfo { chain_id: string; name: string; carried: number }
+export interface ChainInfo {
+  chain_id: string;
+  name: string;
+  /** How many of the page's products the chain carries. */
+  carried: number;
+  /** Rows where the chain holds the page-wide cheapest price (ties count for each chain). */
+  cheapestRows: number;
+  /** The chain's sum over the rows it carries. */
+  sum: number;
+}
 
-/** Every chain on the page with how many of the page's products it carries, most first, then by name. */
+/**
+ * Every chain on the page, ranked for the default columns (SU11A-72b): (a) products
+ * carried, most first; (b) rows where it holds the cheapest price, most first;
+ * (c) its sum over the rows it carries, lowest first; then by name. Before
+ * SU11A-72b only (a) and the name counted, so on "חלב" the two cheapest chains
+ * (₪6.80) were left out and ₪6.85 was marked cheapest.
+ */
 export function pageChains(items: ProductWithPrices[]): ChainInfo[] {
   const m = new Map<string, ChainInfo>();
   for (const it of items) {
-    for (const [id, q] of quoteByChain(it)) {
-      const cur = m.get(id) ?? { chain_id: id, name: q.chain_name ?? id, carried: 0 };
+    const by = quoteByChain(it);
+    let best = Infinity;
+    for (const q of by.values()) best = Math.min(best, q.price);
+    for (const [id, q] of by) {
+      const cur = m.get(id) ?? { chain_id: id, name: q.chain_name ?? id, carried: 0, cheapestRows: 0, sum: 0 };
       cur.carried += 1;
+      cur.sum += q.price;
+      if (Math.abs(q.price - best) < 1e-9) cur.cheapestRows += 1;
       m.set(id, cur);
     }
   }
-  return [...m.values()].sort((a, b) => b.carried - a.carried || a.name.localeCompare(b.name, 'he'));
+  return [...m.values()].sort((a, b) =>
+    b.carried - a.carried
+    || b.cheapestRows - a.cheapestRows
+    || a.sum - b.sum
+    || a.name.localeCompare(b.name, 'he'));
+}
+
+/**
+ * True when a chain outside `cols` is cheaper than every shown chain on some
+ * row (or sells a product no shown chain sells): the table then says that
+ * cheaper chains are hidden.
+ */
+export function hiddenCheaper(items: ProductWithPrices[], cols: string[]): boolean {
+  const shown = new Set(cols);
+  for (const it of items) {
+    let shownBest = Infinity, hiddenBest = Infinity;
+    for (const [id, q] of quoteByChain(it)) {
+      if (shown.has(id)) shownBest = Math.min(shownBest, q.price);
+      else hiddenBest = Math.min(hiddenBest, q.price);
+    }
+    if (hiddenBest < shownBest - 1e-9) return true;
+  }
+  return false;
 }
 
 /** The table's columns: the remembered choice (kept in its order) else the top 5 by products carried. */
@@ -73,6 +115,15 @@ export function tableColumns(items: ProductWithPrices[], remembered: string[]): 
 export function toggleColumn(cols: string[], id: string): string[] {
   if (cols.includes(id)) return cols.length > 1 ? cols.filter(c => c !== id) : cols;
   return cols.length >= TABLE_MAX_COLUMNS ? cols : [...cols, id];
+}
+
+/**
+ * The chip click as a state updater (SU11A-72b): it toggles against the LATEST
+ * choice, so two clicks in the same tick both count. An empty choice means the
+ * defaults are on screen, so the first click starts from them.
+ */
+export function columnsUpdater(defaults: string[], id: string): (prev: string[]) => string[] {
+  return prev => toggleColumn(prev.length ? prev : defaults, id);
 }
 
 export interface ChainTotal { chain_id: string; total: number; missing: number; winner: boolean }

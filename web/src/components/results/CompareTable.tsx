@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle2 } from 'lucide-react';
 import clsx from 'clsx';
@@ -8,8 +8,8 @@ import { K } from './strings';
 import { QuotePrice } from './ResultsListView';
 import { formatIls, productDisplayName } from '../../utils/priceDisplay';
 import {
-  TABLE_MAX_COLUMNS, chainTotals, loadChains, pageChains, quoteByChain, rowCheapest, saveChains,
-  tableColumns, toggleColumn,
+  TABLE_MAX_COLUMNS, chainTotals, columnsUpdater, hiddenCheaper, loadChains, pageChains, quoteByChain,
+  rowCheapest, saveChains, tableColumns,
 } from '../../utils/resultViews';
 
 interface Props {
@@ -44,13 +44,19 @@ export default function CompareTable({ items, city }: Props) {
       (carried.get(b) ?? 0) - (carried.get(a) ?? 0) || (names.get(a) ?? '').localeCompare(names.get(b) ?? '', 'he'));
   }, [names, onPage]);
 
+  // SU11A-72b: a functional update, so two clicks in the same tick both count;
+  // the choice is saved after it changes (only once the user has clicked).
+  const defaults = useMemo(() => tableColumns(items, []), [items]);
+  const touched = useRef(false);
+  useEffect(() => { if (touched.current) saveChains(remembered); }, [remembered]);
   const toggle = (id: string) => {
-    const next = toggleColumn(cols, id);
-    setLimitNote(next === cols && !cols.includes(id) && cols.length >= TABLE_MAX_COLUMNS);
-    if (next !== cols) { setRemembered(next); saveChains(next); }
+    touched.current = true;
+    setLimitNote(!cols.includes(id) && cols.length >= TABLE_MAX_COLUMNS);
+    setRemembered(columnsUpdater(defaults, id));
   };
 
   const totals = chainTotals(items, cols);
+  const hidden = hiddenCheaper(items, cols);
   const anyComplete = totals.some(x => x.winner);
   const nameOf = (id: string) => names.get(id) ?? id;
 
@@ -85,6 +91,7 @@ export default function CompareTable({ items, city }: Props) {
       <p className="text-xs text-gray-700 mb-2">
         {city ? t(`${K}.city_note`, { city }) : t(`${K}.no_city_note`)} {t(`${K}.promo_note`)}
       </p>
+      {hidden && <p className="text-xs text-gray-700 mb-2" role="note">{t(`${K}.hidden_cheaper`)}</p>}
 
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white" tabIndex={0} role="region"
            aria-label={t(`${K}.table_caption`, { count: items.length })}>

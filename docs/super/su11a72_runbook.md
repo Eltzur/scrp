@@ -4,8 +4,8 @@ Written 9 Nov 2026 for Dude. **Web only: no API, nginx, DB or app change**, so t
 
 **What changes**
 - **Where:** on search results (super.xxl.co.il and the portal search) and on category pages (`/categories/<id>`). The promos page is unchanged.
-- **The switcher:** a segmented control "רשת / רשימה / טבלת השוואה" appears above the results. "פריטים בעמוד" sits next to it in the list and the table.
-- **רשת:** today's cards, unchanged, with "load more".
+- **The switcher:** a segmented control "כרטיסים / רשימה / טבלת השוואה" appears above the results (SU11A-72b: the grid is "כרטיסים", not "רשת", which sits next to "קיבוץ לפי: רשת"). "פריטים בעמוד" sits next to it in the list and the table.
+- **כרטיסים:** today's cards, unchanged, with "load more".
 - **רשימה:**
   - one closed row per product: thumbnail, name, "הכי זול ב<רשת>", "רשתות: N", the saving badge, the cheapest price and a chevron;
   - opening a row lists every chain's price, cheapest first. The cheapest line is green **and** says "הכי זול";
@@ -50,7 +50,7 @@ git pull origin main; .\scripts\deploy_frontend.ps1
 **[Browser]** https://super.xxl.co.il, in a private window. Search `חלב` with a city chosen.
 
 1. **Switcher:**
-   - "רשת / רשימה / טבלת השוואה" appears above the results, with רשת selected;
+   - "כרטיסים / רשימה / טבלת השוואה" appears above the results, with כרטיסים selected;
    - the cards are as before, and "טעינת עוד" still works.
 2. **List:**
    - click "רשימה": the rows are **all closed**, and "פריטים בעמוד" shows 25;
@@ -63,8 +63,10 @@ git pull origin main; .\scripts\deploy_frontend.ps1
    - הכל: up to 100 rows in one go. If the search has more, a note says how many are shown out of the total;
    - after a reload (F5) the list and the size are still selected.
 4. **Table:**
-   - "טבלת השוואה" with up to 5 chain columns;
+   - "טבלת השוואה" with up to 5 chain columns. **SU11A-72b:** in a browser with no saved choice (a new private window), search `חלב` in תל אביב-יפו: the default columns include the chains with the lowest row-1 price (רמי לוי and אושר עד at the time of the live test), and row 1's green cell is the true cheapest;
+   - if a chain outside the columns is cheaper on some row, a line above the table reads "יש רשתות זולות יותר שאינן מוצגות – הוסיפו אותן מהרשימה". After adding that chain, the line goes away;
    - click chips to add and remove chains. A 9th chain is refused with "אפשר לבחור עד 8 רשתות.";
+   - click two chips quickly, one right after the other: **both** change (SU11A-72b);
    - the "—" cells are products a chain does not sell; the cheapest cell of each row is green;
    - in the total row, only a chain with no "חסר" can carry "הסכום הזול ביותר";
    - the note above the table names the city. With "כל הערים", it says the chain's lowest price nationwide;
@@ -83,7 +85,7 @@ git pull origin main; .\scripts\deploy_frontend.ps1
    - the table has a caption ("השוואת מחירים: N מוצרים לפי רשת") and column and row headers;
    - a "—" cell reads "לא נמכר", and the cheapest cell adds "הכי זול".
 9. **Group by branch:**
-   - turn off "מצב השוואה" and set "קיבוץ לפי: סניף": only רשת is enabled, and a note explains why;
+   - turn off "מצב השוואה" and set "קיבוץ לפי: סניף": only כרטיסים is enabled, and a note explains why;
    - set it back to רשת: the remembered view returns.
 10. **No URL change, no extra page views:**
     - switching views or the page size does not change the address bar;

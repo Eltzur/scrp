@@ -3117,6 +3117,13 @@ STOP if `retired` is not 15, or the coordinates count drops by more than 1.
 
 Runbook: `docs/super/su11a72_runbook.md` (web deploy with the MATCH guard, then browser checks on desktop and phone). **Web only: no API, nginx, DB or app change.**
 
+**SU11A-72b (11 Nov 2026, live test fixes, web only):**
+- **Default table columns now include the cheapest chains.** Live, `חלב` in Tel Aviv defaulted to סופר יודה / קרפור / ויקטורי / יוחננוף / פרש מרקט, left out רמי לוי and אושר עד (₪6.80 on row 1), and so marked ₪6.85 cheapest. The cause: `pageChains` broke ties on products carried by name. Now, when there is no remembered choice, it ranks by (a) products carried, (b) rows where the chain holds the page-wide cheapest price (ties count for each), (c) its sum over the rows it carries, lowest first, then the name; the top 5 are shown. A remembered choice still wins.
+- **New line above the table** when a chain outside the columns is cheaper on a visible row (or sells a product no shown chain sells): "יש רשתות זולות יותר שאינן מוצגות – הוסיפו אותן מהרשימה" (`hiddenCheaper`).
+- **The grid's label** is "כרטיסים" / "Cards" (was "רשת", next to "קיבוץ לפי: רשת"); the stored value stays `grid`.
+- **Chips:** a functional state update (`columnsUpdater`), so two clicks in the same tick both count (live, one was lost). The choice is saved after it changes.
+- **Tests:** `result-views.test.mjs` +3: a milk-like fixture where the name order alone would drop the two cheapest chains; the hint shown and hidden; two queued chip updates both kept (and the old handler shown to lose one); the switcher label. `npm run test:unit` 104 pass. tsc, eslint, i18n parity (303 + 334 lazy), the build and the deploy guard are clean. Main chunk unchanged (185.46 kB); the change is in the lazy `PagedResults` chunk.
+
 **Read-only check first (the gate):**
 - **Per request:** `/search` and `/compare` return at most **100** products (`limit le=100`, `api/routers/search.py`); `/categories/{id}/items` at most **60** (`db/category_browse.py` `LIMIT_MAX`).
 - **Per-chain prices are already in the payload:** every item carries `quotes[]` with **one quote per chain, its cheapest branch**, inside the city / chain filter of the request (`db/query.py` `group_by_product`; search v2 reads the same per-chain rows from `search_item_prices`; category items use the same `ProductWithPrices`). The list's open rows and the table are built from that one response.

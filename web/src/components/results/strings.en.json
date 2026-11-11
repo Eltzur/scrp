@@ -1,6 +1,6 @@
 {
   "label": "Results view",
-  "grid": "Grid",
+  "grid": "Cards",
   "list": "List",
   "table": "Comparison table",
   "page_size": "Items per page",
@@ -34,5 +34,6 @@
   "promo_note": "A multi-buy promo price is the unit price when buying the stated quantity.",
   "error": "We couldn't load this page.",
   "retry": "Try again",
-  "loading": "Loading…"
+  "loading": "Loading…",
+  "hidden_cheaper": "Some cheaper chains are not shown – add them from the list"
 }
