@@ -3292,7 +3292,7 @@ Runbook: `docs/admin/su11a77_runbook.md`: quiet time → pull + the new tests �
 
 ---
 
-### SU11A-80 (12 Nov 2026) - pre-marketing batch A from the SU11A-79 review: /stats cache, customer error text, error boundary, not-found page, web timeout, quiet /cities retry, JSON 500 on every path; built, not deployed
+### SU11A-80 (12 Nov 2026) - pre-marketing batch A from the SU11A-79 review: /stats cache, customer error text, error boundary, not-found page, web timeout, quiet /cities retry, JSON 500 on every path; DEPLOYED 12 Nov 2026 (live-checked)
 
 Fixes SU11A-79 C1, H1, H6, M1 (route part), M2, L4 and L5 (`docs/super/su11a79_quality_review.md`). No migration, no nginx change, no env change, no mobile change.
 
@@ -3387,7 +3387,7 @@ Fixes SU11A-79 C1, H1, H6, M1 (route part), M2, L4 and L5 (`docs/super/su11a79_q
 
 ---
 
-### SU11A-81 (12 Nov 2026) - SU11A-79 H5: correct link previews per site (one static HTML per host); built, not deployed
+### SU11A-81 (12 Nov 2026) - SU11A-79 H5: correct link previews per site (one static HTML per host); DEPLOYED 12 Nov 2026 (live-checked; the super block includes snippets/xxl-spa-super.conf, backup ~/nginx-backup-su11a81/)
 
 **Problem:** the one built `index.html` served on every host carried the portal's `<title>`, description, OG / Twitter tags and `canonical https://xxl.co.il/`. Crawlers that do not run JS (WhatsApp, Facebook, X, Telegram, LinkedIn) therefore previewed every super.xxl.co.il link as the portal.
 
@@ -3500,6 +3500,329 @@ F=$(sudo grep -l 'server_name[^;]*super\.xxl\.co\.il' /etc/nginx/sites-available
 
 ---
 
+### SU11A-82 (12 Nov 2026) - SU11A-79 batch C: server alerts (H2), encrypted backups + test restore (H3), CGNAT rate limits (H4 + L13); built, not deployed
+
+**Recorded first (Dude, 12 Nov 2026):**
+- **SU11A-80 and SU11A-81 are DEPLOYED and live-checked** (web MATCH; API pull + restart; `/stats` cache; per-host HTML + the nginx snippet).
+- **The live super.xxl.co.il block includes `snippets/xxl-spa-super.conf`.** Its backup is in `~/nginx-backup-su11a81/`.
+- **UptimeRobot (free) watches** `https://super.xxl.co.il/`, `https://api-super.xxl.co.il/health` (keyword "ok"), `https://xxl.co.il/`, `https://admin.xxl.co.il/` and `https://fly.xxl.co.il/` every 5 minutes, alerting info@xxl.co.il. The free plan has **no certificate-expiry check**; this session's daily check covers it (14 days).
+- **Measured 12 Nov:**
+  - **Disk:** 30 GB, 77 % used (6.7 GB free); the DB is 6.5 GB; the api-super certificate expires 14 Dec (certbot.timer active).
+  - **Backups:** rclone has one remote `[b2]` (type b2) and **no crypt remote**: dumps went to B2 unencrypted.
+  - **Alerts:** no unit had `OnFailure=`.
+  - **nginx:** limits as in the repo; 0 limited requests in the logs; peak 17 req/s from one IP; no IPv6.
+
+**H2 — alerts (`scripts/ops_alert.py`, `scripts/ops_health_check.py`, `scripts/ops_common.py`, `deploy/systemd/`):**
+- **`xxl-alert@.service`** (template) runs `python3 -m scripts.ops_alert --unit %i`.
+  - **Runs as:** dude, with `SupplementaryGroups=systemd-journal` to read the failed unit's lines, and `EnvironmentFile=~/scrp/.env`.
+  - **The mail:** to info@xxl.co.il, subject **"[XXL] <unit> failed on scrp-prod-il"**. Body: a hint for known cases (e.g. the GS1 circuit breaker is not a bug), the unit state, the last 30 journal lines.
+  - **SMTP:** sent through `api/mailer.py`, i.e. the API's own SMTP settings (`smtp_*`, never printed). No new secret.
+  - **Redaction:** every text passes `redact()` (connection-string passwords, JWTs, Bearer / Authorization, `*password*= / *secret*= / *token*= / *key*=`, sb_secret_, AWS / Google keys).
+  - **No loop:** the template has no `OnFailure` itself.
+- **`OnFailure=xxl-alert@%n.service`** as **drop-ins** `deploy/systemd/dropins/<unit>.service.d/xxl-onfailure.conf` for all seven: scrp-stats, scrp-backup, scrp-account-sweep, scrp-cron, scrp-search-items, scrp-gs1-fetch, scrp-gs1-images-backup. The main unit files are not edited.
+- **`xxl-health-check.service` + `.timer`:** 08:15 Asia/Jerusalem, `Persistent=true`, `OnFailure` → alert. It **mails only when something is wrong**:
+  - **disk:** / above 85 %;
+  - **TLS:** any certificate expiring within 14 days. It reads `/etc/letsencrypt/live/*/cert.pem` when readable; those are root-only on a default certbot install, so for dude it reads the certificate each host actually serves on 127.0.0.1:443 by SNI (xxl.co.il, www, super, api-super, admin, fly), which is what visitors get;
+  - **prices:** an active chain (`scraper/active_stores.yaml`) with no successful load (`fetch_runs.files_loaded > 0`, the `/freshness` source) for 26 h. 08:15 is ~22 h after a good 10:00 run;
+  - **DB:** larger than 10 GB;
+  - **backup:** `scrp-backup.service`'s last result not `success`, or its last run ended more than 26 h ago (`systemctl show --timestamp=unix`).
+- **Thresholds:** env settings `ops_disk_max_pct`, `ops_cert_min_days`, `ops_fresh_max_hours`, `ops_db_max_gb`, `ops_backup_max_hours`, `ops_tls_hosts`, `ops_alert_to`, `ops_host_label`. The defaults need **no .env change**.
+- **A check that cannot run is reported as a problem** ("tls: could not check (PermissionError)"), never silence.
+- **Flags:** `--dry-run` prints without mailing; `--test-mail` sends one test mail.
+
+**H4 — rate limits (`deploy/nginx/xxl-ratelimit-http.conf`, `deploy/nginx/xxl-ratelimit-api.conf`). Sized for ~50 active people behind one carrier CGNAT IP (no IPv6), a real cap for one scraper kept:**
+
+| Zone | Old | New | Why |
+|---|---|---|---|
+| `xxl_api` (general; also the second bucket of every heavy / bulk call) | 10 r/s, burst 40 | **30 r/s, burst 120** | 50 people opening the home page (4–5 calls each) within 10 s ≈ 25 r/s; the burst covers a group arriving at once. |
+| `xxl_heavy` (/compare, /basket/compare, /promos/grouped, /promos/list, /promos/promoted, /promos/today, /categories/<id>/items, /admin/promos/search) | 2 r/s, burst 10 | **5 r/s, burst 30** | 50 people comparing every ~30 s ≈ 1.7 r/s; 5 r/s still holds one scraper under ~5 expensive queries a second. |
+| **`xxl_bulk` (new, /promos/bulk only, L13)** | (heavy) | **6 r/s, burst 30** | It follows each search / compare (1–3 calls), so it no longer spends the heavy bucket: ~1.7 compares/s × 3 ≈ 5 r/s. |
+| `xxl_suggest` | 20 r/s, burst 60 | **40 r/s, burst 120** | One call per keystroke (160 ms debounce): ~10 people typing at once × 3 r/s. |
+| `xxl_img` | 30 r/s, burst 200 | **60 r/s, burst 300** | 20–50 images per results page; ~10 people opening results in the same seconds. |
+| `xxl_serp` (fly, paid SerpApi) | 10 r/m, burst 5 | unchanged | Every call costs money. |
+
+- **Unchanged:** `limit_req_status 429` (already set) and the 429 JSON with CORS. The zone sizes stay 10m, so a reload is enough. `admin.xxl.co.il.conf` (xxl_api burst 40 for the admin page) is unchanged.
+
+**H3 — encrypted backups (`deploy/backup/scrp-backup.sh`, `deploy/backup/backup.conf.example`):**
+- **What the script does:** the same job as before:
+  - `pg_dump -Fc` of xxl_super as postgres (peer auth), written to `…dump.partial` and renamed when complete, checked with `pg_restore --list`;
+  - local rotation 7 days, Sundays ≤ 28 days, the 1st ≤ 180 days.
+- **What is new — the upload:** `rclone copy` to `${REMOTE}${SUBDIR}/` from `/etc/xxl/backup.conf` (`REMOTE="b2crypt:"`, `SUBDIR="daily"`).
+  - **It refuses a non-crypt remote** (`rclone listremotes --long`: names and types only, never the config). `ALLOW_PLAIN=1` is an emergency switch only.
+  - **It checks the upload:** the uploaded object must be listed with the same size.
+  - Any failure exits 1, and the OnFailure mail goes out.
+- **Where the secrets live:** the passphrase and salt are only in root's rclone config (obscured) and in Dude's password manager. Never in the repo, the config file, chat or CC.
+- **What it protects:** a leaked B2 key or a B2 account takeover. **What it does not:** a full server compromise, because the keys are on the same box.
+- **Lifecycle:** the new objects go under `b2:xxl-scrp-backups/enc/`, which needs its **own B2 lifecycle rule** (180 days), to keep the privacy policy's 180-day promise.
+- `.gitignore` now un-ignores `deploy/backup/`. `.gitattributes` forces LF for `deploy/systemd/**`, `deploy/backup/*` and `deploy/nginx/*`.
+
+**Tests:**
+- **`tests/test_ops_su11a82.py`: 60 passed (Windows, Git Bash for the shell tests):**
+  - redaction (9 secret forms plus ordinary lines kept);
+  - settings defaults / overrides;
+  - the alert: subject, hint, journal command, redaction, dry run, odd unit names refused, exit 1 on a mail failure, a missing command;
+  - every check function at and over its limit; the systemd timestamp parser; the report; `main` on a faked healthy server (no mail), with three problems (one mail), with a crashing gatherer ("could not check", type only), the dry run, a mail failure (exit 1), and the test mail;
+  - the active chains from the YAML; the freshness SQL source;
+  - every drop-in exactly `[Unit]` + `OnFailure=xxl-alert@%n.service`, exactly the seven services, LF; the template has no OnFailure; the timer at 08:15 Asia/Jerusalem, outside the quiet times;
+  - nginx: zone rates and sizes, 429 status, both buckets on all 8 heavy locations, `/promos/bulk` on xxl_bulk + xxl_api, the general / suggest / image bursts, every zone used is defined;
+  - the backup script: the rotation (8 cases), refusal of a non-crypt remote (fake rclone) and of an empty REMOTE, LF and no secret-handling commands, the example config.
+- **Full suite** `pytest tests api/tests`: **1017 passed, 196 skipped, 13 failed** (the 13 known `api/tests/test_smoke.py` failures that need a live `DATABASE_URL`). `bash -n` on the script OK.
+- **Not run:** `nginx -t` and `systemd-analyze verify` (not available on Windows; the files were reviewed by hand and the runbook runs both checks).
+
+#### SU11A-82 runbook (Dude)
+
+**Order:** A alerts → B rate limits → C backup encryption and test restore → D optional cleanup.
+
+**Timing:** outside the quiet times (03:30–03:45, 04:00–04:30, 10:00 until scrp-cron is inactive, 14:25–15:00). C also avoids 10:00 until scrp-cron ends (disk and I/O).
+
+**No API restart is needed:** no API code changed.
+
+**A0. Pull.**
+
+[Bash - server]
+```bash
+cd ~/scrp && git pull origin main && git log -1 --format='%h %s'
+```
+Expected: the SU11A-82 commit.
+
+**A1. Dry run of the health check, with the unit's own environment.** Nothing is mailed.
+
+[Bash - server]
+```bash
+sudo systemd-run --quiet --wait --pipe --uid=dude --gid=dude -p WorkingDirectory=/home/dude/scrp -p EnvironmentFile=/home/dude/scrp/.env -p MemoryMax=300M /home/dude/scrp/venv/bin/python3 -m scripts.ops_health_check --dry-run
+```
+- **Expected:** `health check OK: no problems`. With today's numbers: disk 77 %, certs ≥ 32 days, DB 6.5 GB, backup this morning, all chains loaded at 10:00.
+- **STOP if:** any "could not check" line (paste it), or a problem you do not recognise.
+
+**A2. One test mail through the API's SMTP settings.**
+
+[Bash - server]
+```bash
+sudo systemd-run --quiet --wait --pipe --uid=dude --gid=dude -p WorkingDirectory=/home/dude/scrp -p EnvironmentFile=/home/dude/scrp/.env /home/dude/scrp/venv/bin/python3 -m scripts.ops_health_check --test-mail
+```
+- **Expected:** `test mail sent`, and the mail "[XXL] test alert from scrp-prod-il" arrives at info@xxl.co.il (check spam).
+- **STOP if:** `test mail NOT sent`. The line above it names the mailer's reason; it never prints the settings.
+
+**A3. Install the alert units and the seven drop-ins.**
+
+[Bash - server]
+```bash
+cd ~/scrp/deploy/systemd && sudo install -m 644 -o root -g root xxl-alert@.service xxl-health-check.service xxl-health-check.timer /etc/systemd/system/ && for d in dropins/*.service.d; do sudo install -d -m 755 "/etc/systemd/system/$(basename "$d")" && sudo install -m 644 -o root -g root "$d/xxl-onfailure.conf" "/etc/systemd/system/$(basename "$d")/"; done && sudo systemctl daemon-reload && sudo systemd-analyze verify /etc/systemd/system/xxl-alert@.service /etc/systemd/system/xxl-health-check.service /etc/systemd/system/xxl-health-check.timer; for u in scrp-stats scrp-backup scrp-account-sweep scrp-cron scrp-search-items scrp-gs1-fetch scrp-gs1-images-backup; do systemctl show "$u.service" -p OnFailure; done
+```
+- **Expected:** no verify output (or only notes about other units), then seven lines `OnFailure=xxl-alert@<unit>.service.service`.
+- **STOP if:** a line reads `OnFailure=` (empty): that drop-in did not load.
+
+**A4. End-to-end test: a throwaway unit that fails.**
+
+[Bash - server]
+```bash
+sudo systemd-run --unit=xxl-alert-selftest -p OnFailure=xxl-alert@%n.service /bin/false; sleep 20; journalctl -u 'xxl-alert@xxl-alert-selftest.service.service' -n 5 --no-pager; sudo systemctl reset-failed xxl-alert-selftest.service
+```
+- **Expected:** `alert mailed: [XXL] xxl-alert-selftest.service failed on scrp-prod-il`, and that mail in the inbox with the unit's journal lines.
+- **STOP if:** `alert NOT mailed`.
+
+**A5. Start the daily timer.**
+
+[Bash - server]
+```bash
+sudo systemctl enable --now xxl-health-check.timer && systemctl list-timers xxl-health-check.timer --no-pager
+```
+Expected: the next run at 08:15.
+
+**Undo A:**
+- `sudo systemctl disable --now xxl-health-check.timer`;
+- delete `/etc/systemd/system/xxl-alert@.service`, `xxl-health-check.*` and the seven `<unit>.service.d/xxl-onfailure.conf`;
+- then `sudo systemctl daemon-reload`.
+
+The services themselves are untouched.
+
+**B1. Back up the two live rate-limit files and compare them with the repo.**
+
+[Bash - server]
+```bash
+mkdir -p ~/nginx-backup-su11a82 && sudo cp -p /etc/nginx/conf.d/xxl-ratelimit-http.conf /etc/nginx/snippets/xxl-ratelimit-api.conf ~/nginx-backup-su11a82/ && ls -l ~/nginx-backup-su11a82/ && B=$(git -C ~/scrp log -1 --format=%H --grep='SU11A-82')^ && diff <(git -C ~/scrp show "$B:deploy/nginx/xxl-ratelimit-api.conf") ~/nginx-backup-su11a82/xxl-ratelimit-api.conf && diff <(git -C ~/scrp show "$B:deploy/nginx/xxl-ratelimit-http.conf") ~/nginx-backup-su11a82/xxl-ratelimit-http.conf && echo "LIVE = REPO (before SU11A-82)"
+```
+- **Expected:** both files copied; `LIVE = REPO (before SU11A-82)`.
+- **STOP if:** a diff is printed. The live file has a hand edit that is not in the repo: paste the diff, and nothing is installed.
+
+**B2. Install, test, reload.**
+
+[Bash - server]
+```bash
+sudo install -m 644 -o root -g root ~/scrp/deploy/nginx/xxl-ratelimit-http.conf /etc/nginx/conf.d/ && sudo install -m 644 -o root -g root ~/scrp/deploy/nginx/xxl-ratelimit-api.conf /etc/nginx/snippets/ && sudo nginx -t && sudo systemctl reload nginx && echo RELOADED && sudo nginx -T 2>/dev/null | grep -E 'limit_req_zone|limit_req zone' | sed 's/^\s*//' | sort | uniq -c
+```
+- **Expected:** `syntax is ok`, `test is successful`, `RELOADED`, then:
+  - six `limit_req_zone` lines (api 30r/s, heavy 5r/s, bulk 6r/s, suggest 40r/s, img 60r/s, serp 10r/m);
+  - `xxl_api burst=120` ×11 and `burst=40` ×1 (admin);
+  - `xxl_heavy burst=30` ×8, `xxl_bulk burst=30` ×1, `xxl_suggest burst=120` ×1, `xxl_img burst=300` ×1, `xxl_serp burst=5` ×1.
+- **STOP if:** `nginx -t` fails. Nothing was reloaded: copy the two backups back.
+
+**B3. Live checks.**
+
+1. **Normal use gets 200:**
+
+   [Bash - server]
+   ```bash
+   for u in /health /chains /stats '/search?q=milk'; do curl -s -o /dev/null -w "$u %{http_code}\n" "https://api-super.xxl.co.il$u"; done
+   ```
+
+2. **A burst from one IP gets 429.** `/promos/list` with only a city answers `[]` without a DB query (as in SU11A-64 6c), so 60 quick calls cost nothing:
+
+   [Bash - server]
+   ```bash
+   for i in $(seq 1 60); do curl -s -G -o /dev/null -w '%{http_code} ' https://api-super.xxl.co.il/promos/list --data-urlencode 'city=תל אביב-יפו'; done; echo; curl -s -G https://api-super.xxl.co.il/promos/list --data-urlencode 'city=תל אביב-יפו'; echo
+   ```
+
+- **Expected:** all 200 for the normal calls. For the burst: about 30–40 `200` (burst 30 plus 5 r/s refill), then `429`; the last line `{"code":"rate_limited"}`. Only this server's IP is limited, for a few seconds.
+- **STOP if:** no `429` (the snippet is not in effect), any `5xx`, or the site shows "השרת עמוס" during normal browsing.
+
+**Undo B:** copy the two files from `~/nginx-backup-su11a82/` back to `/etc/nginx/conf.d/` and `/etc/nginx/snippets/`, then `sudo nginx -t && sudo systemctl reload nginx`.
+
+**C0. Read-only checks before touching the backup.**
+
+[Bash - server]
+```bash
+sudo grep -ciE 'pass|secret|token|key' /usr/local/bin/scrp-backup.sh; systemctl cat scrp-backup.service | grep -E '^(ExecStart|User)='; sudo rclone listremotes --long --config /root/.config/rclone/rclone.conf; df -h / | tail -1; sudo du -sh /var/backups/scrp; sudo ls -l /var/backups/scrp | tail -3
+```
+- **Expected:**
+  - `0`;
+  - `ExecStart=/usr/local/bin/scrp-backup.sh` (User root or none);
+  - `b2:  b2`;
+  - free space and the newest dump's size.
+- **STOP if:** the grep count is not 0. Do not print the script; tell the chat only the count.
+- **Then, by yourself:** `sudo less /usr/local/bin/scrp-backup.sh`, and confirm it does only pg_dump, the local rotation and `rclone copy` to `daily/`. **STOP if** it does anything else (another upload, a notification): the new script would drop that.
+
+**C1. B2 lifecycle rule for the new prefix** (Backblaze web UI, bucket `xxl-scrp-backups` → Lifecycle Settings → custom rules). Add prefix `enc/`, "Days till hide" 180, "Days till delete" 1 (the same as `daily/`), and keep the `daily/` rule. **Do this before the first encrypted upload:** it keeps the privacy policy's 180-day promise.
+
+**C2. Create the crypt remote, interactively.** The passphrase and salt **never go into chat or CC**: save each one in your password manager **before** you confirm it.
+
+[Bash - server]
+```bash
+sudo rclone config --config /root/.config/rclone/rclone.conf
+```
+Answers:
+- `n` (new remote), name `b2crypt`, storage `crypt`;
+- remote `b2:xxl-scrp-backups/enc`;
+- filename_encryption `standard`, directory_name_encryption `true`;
+- **password:** `g` (generate), 256 bits. **Copy it into the password manager now**, then `y` to use it;
+- **password2 (salt):** `g`, 256 bits. **Copy it into the password manager now**, then `y`;
+- advanced config `n`, keep `y`, quit `q`.
+
+Then:
+
+[Bash - server]
+```bash
+sudo rclone listremotes --long --config /root/.config/rclone/rclone.conf
+```
+- **Expected:** `b2:  b2` and `b2crypt:  crypt`.
+- **STOP if:** either value is not saved in the password manager. Without both, the encrypted backups cannot be read on any other machine. Delete the remote (`sudo rclone config delete b2crypt --config /root/.config/rclone/rclone.conf`) and start C2 again.
+
+**C3. Install the config and the new script, keeping the old one.**
+
+[Bash - server]
+```bash
+sudo install -d -m 755 /etc/xxl && sudo install -m 644 -o root -g root ~/scrp/deploy/backup/backup.conf.example /etc/xxl/backup.conf && sudo cp -p /usr/local/bin/scrp-backup.sh /root/scrp-backup.sh.pre-su11a82 && sudo install -m 755 -o root -g root ~/scrp/deploy/backup/scrp-backup.sh /usr/local/bin/scrp-backup.sh && sudo bash -n /usr/local/bin/scrp-backup.sh && grep -E '^(REMOTE|SUBDIR|ALLOW_PLAIN)=' /etc/xxl/backup.conf
+```
+Expected: no output from `bash -n`; `REMOTE="b2crypt:"`, `SUBDIR="daily"`, `ALLOW_PLAIN="0"`.
+
+**C4. One manual backup now.** Not between 04:00 and 04:30. It writes a second copy of today's dump next to the morning one until the rename, so it needs free space of at least one dump plus 2 GB (C0).
+
+[Bash - server]
+```bash
+sudo systemctl start scrp-backup.service; systemctl show scrp-backup.service -p Result; journalctl -u scrp-backup.service -n 12 --no-pager
+```
+- **Expected:** `Result=success`, and lines `dump OK: <bytes> bytes`, `upload -> b2crypt:daily/ (type crypt)`, `upload OK: xxl_super-<today>.dump on b2crypt:daily/`, `local rotation: kept …`, `backup done`.
+- **STOP if:** `Result=exit-code`. The `ERROR:` line says why, and the OnFailure mail arrives.
+
+**C5. The object is there, and unreadable through the plain remote.**
+
+[Bash - server]
+```bash
+R=/root/.config/rclone/rclone.conf; D=$(date +%F); sudo rclone lsl b2crypt:daily/ --config $R --include "xxl_super-$D.dump"; P=$(sudo rclone lsf -R --files-only b2:xxl-scrp-backups/enc/ --config $R | head -1); echo "plain name: $P"; echo -n "plain bytes:  "; sudo rclone cat "b2:xxl-scrp-backups/enc/$P" --count 8 --config $R | od -c | head -1; echo -n "crypt bytes:  "; sudo rclone cat "b2crypt:daily/xxl_super-$D.dump" --count 5 --config $R | od -c | head -1
+```
+- **Expected:**
+  - one line with today's dump and its size;
+  - the plain name is random-looking (both the folder and the file name are encrypted);
+  - the plain bytes start `R C L O N E \0` (rclone's encrypted format);
+  - the crypt bytes start `P G D M P` (a readable pg_dump).
+- **STOP if:** the plain bytes show `P G D M P`.
+
+**C6. Test restore, without filling the disk.** The DB is 6.5 GB with 6.7 GB free, so a full restore does not fit. This restores the schema plus three small tables into a scratch DB.
+
+1. **Fetch the dump through the crypt remote and list it:**
+
+   [Bash - server]
+   ```bash
+   R=/root/.config/rclone/rclone.conf; D=$(date +%F); sudo rclone size b2crypt:daily/ --include "xxl_super-$D.dump" --config $R; df -h /tmp | tail -1
+   ```
+   **STOP if:** the dump is larger than the free space minus 2 GB. Then:
+
+   [Bash - server]
+   ```bash
+   R=/root/.config/rclone/rclone.conf; D=$(date +%F); sudo rclone copyto "b2crypt:daily/xxl_super-$D.dump" /tmp/xxl_restore_test.dump --config $R && sudo chown postgres:postgres /tmp/xxl_restore_test.dump && sudo chmod 600 /tmp/xxl_restore_test.dump && sudo -u postgres pg_restore --list /tmp/xxl_restore_test.dump | head -8 && sudo -u postgres pg_restore --list /tmp/xxl_restore_test.dump | grep -cE 'TABLE DATA'
+   ```
+   Expected: the header (`Archive created at …`, `dbname: xxl_super`, `Format: CUSTOM`) and the number of tables with data (several dozen).
+
+2. **Schema, then three small tables, then the counts side by side:**
+
+   [Bash - server]
+   ```bash
+   sudo -u postgres createdb xxl_restore_test && sudo -u postgres pg_restore --schema-only -d xxl_restore_test /tmp/xxl_restore_test.dump; echo "schema exit $?"; sudo -u postgres pg_restore --data-only --disable-triggers -d xxl_restore_test -t chains -t stores -t app_announcements /tmp/xxl_restore_test.dump; echo "data exit $?"; for db in xxl_super xxl_restore_test; do sudo -u postgres psql -d $db -Atc "select current_database(), (select count(*) from chains), (select count(*) from stores), (select count(*) from app_announcements)"; done
+   ```
+   - **Expected:** `schema exit 0`, `data exit 0`, and two lines with equal counts. `stores` can differ by a few if the 10:00 load added stores after the dump.
+   - **STOP if:** an exit is not 0. Paste the error lines (they hold SQL object names, no data).
+
+3. **Clean up:**
+
+   [Bash - server]
+   ```bash
+   sudo -u postgres dropdb xxl_restore_test && sudo rm -f /tmp/xxl_restore_test.dump && df -h / | tail -1
+   ```
+   Expected: the free space back to the C0 value.
+
+**A full restore (later; it needs room the server does not have).**
+- **Why it does not fit:** a full restore needs the dump plus the restored database and its indexes (≥ 15 GB free; the server has 6.7 GB).
+- **Option 1:** attach a temporary Kamatera volume (e.g. 30 GB), mount it, and run a second Postgres cluster with its data directory there (`pg_createcluster 18 restore -d /mnt/restore/pg`). Then `pg_restore -d xxl_super` into it, compare `count(*)` of the main tables with production, and drop the cluster and detach the volume.
+- **Option 2:** another machine (a throwaway VM or a PC) with the same Postgres major version and rclone. Create the same `b2` remote (a read-only B2 application key) and the same `b2crypt` remote **with the passphrase and salt from the password manager**, fetch, restore and compare, then delete everything.
+- **Record:** whichever option, write down the date and the counts in this entry. That is the "tested restore" the compliance drafts ask for.
+
+**C7. The next morning:**
+- no "[XXL] health check" mail;
+- `journalctl -u scrp-backup.service --since today | grep 'upload OK'` shows the 04:00 run to `b2crypt:daily/`.
+
+**C8 (optional, Dude): delete the old unencrypted dumps.** Only after **two** encrypted daily dumps exist:
+
+[Bash - server]
+```bash
+R=/root/.config/rclone/rclone.conf; sudo rclone lsl b2crypt:daily/ --config $R; sudo rclone lsl b2:xxl-scrp-backups/daily/ --config $R | wc -l; sudo rclone delete b2:xxl-scrp-backups/daily/ --config $R --dry-run 2>&1 | tail -3
+```
+- Check that two dates are listed under `b2crypt:daily/`, then run the same `rclone delete` without `--dry-run`.
+- B2 hides the files and the `daily/` lifecycle rule removes them a day later; add `--b2-hard-delete` to remove them at once.
+- The GS1 image backup (`gs1-images/current/`, public images) stays on the plain remote.
+
+**Undo C:**
+- **Never needed for safety:** the old dumps are untouched until C8.
+- **To return to the old behaviour,** copy `/root/scrp-backup.sh.pre-su11a82` back to `/usr/local/bin/scrp-backup.sh` (it uploads unencrypted again, which the review flagged).
+- **An emergency without crypt:** keep the new script and set `ALLOW_PLAIN="0"` → `"1"` with `REMOTE="b2:"` in `/etc/xxl/backup.conf`, only until the crypt remote is fixed.
+
+**D. Cleanup of old nginx backups in sites-available** (optional, read-only first).
+
+[Bash - server]
+```bash
+ls -l /etc/nginx/sites-enabled/; ls -l /etc/nginx/sites-available/ | grep -i '\.bak'; grep -nE 'include.*sites-' /etc/nginx/nginx.conf; for f in /etc/nginx/sites-available/*.bak*; do for l in /etc/nginx/sites-enabled/*; do [ "$(readlink -f "$l")" = "$(readlink -f "$f")" ] && echo "LINKED: $f"; done; done; echo "check done"
+```
+- **Expected:** `nginx.conf` includes only `sites-enabled/*`, no `LINKED:` line, then `check done`.
+- **Then:**
+
+  [Bash - server]
+  ```bash
+  mkdir -p ~/nginx-old-bak && sudo mv /etc/nginx/sites-available/*.bak* ~/nginx-old-bak/ && sudo nginx -t && ls -l ~/nginx-old-bak/
+  ```
+  Moved, not deleted. `~/nginx-backup-su11a81/` stays until the super change has run a week.
+- **STOP if:** any `LINKED:` line appears, or `nginx.conf` includes `sites-available`.
+
+---
+
 ## 📋 Open items / next steps (as of 11 Nov 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (verified, SU11A-53). Lawyer review of the terms is Dude's call.
@@ -3531,8 +3854,10 @@ F=$(sudo grep -l 'server_name[^;]*super\.xxl\.co\.il' /etc/nginx/sites-available
 - **SU11A-72 (+72b, 72c) result view modes and SU11A-75 "בהרצה" notice + admin table alignment: deployed 11 Nov 2026** (deploy guard MATCH). Live-tested by the chat architect in the browser: the notice after the cookie choice on Super and the portal, focus / Esc / trap, once per browser, the label reopens it, none on /privacy; list / table / cards, page sizes, persistence, 375 px; admin tables aligned (Dude's screenshot). Done.
 - **SU11A-78: CLOSED, not a bug (12 Nov 2026).** The "שתי הפלטפורמות" card looked empty, but a read-only query showed the saved row `both|f|1|3|3|טסט` (version 1, off). `NoticesScreen.tsx` fills each card from its saved row; the fields in Dude's screenshot had been cleared on screen without saving, and the preview reads the on-screen fields. All three cards hold test text, OFF (iPhone / Android "עדכון קטן" version 2, both "טסט" version 1); replace the text before switching any card on.
 - **Direction (12 Nov 2026):** feature development is paused; the next technical block is the pre-marketing quality gate. The Play R8 item stays queued.
-- **SU11A-79 pre-marketing review** (`docs/super/su11a79_quality_review.md`, read-only): 1 Critical, 6 High, 13 Medium, 13 Low. **SU11A-80 (batch A: C1, H1, H6, M1 route, M2, L4, L5): built, not deployed** - deploy steps in the SU11A-80 entry (web deploy with MATCH; API pull + restart; two `/stats` calls). Next: a real 404 status via nginx (M1 rest), then H2 alerting, H3 backups, H4 rate limits.
-- **SU11A-81 (SU11A-79 H5, per-host link previews): built, not deployed** - one static HTML per host (`index.html` portal, `index.super.html` super) + nginx snippet `deploy/nginx/xxl-spa-super.conf`. Deploy steps in the SU11A-81 entry: **web first, then nginx** (one line in the super 443 block), then curl / Facebook debugger / WhatsApp.
+- **SU11A-79 pre-marketing review** (`docs/super/su11a79_quality_review.md`, read-only): 1 Critical, 6 High, 13 Medium, 13 Low. **SU11A-80 (batch A: C1, H1, H6, M1 route, M2, L4, L5): DEPLOYED 12 Nov 2026** (live-checked). Next: a real 404 status via nginx (M1 rest).
+- **SU11A-81 (SU11A-79 H5, per-host link previews): DEPLOYED 12 Nov 2026** (live-checked; the live super block includes `snippets/xxl-spa-super.conf`, backup `~/nginx-backup-su11a81/`).
+- **Monitoring (12 Nov 2026):** UptimeRobot (free) watches super.xxl.co.il/, api-super.xxl.co.il/health (keyword "ok"), xxl.co.il/, admin.xxl.co.il/ and fly.xxl.co.il/ every 5 min, alerting info@xxl.co.il; the free plan has no certificate check (the SU11A-82 daily check covers it).
+- **SU11A-82 (SU11A-79 H2 alerts, H3 encrypted backups + test restore, H4 + L13 rate limits): built, not deployed.** Runbook in the SU11A-82 entry, in order A alerts → B rate limits → C backup encryption + test restore → D optional cleanup of `sites-available/*.bak*`. The crypt passphrase and salt go only into Dude's password manager.
 - **SU11A-77 app notice API + admin + has_image: built, not deployed.** Run `docs/admin/su11a77_runbook.md` (migration, restart, curl, web deploy, browser checks). Keep every notice OFF until app 1.2.4 (SU11B-8) is live; SU11B-8 reads `/announcements/active?platform=ios|android` and stores the dismissed `version` per device.
 - **GA4 import check: passed 12 Nov 03:30** (the admin GA4 row reads "מעודכן עד 2026-11-11"). Enhanced measurement → Form interactions **confirmed OFF** (Dude, 11 Nov). GA4 item closed.
 - **GA4 card (SU11A-76):** the import works, but GA4 had no hits on 8–10 Nov. Dude's checks are in the SU11A-76 entry: a clean-browser hit plus Realtime, Data filters, and the stream status.
@@ -3570,4 +3895,4 @@ F=$(sudo grep -l 'server_name[^;]*super\.xxl\.co\.il' /etc/nginx/sites-available
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-82 (SU11A-79 = pre-marketing quality review, SU11A-80 = review batch A, SU11A-81 = per-host link previews). SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
+Next free session ID: SU11A-83 (SU11A-79 = pre-marketing quality review, SU11A-80 = review batch A, SU11A-81 = per-host link previews, SU11A-82 = alerts, encrypted backups, rate limits). SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).

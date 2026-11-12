@@ -1,0 +1,15 @@
+# SU11A-82: settings for /usr/local/bin/scrp-backup.sh.
+# Install as /etc/xxl/backup.conf (root:root 644). NO secrets here: the crypt
+# passphrase and salt live only in root's rclone config and in Dude's password
+# manager. Names only.
+
+# The rclone CRYPT remote (created with `sudo rclone config`, layered on
+# b2:xxl-scrp-backups/enc). The trailing colon is required.
+REMOTE="b2crypt:"
+
+# Folder inside the crypt remote. With directory-name encryption on, B2 shows
+# it under enc/ as an encrypted name.
+SUBDIR="daily"
+
+# Emergency only: 1 lets the script upload through a non-crypt remote.
+ALLOW_PLAIN="0"

@@ -1,0 +1,13 @@
+# SU11A-82: 08:15 Israel time, outside the quiet times (03:30-03:45,
+# 04:00-04:30, 10:00 until scrp-cron ends, 14:25-15:00), after the 04:00 backup
+# and before the 10:00 price load (so "last load" is ~22 h old on a good day).
+[Unit]
+Description=XXL - daily health check at 08:15 Asia/Jerusalem
+
+[Timer]
+OnCalendar=*-*-* 08:15:00 Asia/Jerusalem
+# A check missed while the server was down runs at boot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -257,6 +257,7 @@ city matcher files/
 deploy/*
 !deploy/systemd/
 !deploy/nginx/
+!deploy/backup/
 king_files/
 kingDL/
 screenshots/

@@ -3,6 +3,11 @@
 # systemd unit files must be LF — CRLF in a unit file is not reliably parsed,
 # and these are authored on Windows and consumed on Linux.
 deploy/systemd/* text eol=lf
+# SU11A-82: the OnFailure drop-ins live one level down; the backup script and
+# its config run on Linux (a CRLF shebang line breaks bash).
+deploy/systemd/** text eol=lf
+deploy/backup/* text eol=lf
+deploy/nginx/* text eol=lf
 
 # SU11A-70: official store badge artwork ships byte-for-byte as downloaded
 # (no line-ending conversion; web/public/badges/SOURCE.txt).

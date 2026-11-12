@@ -1,0 +1,28 @@
+# SU11A-82 (SU11A-79 H2): the daily health check (disk, TLS, price freshness,
+# DB size, last backup). Mails info@xxl.co.il only when something is wrong.
+# Installed as /etc/systemd/system/xxl-health-check.service; timer at 08:15.
+[Unit]
+Description=XXL - daily health check (mails only on a problem)
+After=network-online.target postgresql.service
+Wants=network-online.target
+# The check crashing is itself alerted.
+OnFailure=xxl-alert@%n.service
+
+[Service]
+Type=oneshot
+User=dude
+Group=dude
+WorkingDirectory=/home/dude/scrp
+# DATABASE_URL, smtp_* and the optional ops_* thresholds come from .env.
+EnvironmentFile=/home/dude/scrp/.env
+ExecStart=/home/dude/scrp/venv/bin/python3 -m scripts.ops_health_check
+# Bounded (CLAUDE.md rule 8): a few small queries and one directory read.
+MemoryMax=300M
+TimeoutStartSec=5min
+Nice=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=xxl-health-check
+
+[Install]
+WantedBy=multi-user.target

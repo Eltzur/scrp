@@ -1,0 +1,26 @@
+# SU11A-82 (SU11A-79 H2): mail info@xxl.co.il when a unit failed.
+# Installed as /etc/systemd/system/xxl-alert@.service. Every scrp-* service
+# names it with OnFailure=xxl-alert@%n.service (drop-ins in dropins/), so the
+# instance (%i) is the failed unit, e.g. scrp-backup.service.
+# This unit has NO OnFailure of its own (no alert loop).
+[Unit]
+Description=XXL - mail an alert that %i failed
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=dude
+Group=dude
+# Read the failed unit's lines from the system journal (this process only).
+SupplementaryGroups=systemd-journal
+WorkingDirectory=/home/dude/scrp
+# smtp_* and moderation_email_to come from .env, as for the API mailer; the
+# script never prints them.
+EnvironmentFile=/home/dude/scrp/.env
+ExecStart=/home/dude/scrp/venv/bin/python3 -m scripts.ops_alert --unit %i
+MemoryMax=200M
+TimeoutStartSec=2min
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=xxl-alert
