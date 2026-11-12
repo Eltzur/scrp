@@ -581,3 +581,5 @@ Expected: the same list as bundle 10 (K6 / J step 4, including `CHECK_LICENSE` a
 Do not submit App content changes while this is in review.
 
 **After both are live,** tell the chat the dates. The SU11A-77 notice can then be switched on for real; only Dude does that, through the admin tab.
+
+L1–L4 passed 12 Nov 2026; L5/L6 submitted the same day.
