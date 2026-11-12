@@ -3387,6 +3387,119 @@ Fixes SU11A-79 C1, H1, H6, M1 (route part), M2, L4 and L5 (`docs/super/su11a79_q
 
 ---
 
+### SU11A-81 (12 Nov 2026) - SU11A-79 H5: correct link previews per site (one static HTML per host); built, not deployed
+
+**Problem:** the one built `index.html` served on every host carried the portal's `<title>`, description, OG / Twitter tags and `canonical https://xxl.co.il/`. Crawlers that do not run JS (WhatsApp, Facebook, X, Telegram, LinkedIn) therefore previewed every super.xxl.co.il link as the portal.
+
+**Fix:** the build now writes one HTML file per host, with the same hashed assets and each site's own head.
+
+**Hosts:**
+
+| Host | File | Title | Canonical / og:url | og:image |
+|---|---|---|---|---|
+| xxl.co.il, www.xxl.co.il | `index.html` | "XXL — הפורטל שהופך כסף רגיל לכסף חכם" | `https://xxl.co.il/` | `https://xxl.co.il/og-portal.png` |
+| super.xxl.co.il | `index.super.html` | "XXL — השוואת מחירים בסופרמרקט · חוסכים בענקקק" | `https://super.xxl.co.il/` | `https://super.xxl.co.il/og-super.png` |
+
+- **Both files carry:** og:type website, og:site_name (XXL / SUPER XXL), og:locale he_IL, og:image 1200×630, twitter:card summary_large_image, plus twitter title / description / image.
+- **Super file:** no keywords tag (the portal's keywords name vacations and fashion).
+- **Images:** both already existed in `web/public` at 1200×630; no new image.
+- **admin.xxl.co.il:** keeps `index.html` (noindex; the admin app strips the shop tags).
+- **fly.xxl.co.il** is not part of this build (its own repo `xxl-flights/frontend`, own web root) and is unchanged.
+
+**Code:**
+- **`web/src/utils/hostHtml.ts`** (new, pure): `hostHead(kind)` takes its values from `resolveRouteMeta('/', portal)` in `utils/seoMeta.ts`, the same source the app uses at runtime, so the wording cannot drift. `renderHostHtml(html, kind)` replaces only the attribute values and the `<title>` text, and **throws if any expected tag is missing or duplicated**, so a change to `index.html` cannot silently ship a wrong head.
+- **`web/vite.config.ts`:** build plugin `xxl-host-html` (`generateBundle`, post) rewrites the built `index.html` with the portal values and emits `index.super.html` with the super values. `tsconfig.node.json` gets the `DOM` lib (types only: vite.config now type-checks seoMeta.ts).
+- **The inline first-paint script is byte-for-byte unchanged.** Its CSP sha256 in `deploy/nginx/xxl-csp-web.conf` still matches (tested). It still refines canonical / og:url to the current path for JS clients (Google).
+- **`web/scripts/check-deploy.mjs` (deploy guard):** the pre-upload check now fails when `index.super.html` is missing or loads a different `index-*.js` than `index.html`. The post-upload MATCH check is unchanged (it reads super.xxl.co.il, which serves the same `index-*.js` from either file).
+- **Limits:**
+  - static tags are the host's **home** values, so a deep link (e.g. `/promos`, `/categories/D02`) shared to a non-JS crawler previews as the right site's home page, not yet that page. Per-path tags need the planned pre-render step.
+  - `/index.html` requested by name on super still returns the portal file (nothing links to it).
+
+**nginx (repo record `deploy/nginx/xxl-spa-super.conf`, NEW):**
+- **What changes:** in the super.xxl.co.il **443** server block, `location /`'s existing `try_files` line is replaced by `include snippets/xxl-spa-super.conf;`, which holds the single directive `try_files $uri /index.super.html;`.
+- **No `$uri/`:** with it, "/" would be answered by the `index` directive (`index.html`, the portal head).
+- **Unchanged:** real files (assets, images, robots.txt, sitemaps) still match `$uri` first. The xxl.co.il / www / admin blocks are not touched.
+- **The super server block itself is not in the repo** (only the admin block is), so the edit is one line by hand, with a backup.
+
+**Tests (12 Nov):**
+- **`web/scripts/host-html-su11a81.test.mjs`** (8) runs a real production build (vite + the repo config) into a temp folder and checks:
+  - for each file: title, description, canonical, og:url, og:image, og:site_name, og:type, og:locale, image size, twitter:* (values equal to `hostHead`);
+  - both PNGs are 1200×630;
+  - **no portal value in the super file** outside the inline script (portal title / description, `og-portal.png`, `https://xxl.co.il/`, חופשות / אופנה, keywords), and no `og-super.png` in the portal file;
+  - the inline script is identical to `web/index.html` and its sha256 is in the CSP;
+  - both files load the same assets;
+  - `renderHostHtml` throws on missing tags;
+  - the nginx snippet is exactly `try_files $uri /index.super.html;`.
+- **`web/scripts/check-deploy.test.mjs`:** one more test (super file missing / different JS).
+- **Totals:** `npm run test:unit` **132 pass, 0 fail**. `npm run build` OK (`dist/index.html` + `dist/index.super.html`). i18n parity OK. eslint clean on the changed files. check-admin-chunk OK. `check-deploy.mjs hosts dist` OK.
+- **Not run:** `nginx -t` (not possible locally; the snippet is one directive, reviewed by hand). No API code changed.
+
+**Deploy (Dude; outside the quiet times 03:30–03:45, 04:00–04:30, 10:00 until scrp-cron is inactive, 14:25–15:00). ORDER MATTERS: the web first, then nginx.** If nginx points at `index.super.html` before the file is in the web root, every super route returns 404, and `nginx -t` cannot catch that.
+
+1. **Web:**
+
+   [PowerShell - VS Code]
+   ```powershell
+   .\scripts\deploy_frontend.ps1
+   ```
+   It must end with **MATCH**. (Until step 4, super still gets `index.html`, so the live MATCH check is the same as before.)
+
+2. **The new file is in the web root, and the super block's current fallback (read-only):**
+
+   [Bash - server]
+   ```bash
+   ls -l /var/www/super.xxl.co.il/index.super.html; grep -c 'og-super.png' /var/www/super.xxl.co.il/index.super.html
+   F=$(sudo grep -l 'server_name[^;]*super\.xxl\.co\.il' /etc/nginx/sites-available/* | grep -v admin); echo "$F"; sudo grep -n 'listen\|server_name\|location\|try_files' $F
+   ```
+   - **Expected:** the file exists; count ≥ 2; exactly one site file; exactly one `try_files $uri $uri/ /index.html;` line, inside `location /` of the 443 block.
+   - **If there is more than one `try_files` line, or a different one:** stop and paste the output (edit by hand instead of step 4).
+
+3. **Copy the snippet to the server:**
+
+   [PowerShell - VS Code]
+   ```powershell
+   scp deploy/nginx/xxl-spa-super.conf dude@185.229.226.190:~/
+   ```
+
+4. **Install, back up, switch the one line, test, reload:**
+
+   [Bash - server]
+   ```bash
+   F=$(sudo grep -l 'server_name[^;]*super\.xxl\.co\.il' /etc/nginx/sites-available/* | grep -v admin); mkdir -p ~/nginx-backup-su11a81 && sudo cp -p "$F" ~/nginx-backup-su11a81/ && sudo install -m 644 -o root -g root ~/xxl-spa-super.conf /etc/nginx/snippets/xxl-spa-super.conf && sudo sed -i 's#try_files \$uri \$uri/ /index\.html;#include snippets/xxl-spa-super.conf;#' "$F" && sudo grep -n 'try_files\|xxl-spa-super' "$F" && sudo nginx -t && sudo systemctl reload nginx && echo RELOADED
+   ```
+   - **Expected:** one `include snippets/xxl-spa-super.conf;` line, no `try_files` left in the file, `syntax is ok`, `test is successful`, `RELOADED`.
+   - The backup is outside `sites-enabled` and `snippets`, so nginx never loads it.
+
+5. **Live checks:**
+
+   [Bash - server]
+   ```bash
+   for u in https://super.xxl.co.il/ https://super.xxl.co.il/promos https://xxl.co.il/ https://www.xxl.co.il/; do echo "== $u $(curl -s -o /dev/null -w '%{http_code}' "$u")"; curl -s "$u" | grep -E 'og:|canonical|<title>'; done
+   curl -s -o /dev/null -w 'asset: %{http_code}\n' https://super.xxl.co.il/og-super.png; curl -s -o /dev/null -w 'robots: %{http_code}\n' https://super.xxl.co.il/robots.txt
+   ```
+   - **Super `/` and `/promos`:** 200, the super title, canonical / og:url `https://super.xxl.co.il/`, og:image `og-super.png`.
+   - **xxl.co.il and www:** the portal values.
+   - **Assets:** 200.
+   - **Then by hand:**
+     - the Facebook Sharing Debugger (https://developers.facebook.com/tools/debug/): "Scrape Again" for `https://super.xxl.co.il/` and `https://xxl.co.il/` (old previews are cached until then);
+     - a WhatsApp message to yourself with `https://super.xxl.co.il/` (WhatsApp caches previews per URL; if it shows the old one, test `https://super.xxl.co.il/?v=2`).
+   - In a browser, the super site and its routes work as before.
+
+**Rollback** (nginx only; the web change is harmless on its own):
+
+[Bash - server]
+```bash
+F=$(sudo grep -l 'server_name[^;]*super\.xxl\.co\.il' /etc/nginx/sites-available/* | grep -v admin); sudo cp -p ~/nginx-backup-su11a81/$(basename "$F") "$F" && sudo nginx -t && sudo systemctl reload nginx && echo ROLLED-BACK
+```
+
+**Copy back:** after the change, nothing else needs copying: the live super block now includes the repo file `deploy/nginx/xxl-spa-super.conf`.
+
+**Next:**
+- per-path previews for categories / promos (pre-render);
+- the rest of the SU11A-79 list (H2 alerting, H3 backups, H4 rate limits; real 404 status, M1 rest).
+
+---
+
 ## 📋 Open items / next steps (as of 11 Nov 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (verified, SU11A-53). Lawyer review of the terms is Dude's call.
@@ -3418,7 +3531,8 @@ Fixes SU11A-79 C1, H1, H6, M1 (route part), M2, L4 and L5 (`docs/super/su11a79_q
 - **SU11A-72 (+72b, 72c) result view modes and SU11A-75 "בהרצה" notice + admin table alignment: deployed 11 Nov 2026** (deploy guard MATCH). Live-tested by the chat architect in the browser: the notice after the cookie choice on Super and the portal, focus / Esc / trap, once per browser, the label reopens it, none on /privacy; list / table / cards, page sizes, persistence, 375 px; admin tables aligned (Dude's screenshot). Done.
 - **SU11A-78: CLOSED, not a bug (12 Nov 2026).** The "שתי הפלטפורמות" card looked empty, but a read-only query showed the saved row `both|f|1|3|3|טסט` (version 1, off). `NoticesScreen.tsx` fills each card from its saved row; the fields in Dude's screenshot had been cleared on screen without saving, and the preview reads the on-screen fields. All three cards hold test text, OFF (iPhone / Android "עדכון קטן" version 2, both "טסט" version 1); replace the text before switching any card on.
 - **Direction (12 Nov 2026):** feature development is paused; the next technical block is the pre-marketing quality gate. The Play R8 item stays queued.
-- **SU11A-79 pre-marketing review** (`docs/super/su11a79_quality_review.md`, read-only): 1 Critical, 6 High, 13 Medium, 13 Low. **SU11A-80 (batch A: C1, H1, H6, M1 route, M2, L4, L5): built, not deployed** - deploy steps in the SU11A-80 entry (web deploy with MATCH; API pull + restart; two `/stats` calls). Next: a real 404 status via nginx (M1 rest), then H2 alerting, H3 backups, H4 rate limits, H5 link previews.
+- **SU11A-79 pre-marketing review** (`docs/super/su11a79_quality_review.md`, read-only): 1 Critical, 6 High, 13 Medium, 13 Low. **SU11A-80 (batch A: C1, H1, H6, M1 route, M2, L4, L5): built, not deployed** - deploy steps in the SU11A-80 entry (web deploy with MATCH; API pull + restart; two `/stats` calls). Next: a real 404 status via nginx (M1 rest), then H2 alerting, H3 backups, H4 rate limits.
+- **SU11A-81 (SU11A-79 H5, per-host link previews): built, not deployed** - one static HTML per host (`index.html` portal, `index.super.html` super) + nginx snippet `deploy/nginx/xxl-spa-super.conf`. Deploy steps in the SU11A-81 entry: **web first, then nginx** (one line in the super 443 block), then curl / Facebook debugger / WhatsApp.
 - **SU11A-77 app notice API + admin + has_image: built, not deployed.** Run `docs/admin/su11a77_runbook.md` (migration, restart, curl, web deploy, browser checks). Keep every notice OFF until app 1.2.4 (SU11B-8) is live; SU11B-8 reads `/announcements/active?platform=ios|android` and stores the dismissed `version` per device.
 - **GA4 import check: passed 12 Nov 03:30** (the admin GA4 row reads "מעודכן עד 2026-11-11"). Enhanced measurement → Form interactions **confirmed OFF** (Dude, 11 Nov). GA4 item closed.
 - **GA4 card (SU11A-76):** the import works, but GA4 had no hits on 8–10 Nov. Dude's checks are in the SU11A-76 entry: a clean-browser hit plus Realtime, Data filters, and the stream status.
@@ -3456,4 +3570,4 @@ Fixes SU11A-79 C1, H1, H6, M1 (route part), M2, L4 and L5 (`docs/super/su11a79_q
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-81 (SU11A-79 = pre-marketing quality review, SU11A-80 = review batch A). SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
+Next free session ID: SU11A-82 (SU11A-79 = pre-marketing quality review, SU11A-80 = review batch A, SU11A-81 = per-host link previews). SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).

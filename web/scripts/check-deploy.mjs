@@ -45,7 +45,13 @@ export function checkHosts(dist, hosts) {
   const js = files.map(f => readFileSync(f, 'utf8')).join('\n');
   if (!js.includes(`https://${hosts.api}`)) problems.push(`the build does not contain the API host https://${hosts.api}`);
   if (!js.includes(`https://${hosts.supabase}`)) problems.push(`the build does not contain the Supabase host https://${hosts.supabase}`);
-  if (!indexScript(readFileSync(join(dist, 'index.html'), 'utf8'))) problems.push('index.html names no /assets/index-*.js');
+  const mainJs = indexScript(readFileSync(join(dist, 'index.html'), 'utf8'));
+  if (!mainJs) problems.push('index.html names no /assets/index-*.js');
+  // SU11A-81: nginx serves index.super.html on super.xxl.co.il (deploy/nginx/
+  // xxl-spa-super.conf); without it every super route would be a 404.
+  const superHtml = join(dist, 'index.super.html');
+  if (!existsSync(superHtml)) problems.push('index.super.html not found (SU11A-81 per-host HTML): super.xxl.co.il would answer 404');
+  else if (mainJs && indexScript(readFileSync(superHtml, 'utf8')) !== mainJs) problems.push('index.super.html loads a different index-*.js than index.html');
   return problems;
 }
 

@@ -6,4 +6,6 @@ Repo copies of the nginx configuration added for the SU11A-48 review findings F-
 
 `xxl-log-format.conf` (SU11A-69) adds the site name (`$host`) to the shared `access.log` for the admin statistics; installed by `docs/admin/su11a69_runbook.md` step 5, together with commenting out the plain `access_log` line in `/etc/nginx/nginx.conf`.
 
+`xxl-spa-super.conf` (SU11A-81) is the SPA fallback of the super.xxl.co.il 443 `location /` (`try_files $uri /index.super.html;`, the per-host HTML for link previews); installed by the SU11A-81 entry in `docs/super/handoff_super.md` (web deploy first, then this).
+
 When a live file is changed by hand, copy the change back here in the same session.

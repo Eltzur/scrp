@@ -15,9 +15,21 @@ function fakeDist(js, html = '<script type="module" src="/assets/index-AbC_12-x.
   const dir = mkdtempSync(join(tmpdir(), 'xxl-dist-'));
   mkdirSync(join(dir, 'assets'));
   writeFileSync(join(dir, 'index.html'), html);
+  writeFileSync(join(dir, 'index.super.html'), html);   // SU11A-81
   writeFileSync(join(dir, 'assets', 'index-AbC_12-x.js'), js);
   return dir;
 }
+
+test('SU11A-81: index.super.html must exist and load the same index-*.js', () => {
+  const ok = 'https://api.example.test https://proj.supabase.example';
+  const d = fakeDist(ok);
+  try {
+    rmSync(join(d, 'index.super.html'));
+    assert.deepEqual(checkHosts(d, HOSTS), ['index.super.html not found (SU11A-81 per-host HTML): super.xxl.co.il would answer 404']);
+    writeFileSync(join(d, 'index.super.html'), '<script type="module" src="/assets/index-OLD.js"></script>');
+    assert.deepEqual(checkHosts(d, HOSTS), ['index.super.html loads a different index-*.js than index.html']);
+  } finally { rmSync(d, { recursive: true }); }
+});
 
 test('a production build passes', () => {
   const d = fakeDist('const a="https://api.example.test",b="https://proj.supabase.example";');
