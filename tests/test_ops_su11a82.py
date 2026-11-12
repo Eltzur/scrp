@@ -195,7 +195,7 @@ def healthy(monkeypatch):
         def connect(self): return _Conn()
     import db.db as D
     monkeypatch.setattr(D, "get_engine", lambda: _Eng())
-    monkeypatch.setattr(H, "gather_db", lambda conn, active: ([(c, c, 20.0) for c in sorted(active)], int(6.5 * GB)))
+    monkeypatch.setattr(H, "gather_db", lambda conn, active, now: ([(c, c, 20.0) for c in sorted(active)], [], int(6.5 * GB)))
     mails = []
     monkeypatch.setattr(H, "send_alert", lambda s, b: mails.append((s, b)) or True)
     monkeypatch.setattr(H, "datetime", _FixedNow)
@@ -255,7 +255,9 @@ def test_active_chains_come_from_active_stores_yaml():
 
 def test_freshness_sql_uses_the_freshness_source():
     sql = " ".join(H.FRESHNESS_SQL.split())
-    assert "fr.files_loaded > 0" in sql and "MAX(fr.run_at)" in sql and "c.chain_id = ANY(:ids)" in sql
+    assert "fr.files_loaded > 0" in sql and "MAX(fr.run_at)" in sql and "c.chain_id IN :ids" in sql
+    # SU11A-82b: no date arithmetic in SQL (run_at is TEXT in Postgres) and no Postgres-only ANY().
+    assert "now()" not in sql.lower() and "EXTRACT" not in sql and "ANY(" not in sql
 
 
 # =================================================================== systemd
@@ -431,3 +433,114 @@ def test_backup_script_has_no_secrets_and_lf_endings():
 def test_backup_config_example_names_a_crypt_remote():
     s = (ROOT / "deploy" / "backup" / "backup.conf.example").read_text(encoding="utf-8")
     assert 'REMOTE="b2crypt:"' in s and 'SUBDIR="daily"' in s and 'ALLOW_PLAIN="0"' in s
+
+
+# ============================================ SU11A-82b: run_at is TEXT
+# fetch_runs.run_at is TEXT in Postgres (db/schema_postgres.sql:50); the first
+# version did now() - MAX(run_at) in SQL and Postgres rejected it.
+@pytest.mark.parametrize("raw, expected", [
+    ("2026-11-12T08:03:11.123456+00:00", datetime(2026, 11, 12, 8, 3, 11, 123456, tzinfo=timezone.utc)),  # what the loader writes
+    ("2026-11-12T10:03:11+02:00", datetime(2026, 11, 12, 8, 3, 11, tzinfo=timezone.utc)),
+    ("2026-11-12T08:03:11Z", datetime(2026, 11, 12, 8, 3, 11, tzinfo=timezone.utc)),
+    ("2026-11-12 08:03:11z", datetime(2026, 11, 12, 8, 3, 11, tzinfo=timezone.utc)),
+    ("2026-11-12T10:03:11", datetime(2026, 11, 12, 8, 3, 11, tzinfo=timezone.utc)),     # naive = Israel (UTC+2 in Nov)
+    ("2026-07-12 10:03:11", datetime(2026, 7, 12, 7, 3, 11, tzinfo=timezone.utc)),      # naive in summer (UTC+3)
+    (datetime(2026, 11, 12, 8, 0, tzinfo=timezone.utc), datetime(2026, 11, 12, 8, 0, tzinfo=timezone.utc)),
+])
+def test_parse_run_at(raw, expected):
+    assert H.parse_run_at(raw) == expected
+
+
+@pytest.mark.parametrize("raw", ["", None, "garbage", "2026-13-40T00:00:00", "12/11/2026 10:00", "   "])
+def test_parse_run_at_garbage_is_none(raw):
+    assert H.parse_run_at(raw) is None
+
+
+class _FakeResult:
+    def __init__(self, rows=None, scalar=None):
+        self._rows, self._scalar = rows or [], scalar
+
+    def all(self):
+        return self._rows
+
+    def scalar(self):
+        return self._scalar
+
+
+class _FakeConn:
+    """Answers like Postgres: run_at comes back as TEXT."""
+    def __init__(self, rows, size):
+        self.rows, self.size, self.calls = rows, size, []
+
+    def execute(self, stmt, params=None):
+        sql = str(stmt)
+        self.calls.append((sql, params))
+        if "pg_database_size" in sql:
+            return _FakeResult(scalar=self.size)
+        return _FakeResult(rows=self.rows)
+
+
+def test_gather_db_computes_hours_in_python_from_text_timestamps():
+    rows = [("7290027600007", "שופרסל", "2026-11-12T08:03:00+00:00"),     # 22.2 h before NOW
+            ("7290058140886", "רמי לוי", "2026-11-11T08:00:00Z"),          # 46.25 h
+            ("7290000000002", "ויקטורי", "2026-11-12T10:15:00"),           # naive Israel = 08:15 UTC, 22 h
+            ("7290000000003", "חדשה", None),                               # never loaded
+            ("7290000000004", "שבורה", "yesterday")]                       # unparsable
+    active = {r[0] for r in rows} | {"7290000000099"}                       # one id not in chains
+    conn = _FakeConn(rows, int(6.5 * GB))
+    fresh, unparsable, size = H.gather_db(conn, active, NOW)
+    by_id = {c: h for c, _, h in fresh}
+    assert round(by_id["7290027600007"], 2) == 22.2
+    assert round(by_id["7290058140886"], 2) == 46.25
+    assert round(by_id["7290000000002"], 2) == 22.0
+    assert by_id["7290000000003"] is None and by_id["7290000000099"] is None
+    assert "7290000000004" not in by_id
+    assert unparsable == ["prices: could not parse last run for שבורה (7290000000004)"]
+    assert size == int(6.5 * GB)
+    assert H.check_freshness(fresh, 26) == [
+        "prices: חדשה (7290000000003) has no successful price load at all",
+        "prices: not in chains (7290000000099) has no successful price load at all",
+        "prices: רמי לוי (7290058140886) last loaded 46 h ago (limit 26 h)",
+    ]
+    sql, params = conn.calls[0]
+    assert params == {"ids": sorted(active)}
+
+
+def test_freshness_sql_runs_on_sqlite_with_text_run_at():
+    from sqlalchemy import create_engine, text
+    eng = create_engine("sqlite://")
+    with eng.begin() as c:
+        c.execute(text("CREATE TABLE chains (chain_id TEXT PRIMARY KEY, name TEXT)"))
+        c.execute(text("CREATE TABLE fetch_runs (id INTEGER PRIMARY KEY, chain_id TEXT NOT NULL, run_at TEXT NOT NULL, "
+                       "files_loaded INTEGER DEFAULT 0)"))
+        c.execute(text("INSERT INTO chains VALUES ('A', 'אלף'), ('B', 'בית'), ('C', 'גימל')"))
+        c.execute(text("INSERT INTO fetch_runs (chain_id, run_at, files_loaded) VALUES "
+                       "('A', '2026-11-11T08:00:00+00:00', 3), ('A', '2026-11-12T08:00:00+00:00', 5), "
+                       "('A', '2026-11-12T09:00:00+00:00', 0), "     # a failed run (no files) is ignored
+                       "('B', '2026-11-10T08:00:00+00:00', 0)"))
+        rows = sorted(H.freshness_rows(c, {"A", "B"}))
+    assert rows == [("A", "אלף", "2026-11-12T08:00:00+00:00"), ("B", "בית", None)]
+
+
+def test_freshness_sql_runs_on_postgres_with_text_run_at():
+    pg = pytest.importorskip("tests.test_promo_curation_su11a58_pg")
+    if not pg.PG_URL:
+        pytest.skip("SCRP_TEST_PG_URL not set (needs a throwaway Postgres)")
+    from sqlalchemy import create_engine, text
+    with create_engine(pg.PG_URL).connect() as c:
+        c.execute(text("CREATE TEMP TABLE chains (chain_id TEXT PRIMARY KEY, name TEXT)"))
+        c.execute(text("CREATE TEMP TABLE fetch_runs (id SERIAL PRIMARY KEY, chain_id TEXT NOT NULL, run_at TEXT NOT NULL, "
+                       "files_loaded INTEGER DEFAULT 0)"))
+        c.execute(text("INSERT INTO chains VALUES ('A', 'a'), ('B', 'b')"))
+        c.execute(text("INSERT INTO fetch_runs (chain_id, run_at, files_loaded) VALUES ('A', '2026-11-12T08:00:00+00:00', 5)"))
+        fresh, unparsable, size = H.gather_db(c, {"A", "B"}, NOW)
+    assert unparsable == [] and size > 0
+    assert {cid: (None if h is None else round(h, 2)) for cid, _, h in fresh} == {"A": 22.25, "B": None}
+
+
+def test_an_unparsable_run_is_a_problem_line_not_a_crash(healthy, monkeypatch):
+    monkeypatch.setattr(H, "gather_db", lambda conn, active, now: (
+        [("1", "a", 20.0)], ["prices: could not parse last run for b (2)"], int(6.5 * GB)))
+    assert H.main([]) == 0
+    (subject, body), = healthy
+    assert "could not parse last run for b (2)" in body and "could not check" not in body

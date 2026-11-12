@@ -3569,6 +3569,8 @@ F=$(sudo grep -l 'server_name[^;]*super\.xxl\.co\.il' /etc/nginx/sites-available
 - **Full suite** `pytest tests api/tests`: **1017 passed, 196 skipped, 13 failed** (the 13 known `api/tests/test_smoke.py` failures that need a live `DATABASE_URL`). `bash -n` on the script OK.
 - **Not run:** `nginx -t` and `systemd-analyze verify` (not available on Windows; the files were reviewed by hand and the runbook runs both checks).
 
+- **82b (12 Nov 2026): freshness query fixed; deploy = git pull only, the unit runs the repo script.** The live dry run printed `prices / db: could not check (ProgrammingError)`: `fetch_runs.run_at` is TEXT (`db/schema_postgres.sql:50`), so `now() - MAX(run_at)` failed in Postgres. The SQL now selects `MAX(fr.run_at)` (loaded runs only) with an expanding `IN :ids` (portable, no `ANY`). Python parses it (`parse_run_at`: ISO with +02:00 / +00:00 / Z; a naive value = Asia/Jerusalem; every current writer stores UTC `+00:00`), and an unparsable value is the problem line `could not parse last run for <chain>`. Tests: `tests/test_ops_su11a82.py` 76 passed + 1 Postgres-only skipped; full suite 1033 passed, 197 skipped, the 13 known `test_smoke` failures. Re-run step A1 after the pull.
+
 #### SU11A-82 runbook (Dude)
 
 **Order:** A alerts → B rate limits → C backup encryption and test restore → D optional cleanup.

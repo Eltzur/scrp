@@ -196,24 +196,76 @@ def active_chain_ids(path: Path = ACTIVE_STORES) -> set[str]:
     return {str(c["chain_id"]) for c in cfg.get("chains", []) if c.get("store_ids")}
 
 
+# SU11A-82b: fetch_runs.run_at is TEXT (db/schema_postgres.sql:50), so the SQL
+# only picks the newest loaded run per chain (the /freshness source, same text
+# MAX as db/query.py fetch_freshness) and Python does the date arithmetic.
+# Portable: an expanding IN bind, not Postgres-only ANY(:ids).
 FRESHNESS_SQL = """
-    SELECT c.chain_id, c.name,
-           EXTRACT(EPOCH FROM (now() - MAX(fr.run_at))) / 3600.0 AS hours
+    SELECT c.chain_id, c.name, MAX(fr.run_at) AS last_run
     FROM chains c
     LEFT JOIN fetch_runs fr ON fr.chain_id = c.chain_id AND fr.files_loaded > 0
-    WHERE c.chain_id = ANY(:ids)
+    WHERE c.chain_id IN :ids
     GROUP BY c.chain_id, c.name
 """
 
+# A run_at without an offset is read as the server's local time. Every current
+# writer (scraper/base.py, scraper/shufersal.py, scripts/seed_hazihinam.py)
+# stores datetime.now(timezone.utc).isoformat(), i.e. UTC with "+00:00", so a
+# naive value can only be a legacy row.
+LOCAL_TZ = "Asia/Jerusalem"
 
-def gather_db(conn, active: set[str]) -> tuple[list[tuple[str, str, float | None]], int]:
+
+def parse_run_at(raw) -> datetime | None:
+    """fetch_runs.run_at -> aware UTC datetime, or None when it cannot be parsed.
+    Accepts ISO 8601 with "+02:00", "+00:00" or "Z", a space instead of "T",
+    and naive values (taken as Asia/Jerusalem). A datetime passes through."""
+    if isinstance(raw, datetime):
+        dt = raw
+    else:
+        text_value = str(raw or "").strip()
+        if not text_value:
+            return None
+        if text_value.endswith(("Z", "z")):
+            text_value = text_value[:-1] + "+00:00"
+        try:
+            dt = datetime.fromisoformat(text_value)
+        except ValueError:
+            return None
+    if dt.tzinfo is None:
+        from zoneinfo import ZoneInfo
+        dt = dt.replace(tzinfo=ZoneInfo(LOCAL_TZ))
+    return dt.astimezone(timezone.utc)
+
+
+def freshness_rows(conn, ids: set[str]) -> list[tuple[str, str, object]]:
+    """(chain_id, name, newest loaded run_at as stored) for the given chains."""
+    from sqlalchemy import bindparam, text
+    if not ids:
+        return []
+    stmt = text(FRESHNESS_SQL).bindparams(bindparam("ids", expanding=True))
+    return [(str(r[0]), r[1], r[2]) for r in conn.execute(stmt, {"ids": sorted(ids)}).all()]
+
+
+def gather_db(conn, active: set[str], now: datetime) -> tuple[list[tuple[str, str, float | None]], list[str], int]:
+    """Freshness rows (hours since the last successful load, None = never),
+    problem lines for run_at values that cannot be parsed, and the DB size."""
     from sqlalchemy import text
-    rows = conn.execute(text(FRESHNESS_SQL), {"ids": sorted(active)}).all()
-    found = {str(r[0]) for r in rows}
-    fresh = [(str(r[0]), r[1], None if r[2] is None else float(r[2])) for r in rows]
+    fresh: list[tuple[str, str, float | None]] = []
+    unparsable: list[str] = []
+    rows = freshness_rows(conn, active)
+    for chain_id, name, raw in rows:
+        if raw is None:
+            fresh.append((chain_id, name, None))
+            continue
+        at = parse_run_at(raw)
+        if at is None:
+            unparsable.append(f"prices: could not parse last run for {name or '?'} ({chain_id})")
+            continue
+        fresh.append((chain_id, name, (now - at).total_seconds() / 3600))
+    found = {r[0] for r in rows}
     fresh += [(cid, "not in chains", None) for cid in sorted(active - found)]
     size = conn.execute(text("SELECT pg_database_size(current_database())")).scalar()
-    return fresh, int(size or 0)
+    return fresh, unparsable, int(size or 0)
 
 
 def collect(limits: Limits, now: datetime) -> list[str]:
@@ -236,8 +288,9 @@ def collect(limits: Limits, now: datetime) -> list[str]:
     def database():
         from db.db import get_engine
         with get_engine().connect() as conn:
-            fresh, size = gather_db(conn, active_chain_ids())
-        return check_freshness(fresh, limits.fresh_max_hours) + check_db_size(size, limits.db_max_gb)
+            fresh, unparsable, size = gather_db(conn, active_chain_ids(), now)
+        return (check_freshness(fresh, limits.fresh_max_hours) + unparsable
+                + check_db_size(size, limits.db_max_gb))
 
     def backup():
         result, ended = gather_backup()
