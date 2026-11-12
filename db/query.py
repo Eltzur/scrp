@@ -932,11 +932,22 @@ def fetch_cities(conn: Connection) -> list[dict]:
     ]
 
 
+# SU11A-80 (SU11A-79 C1): stores with at least one price. Was
+#   SELECT COUNT(DISTINCT id) FROM stores WHERE id IN (SELECT store_fk FROM prices)
+# which reads all 7.9 M price rows. stores.id is the primary key, so DISTINCT
+# adds nothing, and EXISTS stops at the first price row of each store through
+# the UNIQUE (store_fk, item_code) index: one index probe per store. Same
+# number (tests/test_public_stats_su11a80.py).
+STORES_WITH_PRICES_SQL = (
+    "SELECT COUNT(*) FROM stores s WHERE EXISTS (SELECT 1 FROM prices p WHERE p.store_fk = s.id)"
+)
+
+
 def fetch_stats(conn: Connection) -> dict:
+    """Public /stats numbers. Called only on a cache miss (api/routers/health.py);
+    the prices COUNT(*) (~1.1 s on production) is the expensive part."""
     chains_count = conn.execute(text("SELECT COUNT(*) FROM chains")).scalar()
-    stores_count = conn.execute(text(
-        "SELECT COUNT(DISTINCT id) FROM stores WHERE id IN (SELECT store_fk FROM prices)"
-    )).scalar()
+    stores_count = conn.execute(text(STORES_WITH_PRICES_SQL)).scalar()
     items_count  = conn.execute(text("SELECT COUNT(*) FROM items")).scalar()
     prices_count = conn.execute(text("SELECT COUNT(*) FROM prices")).scalar()
 

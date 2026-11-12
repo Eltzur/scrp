@@ -16,10 +16,9 @@ export default function ErrorState({ onRetry, busy }: Props) {
       <p className="text-gray-700 font-medium" role="alert">
         {busy ? t('errors.busy') : t('errors.api_down')}
       </p>
+      {/* SU11A-80 (SU11A-79 H1): customer text only - no developer hint, no code box. */}
       {!busy && (
-        <p className="text-gray-500 text-sm mt-1">
-          <code className="bg-gray-100 px-1 rounded text-xs">{t('errors.api_down_hint')}</code>
-        </p>
+        <p className="text-gray-600 text-sm mt-1">{t('errors.api_down_hint')}</p>
       )}
       {onRetry && (
         <button

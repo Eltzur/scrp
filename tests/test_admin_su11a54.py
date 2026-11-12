@@ -418,10 +418,14 @@ def test_counters_window_and_statuses():
     metrics.reset()
 
 
-def test_unhandled_error_outside_admin_keeps_plain_500(client, monkeypatch):
+def test_unhandled_error_outside_admin_is_json_500_since_su11a80(client, monkeypatch):
+    # SU11A-80 (SU11A-79 L5): every path answers the JSON 500, not only /admin/*
+    # (was: plain-text 500 outside /admin). Still counted once as a 5xx.
     def boom(conn):
-        raise RuntimeError("x")
+        raise RuntimeError("secret x")
     monkeypatch.setattr("api.routers.freshness.fetch_freshness", boom)
-    with pytest.raises(RuntimeError):
-        client.get("/freshness")
+    r = client.get("/freshness")
+    assert r.status_code == 500 and r.json() == {"code": "server_error"}
+    assert "secret" not in r.text
+    assert "cache-control" not in r.headers or r.headers["cache-control"] != "no-store"   # admin-only header
     assert metrics.snapshot()["http_5xx"] == 1

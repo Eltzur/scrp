@@ -42,6 +42,7 @@ interface RouteMeta {
 
 const PORTAL_HOME_TITLE = 'XXL — הפורטל שהופך כסף רגיל לכסף חכם';
 const PORTAL_HOME_DESC = 'השוואת מחירים חכמה למצרכים, חופשות ואופנה. חוסכים בענקקק.';
+export const NOT_FOUND_TITLE = 'הדף לא נמצא';
 const SUPER_HOME_TITLE = 'XXL — השוואת מחירים בסופרמרקט · חוסכים בענקקק';
 const SUPER_HOME_DESC = 'השוואת מחירים בין סופרמרקטים בישראל. שופרסל, רמי לוי, יוחננוף, ויקטורי, אושר עד, קשת, קרפור. חוסכים בענקקק.';
 
@@ -141,8 +142,9 @@ export function resolveRouteMeta(pathname: string, portalHost: boolean): Resolve
   if (!meta) {
     // Unknown path: the SPA fallback answers 200 with the app shell. Keep it
     // out of the index and give it no canonical.
+    // SU11A-80: the catch-all route shows NotFoundPage, so the tab says so.
     return {
-      title: portalHost ? PORTAL_HOME_TITLE : SUPER_HOME_TITLE,
+      title: `${NOT_FOUND_TITLE} | ${brand}`,
       description: portalHost ? PORTAL_HOME_DESC : SUPER_HOME_DESC,
       canonical: null,
       noindex: true,

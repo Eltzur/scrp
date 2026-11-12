@@ -28,8 +28,11 @@ const PartnershipsPage  = lazy(() => import('./pages/PartnershipsPage'));
 const CategoriesPage    = lazy(() => import('./pages/categories/CategoriesPage'));
 // SU11A-54: the admin console, its own chunk; only admin.xxl.co.il loads it.
 const AdminApp          = lazy(() => import('./admin/AdminApp'));
+// SU11A-80 (SU11A-79 M1): the catch-all page inside the Super shell.
+const NotFoundPage      = lazy(() => import('./pages/NotFoundPage'));
 // Utilities
 import { getCities } from './api/client';
+import { loadWithRetry } from './utils/retry';
 import type { CityInfo } from './api/client';
 import { isAdminHostname, isPortalHostname } from './utils/hostname';
 import { applyRouteMeta } from './utils/seoMeta';
@@ -42,10 +45,9 @@ import ExpiredLinkNotice from './components/ExpiredLinkNotice';
 function AppShell() {
   const [cities, setCities] = useState<CityInfo[]>([]);
 
-  useEffect(() => {
-    getCities().then(setCities);
-    fetch('https://api-super.xxl.co.il/health', { method: 'GET' }).catch(() => {});
-  }, []);
+  // SU11A-80 (SU11A-79 L4): a failed /cities call is retried quietly (the
+  // filters work without the list meanwhile); the unused /health ping is gone.
+  useEffect(() => loadWithRetry(getCities, setCities), []);
 
   return (
     <BasketProvider>
@@ -70,6 +72,7 @@ function AppShell() {
           <Route path="/categories/:id" element={<CategoriesPage />} />
           {/* SU11A-31: public deletion URL (Google Play); the form needs sign-in. */}
           <Route path="/account/delete" element={<DeleteAccountPage />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
         </Suspense>
         <Footer />

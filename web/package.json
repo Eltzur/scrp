@@ -12,7 +12,7 @@
     "gen:types": "openapi-typescript http://localhost:8000/openapi.json -o src/types/api.ts",
     "test:i18n": "node scripts/check-i18n.js",
     "check:admin-chunk": "node scripts/check-admin-chunk.js",
-    "test:unit": "node --test scripts/recent-search.test.mjs scripts/sponsored-label.test.mjs scripts/check-deploy.test.mjs scripts/admin-nav.test.mjs scripts/promos-page.test.mjs scripts/promo-bulk.test.mjs scripts/delete-account.test.mjs scripts/gift-coupon.test.mjs scripts/categories-page.test.mjs scripts/categories-seo.test.mjs scripts/admin-stats.test.mjs scripts/site-su11a70.test.mjs scripts/analytics.test.mjs scripts/result-views.test.mjs scripts/beta-notice.test.mjs scripts/notices-su11a77.test.mjs"
+    "test:unit": "node --test scripts/recent-search.test.mjs scripts/sponsored-label.test.mjs scripts/check-deploy.test.mjs scripts/admin-nav.test.mjs scripts/promos-page.test.mjs scripts/promo-bulk.test.mjs scripts/delete-account.test.mjs scripts/gift-coupon.test.mjs scripts/categories-page.test.mjs scripts/categories-seo.test.mjs scripts/admin-stats.test.mjs scripts/site-su11a70.test.mjs scripts/analytics.test.mjs scripts/result-views.test.mjs scripts/beta-notice.test.mjs scripts/notices-su11a77.test.mjs scripts/su11a80-errors.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.1",

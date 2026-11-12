@@ -54,10 +54,10 @@ if ADMIN_ORIGIN not in ALLOWED_ORIGINS:
 class RequestMetricsMiddleware:
     """Plain ASGI (no BaseHTTPMiddleware). SU11A-54:
       - every HTTP answer feeds api/metrics.py (requests, 5xx, 429);
-      - /admin/* answers get Cache-Control: no-store and a Server-Timing total,
-        and an unhandled error there answers 500 {"code":"server_error"}
-        (JSON, no stack) instead of the plain-text 500. Other paths keep the
-        plain 500.
+      - /admin/* answers get Cache-Control: no-store and a Server-Timing total;
+      - an unhandled error on ANY path answers 500 {"code":"server_error"}
+        (JSON, no stack) instead of the plain-text 500 (admin SU11A-54, every
+        path SU11A-80).
     Added before CORSMiddleware, so CORS wraps it and the JSON 500 carries the
     CORS headers the console needs to read it."""
 
@@ -89,12 +89,16 @@ class RequestMetricsMiddleware:
         try:
             await self.app(scope, receive, _send)
         except Exception as exc:
-            if not is_admin or started:
-                if not started:
-                    metrics.record_status(500)
+            if started:
                 raise
-            log.error("admin request failed: %s %s (%s)", scope.get("method"),
-                      scope.get("path"), type(exc).__name__)
+            # SU11A-80 (SU11A-79 L5): every path, not only /admin/*, answers an
+            # unhandled error with JSON 500 {"code":"server_error"}. Sent from
+            # here (inside CORSMiddleware), so it carries the normal CORS
+            # headers and the web can read it instead of seeing a network
+            # error. No traceback, SQL or query string in the body or the log
+            # line: method, path and the exception type only.
+            log.error("%s request failed: %s %s (%s)", "admin" if is_admin else "api",
+                      scope.get("method"), scope.get("path"), type(exc).__name__)
             body = json.dumps({"code": "server_error"}).encode()
             await _send({"type": "http.response.start", "status": 500, "headers": [
                 (b"content-type", b"application/json"),
@@ -167,7 +171,8 @@ def _db_error(request: Request, exc: DBAPIError) -> JSONResponse:
 
     The body carries no SQL, parameters or stack. The log line names the method
     and path only - never the query string, which holds the search text.
-    Any other database error is re-raised and becomes the usual plain 500."""
+    Any other database error is re-raised and becomes the JSON 500
+    {"code": "server_error"} (RequestMetricsMiddleware, SU11A-80)."""
     if getattr(exc.orig, "pgcode", None) != _QUERY_CANCELED:
         raise exc
     metrics.inc("query_timeout")

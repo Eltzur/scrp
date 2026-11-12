@@ -58,11 +58,15 @@ export const useCities = () =>
     refetchOnWindowFocus: false,
   });
 
+// SU11A-80: the API caches /stats for 10 minutes, so a remount (route change,
+// back to the home page) inside that window reuses the cached answer.
+export const STATS_STALE_MS = 10 * 60 * 1000;
+
 export const useStats = () =>
   useQuery({
     queryKey: ['stats'],
     queryFn: getStats,
-    staleTime: STALE,
+    staleTime: STATS_STALE_MS,
     refetchOnWindowFocus: false,
   });
 

@@ -13,8 +13,14 @@ export type CityInfo        = components['schemas']['CityInfo'];
 import { supabase } from '../lib/supabase';
 import { mergePromoMaps, planPromosBulk } from '../utils/promoBulk';
 
+/** SU11A-80 (SU11A-79 M2): give up after 20 s (nginx would wait 120 s) and show
+ *  the customer error with its retry button. The API's own statement timeout is
+ *  15 s, so a slow-but-working answer still arrives in time. */
+export const API_TIMEOUT_MS = 20_000;
+
 export const http = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  timeout: API_TIMEOUT_MS,
   paramsSerializer: (params) => {
     const sp = new URLSearchParams();
     for (const [key, val] of Object.entries(params)) {

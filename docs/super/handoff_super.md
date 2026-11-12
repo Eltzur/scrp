@@ -3292,6 +3292,101 @@ Runbook: `docs/admin/su11a77_runbook.md`: quiet time → pull + the new tests �
 
 ---
 
+### SU11A-80 (12 Nov 2026) - pre-marketing batch A from the SU11A-79 review: /stats cache, customer error text, error boundary, not-found page, web timeout, quiet /cities retry, JSON 500 on every path; built, not deployed
+
+Fixes SU11A-79 C1, H1, H6, M1 (route part), M2, L4 and L5 (`docs/super/su11a79_quality_review.md`). No migration, no nginx change, no env change, no mobile change.
+
+**API:**
+- **C1 `/stats`** (`api/routers/health.py`):
+  - **Cache:** served from an in-process cache, 10 minutes per worker (`STATS_TTL_S = 600`).
+  - **Single-flight:** on a cold cache, concurrent requests wait for one load (a lock plus a re-check), so a burst runs the queries once per worker.
+  - **Connections:** opened only on a miss (no `get_db` per request), the same idea as `/announcements/active`.
+  - **Failures:** a failed load is not cached and answers the JSON 500.
+  - **Header:** `Cache-Control: public, max-age=300`.
+  - **Cost:** production measured 12 Nov: `prices` 7.9 M rows, `COUNT(*)` 1.1 s. With the cache, that is at most one count per worker per 10 minutes.
+- **Stores count** (`db/query.py` `STORES_WITH_PRICES_SQL`): `COUNT(*) FROM stores s WHERE EXISTS (SELECT 1 FROM prices p WHERE p.store_fk = s.id)` replaces `COUNT(DISTINCT id) FROM stores WHERE id IN (SELECT store_fk FROM prices)`.
+  - `stores.id` is the PK, so DISTINCT added nothing.
+  - EXISTS is one probe per store on the `UNIQUE (store_fk, item_code)` index, instead of reading all of `prices`.
+  - Same number: tested on SQLite, plus a Postgres variant that runs with `SCRP_TEST_PG_URL`.
+  - The `prices` `COUNT(*)` itself is unchanged (exact number, now cached).
+- **L5** (`api/main.py` `RequestMetricsMiddleware`): an unhandled error on **any** path answers `500 {"code":"server_error"}` as JSON (before: only `/admin/*`; other paths gave the plain-text 500).
+  - It is sent inside `CORSMiddleware`, so allowed origins get their CORS header and the web can read it instead of seeing a "network error".
+  - No traceback, SQL or query string in the body or the log line (method, path, exception type).
+  - Still counted once in `http_5xx`. `Cache-Control: no-store` stays admin-only.
+  - A non-timeout `DBAPIError` now ends here too (the timeout stays `503 query_timeout`).
+
+**Web:**
+- **H1:**
+  - `errors.api_down_hint` is now customer text: he "השירות אינו זמין כרגע. נסו שוב בעוד כמה דקות.", en "The service is unavailable right now. Please try again in a few minutes."; en `api_down` "We could not reach the server".
+  - `ErrorState` shows it as a plain line: no `<code>` box.
+  - **Grep for other developer text shown to users:** web locales and components are clean. The app shows none, except the deliberate diagnostics screen (`location-diagnostics.tsx`, "זמן הפעלת Metro (npm start)"), which was left as is. Error `detail` strings go to `console.warn` only.
+- **H6:** `web/src/components/AppErrorBoundary.tsx` wraps the whole tree in `main.tsx`.
+  - **Fallback:** plain Hebrew RTL `main` (`dir="rtl" lang="he"`) with the title "משהו השתבש", one sentence and a "רענון הדף" button (`window.location.reload()`). `role="alert"`, visible focus.
+  - **What it avoids:** no i18n, router or context (any of them may be what failed). No error text or stack on screen; `console.error` only.
+- **M1 (route part):**
+  - `<Route path="*">` last in the Super shell → `web/src/pages/NotFoundPage.tsx` (lazy chunk): "הדף לא נמצא", one sentence, a "חזרה לדף הבית" link.
+  - `utils/seoMeta.ts`: an unknown path keeps noindex and no canonical, and its title is now "הדף לא נמצא | SUPER XXL" (portal: "| XXL").
+  - **nginx still answers 200** for unknown paths (the SPA fallback): see "next".
+- **M2:** `http` (axios) has `timeout: 20000` (`API_TIMEOUT_MS`, `web/src/api/client.ts`).
+  - A timeout is not "busy" (no 429 / 503), so the views show the H1 customer error with their retry button (`ErrorState` in search / compare / categories; the promos page keeps its own retry box).
+  - The API's 15 s statement timeout is below 20 s, so a slow answer still arrives.
+- **L4:**
+  - `getCities()` goes through `web/src/utils/retry.ts` `loadWithRetry` (quiet retries after 3 / 10 / 30 s, then gives up; the cleanup cancels a pending retry).
+  - The unused `fetch('https://api-super.xxl.co.il/health')` on every load is removed (one call fewer per visit and per CGNAT IP).
+- **C1 web side:** `useStats` `staleTime` is 10 min (`STATS_STALE_MS`, `web/src/api/hooks.ts`; was 5 min). `refetchOnWindowFocus` was already off, so returning to the home page inside 10 minutes uses the cached answer. Main chunk 187.36 kB.
+
+**Tests (12 Nov, Windows, throwaway venv from `requirements.txt` + tzdata):**
+- **`tests/test_public_stats_su11a80.py`** (9 + 1 Postgres-only, skipped without `SCRP_TEST_PG_URL`):
+  - two calls → one load, one connection (closed), identical bodies, the Cache-Control header;
+  - reload only after the TTL;
+  - 12 concurrent misses → one load;
+  - a failed load is not cached and answers the JSON 500 without the message;
+  - the stores count equal to the old sub-scan (SQLite; Postgres when available);
+  - JSON 500 with the CORS header for an allowed origin and none for an unknown one, with no traceback, SQL or query string in the body or the log.
+- **`tests/test_admin_su11a54.py`:** `test_unhandled_error_outside_admin_keeps_plain_500` became `..._is_json_500_since_su11a80` (the intended change).
+- **Totals:** `pytest tests api/tests`: **957 passed, 196 skipped, 13 failed.** The 13 failures are all `api/tests/test_smoke.py`, the known ones that need a live `DATABASE_URL` (14 when that file runs alone, unchanged from before this session).
+- **Web:**
+  - `web/scripts/su11a80-errors.test.mjs` (15): H1 texts in he / en, no developer text in the locales; the boundary's children, its fallback (RTL, button, no error text), reload and console-only logging, and that it encloses `<App />`; the not-found page and route, and its meta; the 20 s timeout and a real timed-out request (`ECONNABORTED`, not busy) → the customer error with retry; the cities retry, give-up and cleanup; no `/health` ping; the stats staleTime.
+  - `npm run test:unit`: **123 pass, 0 fail.** i18n parity OK (305 + 364 lazy). eslint clean on the changed files. `npm run build` (tsc + vite) OK. check-admin-chunk OK.
+
+**Deploy (Dude; outside the quiet times 03:30–03:45, 04:00–04:30, 10:00 until scrp-cron is inactive, 14:25–15:00):**
+
+1. **Web** (any order relative to the API; the web works with the old API too):
+
+   [PowerShell - VS Code]
+   ```powershell
+   .\scripts\deploy_frontend.ps1
+   ```
+   It must end with **MATCH**.
+
+2. **API** (pull, then restart):
+
+   [Bash - server]
+   ```bash
+   cd ~/scrp && git pull origin main && sudo /usr/local/bin/xxl-restart.sh scrp-api
+   ```
+
+3. **Live check, `/stats`.** Two calls: the second must be fast (a cache hit if it reached the same worker) and the bodies identical.
+
+   [Bash - server]
+   ```bash
+   for i in 1 2; do curl -s -o /tmp/su80_stats_$i.json -w "call $i: %{http_code} %{time_total}s\n" https://api-super.xxl.co.il/stats; done; cmp /tmp/su80_stats_1.json /tmp/su80_stats_2.json && echo IDENTICAL; curl -sI https://api-super.xxl.co.il/stats | grep -i '^cache-control'; rm -f /tmp/su80_stats_*.json
+   ```
+   - **Expected:** call 1 up to about 1–2 s (cold), call 2 well under 0.2 s, `IDENTICAL`, `cache-control: public, max-age=300`.
+   - **If call 2 is slow:** it reached the other worker (2 workers, one cache each); a third call is then fast too.
+   - **If the bodies differ:** the calls were answered by two workers whose caches were loaded at different moments, around a price load. Repeat after a minute.
+
+4. **Browser:**
+   - an unknown path (e.g. `https://super.xxl.co.il/no-such-page`) shows "הדף לא נמצא" with the link home;
+   - DevTools → Network on the home page shows no `/health` call;
+   - with the network offline, a search shows "השירות אינו זמין כרגע…" with "נסה שוב", and no `uvicorn` text.
+
+**Next (not in this batch):**
+- **A real 404 status for unknown paths** needs nginx (e.g. a list of known routes with `try_files`, or `error_page 404` for paths not in the sitemap / router); also `/sitemap.xml` → 301 to `/sitemap-super.xml`.
+- **The rest of the SU11A-79 review:** H2 alerting, H3 backups, H4 rate limits, H5 link previews, M3–M13 and the other Low items.
+
+---
+
 ## 📋 Open items / next steps (as of 11 Nov 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (verified, SU11A-53). Lawyer review of the terms is Dude's call.
@@ -3323,6 +3418,7 @@ Runbook: `docs/admin/su11a77_runbook.md`: quiet time → pull + the new tests �
 - **SU11A-72 (+72b, 72c) result view modes and SU11A-75 "בהרצה" notice + admin table alignment: deployed 11 Nov 2026** (deploy guard MATCH). Live-tested by the chat architect in the browser: the notice after the cookie choice on Super and the portal, focus / Esc / trap, once per browser, the label reopens it, none on /privacy; list / table / cards, page sizes, persistence, 375 px; admin tables aligned (Dude's screenshot). Done.
 - **SU11A-78: CLOSED, not a bug (12 Nov 2026).** The "שתי הפלטפורמות" card looked empty, but a read-only query showed the saved row `both|f|1|3|3|טסט` (version 1, off). `NoticesScreen.tsx` fills each card from its saved row; the fields in Dude's screenshot had been cleared on screen without saving, and the preview reads the on-screen fields. All three cards hold test text, OFF (iPhone / Android "עדכון קטן" version 2, both "טסט" version 1); replace the text before switching any card on.
 - **Direction (12 Nov 2026):** feature development is paused; the next technical block is the pre-marketing quality gate. The Play R8 item stays queued.
+- **SU11A-79 pre-marketing review** (`docs/super/su11a79_quality_review.md`, read-only): 1 Critical, 6 High, 13 Medium, 13 Low. **SU11A-80 (batch A: C1, H1, H6, M1 route, M2, L4, L5): built, not deployed** - deploy steps in the SU11A-80 entry (web deploy with MATCH; API pull + restart; two `/stats` calls). Next: a real 404 status via nginx (M1 rest), then H2 alerting, H3 backups, H4 rate limits, H5 link previews.
 - **SU11A-77 app notice API + admin + has_image: built, not deployed.** Run `docs/admin/su11a77_runbook.md` (migration, restart, curl, web deploy, browser checks). Keep every notice OFF until app 1.2.4 (SU11B-8) is live; SU11B-8 reads `/announcements/active?platform=ios|android` and stores the dismissed `version` per device.
 - **GA4 import check: passed 12 Nov 03:30** (the admin GA4 row reads "מעודכן עד 2026-11-11"). Enhanced measurement → Form interactions **confirmed OFF** (Dude, 11 Nov). GA4 item closed.
 - **GA4 card (SU11A-76):** the import works, but GA4 had no hits on 8–10 Nov. Dude's checks are in the SU11A-76 entry: a clean-browser hit plus Realtime, Data filters, and the stream status.
@@ -3360,4 +3456,4 @@ Runbook: `docs/admin/su11a77_runbook.md`: quiet time → pull + the new tests �
 - **Auth refinements (optional):** surface real 429 / server errors on the reset-request step; consider a code flow for confirm-signup.
 - **Server:** reboot at a quiet time.
 
-Next free session ID: SU11A-79 (SU11A-78 queued: admin notice card display bug). SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).
+Next free session ID: SU11A-81 (SU11A-79 = pre-marketing quality review, SU11A-80 = review batch A). SU11A-37 reserved: popularity counters. Apple sessions use SU11B (see CLAUDE.md).

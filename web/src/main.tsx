@@ -6,6 +6,7 @@ import { AuthProvider } from './components/AuthContext';
 import './i18n/config';
 import './index.css';
 import App from './App';
+import AppErrorBoundary from './components/AppErrorBoundary';
 import { isBusyError } from './api/client';
 
 const queryClient = new QueryClient({
@@ -21,12 +22,15 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
+    {/* SU11A-80: a render error anywhere shows a Hebrew fallback, never a blank page. */}
+    <AppErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </AppErrorBoundary>
   </StrictMode>,
 );
