@@ -933,4 +933,4 @@ Mobile commit `fb0a86a`. Code and docs only: no EAS build or submit, nothing on 
   - **Play:** 1.2.4 (11) submitted to Production, 100%, Israel; in review. Bundle 11 has the same 9 permissions as bundle 10 (including `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`, `CHECK_LICENSE`, `BIND_GET_INSTALL_REFERRER_SERVICE`). The deobfuscation-file warning is expected (R8 is queued).
   - Live dates: to be added when both stores publish.
 - **Admin notice cards:** iPhone and Android are at version 2 with the test text "עדכון קטן / המחירים מתעדכנים כל יום. תודה שאתם משתמשים באפליקציה!", both **OFF**. Replace the text before any real use. All cards stay OFF until 1.2.4 is live on both stores; switching one on is Dude's decision.
-- **Open bug SU11A-78 (admin, web):** the "שתי הפלטפורמות" card does not display its saved text (details in handoff_super open items). Until it is fixed, use only the iPhone and Android cards.
+- **SU11A-78 (the "שתי הפלטפורמות" card looked empty): closed: not a bug.** The fields had been cleared on screen without saving; the saved row is "טסט", version 1, off (details in handoff_super open items).
