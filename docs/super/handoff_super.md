@@ -3500,7 +3500,7 @@ F=$(sudo grep -l 'server_name[^;]*super\.xxl\.co\.il' /etc/nginx/sites-available
 
 ---
 
-### SU11A-82 (12 Nov 2026) - SU11A-79 batch C: server alerts (H2), encrypted backups + test restore (H3), CGNAT rate limits (H4 + L13); built, not deployed
+### SU11A-82 (12 Nov 2026) - SU11A-79 batch C: server alerts (H2), encrypted backups + test restore (H3), CGNAT rate limits (H4 + L13); DEPLOYED 12-13 Nov 2026 (82b included)
 
 **Recorded first (Dude, 12 Nov 2026):**
 - **SU11A-80 and SU11A-81 are DEPLOYED and live-checked** (web MATCH; API pull + restart; `/stats` cache; per-host HTML + the nginx snippet).
@@ -3570,6 +3570,12 @@ F=$(sudo grep -l 'server_name[^;]*super\.xxl\.co\.il' /etc/nginx/sites-available
 - **Not run:** `nginx -t` and `systemd-analyze verify` (not available on Windows; the files were reviewed by hand and the runbook runs both checks).
 
 - **82b (12 Nov 2026): freshness query fixed; deploy = git pull only, the unit runs the repo script.** The live dry run printed `prices / db: could not check (ProgrammingError)`: `fetch_runs.run_at` is TEXT (`db/schema_postgres.sql:50`), so `now() - MAX(run_at)` failed in Postgres. The SQL now selects `MAX(fr.run_at)` (loaded runs only) with an expanding `IN :ids` (portable, no `ANY`). Python parses it (`parse_run_at`: ISO with +02:00 / +00:00 / Z; a naive value = Asia/Jerusalem; every current writer stores UTC `+00:00`), and an unparsable value is the problem line `could not parse last run for <chain>`. Tests: `tests/test_ops_su11a82.py` 76 passed + 1 Postgres-only skipped; full suite 1033 passed, 197 skipped, the 13 known `test_smoke` failures. Re-run step A1 after the pull.
+
+#### SU11A-82 deployment record (Dude, 12-13 Nov 2026)
+- **A alerts (12 Nov; 82b 13 Nov):** installed 12 Nov. The test mail and the self-test alert arrived from notify@xxl.co.il; the seven OnFailure drop-ins are loaded; `xxl-health-check.timer` runs at 08:15. 82b deployed 13 Nov (git pull); the dry run prints `health check OK: no problems`.
+- **B rate limits (13 Nov):** the live `http.conf` differed from the repo only in an old comment. Backups in `~/nginx-backup-su11a82/`. Live zones: api 30r/s burst 120 (admin burst 40), heavy 5r/s b30, bulk 6r/s b30, suggest 40r/s b120, img 60r/s b300, serp 10r/m b5. Normal calls give 200; 120 parallel calls from one IP gave 50 x 200 and 70 x 429.
+- **C backups (13 Nov):** the old script is kept at `/root/scrp-backup.sh.pre-su11a82` (it held no secrets: pg_dump, rotation, rclone copy only). B2 lifecycle rule for `enc/` set to 180 days. The `b2crypt:` remote was created; the passphrase and salt are only in Dude's password manager. The manual run at 09:37 uploaded 235,871,184 bytes through crypt in 14 s; raw B2 bytes start `RCLONE\0\0`, read through crypt they start `PGDMP`. **Partial test restore:** 45 TABLE DATA entries; schema exit 0, data exit 0; chains 14, stores 1226, app_announcements 3 - equal to production. A full restore on another machine (dumps are ~235 MB, so easy) is still open; not a soft-launch blocker.
+- **Still open:** C7 check tomorrow's (14 Nov) 04:00 run; C8 delete the old unencrypted `daily/` dumps after two encrypted nights (Dude's call; the 180-day rule removes them anyway); D the `sites-available/*.bak*` cleanup; the full restore test.
 
 #### SU11A-82 runbook (Dude)
 
@@ -3825,7 +3831,7 @@ ls -l /etc/nginx/sites-enabled/; ls -l /etc/nginx/sites-available/ | grep -i '\.
 
 ---
 
-## 📋 Open items / next steps (as of 11 Nov 2026)
+## 📋 Open items / next steps (as of 13 Nov 2026)
 
 - **SU11A-42 Stage 2 (UGC, Apple 1.2): built in SU11A-44.** Migration applied 18 Oct; moderation queue cleared. Build 8 carries the app side (Production review). Entity name filled in SU11A-44b (XXL Enterprises); deploy order unchanged. RATINGS_REQUIRE_TERMS=on since 24 Oct 2026 (verified, SU11A-53). Lawyer review of the terms is Dude's call.
 - **SU11A-36 Search v2:** SEARCH_V2=on since 21 Oct 2026; timer daily 14:30.
@@ -3859,7 +3865,8 @@ ls -l /etc/nginx/sites-enabled/; ls -l /etc/nginx/sites-available/ | grep -i '\.
 - **SU11A-79 pre-marketing review** (`docs/super/su11a79_quality_review.md`, read-only): 1 Critical, 6 High, 13 Medium, 13 Low. **SU11A-80 (batch A: C1, H1, H6, M1 route, M2, L4, L5): DEPLOYED 12 Nov 2026** (live-checked). Next: a real 404 status via nginx (M1 rest).
 - **SU11A-81 (SU11A-79 H5, per-host link previews): DEPLOYED 12 Nov 2026** (live-checked; the live super block includes `snippets/xxl-spa-super.conf`, backup `~/nginx-backup-su11a81/`).
 - **Monitoring (12 Nov 2026):** UptimeRobot (free) watches super.xxl.co.il/, api-super.xxl.co.il/health (keyword "ok"), xxl.co.il/, admin.xxl.co.il/ and fly.xxl.co.il/ every 5 min, alerting info@xxl.co.il; the free plan has no certificate check (the SU11A-82 daily check covers it).
-- **SU11A-82 (SU11A-79 H2 alerts, H3 encrypted backups + test restore, H4 + L13 rate limits): built, not deployed.** Runbook in the SU11A-82 entry, in order A alerts → B rate limits → C backup encryption + test restore → D optional cleanup of `sites-available/*.bak*`. The crypt passphrase and salt go only into Dude's password manager.
+- **SU11A-82 + 82b (SU11A-79 H2 alerts, H3 encrypted backups + test restore, H4 + L13 rate limits): DEPLOYED 12-13 Nov 2026** (deployment record in the SU11A-82 entry). Still open: C7 check the 14 Nov 04:00 backup run; C8 delete the old unencrypted `daily/` dumps after two encrypted nights (Dude's call; the 180-day rule removes them anyway); D cleanup of `sites-available/*.bak*`; a full restore test on another machine.
+- **Pre-marketing gate CLOSED (13 Nov 2026):** every Critical and High finding of SU11A-79 is fixed and deployed; the soft launch can start. The Medium / Low items are queued for after the launch.
 - **SU11A-77 app notice API + admin + has_image: built, not deployed.** Run `docs/admin/su11a77_runbook.md` (migration, restart, curl, web deploy, browser checks). Keep every notice OFF until app 1.2.4 (SU11B-8) is live; SU11B-8 reads `/announcements/active?platform=ios|android` and stores the dismissed `version` per device.
 - **GA4 import check: passed 12 Nov 03:30** (the admin GA4 row reads "מעודכן עד 2026-11-11"). Enhanced measurement → Form interactions **confirmed OFF** (Dude, 11 Nov). GA4 item closed.
 - **GA4 card (SU11A-76):** the import works, but GA4 had no hits on 8–10 Nov. Dude's checks are in the SU11A-76 entry: a clean-browser hit plus Realtime, Data filters, and the stream status.
