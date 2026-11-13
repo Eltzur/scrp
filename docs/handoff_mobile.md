@@ -929,8 +929,9 @@ Mobile commit `fb0a86a`. Code and docs only: no EAS build or submit, nothing on 
   - light and dark mode; pictures and has_image.
   - The API returned 200 / 204 as expected during L4; the final check returned 204 for both platforms.
 - **Store state:**
-  - **App Store:** 1.2.4 Waiting for Review, automatic release.
-  - **Play:** 1.2.4 (11) submitted to Production, 100%, Israel; in review. Bundle 11 has the same 9 permissions as bundle 10 (including `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`, `CHECK_LICENSE`, `BIND_GET_INSTALL_REFERRER_SERVICE`). The deobfuscation-file warning is expected (R8 is queued).
-  - Live dates: to be added when both stores publish.
-- **Admin notice cards:** iPhone and Android are at version 2 with the test text "עדכון קטן / המחירים מתעדכנים כל יום. תודה שאתם משתמשים באפליקציה!", both **OFF**. Replace the text before any real use. All cards stay OFF until 1.2.4 is live on both stores; switching one on is Dude's decision.
+  - **App Store:** 1.2.4 (4) **LIVE**: approved and auto-released 13 Nov 2026.
+  - **Play:** 1.2.4 (versionCode 11) **LIVE** in Production, 100%, Israel, confirmed 13 Nov 2026. Bundle 11 has the same 9 permissions as bundle 10 (including `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`, `CHECK_LICENSE`, `BIND_GET_INSTALL_REFERRER_SERVICE`). The deobfuscation-file warning is expected (R8 is queued).
+  - Both built from mobile `fb0a86a`. Next builds: iOS 5, Android versionCode 12.
+  - Apple case 103015749110 (seller name "Lead Tour"), open: Apple asked for a government ID and the upload link refused Dude's account ("not authorized"); Dude is asking Apple for a working link. No action for CC.
+- **Admin notice cards:** iPhone and Android are at version 2 with the test text "עדכון קטן / המחירים מתעדכנים כל יום. תודה שאתם משתמשים באפליקציה!", both **OFF**. Replace the text before any real use. 1.2.4 is live on both stores (13 Nov 2026), so the notice cards may now be used for real, after their test text is replaced; all three are still OFF with test text. Switching one on is Dude's decision.
 - **SU11A-78 (the "שתי הפלטפורמות" card looked empty): closed: not a bug.** The fields had been cleared on screen without saving; the saved row is "טסט", version 1, off (details in handoff_super open items).
